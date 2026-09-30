@@ -112,8 +112,15 @@ def load_motifs(client: Client, pfm_file: str | Path | None = None,
                 matrix_ids: list[str] | None = None) -> list[Motif]:
     """Load motifs from a local file, an explicit ID list, or the bulk URL."""
     if pfm_file:
-        text = Path(pfm_file).read_text()
+        text = Path(pfm_file).read_text(encoding="utf-8")
         motifs = parse_jaspar_pfm_text(text)
+        if matrix_ids:
+            wanted = set(matrix_ids)
+            motifs = [motif for motif in motifs if motif.matrix_id in wanted]
+            missing = wanted - {motif.matrix_id for motif in motifs}
+            if missing:
+                raise ValueError("matrix IDs not found in PFM file: " +
+                                 ", ".join(sorted(missing)))
         log.info("loaded %d motifs from %s", len(motifs), pfm_file)
     elif matrix_ids:
         motifs = []

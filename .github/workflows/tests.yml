@@ -1,0 +1,38 @@
+name: Tests and packaging
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ['3.10', '3.12', '3.14']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install -e ".[dev,chemistry]"
+      - run: python -m pytest -q
+        env:
+          PTD_CACHE: ${{ runner.temp }}/ptd-cache
+      - run: python scripts/generate_cli_docs.py
+        if: matrix.python == '3.12'
+      - run: git diff --exit-code -- docs/cli.md
+        if: matrix.python == '3.12'
+      - run: python -m build
+      - name: Install and test the wheel outside the checkout
+        shell: bash
+        run: |
+          python -m pip uninstall -y promoter-tf-drugs
+          python -m pip install --no-deps dist/*.whl
+          cd "$RUNNER_TEMP"
+          promoter-tf-drugs --demo --gene DEMOGENE --out wheel-demo
+          promoter-tf-drugs-shortlist --help
+          promoter-tf-drugs-explain --help

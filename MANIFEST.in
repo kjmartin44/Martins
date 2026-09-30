@@ -1,0 +1,5 @@
+include AGENTS.md
+include INSTALL.txt
+recursive-include docs *.md
+include scripts/generate_cli_docs.py
+recursive-include tests *.py

@@ -13,6 +13,7 @@ import logging
 import sys
 
 from .pipeline import run, write_outputs, markdown_report
+from .http import HttpError
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -79,10 +80,8 @@ def build_parser() -> argparse.ArgumentParser:
                         "your gene, and that the drug reaches them. Heavily "
                         "down-weights factors with no tissue overlap")
     p.add_argument("--lincs", action="store_true",
-                   help="query LINCS L1000 for drugs that MEASURABLY moved this "
-                        "gene. The only empirical evidence in the pipeline; "
-                        "flags whether your gene is a measured landmark or an "
-                        "inferred value")
+                   help="query LINCS L1000 drug/gene expression signatures; "
+                        "distinguishes measured landmarks from inferred values")
     p.add_argument("--expression-file",
                    help="local tissue-expression table (HPA "
                         "rna_tissue_consensus.tsv or a GTEx median-TPM matrix). "
@@ -93,8 +92,9 @@ def build_parser() -> argparse.ArgumentParser:
                         "cell_line,is_landmark]) exported from CLUE or iLINCS. "
                         "Offline replacement for --lincs")
     p.add_argument("--signature-file",
-                   help="a gene,score signature exported from CLUE/iLINCS, for "
-                        "connectivity queries against a known activator")
+                   help="reference gene,score signature; records the gene count "
+                        "when --lincs or --lincs-file is active. Does not run "
+                        "a connectivity search")
     p.add_argument("--genetics", action="store_true",
                    help="human genetic evidence via Open Targets: what "
                         "phenotypes associate with variation in this gene "
@@ -157,7 +157,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv=None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.top < 1:
+        parser.error("--top must be a positive integer")
 
     # Windows consoles default to cp1252, which cannot encode the characters
     # used in the report tables. Print UTF-8 where possible; degrade to "?"
@@ -171,6 +174,18 @@ def main(argv=None) -> int:
         level=[logging.WARNING, logging.INFO, logging.DEBUG][min(args.verbose, 2)],
         format="%(levelname)s %(name)s: %(message)s",
     )
+
+    try:
+        return _execute(args)
+    except (ValueError, OSError, HttpError) as exc:
+        if args.verbose:
+            logging.getLogger(__name__).exception("analysis failed")
+        else:
+            print(f"{parser.prog}: error: {exc}", file=sys.stderr)
+        return 1
+
+
+def _execute(args) -> int:
 
     result = run(
         args.gene,
@@ -201,7 +216,7 @@ def main(argv=None) -> int:
         cache_dir=args.cache_dir, min_ic=args.min_ic,
     )
 
-    written = write_outputs(result, args.out)
+    written = write_outputs(result, args.out, top_n=args.top)
     print(markdown_report(result, top_n=args.top))
     print("\nWrote:", ", ".join(str(p) for p in written), file=sys.stderr)
     return 0

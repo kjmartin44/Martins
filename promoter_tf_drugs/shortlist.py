@@ -222,7 +222,7 @@ def main(argv=None) -> int:
                 "exclude_black_box", "exclude_conflicts", "only_novel",
                 "only_known"):
         v = getattr(args, key, None)
-        if v not in (None, False):
+        if v is not None and v is not False:
             criteria[key] = v
 
     total = sum(len((b.get("all_routes") or {}).get("routes", []))
