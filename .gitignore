@@ -1,0 +1,30 @@
+# Python caches and build artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Local environments and editor files
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/
+
+# Generated analyses and downloaded reference files
+/results/
+/shortlist_*.md
+/\.cache/
+/data/remap*.bed.gz
+
+# OS files
+.DS_Store
+Thumbs.db

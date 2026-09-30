@@ -16,7 +16,7 @@ Get a peak catalogue (BED, one-time download, no API):
   ChIP-Atlas (per-TF or all-TF BEDs, multiple assemblies)
       https://chip-atlas.org/
 
-Then pass --chip-bed remap2022_nr_macs2_hg38_v1_0.bed.gz.
+Then pass --chip-bed data/remap2022.bed.gz.
 
 Or skip the download entirely: ReMap exposes a REST API that returns peaks for
 one region, which is far lighter than scanning a multi-GB file per gene. Use

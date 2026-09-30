@@ -17,8 +17,8 @@ python -m promoter_tf_drugs --demo --gene DEMOGENE --direction down --out result
 
 # real run
 python -m promoter_tf_drugs --gene PAH --upstream 2000 --downstream 500 \
-    --pfm-file JASPAR2024_CORE_vertebrates_non-redundant_pfms_jaspar.txt \
-    --chip-bed remap2022_nr_macs2_hg38_v1_0.bed.gz \
+    --pfm-file data/jaspar2024.txt \
+    --chip-bed data/remap2022.bed.gz \
     --out results/PAH -v
 
 python -m pytest tests/
@@ -26,6 +26,19 @@ python -m pytest tests/
 
 Outputs: `report.md`, `results.json`, `tf_summary.tsv`, `sites.bed`
 (load in IGV/UCSC alongside the gene), `promoter.fa`.
+The real run above uses an optional ReMap file. On Windows, run
+`scripts/download_remap.bat` once before using `--chip-bed`.
+
+## Repository layout
+
+- `promoter_tf_drugs/` contains the Python package.
+- `tests/` contains the test suite.
+- `data/` contains the included JASPAR, TRRUST, and HPA reference files.
+  `scripts/download_remap.bat` downloads the optional ReMap file there.
+- `scripts/` contains Windows launchers. Run them from any folder; they switch
+  to the repository root before starting the pipeline.
+- `examples/CCR5_down/` contains a saved analysis. New runs go in `results/`,
+  which Git ignores.
 
 ---
 
@@ -280,7 +293,7 @@ It runs only for TFs with **no** direct pharmacology, since that is the gap it
 exists to fill.
 
 ```
-python -m promoter_tf_drugs --gene YOURGENE --pfm-file jaspar2024.txt \
+python -m promoter_tf_drugs --gene YOURGENE --pfm-file data/jaspar2024.txt \
     --upstream --upstream-depth 3 --out results\YOURGENE
 ```
 
@@ -480,7 +493,7 @@ can tighten and loosen criteria interactively.
 python -m promoter_tf_drugs.shortlist results\PAH_up\results.json --preset strict
 ```
 
-Or double-click `shortlist.bat`.
+Or double-click `scripts/shortlist.bat`.
 
 | preset | the question it answers |
 |---|---|
@@ -694,7 +707,7 @@ that actually matters — a deliverability verdict.
 
 ```
 python -m promoter_tf_drugs --gene CCR5 --direction down --tissue cns \
-    --design-modality --pfm-file jaspar2024.txt --out results\CCR5
+    --design-modality --pfm-file data\jaspar2024.txt --out results\CCR5
 ```
 
 ### Delivery is the constraint, not design

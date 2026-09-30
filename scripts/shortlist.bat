@@ -1,7 +1,7 @@
 @echo off
 REM Filter an existing results.json down to a shortlist. No network, instant.
 setlocal
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
 set "RESULTS="
 set /p RESULTS="Path to results.json (e.g. results\PAH_up\results.json): "

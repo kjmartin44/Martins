@@ -12,18 +12,18 @@ promoter-tf-drugs — quick start (Windows)
 
 4. Smoke test - runs offline on FAKE data, just to prove the install works:
        python -m promoter_tf_drugs --demo --gene DEMOGENE --out results\demo
-   Or just double-click run_demo.bat
+   Or just double-click scripts\run_demo.bat
 
-   NOTE: run_demo.bat and any command with --demo use SYNTHETIC data.
+   NOTE: scripts\run_demo.bat and any command with --demo use SYNTHETIC data.
    They exist only to check the install. For real results, go to step 5.
 
-5. REAL RUN - double-click run_analysis.bat and type a gene symbol.
+5. REAL RUN - double-click scripts\run_analysis.bat and type a gene symbol.
 
    Or do it by hand. Download the motif file once (~2 MB):
-       curl.exe -o jaspar2024.txt https://jaspar.elixir.no/download/data/2024/CORE/JASPAR2024_CORE_vertebrates_non-redundant_pfms_jaspar.txt
+       curl.exe -o data\jaspar2024.txt https://jaspar.elixir.no/download/data/2024/CORE/JASPAR2024_CORE_vertebrates_non-redundant_pfms_jaspar.txt
 
    Then:
-       python -m promoter_tf_drugs --gene PAH --pfm-file jaspar2024.txt --out results\PAH -v
+       python -m promoter_tf_drugs --gene PAH --pfm-file data\jaspar2024.txt --out results\PAH -v
 
 6. Read results\PAH\report.md
 

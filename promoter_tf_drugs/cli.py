@@ -2,8 +2,8 @@
 
     python -m promoter_tf_drugs --demo --gene DEMOGENE --out results/
     python -m promoter_tf_drugs --gene SMN2 --upstream 2000 --downstream 500 \
-        --pfm-file JASPAR2024_CORE_vertebrates_non-redundant_pfms_jaspar.txt \
-        --chip-bed remap2022_nr_macs2_hg38_v1_0.bed.gz --out results/SMN2
+        --pfm-file data/jaspar2024.txt \
+        --chip-bed data/remap2022.bed.gz --out results/SMN2
 """
 
 from __future__ import annotations
