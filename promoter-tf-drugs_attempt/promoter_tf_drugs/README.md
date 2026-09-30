@@ -29,6 +29,298 @@ Outputs: `report.md`, `results.json`, `tf_summary.tsv`, `sites.bed`
 
 ---
 
+## How the report is ordered
+
+The answer first, the method last:
+
+| | |
+|---|---|
+| 1 | **Evidence available in this run** — can any of it be read as evidence? |
+| 2 | **Drugs targeting the gene directly** — when one exists it usually wins |
+| 3 | **Model-predicted medications** — the headline answer, with the why |
+| 4 | the analysis: promoter, factors, routes, grades, specificity, outcome |
+| 5 | how to read it |
+| 6 | **Testing any of this in the lab** — reporter, CRISPRa, compound screen |
+
+### Model-predicted medications
+
+The evidence for any one drug used to be spread across eight sections — the
+route catalogue, the grade table, the outcome chain, the mechanism
+comparison, the ligand axis, the specificity axes and the standard-of-care
+comparison. Reading it meant assembling the argument yourself from tables
+that each answered a different question.
+
+This states the chain in sentences, per drug:
+
+```
+what the drug does -> to which factor -> why that factor is believed to act
+on your promoter -> which direction that moves your gene -> how confident,
+and what would falsify it
+```
+
+Each row also carries its predicted P(gene moves), the limiting step, the
+regulon and clinical-burden collateral, and the single experiment that would
+disprove it. Direction reasoning inverts correctly with `--direction`, and a
+**dual-role factor is stated as unsettled** rather than assigned a direction
+the annotation does not support.
+
+Every row is a **hypothesis generated from annotation**, not a
+recommendation, and the section says so. If the run's evidence verdict is
+`degraded` or `not interpretable`, that warning is repeated *here* — where
+the drugs are actually read — rather than only in a table further up that a
+reader may skip.
+
+### Wet-lab protocol is last
+
+Experimental design is how you *test* the analysis, and it is long. A CRISPRa
+protocol and a plate layout sitting between the reader and the drug list
+buried the answer under the method, so all of it — modality design, reporter
+construct, CRISPRa screen, compound screen, cherry-pick list, expected hit
+rates — now sits after a divider at the end, led by the one control that
+matters most: the scrambled-motif reporter.
+
+---
+
+## Choosing between several candidate genes (`panel`)
+
+```bash
+python -m promoter_tf_drugs.panel --genes CCR5,PCSK9,LDLR --direction down \
+    --pfm-file jaspar2024.txt --chip-bed remap2022.bed.gz \
+    --cell-type-check --expression-file rna_tissue_consensus.tsv \
+    --max-regulon 600 --max-burden moderate --out results/panel
+```
+
+The rest of the package asks "which drugs move THIS gene". If you have five
+candidate targets and must pick one, that is the wrong unit. `panel` runs each
+gene, pools every route, and narrows on the three off-target axes.
+
+**Your genes are treated as alternatives, not a panel to move together.** That
+inverts how a recurring hit reads: a drug appearing against four of five
+candidates is not four times validated, it is a drug that moves a lot of
+things and one of them is whichever gene you pick. `1 gene` is the good case.
+
+### A funnel, not a score
+
+Collapsing specificity into one number hides which criterion did the work.
+Each stage applies one criterion and reports what it removed:
+
+| Stage | Axis |
+|---|---|
+| Evidence floor | tier, grade, direction conflicts |
+| Not genome-wide | chromatin agents — specificity ~0.05, no grade |
+| **Narrow regulon** | how many genes the factor controls |
+| **Narrow TF tissue footprint** | how body-wide the factor is (a proxy) |
+| **Tolerable clinical burden** | withdrawal, drug class, target class |
+
+Three properties keep the accounting honest.
+
+**Missing data passes, and is counted.** Dropping a candidate for lacking a
+field its route never had is backwards. But a stage reporting "removed 0" when
+it had nothing to work with reads like a clean bill of health, so
+`not assessable` is printed beside it, and a stage nobody set a threshold for
+says *that* rather than pretending to have run.
+
+**Correlated stages are exposed.** Global regulators tend to have large
+regulons *and* broad expression *and* systemic drug classes — three views of
+one property. Each stage reports **unique kills**: rows it removed that no
+later stage would have removed anyway. Large removed with small unique means
+the stage is nearly redundant with the next.
+
+**Genes, not rows.** Counts are of distinct (active moiety, target) pairs per
+gene. With `--all-tss` a gene contributes several near-identical windows —
+CCR5's two overlapped by 71% — and counting rows would let the most-annotated
+gene win on annotation volume.
+
+The deliverable is the **gene × stage grid**: the stage where a candidate gene
+runs out of routes is the answer to which gene is cleanest.
+
+### The third denominator: systems
+
+Dexamethasone is a clean, potent, highly selective NR3C1 agonist. It passes
+*every* other filter here — and it acts on essentially every tissue, because
+that is what the receptor does. `selectivity` counts **proteins**, `regulon`
+counts **genes**; neither counts **systems**.
+
+`systemic.py` adds that, from three signals: a curated pleiotropic drug-class
+table, the regulatory flags `shortlist` already reads, and — the one that
+catches dexamethasone — whether the *target* is a global regulator, reusing
+`regulon.GLOBAL_REGULATORS` rather than duplicating it. A drug absent from the
+table is reported **unassessed**, never clean.
+
+### Known biases, corrected or declared
+
+**Regulon size is confounded with study effort.** TRRUST is literature-curated,
+so a factor with 8 recorded targets is likelier under-assayed than narrow, and
+a hard cutoff would select for obscurity and call it specificity — the same
+trap `evidence_depth` already corrects for protein selectivity.
+`regulon.regulon_evidence` marks those `understudied` and surfaces the
+provenance (`regulon file` / `bundled tier` / `unknown`) that the score alone
+collapses. `--trustworthy-regulon` requires a real count.
+
+**TF mRNA is not TF activity.** The tissue axis is a proxy for the *factor's*
+breadth, never the drug's distribution — nothing here maps a compound to
+tissues. For nuclear receptors it is **withheld entirely**: VDR is transcribed
+almost everywhere while 1,25-D signalling is not, and NRs were 201 of 216
+routes in a real CCR5 run, so a bad proxy there would bias the whole output.
+
+**The winner is a maximum.** Selecting the best of N genes × M drugs inflates
+the top row, because you are looking at it *because* its predicted score came
+out high. The report states the number of comparisons and, when the margin
+over the runner-up is within noise, says the two are not separable.
+
+**Genes are not run identically unless you make them so.** A gene run without
+`--chip-bed` loses every chip-dependent stage for reasons unrelated to its
+biology. `parity()` reports which options differ; mixed `--direction` is a
+hard error rather than a warning.
+
+**Tractability is not therapeutic value.** The funnel narrows on how cleanly a
+gene can be drugged. Human genetic support is printed *above* it, and gates
+nothing, so the easiest gene to drug cannot quietly win the argument.
+
+### Every panel flag
+
+| flag | what it does |
+|---|---|
+| `--genes A,B,C` / `--gene-file f` | the candidate genes; the file is one symbol per line, `#` comments allowed |
+| `--control-gene SYM` | an extra gene through the identical funnel as a negative control — excluded from the ranking and from recurrence, reported separately |
+| `--renarrow panel.json` | re-filter a saved panel with new cutoffs. No network, no re-run |
+| `--preset` | `narrow`, `narrow+clean`, `exploratory` |
+| `--max-regulon N` | axis (a) — drop factors controlling more than N genes |
+| `--trustworthy-regulon` | require a real regulon count, not a bundled tier or a handful of curated targets |
+| `--min-tissue-breadth 0..1` | axis (b) — higher is narrower. A proxy via the factor's expression; withheld for nuclear receptors |
+| `--max-burden` | axis (c) — `low`, `moderate`, `high`, `prohibitive` |
+| `--min-paralog-specificity 0..1` | axis (d) — higher means fewer relatives share the pocket |
+| `--require-interpretable` | also exclude `degraded` genes, not just `not interpretable` ones |
+| `--top N` / `--per-gene-top N` | rows in the table. `filter_rows` sorts globally by `(tier, -score)`, so without the per-gene cap one prolific gene fills it |
+
+### Why a control gene matters
+
+Without one, **an empty shortlist and a misconfigured filter look identical.**
+`--control-gene` runs an extra gene — a housekeeping gene is the natural
+choice — through exactly the same stages, and the report compares its
+survival against the candidate median. If the control survives as well as
+your candidates, the funnel is passing routes on properties every gene
+shares, and the surviving list is not evidence about your genes specifically.
+The report says that in those words rather than leaving you to notice.
+
+### Re-narrowing is free; re-running is not
+
+A fresh run costs tens of minutes per gene; tuning a cutoff should cost a
+second. `--renarrow` reloads `panel.json` and re-applies the funnel with no
+network at all, preserving the control gene. Tune there.
+
+### A fourth axis: the receptor family (`--min-paralog-specificity`)
+
+An orthosteric pocket is under selection to bind the same endogenous ligand
+across a receptor family, so it is **conserved and hard to discriminate**.
+Thyroid hormone binds THRA and THRB because both evolved to bind it — not an
+off-target defect in any drug, but a property of the family.
+
+Visible in a real CCR5 run's own output: THRA *and* THRB both surfaced with
+dextrothyroxine, liothyronine and levothyroxine scoring against both; RARA
+*and* RARG both surfaced with tretinoin, trifarotene and alitretinoin
+crossing between them. Two family members scoring well is **one bet, not
+two**, and the report now names which rows are relatives — distinguishing
+recurrence through the *same* factor (your genes share a regulator) from
+recurrence through *different* ones (the drug is unselective).
+
+Why family size and not ligand count: **ligand count measures study effort**,
+the same trap `regulon_evidence` and `evidence_depth` already correct for. A
+factor with two known ligands usually means nobody did the chemistry — and
+the causation runs backwards, since nuclear receptors have many ligands
+*because* they have a pocket. Few ligands correlates with *no pocket*, which
+is the hardest case, not the cleanest.
+
+A large family is a **risk, not a verdict**: subtype-selective agents exist
+for several of these families and were often developed precisely because the
+pan-agonist was unusable — resmetirom for THRB, trifarotene for RARG. Where
+one exists it is named and the drug is exempt from the filter.
+
+---
+
+## Trans-eQTL: the strongest evidence in the package
+
+Everything else here infers. A motif says a factor *could* bind. A trans-eQTL
+says natural genetic variation near it **does** change your gene's
+expression, in human tissue, with exposure randomised by meiosis.
+
+The report used to end each factor with "look for trans-eQTLs of X in
+eQTLGen" — identical wording per factor, advice rather than an answer. The
+significant-results file is 2 MB, so the lookup now just runs, caching once
+under the HTTP cache directory.
+
+A worked result: **CCR5 has no significant trans-eQTL at all** — it is not
+among the 6,297 genes with one, across 31,684 whole-blood samples at
+FDR<0.05. So the test returns nothing for every factor, and checking them one
+at a time is wasted effort. The report says that once.
+
+**Absence is weak here, and that matters more than it sounds.** Trans effects
+are small and detecting them needs enormous power, so a null overwhelmingly
+means underpowered rather than unregulated. eQTLGen is also whole blood: a
+relationship operating in hepatocytes or neurons will not appear however real
+it is.
+
+---
+
+## Keeping the curated tables honest (`audit`)
+
+Several tables here are hand-entered — the systemic drug classes, the
+receptor families, the curated stabilisers, the P-gp substrates. Each says in
+its docstring that it is incomplete, which is honest and useless on its own,
+because nothing tells you *when* it has drifted. A table that is quietly
+wrong is worse than one known to be incomplete: the report presents both with
+the same confidence.
+
+```bash
+python -m promoter_tf_drugs.audit            # consistency, no network
+python -m promoter_tf_drugs.audit --online   # also resolve names in ChEMBL
+```
+
+**Offline, and run on every commit as a test.** No drug in two systemic
+classes and no receptor in two families (either would make the burden a drug
+reports depend on table declaration order); no field too thin to act on; and
+every name normalising to itself under `salt_free_name`, since that is the
+form `classify` looks up — a member stored with a counterion could never be
+found.
+
+**Online, opt-in.** Resolves every curated drug name against ChEMBL. A name
+that no longer resolves is the clearest signal a table has drifted: renamed,
+merged, or wrong from the start. Names ChEMBL could not answer for are
+counted as **lookup errors, not as missing** — the same distinction the
+evidence ledger makes everywhere else.
+
+Neither level can tell you what is **missing** from a table. Only a human
+reading the current literature can. What this catches is drift in what is
+already there, which would otherwise be silent.
+
+---
+
+## What else is in the promoter window?
+
+Every other specificity check asks whether a drug or factor affects other
+genes. This asks the prior question: **is the sequence you scanned uniquely
+your gene's?**
+
+Found in a real CCR5 run. The window `chr3:46,365,946-46,371,945` sits
+entirely inside **CCR5AS**, an antisense lncRNA spanning
+`chr3:46,363,984-46,407,184` on the opposite strand. **CCR2**, CCR5's
+co-regulated paralog, is 5 kb beyond the edge — `--upstream 10000` would have
+swallowed it. Nothing in the pipeline said so.
+
+An antisense overlap matters more than it looks: the direction logic
+("activator bound here, so block it") assumes the factor acts on *your*
+promoter. Where the window lies inside an antisense transcript a site may
+drive that instead, and antisense RNA can stabilise or repress the sense gene
+— so the sign does not carry.
+
+This checks **annotation, not sequence uniqueness**. BLAT the window if you
+need to know it appears nowhere else. For CCR5 that distinction came out well:
+CCR5 and CCR2 promoters share almost no sequence (12-mer Jaccard 0.0005, 6
+shared 12-mers against 0 for a shuffled control) despite the genes being
+paralogs — the risk was neighbouring transcription units, not duplication.
+
+---
+
 ## Read this first: did the evidence sources actually work?
 
 Every report now opens with an **Evidence available in this run** table, and
@@ -524,8 +816,40 @@ https://gtexportal.org/home/downloads/adult-gtex/bulk_tissue_expression.
 if your table has an `is_landmark` column it is honoured, otherwise values are
 scored as inferred, which is the conservative reading.
 
-Only Ensembl (gene coordinates and sequence) has no offline substitute — but
-its results cache, so a gene you have fetched once works offline afterwards.
+`--promoter-fasta` closes the last gap. Ensembl was the one stage with no
+local route, so a 500 there took the whole run down. But this package already
+*writes* every window it fetched to `promoter.fa`, so **a previous run is its
+own offline source**:
+
+```bash
+python -m promoter_tf_drugs --gene YOURGENE --promoter-fasta results/YOURGENE_up/promoter.fa ...
+```
+
+Matching is on exact coordinates, so a window is reused only when it is
+genuinely the same window — a near-miss is rejected rather than silently
+analysing the wrong sequence. Any FASTA whose headers carry a `chrN:start-end`
+span works, not only this package's own.
+
+### When a service is down anyway
+
+Three behaviours, all of which used to be worse:
+
+**A 500 is backoff, not a verdict.** Ensembl, ChEMBL and the maayanlab hosts
+all return HTTP 500 while merely busy. Six attempts with capped jittered
+backoff now span about a minute; three attempts over 7 s gave up while the
+service was still just loading, and giving up there discarded every lookup
+the run had already completed. Tune with `PTD_RETRIES` and `PTD_RETRY_CAP`.
+
+**One unreachable window no longer aborts the run.** With `--all-tss` a gene
+has several promoter windows; a failure on one now skips that window with a
+warning and continues with the rest, reporting which were lost. Only a run
+where *every* window failed raises — an empty promoter list would read
+downstream as "this gene has no promoter", which is a different and wrong
+claim.
+
+**A failed source is never a measured negative.** This is the evidence-ledger
+guarantee described above: a service that was asked and did not answer is
+reported `FAILED` with what it cost you, and is refused as scoring input.
 
 ---
 

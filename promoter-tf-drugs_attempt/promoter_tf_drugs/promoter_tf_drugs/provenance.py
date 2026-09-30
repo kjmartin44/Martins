@@ -37,10 +37,12 @@ FLAGS = {
     "chip": "--chip-bed (preferred) or --chip-api",
     "expression": "--cell-type-check, ideally with --expression-file",
     "lincs": "--lincs or --lincs-file",
+    "ctd": "on by default; --no-improvements turns it off",
     "genetics": "--genetics",
     "regulon": "--regulon-file",
     "upstream": "--upstream-network",
     "screen": "--screen",
+    "direction_model": "--predict-direction (needs rdkit + scikit-learn)",
 }
 
 # What you lose when a source is unavailable. Stated per source because
@@ -50,13 +52,19 @@ IMPACT = {
             "as bound. This is the single largest loss of evidence in the run.",
     "expression": "Factors are not checked for co-expression with your gene, "
                   "so a regulator absent from your tissue can still rank top.",
-    "lincs": "No measured expression change anywhere in the report — every "
-             "remaining route is inference.",
+    "lincs": "No L1000 signature for this gene. CTD may still carry measured "
+             "expression effects — check that row before concluding nothing "
+             "was ever measured.",
+    "ctd": "No curated chemical-gene expression effects, so the report loses "
+           "its literature-derived empirical evidence as well as its "
+           "novelty check.",
     "genetics": "No human causal evidence for the TF-to-gene link.",
     "regulon": "Transcriptional specificity falls back to coarse bundled "
                "tiers, so a global regulator may not be penalised enough.",
     "upstream": "TFs with no direct pharmacology return no route at all.",
     "screen": "No untested drug/receptor pairs are surfaced.",
+    "direction_model": "Agonist-vs-antagonist was taken from the database annotation alone, with no independent structural check "
+                        "— so a mislabelled action_type passes through unchallenged.",
 }
 
 
@@ -129,10 +137,18 @@ class Ledger:
     def failures(self) -> list:
         return [s for s in self.sources.values() if s.requested and not s.ok]
 
+    # Sources carrying MEASUREMENT rather than annotation. CTD belongs here:
+    # a curator recorded that someone dosed cells and the gene's expression
+    # moved. That is an observation, not an inference from a motif — and it
+    # is frequently the only empirical source still standing when LINCS is
+    # unreachable, which it often is.
+    EMPIRICAL = ("chip", "lincs", "ctd", "genetics")
+
     def empirical_sources_ok(self) -> int:
-        """How many sources carrying *measurement* rather than annotation."""
-        return sum(1 for n in ("chip", "lincs", "genetics")
-                   if self.usable(n))
+        return sum(1 for n in self.EMPIRICAL if self.usable(n))
+
+    def empirical_names(self) -> list:
+        return [n for n in self.EMPIRICAL if self.usable(n)]
 
     def to_dict(self) -> dict:
         return {
@@ -140,6 +156,7 @@ class Ledger:
             "n_failed": len(self.failures()),
             "failed": sorted(s.name for s in self.failures()),
             "empirical_sources_ok": self.empirical_sources_ok(),
+            "empirical_available": self.empirical_names(),
         }
 
 
@@ -169,6 +186,7 @@ def verdict(ledger: Ledger, scan_quality: dict | None = None) -> dict:
     if failed:
         reasons.append("requested source(s) failed: " + ", ".join(failed))
 
+    have = ledger.empirical_names()
     if scan_bad and n_emp == 0:
         level = "not interpretable"
         headline = (
@@ -178,13 +196,17 @@ def verdict(ledger: Ledger, scan_quality: dict | None = None) -> dict:
     elif reasons:
         level = "degraded"
         headline = ("Read the ranking as a reading order, not as evidence. "
-                    "At least one pillar of the analysis is missing.")
+                    "At least one pillar of the analysis is missing."
+                    + (f" Measured evidence that DID arrive: "
+                       f"{', '.join(have)}." if have else ""))
     else:
         level = "interpretable"
-        headline = ("Scan is enriched and at least one measured source is "
-                    "available. The ranking rests on more than annotation.")
+        headline = (f"Scan is enriched and measured evidence is available "
+                    f"({', '.join(have)}). The ranking rests on more than "
+                    f"annotation.")
 
     return {"level": level, "headline": headline, "reasons": reasons,
             "n_empirical_sources": n_emp,
+            "empirical_available": have,
             "scan_verdict": scan_verdict,
             "false_discovery_proportion": fdp}

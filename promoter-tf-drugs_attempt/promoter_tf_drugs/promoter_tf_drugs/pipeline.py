@@ -10,10 +10,12 @@ from pathlib import Path
 
 from . import (annotate, catalogue as cat_mod, cellcycle, congeners as cong_mod,
                delivery as dlv_mod,
-               demo_data, direct, discovery, drug_scoring, modalities as modal_mod,
+               demo_data, direct, discovery, drug_scoring, eqtl as eqtl_mod,
+               modalities as modal_mod,
                drugs as drugs_mod, evidence, genes, motifs as motifs_mod,
                genetics as gen_mod, ligands as lig_mod, modulators as mod_mod,
-               network as net_mod,
+               neighbours as nbr_mod, network as net_mod,
+               predictions as pred_mod, systemic as sys_mod,
                outcome as outcome_mod, provenance as prov_mod,
                regulon as regulon_mod,
                screens as screens_mod, signatures as sig_mod,
@@ -133,6 +135,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         design_screen: bool = False, design_modality: bool = False,
         use_lincs: bool = False, signature_file: str | None = None,
         lincs_file: str | None = None, expression_file: str | None = None,
+        promoter_fasta: str | None = None,
         use_genetics: bool = False,
         upstream_network: bool = False,
         upstream_depth: int = 3,
@@ -160,6 +163,9 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                           "no regulon file; coarse bundled tiers in use"))
     if expression_file:
         dlv_mod.load_expression_file(expression_file)
+    if promoter_fasta:
+        # Removes the one stage that had no offline route.
+        genes.load_promoter_fasta(promoter_fasta)
 
     # ------------------------------------- 0. drugs that skip the TF route
     # Done first because if one of these exists it outranks everything below.
@@ -227,6 +233,17 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                 by_tf[s].hits.append(h)
 
         # --------------------------------------------------- 4. ChIP evidence
+        # ------------------- 3b. is this window uniquely this gene's?
+        # Asked before any ranking, because a window containing another
+        # transcription unit makes every site call below ambiguous.
+        neighbours = ({} if demo else _optional(
+            "neighbouring-gene check",
+            lambda: nbr_mod.genes_in_window(
+                client, prom.chrom, prom.start, prom.end,
+                strand=prom.strand, species=species,
+                exclude=prom.gene_symbol),
+            {}))
+
         chip_counts, chip_status = evidence.chip_evidence_status(
             prom, chip_bed=chip_bed, client=client, use_api=chip_api)
         chip_src = ledger.record("chip", **chip_status)
@@ -279,6 +296,24 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                 evidence_lookup=demo_data.demo_evidence if demo else None,
                 predict_direction=predict_direction and not demo, goal=goal,
                 regulons=regulons)
+
+            # A ChEMBL outage and a target with genuinely few ligands both
+            # end as "no direction model", and the grade rows look identical.
+            # Record which it was: the whole point of the ledger is that a
+            # source which was asked and did not answer cannot pass as a
+            # measured negative.
+            if predict_direction and not demo:
+                broke = sum(1 for g in grades if any(
+                    "direction model unavailable" in n
+                    or "direction prediction failed" in n
+                    for n in (g.notes or [])))
+                ledger.record(
+                    "direction_model", requested=True,
+                    ok=broke == 0 and bool(grades),
+                    yielded=len(grades) - broke,
+                    detail=(f"{broke} of {len(grades)} grade(s) could not be "
+                            f"direction-checked" if broke else
+                            f"{len(grades)} grade(s) direction-checked"))
 
             # Collapse salt forms. One pharmacology was occupying five rows
             # (Liothyronine / Liothyronine Sodium / Levothyroxine Sodium ...),
@@ -421,7 +456,12 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                         client, r.symbol, r.annotation.get("uniprot"),
                         goal=goal, approved_only=approved_only)
                     a["stabilisers"] += [e.to_dict() for e in extra]
-                if a["stabilisers"] or a["recommended"]:
+                # Keep the no-route factors too. They are the majority, and
+                # dropping them silently means a reader never learns that
+                # stabilisation was considered for them and found nothing —
+                # which is exactly the question "can we stabilise this?"
+                if (a["stabilisers"] or a["recommended"]
+                        or not a["has_ligand_pocket"]):
                     stabilisation[r.symbol] = a
 
         # ------------- 8b3. change the natural ligand instead of the receptor
@@ -452,6 +492,9 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                                   f"for {prom.gene_symbol} — co-expression "
                                   f"cannot be checked for any factor"))
             celltype["gene_tissues"] = sorted(gene_tissues)[:20]
+            # The denominator a tissue count needs to mean anything. None
+            # when no local table was loaded — see tissue_universe_size.
+            celltype["n_tissues_total"] = dlv_mod.tissue_universe_size()
             celltype["tfs"] = {}
             for r in ranked[:10]:
                 tf_t = dlv_mod.tissue_expression(client, r.symbol)
@@ -516,6 +559,45 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                 gen_mod.tf_link_support(client, r.symbol, prom.gene_symbol).to_dict()
                 for r in ranked[:3]]
 
+            # Actually run the trans-eQTL lookup the advice above describes.
+            # The eQTLGen significant file is 2 MB; telling someone to go
+            # check it by hand, once per factor, in identical wording, was
+            # advice rather than an answer.
+            def _trans_eqtl():
+                any_hit = eqtl_mod.gene_has_any_trans_eqtl(
+                    prom.gene_symbol, client=client)
+                out = []
+                for r in ranked[:6]:
+                    locus = None
+                    if any_hit:
+                        # Only worth an Ensembl lookup when there is
+                        # something for it to be near.
+                        info = _optional(
+                            f"locus of {r.symbol}",
+                            lambda s=r.symbol: genes._lookup_symbol(
+                                client, s, species), None)
+                        if info and info.get("seq_region_name"):
+                            locus = (info["seq_region_name"], info["start"],
+                                     info["end"])
+                    out.append(eqtl_mod.trans_support(
+                        r.symbol, prom.gene_symbol, tf_locus=locus,
+                        client=client))
+                return out
+
+            supports = _optional("eQTLGen trans-eQTL lookup", _trans_eqtl, [])
+            if supports:
+                genetic["trans_eqtl"] = [s.to_dict() for s in supports]
+                genetic["trans_eqtl_summary"] = eqtl_mod.summarise(
+                    prom.gene_symbol, supports)
+                ledger.record(
+                    "trans_eqtl", requested=True,
+                    ok=any(s.checked for s in supports),
+                    yielded=sum(1 for s in supports if s.supported),
+                    detail=(f"{sum(1 for s in supports if s.supported)} of "
+                            f"{len(supports)} factor(s) have trans-eQTL "
+                            f"support" if any(s.checked for s in supports)
+                            else "eQTLGen file not retrieved"))
+
         # ---------------- 8e2. design a direct modality for this gene
         modality = {}
         if design_modality:
@@ -542,6 +624,21 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             improvements = discovery.discover(
                 client, prom.gene_symbol, grades, ranked, direct_hits,
                 outcomes=estimates, goal=goal, demo=demo)
+            # CTD is empirical, not annotation: a curator recorded that
+            # someone dosed cells and this gene's expression moved. It was
+            # only ever used for the novelty check, so a run could report
+            # "no measured evidence" while holding 152 curated expression
+            # effects — which is what happened on the real CCR5 run.
+            if not demo:
+                n_ctd = improvements.get("ctd_links_found") or 0
+                rl = (improvements.get("reported_links") or {}).get("counts") or {}
+                ledger.record(
+                    "ctd", requested=True, ok=bool(n_ctd), yielded=n_ctd,
+                    detail=(f"{n_ctd} chemical(s) with curated expression "
+                            f"effects on this gene; {rl.get('wanted', 0)} move "
+                            f"it the way you want" if n_ctd else
+                            "no curated chemical-gene expression effects "
+                            "returned for this gene"))
 
         block_for_catalogue = {
             "direct_therapies": [t.to_dict() for t in direct_hits],
@@ -568,6 +665,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             "scan_quality": quality,
             "salt_forms_collapsed": collapsed if grade_drugs else {},
             "evidence_verdict": prov_mod.verdict(ledger, quality),
+            "neighbours": neighbours,
             "n_tfs": len(by_tf),
             "tfs": [r.to_dict() for r in ranked],
             "direction_unknown": {
@@ -593,8 +691,15 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             "hits": [vars(h) for h in hits],
         })
 
+    # How much the --all-tss windows duplicate each other. CCR5's two
+    # overlapped by 4275 of 6000 bp, so they were largely one analysis
+    # counted twice — which inflates every per-gene route count downstream.
+    tss_overlap = nbr_mod.window_overlap(
+        [o["promoter"] for o in outputs]) if len(outputs) > 1 else []
+
     return {
         "direct_therapies": [t.to_dict() for t in direct_hits],
+        "tss_window_overlap": tss_overlap,
         "evidence_sources": ledger.to_dict(),
         "evidence_verdict": prov_mod.verdict(
             ledger, (outputs[0] or {}).get("scan_quality") if outputs else None),
@@ -721,6 +826,31 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                  "nothing exists.")
         L.append("")
 
+    # ------------------------------------- the headline answer, up front
+    # This is the question people actually bring to the tool. It used to be
+    # answerable only by assembling eight tables yourself.
+    if result["results"]:
+        first = result["results"][0]
+        burdens = {}
+        for g in (first.get("drug_grades") or []):
+            burdens[g["drug_name"].lower()] = sys_mod.clinical_burden(
+                g["drug_name"], notes=" ".join(g.get("notes") or []),
+                target=g.get("tf_symbol")).to_dict()
+        preds = pred_mod.build(
+            first, goal=goal,
+            has_chip=bool(q.get("chip_bed") or q.get("chip_api")),
+            burdens=burdens)
+        L.extend(pred_mod.render(preds, q["gene"], goal,
+                                 verdict=result.get("evidence_verdict")))
+
+    ov = result.get("tss_window_overlap") or []
+    if ov:
+        L.append("> **⚠ These promoter windows overlap each other.** "
+                 + " ".join(o["note"] for o in ov[:2])
+                 + " Counts and route lists below are therefore not "
+                 "independent across the windows.")
+        L.append("")
+
     for res in result["results"]:
         p = res["promoter"]
         L.append(f"## Promoter of {p['gene_symbol']} ({p['transcript_id']})")
@@ -750,6 +880,42 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                 # mild signal but means ~5 of every 6 rows are chance.
                 L.append(f"*{q2['fdp_note']}*")
                 L.append("")
+
+        nb = res.get("neighbours") or {}
+        if nb.get("checked") and nb.get("genes"):
+            L.append("#### What else is in this window")
+            L.append("")
+            L.append("Every other specificity check here asks whether a drug "
+                     "or factor affects other genes. This asks the prior "
+                     "question: is the sequence that was scanned uniquely "
+                     "this gene's?")
+            L.append("")
+            L.append(nb["summary"])
+            L.append("")
+            L.append("| Gene | Biotype | Location | Strand | Relation |")
+            L.append("|---|---|---|---|---|")
+            for g in nb["genes"][:12]:
+                L.append(f"| {g['gene']} | {g['biotype']} | "
+                         f"chr{g['chrom']}:{g['start']}-{g['end']} | "
+                         f"{'+' if g['strand'] == 1 else '-'} | "
+                         f"{g['relation']} |")
+            L.append("")
+            for g in nb["genes"][:4]:
+                if g["relation"] != "nearby":
+                    L.append(f"- **{g['gene']}** — {g['note']}")
+            if nb.get("n_antisense"):
+                L.append("")
+                L.append("*An antisense overlap matters more than it looks. "
+                         "The direction logic in this report assumes a factor "
+                         "acts on YOUR promoter; where the window lies inside "
+                         "an antisense transcript, a site may drive that "
+                         "instead, and antisense RNA can stabilise or repress "
+                         "the sense gene — so the sign does not carry.*")
+            L.append("")
+            L.append("*This checks annotation, not sequence uniqueness. BLAT "
+                     "the window if you need to know it appears nowhere else "
+                     "in the genome.*")
+            L.append("")
 
         nrs = [t for t in res["tfs"] if t.get("nuclear_receptor")]
         if nrs:
@@ -832,10 +998,66 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                          "**abundance** or protein **activity** — a western "
                          "blot only sees the first.")
                 L.append("")
+
+                # Which drugs are actually in each category, and what assay
+                # would see the effect. Printing only "(21 found)" left the
+                # reader unable to connect a category to their own candidates.
+                by_cat: dict = {}
+                for r in ar["routes"]:
+                    by_cat.setdefault(r["category"], []).append(r["drug"])
+
+                L.append("| Category | What it changes | Your drugs in it | "
+                         "Assay that sees it |")
+                L.append("|---|---|---|---|")
                 for c in present:
                     g = guide[c]
+                    drugs = by_cat.get(c) or []
+                    seen, uniq = set(), []
+                    for d in drugs:
+                        if d.lower() not in seen:
+                            seen.add(d.lower())
+                            uniq.append(d)
+                    shown = ", ".join(uniq[:4])
+                    if len(uniq) > 4:
+                        shown += f" … +{len(uniq) - 4}"
+                    L.append(f"| {c} | **{g.get('changes', '?')}** | "
+                             f"{shown or '—'} | {g.get('assay', '—')} |")
+                L.append("")
+                if "direct: gene product" in present:
+                    L.append("**Only one of these changes activity rather "
+                             "than abundance: *direct: gene product*.** "
+                             "Everything else works through transcription, so "
+                             "it moves how much of your gene's product exists "
+                             "and an RT-qPCR will see it. A ligand or "
+                             "inhibitor on the product itself changes what "
+                             "the protein already present does while its "
+                             "level barely moves — which is why ivacaftor "
+                             "reads as a failure on a western blot and works "
+                             "in patients.")
+                else:
+                    L.append("*Every category present here works through "
+                             "transcription, so all of them move your gene's "
+                             "product **abundance** and an RT-qPCR is the "
+                             "right first readout. The one exception in the "
+                             "taxonomy — a drug on the gene product itself, "
+                             "which changes activity only — did not appear "
+                             "in this run.*")
+                L.append("")
+
+                for c in present:
+                    g = guide[c]
+                    drugs = by_cat.get(c) or []
+                    seen, uniq = set(), []
+                    for d in drugs:
+                        if d.lower() not in seen:
+                            seen.add(d.lower())
+                            uniq.append(d)
                     L.append(f"**{c}** ({ar['by_category'][c]} found)")
                     L.append("")
+                    if uniq:
+                        L.append(f"- *Yours:* {', '.join(uniq[:8])}"
+                                 + (f" … +{len(uniq) - 8} more"
+                                    if len(uniq) > 8 else ""))
                     L.append(f"- {g['what']}")
                     L.append(f"- *Why:* {g['why']}")
                     L.append(f"- *Cost:* {g['cost']}")
@@ -1061,30 +1283,62 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                      "every factor has protein-protein interfaces and "
                      "degradation machinery, and both are druggable.")
             L.append("")
-            for sym, a in list(stab.items())[:6]:
-                pocket = "has a ligand pocket" if a["has_ligand_pocket"] else                          "**no ligand pocket**"
-                L.append(f"**{sym}** — {pocket}"
-                         + (" · stabilisation recommended" if a["recommended"] else ""))
+            # Split by whether anything actually exists for the factor. The
+            # previous version printed the same paragraph and the same four
+            # exemplars under every pocket-less TF, which read as though a
+            # route were available for each of them. For most, none is.
+            actionable = {s: a for s, a in stab.items() if a.get("actionable")}
+            nothing = [s for s, a in stab.items() if not a.get("actionable")]
+
+            for sym, a in list(actionable.items())[:6]:
+                pocket = ("has a ligand pocket" if a["has_ligand_pocket"]
+                          else "**no ligand pocket**")
+                L.append(f"**{sym}** — {pocket} · **a curated route exists**")
                 L.append("")
-                if a["stabilisers"]:
-                    L.append("| Drug | Mechanism | Binds | Raises | Status |")
-                    L.append("|---|---|---|---|---|")
-                    for st in a["stabilisers"][:top_n]:
-                        yr = f" ({st['approval_year']})" if st["approval_year"] else ""
-                        L.append(f"| {st['drug']}{yr} | {st['mechanism']} | "
-                                 f"{st['target_node']} | {st['raises']} | "
-                                 f"{st['status']} |")
-                    L.append("")
+                L.append("| Drug | Mechanism | Binds | Raises | Status |")
+                L.append("|---|---|---|---|---|")
+                for st in a["stabilisers"][:top_n]:
+                    yr = f" ({st['approval_year']})" if st["approval_year"] else ""
+                    L.append(f"| {st['drug']}{yr} | {st['mechanism']} | "
+                             f"{st['target_node']} | {st['raises']} | "
+                             f"{st['status']} |")
+                L.append("")
                 for n2 in a["notes"][:3]:
                     L.append(f"- {n2}")
                 L.append("")
-                if a.get("exemplars"):
-                    L.append("  Approved proof the mechanism class works, on "
-                             "other targets:")
-                    for ex in a["exemplars"][:4]:
-                        L.append(f"  - **{ex['drug']}** ({ex['approval_year']}) — "
-                                 f"{ex['mechanism']}: {ex['description']}")
-                    L.append("")
+
+            if nothing:
+                L.append(f"#### No stabilisation route for "
+                         f"{len(nothing)} factor(s)")
+                L.append("")
+                L.append(", ".join(sorted(nothing)))
+                L.append("")
+                L.append("These have no ligand pocket, no direct drug, and "
+                         "**nothing curated against them or their degradation "
+                         "machinery**. For these factors stabilisation is a "
+                         "research programme, not a route you can take: "
+                         "making it real needs the E3 ligase that degrades "
+                         "the factor *and* a ligand for that ligase, and "
+                         "neither is published here.")
+                L.append("")
+                L.append("The mechanism class is real — it has shipped "
+                         "approved drugs, listed once below — but those act "
+                         "on **other proteins entirely**, and none of them "
+                         "is evidence that any factor above is tractable.")
+                L.append("")
+
+            if any(a.get("exemplars") for a in stab.values()):
+                ex_list = next(a["exemplars"] for a in stab.values()
+                               if a.get("exemplars"))
+                L.append("<details><summary>Approved proof the mechanism "
+                         "class works — on unrelated targets</summary>")
+                L.append("")
+                for ex in ex_list[:4]:
+                    L.append(f"- **{ex['drug']}** ({ex['approval_year']}) — "
+                             f"{ex['mechanism']}: {ex['description']}")
+                L.append("")
+                L.append("</details>")
+                L.append("")
             L.append("*Conformational stabilisers raise activity with protein "
                      "levels unchanged; degradation blockers raise levels. A "
                      "western blot cannot see the first kind — pick the assay to "
@@ -1196,10 +1450,53 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                     L.append(f"| {pz['phenotype']} | {pz['genetic_score']} | "
                              f"{pz['overall_score']} |")
                 L.append("")
-            for t in (gen.get("trans") or [])[:3]:
-                if t.get("notes"):
-                    L.append(f"- **{t['tf_symbol']} → {t['gene']}**: {t['notes'][0]}")
-            L.append("")
+            # The actual trans-eQTL answer, not advice to go and find it.
+            # This used to print the same "look for trans-eQTLs of X in
+            # eQTLGen" paragraph once per factor — identical wording, no
+            # result. The significant-results file is 2 MB.
+            teq = gen.get("trans_eqtl") or []
+            if teq:
+                L.append("#### Does variation in the factor actually move "
+                         "this gene? (trans-eQTL)")
+                L.append("")
+                L.append("The strongest evidence available anywhere in this "
+                         "report. A motif says a factor *could* bind; a "
+                         "trans-eQTL says natural genetic variation near it "
+                         "**does** change your gene's expression, in real "
+                         "human tissue, with exposure randomised by meiosis.")
+                L.append("")
+                if gen.get("trans_eqtl_summary"):
+                    L.append(gen["trans_eqtl_summary"])
+                    L.append("")
+                supported = [t for t in teq if t.get("supported")]
+                if supported:
+                    L.append("| Factor | Variants | Best SNP | Z | p | n |")
+                    L.append("|---|---|---|---|---|---|")
+                    for t in supported[:top_n]:
+                        h = (t.get("hits") or [{}])[0]
+                        L.append(f"| **{t['tf']}** | {len(t.get('hits') or [])} | "
+                                 f"{h.get('snp', '—')} | {h.get('z', 0):.1f} | "
+                                 f"{h.get('p', 0):.2g} | {h.get('n', '—')} |")
+                    L.append("")
+                else:
+                    tested = ", ".join(t["tf"] for t in teq[:8])
+                    L.append(f"*No factor tested ({tested}) has trans-eQTL "
+                             f"support for this gene.*")
+                    L.append("")
+                L.append("*eQTLGen is whole blood at n=31,684, FDR<0.05. A "
+                         "hit is strong causal evidence. **Absence is weak** "
+                         "— trans effects are small and detecting them needs "
+                         "enormous power, so a null overwhelmingly means "
+                         "underpowered rather than unregulated, and a "
+                         "relationship operating outside blood would not "
+                         "appear at all.*")
+                L.append("")
+            else:
+                for t in (gen.get("trans") or [])[:3]:
+                    if t.get("notes"):
+                        L.append(f"- **{t['tf_symbol']} → {t['gene']}**: "
+                                 f"{t['notes'][0]}")
+                L.append("")
 
         imp = res.get("improvements") or {}
         if imp:
@@ -1528,127 +1825,162 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                          f"tf_summary.tsv | | | | | | | |")
         L.append("")
 
+    # Experimental design is deferred to the end of the report.
+    # It is how you would TEST any of the above, and putting a
+    # CRISPRa protocol between the reader and the drug list buried
+    # the answer under the method.
+    lab: list[str] = []
     # These two sections describe the GENE, not a particular promoter window,
     # so they are emitted once. Repeating them per TSS tripled the report.
     for res in result["results"][:1]:
         mo = res.get("modality_design") or {}
         if mo:
-            L.append(f"## Designing a direct modality for {mo['gene']}")
-            L.append("")
+            lab.append(f"## Designing a direct modality for {mo['gene']}")
+            lab.append("")
             d = mo["delivery"]
             flag = "" if mo["feasible_in_vivo"] else " ⚠"
-            L.append(f"**Delivery to {d['compartment']}: {d['status']}**{flag} — "
+            lab.append(f"**Delivery to {d['compartment']}: {d['status']}**{flag} — "
                      f"{d['route']}")
-            L.append("")
-            L.append(f"{d['note']}")
-            L.append("")
-            L.append(f"**{mo['verdict']}**")
-            L.append("")
+            lab.append("")
+            lab.append(f"{d['note']}")
+            lab.append("")
+            lab.append(f"**{mo['verdict']}**")
+            lab.append("")
             for opt in mo["options"]:
-                L.append(f"### {opt['modality']}")
-                L.append("")
-                L.append(opt["rationale"])
-                L.append("")
+                lab.append(f"### {opt['modality']}")
+                lab.append("")
+                lab.append(opt["rationale"])
+                lab.append("")
                 if opt.get("note"):
-                    L.append(f"*{opt['note']}*")
-                    L.append("")
+                    lab.append(f"*{opt['note']}*")
+                    lab.append("")
                 cands = opt.get("candidates") or []
                 # CRISPRi guides also carry a "sequence" key; the oligo branch
                 # is distinguished by having an antisense strand.
                 if cands and "antisense" in cands[0]:
-                    L.append("| Target site (5'→3') | Guide/antisense | Pos | "
+                    lab.append("| Target site (5'→3') | Guide/antisense | Pos | "
                              "GC | Notes |")
-                    L.append("|---|---|---|---|---|")
+                    lab.append("|---|---|---|---|---|")
                     for c in cands[:6]:
                         w = "; ".join(c["warnings"])[:45] or "clean"
-                        L.append(f"| `{c['sequence']}` | `{c['antisense']}` | "
+                        lab.append(f"| `{c['sequence']}` | `{c['antisense']}` | "
                                  f"{c['position']} | {c['gc']:.0%} | {w} |")
-                    L.append("")
+                    lab.append("")
                 elif cands:
-                    L.append("| Protospacer | PAM | Strand | vs TSS | Notes |")
-                    L.append("|---|---|---|---|---|")
+                    lab.append("| Protospacer | PAM | Strand | vs TSS | Notes |")
+                    lab.append("|---|---|---|---|---|")
                     for c in cands[:6]:
                         w = "; ".join(c["warnings"])[:40] or "clean"
-                        L.append(f"| `{c['sequence']}` | {c['pam']} | "
+                        lab.append(f"| `{c['sequence']}` | {c['pam']} | "
                                  f"{c['strand']} | {c['tss_offset']:+d} | {w} |")
-                    L.append("")
-            L.append(f"*{mo['off_target_warning']}*")
-            L.append("")
+                    lab.append("")
+            lab.append(f"*{mo['off_target_warning']}*")
+            lab.append("")
 
         sp = next((r.get("screen_plan") for r in result["results"]
                    if r.get("screen_plan")), None)
         if not sp:
             continue
-        L.append("## Screen design")
-        L.append("")
+        lab.append("## Screen design")
+        lab.append("")
         if len(result["results"]) > 1:
-            L.append(f"*One plan for the gene. The reporter insert below uses "
+            lab.append(f"*One plan for the gene. The reporter insert below uses "
                      f"the {result['results'][0]['promoter']['transcript_id']} "
                      f"window; clone a second construct for the other TSS if "
                      f"you want to compare them.*")
-            L.append("")
-        L.append("The outcome chain above is almost always limited by *gene "
+            lab.append("")
+        lab.append("The outcome chain above is almost always limited by *gene "
                  "responsiveness in your cell type* — the link this package "
                  "cannot see. A screen measures it instead of assuming it. "
                  "Everything above prioritises this experiment; it does not "
                  "replace it.")
-        L.append("")
-        L.append("### Reporter construct")
-        L.append("")
-        L.append(f"- Insert: {sp['reporter']['insert']}")
-        L.append(f"- Vector: {sp['reporter']['vector']}")
-        L.append("- Controls:")
+        lab.append("")
+        lab.append("### Reporter construct")
+        lab.append("")
+        lab.append(f"- Insert: {sp['reporter']['insert']}")
+        lab.append(f"- Vector: {sp['reporter']['vector']}")
+        lab.append("- Controls:")
         for c in sp["reporter"]["controls"]:
-            L.append(f"  - {c}")
-        L.append(f"- {sp['reporter']['caveat']}")
-        L.append("")
+            lab.append(f"  - {c}")
+        lab.append(f"- {sp['reporter']['caveat']}")
+        lab.append("")
         cr = sp["crispra"]
-        L.append("### CRISPRa screen")
-        L.append("")
-        L.append(f"- Approach: {cr['approach']}")
-        L.append(f"- Focused library: {cr['library']['focused']}")
-        L.append(f"- Unbiased: {cr['library']['genome_wide']}")
-        L.append(f"- Coverage: {cr['library']['coverage']}")
-        L.append(f"- Readout: {cr['readout']}")
-        L.append("")
+        lab.append("### CRISPRa screen")
+        lab.append("")
+        lab.append(f"- Approach: {cr['approach']}")
+        lab.append(f"- Focused library: {cr['library']['focused']}")
+        lab.append(f"- Unbiased: {cr['library']['genome_wide']}")
+        lab.append(f"- Coverage: {cr['library']['coverage']}")
+        lab.append(f"- Readout: {cr['readout']}")
+        lab.append("")
         gl = cr["guides_at_target_promoter"]
         if gl:
-            L.append(f"Positive-control sgRNAs at your promoter "
+            lab.append(f"Positive-control sgRNAs at your promoter "
                      f"({cr['n_usable_guides']} clean of {len(gl)} shown):")
-            L.append("")
-            L.append("| Protospacer (20 nt) | PAM | Strand | vs TSS | GC | Note |")
-            L.append("|---|---|---|---|---|---|")
+            lab.append("")
+            lab.append("| Protospacer (20 nt) | PAM | Strand | vs TSS | GC | Note |")
+            lab.append("|---|---|---|---|---|---|")
             for g in gl[:10]:
                 note = g["warnings"][0][:45] if g["warnings"] else "ok"
-                L.append(f"| `{g['sequence']}` | {g['pam']} | {g['strand']} | "
+                lab.append(f"| `{g['sequence']}` | {g['pam']} | {g['strand']} | "
                          f"{g['tss_offset']:+d} | {g['gc']:.0%} | {note} |")
-            L.append("")
-        L.append(f"*{cr['note']}*")
-        L.append("")
+            lab.append("")
+        lab.append(f"*{cr['note']}*")
+        lab.append("")
         cp = sp["compounds"]
-        L.append("### Compound screen")
-        L.append("")
+        lab.append("### Compound screen")
+        lab.append("")
         for lib in cp["libraries"]:
-            L.append(f"- {lib}")
-        L.append("")
-        L.append(f"- Design: {cp['design']}")
-        L.append(f"- Counter-screen: {cp['counter_screen']}")
-        L.append("")
+            lab.append(f"- {lib}")
+        lab.append("")
+        lab.append(f"- Design: {cp['design']}")
+        lab.append(f"- Counter-screen: {cp['counter_screen']}")
+        lab.append("")
         if cp["cherry_pick"]:
-            L.append("Cherry-pick, in priority order:")
-            L.append("")
-            L.append("| Compound | Rationale |")
-            L.append("|---|---|")
+            n_shown = len(cp["cherry_pick"][:24])
+            lab.append("#### Cherry-pick list")
+            lab.append("")
+            lab.append("**What this is.** \"Cherry-picking\" means having the "
+                     "vendor pull these named compounds into a custom plate "
+                     "rather than buying a whole library. It is a cost and "
+                     "time decision: ~48 wells you can run in a week, against "
+                     "~1,520 compounds for Prestwick or ~3,000 for the "
+                     "Selleck set.")
+            lab.append("")
+            lab.append("**Where these came from.** Every compound below was "
+                     "proposed earlier in *this run* — nothing external was "
+                     "consulted to build the list:")
+            lab.append("")
+            for src in cp.get("pulled_from", []):
+                lab.append(f"- {src}")
+            lab.append("")
+            if cp.get("priority_key"):
+                lab.append("Priority means:")
+                lab.append("")
+                for p, meaning in sorted(cp["priority_key"].items()):
+                    lab.append(f"- **{p}** — {meaning}")
+                lab.append("")
+            if cp.get("cannot_do"):
+                lab.append(f"**What it cannot do.** {cp['cannot_do']}")
+                lab.append("")
+            total = len(cp["cherry_pick"])
+            lab.append(f"Showing {n_shown} of {total} selected "
+                     f"(from {cp.get('n_available', total)} candidates in "
+                     f"this run), in priority order:")
+            lab.append("")
+            lab.append("| Priority | Compound | Why it is on the plate | Pulled from |")
+            lab.append("|---|---|---|---|")
             for c in cp["cherry_pick"][:24]:
-                L.append(f"| {c['compound']} | {c['rationale']} |")
-            L.append("")
-        L.append(f"*{cp['note']}*")
-        L.append("")
-        L.append("### What to expect")
-        L.append("")
+                lab.append(f"| {c.get('priority', '—')} | {c['compound']} | "
+                         f"{c['rationale']} | {c.get('source', '—')} |")
+            lab.append("")
+        lab.append(f"*{cp['note']}*")
+        lab.append("")
+        lab.append("### What to expect")
+        lab.append("")
         for k, v in sp["expectations"].items():
-            L.append(f"- **{k.replace('_', ' ')}**: {v}")
-        L.append("")
+            lab.append(f"- **{k.replace('_', ' ')}**: {v}")
+        lab.append("")
 
     L.append("---")
     L.append("")
@@ -1671,6 +2003,32 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
              "promoter-reporter assay for the element, agonist dose-response with "
              "RT-qPCR/protein readout for the drug, and a site-directed mutant of the "
              "element to show the drug effect runs through it.")
+    L.append("")
+
+    # ------------------------------------- experimental design, at the end
+    # Deferred deliberately. These sections are how you TEST the analysis,
+    # and they are long: a CRISPRa protocol and a plate layout sitting
+    # between the reader and the drug list buried the answer under the
+    # method. Everything above is what the model concluded; everything
+    # below is how you would find out whether it is right.
+    if lab:
+        L.append("---")
+        L.append("")
+        L.append("# Testing any of this in the lab")
+        L.append("")
+        L.append("Everything above is prediction. This part is experiment — "
+                 "how you would find out whether any of it holds, and it is "
+                 "placed last because it is long, not because it is "
+                 "optional.")
+        L.append("")
+        L.append("**If you run one thing, run the reporter assay with the "
+                 "scrambled-motif control.** A drug that induces the "
+                 "wild-type promoter but not the mutant has an effect "
+                 "running through the element this report predicted. A drug "
+                 "that induces both means the prediction was wrong. That "
+                 "single control turns a hit into a mechanism.")
+        L.append("")
+        L.extend(lab)
     return "\n".join(L)
 
 

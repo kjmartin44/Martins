@@ -183,16 +183,57 @@ def crispra_plan(promoter, tf_symbols: list[str], guides: list[Guide]) -> dict:
 
 
 def compound_plan(graded_drugs: list[dict], direct_hits: list[dict]) -> dict:
+    """Which individual compounds to order, rather than screening a library.
+
+    "Cherry-pick" is the physical act of having a vendor pull named compounds
+    into a custom plate, instead of buying and running a whole library. It is
+    a cost-and-time decision: ~48 wells you can run in a week, against ~1,520
+    for Prestwick or ~3,000 for the Selleck set.
+
+    What it buys and what it costs, which is the part worth being explicit
+    about: this list is assembled **entirely from the predictions made
+    earlier in this same run** — the direct-therapy lookup and the graded
+    TF/drug table. So it tests the model's own hypotheses quickly and
+    cheaply, and it is **structurally incapable of finding a mechanism the
+    model did not propose.** The unbiased full-library screen is the one that
+    surfaces the anti-parasitic nobody would have predicted. These are
+    complementary experiments, not substitutes, and running the cherry-pick
+    first is a way to fail fast, not a way to be thorough.
+    """
     cherry = []
     for d in direct_hits[:10]:
-        cherry.append({"compound": d.get("drug"), "rationale": "direct gene-"
-                       "targeted agent", "priority": 1})
+        cherry.append({"compound": d.get("drug"),
+                       "rationale": "direct gene-targeted agent",
+                       "source": "direct-therapy lookup (ChEMBL/DGIdb + "
+                                 "curated table)",
+                       "priority": 1})
     for g in graded_drugs[:40]:
         cherry.append({"compound": g.get("drug_name"),
                        "rationale": f"{g.get('tf_symbol')} route, grade "
                                     f"{g.get('grade')}",
+                       "source": f"graded TF route via {g.get('tf_symbol')}",
                        "priority": 2 if g.get("grade") in ("A", "B") else 3})
     return {
+        "n_available": len(direct_hits) + len(graded_drugs),
+        "pulled_from": [
+            f"{len(direct_hits)} direct gene-targeted agent(s) — priority 1, "
+            f"because they act on the gene or its product and skip every "
+            f"inferential step",
+            f"{len(graded_drugs)} graded TF/drug route(s) — priority 2 if "
+            f"graded A/B, else 3",
+        ],
+        "priority_key": {
+            1: "acts directly on your gene, transcript or protein",
+            2: "TF route the grading believes (A or B)",
+            3: "TF route with a weaker grade — included to fill the plate, "
+               "and the first rows to cut if wells are scarce",
+        },
+        "cannot_do": (
+            "Every compound here was proposed by this run. A cherry-pick "
+            "therefore tests the model and nothing beyond it — it cannot "
+            "discover a mechanism the pipeline never predicted. If the whole "
+            "plate is negative, the honest reading is that the promoter/TF "
+            "model is wrong for this gene, not that no drug moves it."),
         "libraries": [
             "Prestwick Chemical Library (~1,520 approved drugs, high chemical "
             "and pharmacological diversity)",

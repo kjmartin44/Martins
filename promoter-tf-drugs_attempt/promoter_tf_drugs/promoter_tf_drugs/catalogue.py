@@ -94,6 +94,8 @@ CHROMATIN_DRUGS = [
 # behave very differently.
 CATEGORY_GUIDE = {
     "direct: gene or transcript": {
+        "changes": "abundance",
+        "assay": "RT-qPCR then western/ELISA",
         "what": "Acts on your gene's own DNA or RNA — siRNA, antisense, "
                 "splice-switching oligos, gene therapy.",
         "why": "Sequence-level specificity. Affects your gene and essentially "
@@ -104,6 +106,8 @@ CATEGORY_GUIDE = {
                    "protein is made rather than what existing protein does.",
     },
     "direct: gene product": {
+        "changes": "ACTIVITY ONLY",
+        "assay": "a functional/activity assay — a western blot will show nothing",
         "what": "Binds the protein your gene encodes — an antibody, enzyme "
                 "inhibitor or receptor ligand acting on the product itself.",
         "why": "Immediate, well-understood pharmacology; the protein is right "
@@ -116,6 +120,8 @@ CATEGORY_GUIDE = {
                    "actually want.",
     },
     "TF: orthosteric ligand": {
+        "changes": "abundance",
+        "assay": "RT-qPCR then western/ELISA",
         "what": "Binds the transcription factor's natural ligand pocket.",
         "why": "The best-characterised route, and where nearly all approved "
                "TF pharmacology lives.",
@@ -126,6 +132,8 @@ CATEGORY_GUIDE = {
                    "routes, which scale what is already happening.",
     },
     "TF: allosteric modulator": {
+        "changes": "abundance",
+        "assay": "RT-qPCR then western/ELISA",
         "what": "Binds a site away from the ligand pocket, amplifying or "
                 "damping the endogenous ligand's effect (PAM/NAM).",
         "why": "Allosteric sites are not conserved across a receptor family, "
@@ -137,6 +145,8 @@ CATEGORY_GUIDE = {
                    "trade-off: less maximal effect, more selectivity.",
     },
     "TF: endogenous ligand": {
+        "changes": "abundance",
+        "assay": "RT-qPCR then western/ELISA; also measure the endogenous ligand, which is what actually moved",
         "what": "Changes how much natural ligand exists, by drugging the "
                 "enzyme that makes or destroys it.",
         "why": "The enzyme is often far more druggable than the receptor, and "
@@ -149,6 +159,8 @@ CATEGORY_GUIDE = {
                    "work this way and appear in no other category.",
     },
     "TF: stabiliser or glue": {
+        "changes": "abundance",
+        "assay": "RT-qPCR for your gene; note the DRUG acts on the factor's activity or level, not your gene's",
         "what": "Locks the factor in an active conformation, or glues it to a "
                 "partner protein.",
         "why": "Needs no ligand pocket, so it reaches factors that orthosteric "
@@ -159,6 +171,8 @@ CATEGORY_GUIDE = {
                    "unchanged — the opposite of a degradation blocker.",
     },
     "TF: degradation blocker": {
+        "changes": "abundance",
+        "assay": "RT-qPCR for your gene; western for the FACTOR to confirm it accumulated",
         "what": "Stops the factor being destroyed, so more of it accumulates.",
         "why": "The class that actually shipped: NRF2 via KEAP1, HIF via PHD "
                "inhibitors.",
@@ -168,6 +182,8 @@ CATEGORY_GUIDE = {
                    "unlike a conformational stabiliser, which does not.",
     },
     "upstream signalling": {
+        "changes": "abundance",
+        "assay": "RT-qPCR then western/ELISA; confirm the pathway node moved too, or you cannot attribute the effect",
         "what": "Drugs a kinase, phosphatase or receptor upstream of the "
                 "transcription factor.",
         "why": "Turns 'this factor has no drugs' into a real list. Most TFs "
@@ -179,6 +195,8 @@ CATEGORY_GUIDE = {
                    "or its TF — read the printed path and judge it yourself.",
     },
     "empirical signature": {
+        "changes": "abundance (measured)",
+        "assay": "already measured as mRNA — confirm by RT-qPCR in your own cells",
         "what": "A compound observed to move your gene in a cell-based "
                 "transcriptomic assay, mechanism unknown.",
         "why": "The only evidence here that is measured rather than inferred. "
@@ -192,6 +210,8 @@ CATEGORY_GUIDE = {
                    "mechanism.",
     },
     "chromatin-level": {
+        "changes": "abundance, genome-wide",
+        "assay": "RT-qPCR plus a housekeeping panel; if everything moved, nothing specific happened",
         "what": "HDAC, DNMT and EZH2 inhibitors — genome-wide transcriptional "
                 "effects.",
         "why": "Reliable positive control that your reporter *can* be induced.",
@@ -201,6 +221,8 @@ CATEGORY_GUIDE = {
                    "so you can see what a non-specific option scores.",
     },
     "virtual screen hypothesis": {
+        "changes": "unknown — predicted binding only",
+        "assay": "a binding assay first; expression is two steps further on",
         "what": "An approved drug predicted to bind one of your TFs, never "
                 "tested against it.",
         "why": "Real repurposing space — most approved drugs have been assayed "

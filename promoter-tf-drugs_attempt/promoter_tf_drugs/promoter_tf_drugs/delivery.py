@@ -273,15 +273,59 @@ def assess_delivery(drug_name: str, *, compartment: str = "unknown",
 # Open Targets changes this schema between releases. Try the richest form
 # first and fall back; a 400 means the shape is wrong, not that the gene is
 # missing, so there is no point retrying the same query for every TF.
+# Open Targets removed `Target.expressions` (the HPA-style 0-3 level across
+# ~50 tissues) somewhere before API v26.9. Querying it now returns HTTP 400
+# for every gene, which is why the whole axis went dark rather than degrading.
+#
+# The replacement, `baselineExpression`, is NOT a drop-in. For CCR5 it returns
+# 1409 rows of which the overwhelming majority are single-cell
+# `CPM(pseudobulk sum[counts])` and only ~17 are bulk `TPM`. Mixing those
+# units and thresholding across them would be meaningless, so only TPM rows
+# are read. The result is a much thinner tissue set than the old field gave
+# (6 tissues for CCR5, against HPA's ~50), and it is a different dataset
+# rather than the same one renamed.
+#
+# So this restores the source but does not restore the old quality.
+# `--expression-file` with HPA's rna_tissue_consensus.tsv is now clearly the
+# better path, and `tissue_universe_size()` still refuses to supply a
+# denominator for the API route precisely because this vocabulary varies.
+# Large enough to take the whole response in one page: CCR5 has 1409 rows.
+# At size=500 only 17 TPM rows came back; at 1500, 66 do — so an undersized
+# page silently loses most of the bulk data.
+_EXPR_PAGE = 1500
+
+# Two units, two thresholds, never one cutoff across both. `TPM` is bulk
+# RNA-seq; `CPM(pseudobulk sum[counts])` is summed single-cell counts. They
+# are different measurements on different data and the same number does not
+# mean the same thing in each, so each keeps its own floor.
+#
+#   TPM: 1.0 is the conventional floor for "expressed", and matches
+#        load_expression_file's min_value, so the API and local-file routes
+#        finally agree on what "expressed here" means.
+#   CPM: also 1.0, but chosen from the observed distribution rather than by
+#        analogy. The single-cell data is heavily zero-inflated (892 of 1343
+#        rows are exactly 0 for CCR5, 821 for GATA2) and a floor of 1
+#        separates the restricted genes from the broad ones sensibly:
+#        CCR5 349 rows, GATA2 431, VDR 924. Tunable independently, which is
+#        the point of keeping it a separate constant.
+_EXPR_UNITS = {
+    "TPM": 1.0,
+    "CPM(pseudobulk sum[counts])": 1.0,
+}
+
 _EXPR_QUERIES = [
+    """query($ensemblId: String!, $size: Int!) {
+  target(ensemblId: $ensemblId) {
+    baselineExpression(page: {index: 0, size: $size}) {
+      count
+      rows { median unit tissueBiosample { biosampleName } }
+    }
+  }
+}""",
+    # Older deployments still serving the previous schema.
     """query($ensemblId: String!) {
   target(ensemblId: $ensemblId) {
     expressions { tissue { label } rna { level } protein { level } }
-  }
-}""",
-    """query($ensemblId: String!) {
-  target(ensemblId: $ensemblId) {
-    expressions { tissue { label } rna { level } }
   }
 }""",
 ]
@@ -291,6 +335,63 @@ _EXPR_DISABLED = {"value": False, "reason": None}
 
 # A locally-loaded expression table takes priority over the API entirely.
 _LOCAL_EXPRESSION: dict[str, dict[str, float]] = {}
+
+
+def tissue_universe_size() -> int | None:
+    """How many distinct tissues the loaded expression table contains.
+
+    A tissue count needs a denominator to mean anything. HPA's consensus table
+    has ~50 tissues, a GTEx matrix ~54, and the Open Targets response uses a
+    variable per-gene vocabulary — so "expressed in 30 tissues" is a different
+    claim in each. Returns None when no local table is loaded, because a
+    fraction against a guessed denominator would be a fabricated number.
+    """
+    if not _LOCAL_EXPRESSION:
+        return None
+    return len({t for per_gene in _LOCAL_EXPRESSION.values() for t in per_gene})
+
+
+def expression_breadth(symbol: str, *, n_total: int | None = None,
+                       nuclear_receptor: bool = False) -> dict:
+    """How body-wide is this factor? 0..1, HIGHER = NARROWER = better.
+
+    Direction deliberately matches `regulon.transcriptional_specificity`, so
+    there is one convention across the specificity axes rather than two.
+
+    Two things this is NOT, both of which it would be easy to imply:
+
+    **It is not the drug's tissue distribution.** Nothing in this package maps
+    a compound to the tissues it reaches; `assess_delivery` answers one
+    question about one barrier. This measures the *transcription factor's*
+    expression, as a stand-in for the route's reach.
+
+    **For a nuclear receptor it is close to meaningless.** mRNA presence is
+    not activity: VDR is transcribed almost everywhere, while 1,25-D
+    signalling happens where the ligand is. Ligand availability sets the
+    footprint of a ligand-gated factor, and this package cannot see it — so
+    for those factors the score is withheld rather than used to penalise
+    exactly the receptor class that dominates this pipeline's output.
+    """
+    tissues = _LOCAL_EXPRESSION.get(symbol.upper())
+    n_tf = len(tissues) if tissues else None
+    total = n_total if n_total is not None else tissue_universe_size()
+
+    if nuclear_receptor:
+        return {"score": None, "n_tf": n_tf, "n_total": total,
+                "basis": "withheld: ligand-gated factor",
+                "note": (f"{symbol} is a nuclear receptor. Expression breadth "
+                         f"overstates its footprint because activity follows "
+                         f"the ligand, not the receptor — not scored on this "
+                         f"axis rather than penalised on a bad proxy.")}
+    if n_tf is None or not total:
+        return {"score": None, "n_tf": n_tf, "n_total": total,
+                "basis": "not assessed",
+                "note": ("no local expression table, so there is no "
+                         "denominator; pass --expression-file to score this")}
+
+    return {"score": round(max(0.0, 1.0 - n_tf / total), 3),
+            "n_tf": n_tf, "n_total": total, "basis": "expression table",
+            "note": f"{symbol} expressed in {n_tf} of {total} tissues"}
 
 
 def expression_source_status() -> dict:
@@ -481,9 +582,12 @@ def tissue_expression(client, symbol: str, *, min_level: int = 2) -> set:
 
     res, last = None, None
     for query in _EXPR_QUERIES:
+        variables = {"ensemblId": ensembl}
+        if "$size" in query:
+            variables["size"] = _EXPR_PAGE
         try:
             res = client.post(OPENTARGETS, {"query": query,
-                                            "variables": {"ensemblId": ensembl}})
+                                            "variables": variables})
             if not (res.get("errors")):
                 break
             last, res = res["errors"], None
@@ -504,6 +608,36 @@ def tissue_expression(client, symbol: str, *, min_level: int = 2) -> set:
 
     target = (res.get("data") or {}).get("target") or {}
     out = set()
+
+    # New schema: baselineExpression, a continuous median in mixed units.
+    base = target.get("baselineExpression") or {}
+    per_unit: dict = {}
+    for row in base.get("rows") or []:
+        # Each unit against its own floor. Thresholding TPM and
+        # CPM(pseudobulk) against one cutoff would compare numbers that do
+        # not mean the same thing.
+        unit = row.get("unit")
+        floor = _EXPR_UNITS.get(unit)
+        if floor is None:
+            continue
+        bs = row.get("tissueBiosample") or {}
+        name = (bs.get("biosampleName") or "").strip().lower()
+        median = row.get("median")
+        if name and median is not None and median >= floor:
+            out.add(name)
+            per_unit.setdefault(unit, set()).add(name)
+    if base:
+        total = base.get("count") or 0
+        if total > _EXPR_PAGE:
+            log.warning("Open Targets has %d expression rows for %s but only "
+                        "%d were read — raise _EXPR_PAGE or use "
+                        "--expression-file", total, symbol, _EXPR_PAGE)
+        log.debug("%s: %s", symbol,
+                  ", ".join(f"{u.split('(')[0]} {len(v)}"
+                            for u, v in sorted(per_unit.items())) or "nothing")
+        return out
+
+    # Older schema, still served by some deployments: 0-3 levels.
     for e in target.get("expressions") or []:
         tissue = ((e.get("tissue") or {}).get("label") or "").lower()
         rna = (e.get("rna") or {}).get("level")

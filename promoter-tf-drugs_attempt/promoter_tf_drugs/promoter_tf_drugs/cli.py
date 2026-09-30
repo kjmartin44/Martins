@@ -24,6 +24,24 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     p.add_argument("--gene", required=True, help="gene symbol or Ensembl gene ID")
+    p.add_argument("--out", default="results", help="output directory")
+    p.add_argument("--top", type=int, default=25, help="rows in the report tables")
+    add_analysis_args(p)
+    return p
+
+
+def add_analysis_args(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    """Every flag that configures the analysis itself, shared by both CLIs.
+
+    `panel` needs the same ~40 options as the single-gene entry point, and it
+    used to borrow them by reaching into the other parser's private
+    `_actions` and re-registering the same Action objects in two parsers.
+    That shares mutable state between parsers, which is exactly the kind of
+    thing that works until it silently does not. Declared once here instead.
+
+    `--gene` and `--out` stay with their own CLIs, because the panel takes a
+    gene LIST and writes a different set of files.
+    """
     p.add_argument("--direction", choices=["up", "down"], default="up",
                    help="up: find drugs that should raise target-gene expression "
                         "(agonise activators, block repressors). "
@@ -83,6 +101,12 @@ def build_parser() -> argparse.ArgumentParser:
                         "gene. The only empirical evidence in the pipeline; "
                         "flags whether your gene is a measured landmark or an "
                         "inferred value")
+    p.add_argument("--promoter-fasta",
+                   help="read promoter sequences from a local FASTA instead "
+                        "of Ensembl, matched on exact coordinates. This "
+                        "package's own promoter.fa works, so a previous run "
+                        "is its own offline source — Ensembl 500s then cost "
+                        "you nothing")
     p.add_argument("--expression-file",
                    help="local tissue-expression table (HPA "
                         "rna_tissue_consensus.tsv or a GTEx median-TPM matrix). "
@@ -150,8 +174,6 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--offline", action="store_true",
                    help="fail rather than hit the network; use cached responses only")
     p.add_argument("--cache-dir")
-    p.add_argument("--out", default="results", help="output directory")
-    p.add_argument("--top", type=int, default=25, help="rows in the report tables")
     p.add_argument("-v", "--verbose", action="count", default=0)
     return p
 
@@ -192,7 +214,8 @@ def main(argv=None) -> int:
         design_modality=args.design_modality,
         use_lincs=args.lincs,
         signature_file=args.signature_file, lincs_file=args.lincs_file,
-        expression_file=args.expression_file, use_genetics=args.genetics,
+        expression_file=args.expression_file,
+        promoter_fasta=args.promoter_fasta, use_genetics=args.genetics,
         upstream_network=args.upstream_network,
         upstream_depth=args.upstream_depth,
         approved_only=not args.include_investigational,

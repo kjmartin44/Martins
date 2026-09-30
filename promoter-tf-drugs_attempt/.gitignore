@@ -1,0 +1,47 @@
+# ---------------------------------------------------------------- big data
+# Reference datasets are downloaded, not authored. They are large, versioned
+# upstream, and re-fetchable — run_analysis.bat / run_everything.bat pull them.
+# remap2022.bed.gz alone is ~1.4 GB; GitHub hard-rejects any file over 100 MB.
+*.bed
+*.bed.gz
+*.bigWig
+*.bw
+*.gtf
+*.gtf.gz
+*.fa
+*.fa.gz
+*.fasta
+*.2bit
+
+# Downloaded reference tables (all re-fetchable; URLs are in the README)
+jaspar2024.txt
+trrust.tsv
+rna_tissue_consensus.tsv
+rna_tissue_consensus.tsv.zip
+*_median_tpm.gct
+*_median_tpm.gct.gz
+
+# ------------------------------------------------------------ run products
+# Regenerable from a command; results.json runs to several MB per gene.
+results/
+panel/
+*.log
+
+# ------------------------------------------------------------------ python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# on-disk HTTP cache, if pointed inside the repo with --cache-dir
+.cache/
+
+# --------------------------------------------------------------------- OS
+.DS_Store
+Thumbs.db

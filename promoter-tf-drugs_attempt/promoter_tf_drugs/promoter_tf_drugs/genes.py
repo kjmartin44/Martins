@@ -18,6 +18,7 @@ downstream:
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from dataclasses import dataclass, field, asdict
 
 from .http import Client, HttpError
@@ -197,6 +198,7 @@ def get_promoters(client: Client, symbol: str, *, species: str = "homo_sapiens",
     assembly = gene.get("assembly_name", "unknown")
 
     out: list[Promoter] = []
+    failures: list[tuple] = []
     for tr, reason in select_transcripts(gene, all_tss=all_tss,
                                          cluster_bp=tss_cluster_bp):
         if strand == 1:
@@ -207,7 +209,30 @@ def get_promoters(client: Client, symbol: str, *, species: str = "homo_sapiens",
             start, end = tss - downstream + 1, tss + upstream
         start = max(start, 1)
 
-        seq = fetch_sequence(client, species, chrom, start, end, strand, mask=mask)
+        # One unreachable window must not cost the whole run. With --all-tss
+        # a gene has several, and a transient Ensembl 500 on one of them used
+        # to abort after the transcript selection, regulon and expression
+        # tables had already been built. Same principle as
+        # `pipeline._optional`: lose the section, not the run.
+        try:
+            # A local FASTA wins outright: faster, reproducible, and immune
+            # to the endpoint being down.
+            seq = local_sequence(chrom, start, end)
+            if seq is None:
+                seq = fetch_sequence(client, species, chrom, start, end,
+                                     strand, mask=mask)
+            else:
+                log.info("using the local FASTA for %s:%d-%d (no Ensembl "
+                         "request)", chrom, start, end)
+        except Exception as exc:                            # noqa: BLE001
+            failures.append((tr["id"], f"{chrom}:{start}-{end}",
+                             f"{type(exc).__name__}: {str(exc)[:120]}"))
+            log.warning(
+                "could not fetch the promoter sequence for %s (%s:%d-%d): "
+                "%s — skipping this TSS and continuing with the others",
+                tr["id"], chrom, start, end, str(exc)[:160])
+            continue
+
         out.append(Promoter(
             gene_symbol=gene.get("display_name", symbol),
             gene_id=gene["id"],
@@ -223,7 +248,83 @@ def get_promoters(client: Client, symbol: str, *, species: str = "homo_sapiens",
             assembly=assembly,
             sequence=seq,
         ))
+
+    if failures and not out:
+        # Every window failed: there is genuinely nothing to analyse, so this
+        # one does raise rather than returning an empty promoter list that
+        # would read downstream as "this gene has no promoter".
+        detail = "; ".join(f"{t} ({r}): {e}" for t, r, e in failures[:3])
+        raise HttpError(
+            f"could not fetch any promoter sequence for {symbol} "
+            f"({len(failures)} window(s) attempted). {detail}. Ensembl "
+            f"returns HTTP 500 intermittently — everything already fetched "
+            f"is cached, so re-running resumes quickly.")
+    if failures:
+        log.warning(
+            "%d of %d promoter window(s) for %s could not be fetched and "
+            "were SKIPPED: %s. The analysis below covers only the %d window(s) "
+            "that succeeded.", len(failures), len(failures) + len(out),
+            symbol, ", ".join(r for _, r, _ in failures), len(out))
     return out
+
+
+# ------------------------------------------------- offline sequence source
+# Ensembl was the one stage with no local route, so a 500 there took the
+# whole run down. But the package already WRITES every window it fetched to
+# promoter.fa, so a previous run is its own offline source — and any FASTA
+# with matching coordinates works.
+_LOCAL_SEQ: dict[str, str] = {}
+
+
+def load_promoter_fasta(path) -> int:
+    """Index a promoter FASTA so sequence fetches can run with no network.
+
+    Accepts this package's own `promoter.fa` output, whose headers look like
+
+        >GENE|ENST00000292303|chr3:46365946-46371945|strand=1|-5000/+1000
+
+    and any FASTA whose header contains a `chrN:start-end` span. Keyed on the
+    span, so a window is reused only when its coordinates match exactly —
+    a near-miss would silently analyse the wrong sequence.
+    """
+    import re
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(f"{path} not found")
+
+    span = re.compile(r"(?:chr)?([\w.]+):(\d+)-(\d+)")
+    name, buf, n = None, [], 0
+    _LOCAL_SEQ.clear()
+
+    def _store(hdr, chunks):
+        nonlocal n
+        if not hdr or not chunks:
+            return
+        m = span.search(hdr)
+        if not m:
+            return
+        key = f"{m.group(1)}:{m.group(2)}-{m.group(3)}"
+        _LOCAL_SEQ[key] = "".join(chunks)
+        n += 1
+
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if line.startswith(">"):
+            _store(name, buf)
+            name, buf = line[1:], []
+        elif line.strip():
+            buf.append(line.strip())
+    _store(name, buf)
+
+    log.info("indexed %d promoter sequence(s) from %s — these will be used "
+             "instead of Ensembl where the coordinates match", n, path.name)
+    return n
+
+
+def local_sequence(chrom: str, start: int, end: int) -> str | None:
+    if not _LOCAL_SEQ:
+        return None
+    c = str(chrom).replace("chr", "")
+    return _LOCAL_SEQ.get(f"{c}:{start}-{end}")
 
 
 def fetch_cdna(client: Client, transcript_id: str) -> str | None:

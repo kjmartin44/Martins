@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -139,3 +140,70 @@ def transcriptional_specificity(symbol: str, regulons: dict | None = None
     elif n >= 600:
         note = f"{symbol} controls ~{n} genes; expect broad transcriptional effects"
     return round(score, 3), n, note
+
+
+# Below this many curated targets, the count says more about how much anyone
+# has studied the factor than about how many genes it controls. TRRUST is
+# literature-derived: a TF with 8 recorded targets is far likelier to be
+# under-assayed than to be genuinely narrow.
+MIN_CREDIBLE_REGULON = 15
+
+
+@dataclass
+class RegulonEvidence:
+    """How much the regulon count can be *trusted*, as distinct from its value.
+
+    `transcriptional_specificity` answers "how broad is this factor". That is
+    the wrong question to ask of a number derived from curation effort. A drug
+    acting through a factor nobody has studied is not thereby specific — it is
+    unmeasured, and the two must not score alike.
+
+    This is the same correction `drug_scoring.evidence_depth` already applies
+    to protein selectivity, which the README states plainly: "A low target
+    count can mean selective, or can mean nobody looked."
+    """
+    symbol: str
+    n: int | None
+    provenance: str
+    understudied: bool = False
+    trustworthy: bool = True
+    note: str | None = None
+
+    def to_dict(self) -> dict:
+        return {"symbol": self.symbol, "n": self.n,
+                "provenance": self.provenance,
+                "understudied": self.understudied,
+                "trustworthy": self.trustworthy, "note": self.note}
+
+
+def regulon_evidence(symbol: str, regulons: dict | None = None
+                     ) -> RegulonEvidence:
+    """Whether this factor's regulon count is usable as specificity evidence.
+
+    Surfaces the provenance that `transcriptional_specificity` computes and
+    throws away — "regulon file", "bundled tier: broad" and "unknown" are
+    three different epistemic states that a single float collapses into one.
+    """
+    n, provenance = regulon_size(symbol, regulons)
+
+    if n is None:
+        return RegulonEvidence(
+            symbol, None, provenance, trustworthy=False,
+            note=("no regulon information for this factor; its breadth is "
+                  "unmeasured, which is not the same as narrow"))
+
+    if provenance.startswith("bundled tier"):
+        return RegulonEvidence(
+            symbol, n, provenance, trustworthy=False,
+            note=(f"{n} is an order-of-magnitude bucket, not a count — supply "
+                  f"--regulon-file for a real number"))
+
+    if n < MIN_CREDIBLE_REGULON:
+        return RegulonEvidence(
+            symbol, n, provenance, understudied=True, trustworthy=False,
+            note=(f"only {n} curated target(s) for {symbol}. Below "
+                  f"{MIN_CREDIBLE_REGULON} this measures curation depth rather "
+                  f"than biology — the factor is UNDERSTUDIED, which must not "
+                  f"be read as specific"))
+
+    return RegulonEvidence(symbol, n, provenance, trustworthy=True)

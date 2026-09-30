@@ -256,24 +256,36 @@ def assess(tf: str, *, goal: str = "up", annotation: dict | None = None,
         "stabilisers": [s.to_dict() for s in hits],
         "n_approved": sum(1 for s in hits if s.status == "approved"),
         "recommended": False,
+        # Is there an actual route for THIS factor, or only a mechanism class
+        # that has worked on other proteins? The distinction decides whether
+        # this is something you can do or something someone could research.
+        "actionable": bool(hits),
+        "status": "no route known",
         "notes": [],
     }
 
     if not pocket and not has_direct_drug:
-        result["recommended"] = True
-        result["notes"].append(
-            f"{tf.upper()} has no ligand-binding pocket and no direct drug. This "
-            "is exactly the case stabilisation exists for: its protein-protein "
-            "interfaces and its degradation machinery are both druggable even "
-            "though its surface is not.")
-        if not hits:
+        if hits:
+            # A real, named agent against this factor or its degradation node.
+            result["recommended"] = True
+            result["status"] = "curated route exists"
             result["notes"].append(
-                "Nothing curated for this factor specifically. The tractable "
-                "questions are: which E3 ligase degrades it (block that to raise "
-                "abundance), and which partner complex sequesters or activates it "
-                "(glue or disrupt that). Both are established, approved "
-                "mechanisms — see the exemplars.")
-            result["exemplars"] = [s.to_dict() for s in EXEMPLARS]
+                f"{tf.upper()} has no ligand pocket and no direct drug, but "
+                f"there IS a curated stabilisation route for it — see the "
+                f"table. This is the case the mechanism exists for.")
+        else:
+            # The common case, and previously over-claimed. Saying
+            # "stabilisation recommended" and then listing four approved
+            # drugs against unrelated proteins reads as though something
+            # were available. Nothing is.
+            result["status"] = "no route known"
+            result["notes"].append(
+                f"{tf.upper()} has no ligand pocket, no direct drug, and "
+                f"**nothing curated against it or its degradation "
+                f"machinery**. Stabilisation is not a route you can take "
+                f"here — it is a research programme. Making it real needs "
+                f"two things nobody has published for this factor: the E3 "
+                f"ligase that degrades it, and a ligand for that ligase.")
     elif pocket:
         result["notes"].append(
             f"{tf.upper()} has a ligand-binding pocket, so conventional agonists "

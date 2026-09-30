@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import gzip
 import hashlib
+import random
 import http.client
 import json
 import logging
@@ -24,6 +25,15 @@ log = logging.getLogger(__name__)
 
 DEFAULT_CACHE = Path(os.environ.get("PTD_CACHE", Path.home() / ".cache" / "promoter_tf_drugs"))
 USER_AGENT = "promoter-tf-drugs/0.1 (research pipeline)"
+
+# Retries, and why they are this patient. Ensembl, ChEMBL and the
+# maayanlab services all return HTTP 500 when they are merely busy, so a
+# 500 is a backoff signal rather than a verdict. Six attempts with capped
+# jittered backoff spans roughly a minute, which rides out the outages
+# seen in practice; the old three attempts over 7s did not, and giving up
+# there discards every lookup the run had already completed.
+DEFAULT_RETRIES = int(os.environ.get("PTD_RETRIES", 6))
+RETRY_CAP = float(os.environ.get("PTD_RETRY_CAP", 20.0))
 
 
 class HttpError(RuntimeError):
@@ -74,7 +84,8 @@ class Client:
 
     def request(self, url: str, *, method: str = "GET", data: dict | None = None,
                 headers: dict | None = None, parse_json: bool = True,
-                retries: int = 3, timeout: float = 60):
+                retries: int | None = None, timeout: float = 60):
+        retries = DEFAULT_RETRIES if retries is None else retries
         body = json.dumps(data, sort_keys=True) if data is not None else None
         cache_path = self._path(url, body)
 
@@ -124,8 +135,20 @@ class Client:
                 if exc.code == 404:
                     raise HttpError(f"404 for {url}") from exc
                 if exc.code in (429, 500, 502, 503, 504):
-                    wait = float(exc.headers.get("Retry-After", 2 ** attempt))
-                    log.warning("HTTP %s from %s, retrying in %.1fs", exc.code, url, wait)
+                    # Public bioinformatics endpoints 500 under load as often
+                    # as they 429, so a 500 is treated as "slow down", not
+                    # "broken". Three tries over 7s gave up while Ensembl was
+                    # merely busy — and losing the run there costs every
+                    # lookup already done. Backoff is capped and jittered so
+                    # parallel callers do not resynchronise onto the same
+                    # retry instant.
+                    wait = exc.headers.get("Retry-After")
+                    wait = (float(wait) if wait
+                            else min(RETRY_CAP, 2.0 ** attempt)
+                            + random.uniform(0, 1.0))
+                    log.warning("HTTP %s from %s, retrying in %.1fs "
+                                "(attempt %d/%d)", exc.code, url, wait,
+                                attempt + 1, retries)
                     time.sleep(wait)
                     continue
                 raise HttpError(f"HTTP {exc.code} for {url}") from exc

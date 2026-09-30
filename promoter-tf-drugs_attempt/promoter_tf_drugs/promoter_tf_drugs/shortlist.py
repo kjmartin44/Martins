@@ -79,8 +79,15 @@ def _grade_ok(grade: str | None, minimum: str | None) -> bool:
     return GRADE_ORDER.get(grade, 4) <= GRADE_ORDER.get(minimum, 4)
 
 
-def filter_routes(result: dict, **f) -> list[dict]:
-    """Apply filters across every promoter block in a results.json."""
+def enrich_rows(result: dict) -> list[dict]:
+    """Every route from every promoter block, with its supporting evidence
+    stamped on. No filtering happens here.
+
+    Split out from `filter_routes` so the same rows can be fed to a staged
+    funnel that applies one criterion at a time and counts what each removed.
+    The underscore-prefixed keys exist so every predicate below can be a pure
+    `(row, value) -> bool` rather than reaching back into the block.
+    """
     out: list[dict] = []
 
     for block in result.get("results", []):
@@ -93,61 +100,161 @@ def filter_routes(result: dict, **f) -> list[dict]:
                   for c in ((block.get("improvements") or {})
                             .get("all_candidates") or [])
                   if c.get("previously_linked")}
+        celltype = ((block.get("cell_type") or {}).get("tfs") or {})
+        verdict = (block.get("evidence_verdict") or {}).get("level")
 
         for r in (block.get("all_routes") or {}).get("routes", []):
             g = grades.get(r["drug"].lower(), {})
-            notes = " ".join(r.get("notes", []) + g.get("notes", []))
-            a = r["axes"]
-
-            if r["tier"] > f.get("max_tier", 5):
-                continue
-            if r["tier"] < f.get("min_tier", 0):
-                continue
-            if not _grade_ok(g.get("grade"), f.get("min_grade")):
-                continue
-            if r["category"] in (f.get("exclude_categories") or []):
-                continue
-            if r["directness"] > f.get("max_steps", 99):
-                continue
-            if a["specificity"] < f.get("min_specificity", 0.0):
-                continue
-            if f.get("require_approved") and not r.get("approved"):
-                continue
-            if f.get("exclude_withdrawn") and "WITHDRAWN" in notes.upper():
-                continue
-            if f.get("exclude_black_box") and "black-box" in notes:
-                continue
-            if f.get("exclude_conflicts") and "CONFLICT" in notes:
-                continue
-            if f.get("require_mechanism") and not r.get("mechanism"):
-                continue
-            if f.get("only_novel") and r["drug"].lower() in linked:
-                continue
-            if f.get("only_known") and r["drug"].lower() not in linked:
-                continue
-
-            max_reg = f.get("max_regulon")
-            if max_reg is not None:
-                ev = (g.get("evidence") or {})
-                size = ev.get("regulon_size")
-                if size is not None and size > max_reg:
-                    continue
-
-            if f.get("require_chip"):
-                tf = r.get("acts_on")
-                # Only applies to TF-mediated routes; a siRNA has no TF.
-                if r["directness"] >= 1 and tf in tf_chip and not tf_chip[tf]:
-                    continue
+            tf = r.get("acts_on")
 
             row = dict(r)
             row["grade"] = g.get("grade")
             row["gene"] = block.get("promoter", {}).get("gene_symbol")
             row["previously_linked"] = r["drug"].lower() in linked
-            row["chip_peaks"] = tf_chip.get(r.get("acts_on"))
+            row["chip_peaks"] = tf_chip.get(tf)
+
+            row["_notes"] = " ".join(r.get("notes", []) + g.get("notes", []))
+            row["_regulon_size"] = (g.get("evidence") or {}).get("regulon_size")
+            row["_gene_verdict"] = verdict
+            # `require_chip` has only ever applied to TFs the block actually
+            # listed. Preserving that as an explicit flag matters: without it,
+            # a route whose factor is missing from the TF table would start
+            # being dropped, which is a silent behaviour change.
+            row["_chip_known"] = tf in tf_chip
+            # Absent, NOT zero, when the expression lookup failed — see
+            # delivery.expression_overlap's early return. Zero would read as
+            # "expressed nowhere" and sail through a breadth filter.
+            row["_tf_tissues"] = (celltype.get(tf) or {}).get("n_tf")
             out.append(row)
 
+    return _dedupe_across_windows(out)
+
+
+def _dedupe_across_windows(rows: list[dict]) -> list[dict]:
+    """One row per distinct route per gene, not per promoter window.
+
+    With `--all-tss` a gene contributes one block per TSS, and those windows
+    can overlap heavily — CCR5's two shared 4,275 of 6,000 bp. Gene-level
+    routes are folded into every block by `catalogue.from_direct`, so an
+    approved drug against the gene product appeared once per window:
+    Maraviroc twice in a two-row shortlist, with its caveat printed twice.
+
+    Routes are keyed on (gene, active moiety, target, category) — the salt
+    form collapses too, for the same reason it does in the graded tables.
+    The best-scoring instance survives and records how many windows produced
+    it, because that count is real information about the scan rather than
+    something to hide.
+    """
+    from .congeners import salt_free_name
+
+    best: dict = {}
+    order: list = []
+    for r in rows:
+        key = (r.get("gene"), salt_free_name(r["drug"]), r.get("acts_on"),
+               r.get("category"))
+        prev = best.get(key)
+        if prev is None:
+            r["_n_windows"] = 1
+            best[key] = r
+            order.append(key)
+        else:
+            prev["_n_windows"] = prev.get("_n_windows", 1) + 1
+            # Keep the stronger evidence, not whichever window came first.
+            if (r["tier"], -r["score"]) < (prev["tier"], -prev["score"]):
+                r["_n_windows"] = prev["_n_windows"]
+                best[key] = r
+    return [best[k] for k in order]
+
+
+# --------------------------------------------------------------- predicates
+# One per filter name. Keys are exactly the names PRESETS and the CLI already
+# use, so neither had to change. Each returns True to KEEP the row.
+def _p_max_tier(row, v):            return row["tier"] <= v
+def _p_min_tier(row, v):            return row["tier"] >= v
+def _p_min_grade(row, v):           return _grade_ok(row.get("grade"), v)
+def _p_max_steps(row, v):           return row["directness"] <= v
+def _p_min_specificity(row, v):     return row["axes"]["specificity"] >= v
+def _p_exclude_categories(row, v):  return row["category"] not in (v or [])
+def _p_require_approved(row, v):    return not v or bool(row.get("approved"))
+def _p_require_mechanism(row, v):   return not v or bool(row.get("mechanism"))
+def _p_only_novel(row, v):          return not v or not row["previously_linked"]
+def _p_only_known(row, v):          return not v or row["previously_linked"]
+def _p_exclude_withdrawn(row, v):
+    return not v or "WITHDRAWN" not in row["_notes"].upper()
+def _p_exclude_black_box(row, v):   return not v or "black-box" not in row["_notes"]
+def _p_exclude_conflicts(row, v):   return not v or "CONFLICT" not in row["_notes"]
+
+
+def _p_max_regulon(row, v):
+    """Missing regulon size passes — see `_grade_ok` for the same principle."""
+    size = row.get("_regulon_size")
+    return size is None or size <= v
+
+
+def _p_require_chip(row, v):
+    if not v:
+        return True
+    # Only applies to TF-mediated routes; a siRNA has no TF.
+    return not (row["directness"] >= 1 and row.get("_chip_known")
+                and not row.get("chip_peaks"))
+
+
+PREDICATES = {
+    "max_tier": _p_max_tier,
+    "min_tier": _p_min_tier,
+    "min_grade": _p_min_grade,
+    "max_steps": _p_max_steps,
+    "min_specificity": _p_min_specificity,
+    "exclude_categories": _p_exclude_categories,
+    "require_approved": _p_require_approved,
+    "require_mechanism": _p_require_mechanism,
+    "require_chip": _p_require_chip,
+    "only_novel": _p_only_novel,
+    "only_known": _p_only_known,
+    "exclude_withdrawn": _p_exclude_withdrawn,
+    "exclude_black_box": _p_exclude_black_box,
+    "exclude_conflicts": _p_exclude_conflicts,
+    "max_regulon": _p_max_regulon,
+}
+
+
+def validate_filters(f: dict) -> None:
+    """Reject unknown filter names before any row is examined.
+
+    Checked up front rather than per row, for two reasons. An empty candidate
+    list would otherwise never reach the lookup, so a typo'd criterion would
+    pass silently on exactly the runs where you can least afford it. And a
+    failure that depends on whether any data happened to arrive is not a
+    failure anyone can debug.
+
+    A silently-ignored filter quietly widens a shortlist that reads as though
+    it had been narrowed, and it is what structurally prevents a
+    diagnostic-only field (cross-gene recurrence) being used as a gate.
+    """
+    unknown = sorted(set(f) - set(PREDICATES))
+    if unknown:
+        raise KeyError(
+            f"unknown filter(s) {', '.join(repr(u) for u in unknown)}; "
+            f"known filters are {', '.join(sorted(PREDICATES))}")
+
+
+def keep(row: dict, **f) -> bool:
+    """Does this row survive every named filter?"""
+    return all(PREDICATES[name](row, value)
+               for name, value in f.items() if value is not None)
+
+
+def filter_rows(rows: list[dict], **f) -> list[dict]:
+    """Apply named filters to already-enriched rows, then rank."""
+    validate_filters(f)
+    out = [r for r in rows if keep(r, **f)]
     out.sort(key=lambda r: (r["tier"], -r["score"]))
     return out
+
+
+def filter_routes(result: dict, **f) -> list[dict]:
+    """Apply filters across every promoter block in a results.json."""
+    return filter_rows(enrich_rows(result), **f)
 
 
 def render(rows: list[dict], criteria: dict, total: int) -> str:
@@ -225,8 +332,9 @@ def main(argv=None) -> int:
         if v not in (None, False):
             criteria[key] = v
 
-    total = sum(len((b.get("all_routes") or {}).get("routes", []))
-                for b in data.get("results", []))
+    # Count distinct routes, not rows. Summing per-block route lists
+    # double-counts every gene-level route once per TSS window.
+    total = len(enrich_rows(data))
     rows = filter_routes(data, **criteria)[:args.top]
     text = render(rows, criteria, total)
 

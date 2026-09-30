@@ -1495,16 +1495,32 @@ def test_drug_scoring_now_uses_cns_mpo():
 from promoter_tf_drugs import stabilizers as stab          # noqa: E402
 
 
-def test_pocketless_tf_gets_the_stabilisation_recommendation():
-    """The whole point: SP1 has no ligand pocket, so agonist chemistry will
-    never reach it, but its interfaces and degradation machinery can."""
+def test_pocketless_tf_with_nothing_curated_is_not_called_actionable():
+    """SP1 has no ligand pocket, so agonist chemistry will never reach it —
+    but nothing is curated against SP1 or its degradation machinery either.
+
+    Saying 'stabilisation recommended' and then listing four approved drugs
+    against transthyretin and FKBP12 read as though a route were available.
+    It is not. The mechanism class is real; its applicability to THIS factor
+    is unknown, and those are different claims."""
     a = stab.assess("SP1", has_direct_drug=False)
     assert a["has_ligand_pocket"] is False
-    assert a["recommended"] is True
-    assert any("no ligand-binding pocket" in n for n in a["notes"])
-    # with nothing curated, it must still point somewhere concrete
-    assert a.get("exemplars")
+    assert a["actionable"] is False
+    assert a["recommended"] is False          # was True — that was over-claiming
+    assert a["status"] == "no route known"
+    assert any("research programme" in n for n in a["notes"])
+    # it must still say what WOULD make it real
     assert any("E3 ligase" in n for n in a["notes"])
+
+
+def test_pocketless_tf_with_a_curated_route_is_actionable():
+    """Contrast: NFE2L2 has no pocket either, but dimethyl fumarate is an
+    approved KEAP1-directed stabiliser of it. That is a real route."""
+    a = stab.assess("NFE2L2", goal="up", has_direct_drug=False)
+    assert a["actionable"] is True
+    assert a["recommended"] is True
+    assert a["status"] == "curated route exists"
+    assert a["n_approved"] >= 1
 
 
 def test_nuclear_receptor_is_not_pushed_toward_stabilisation():
@@ -2743,8 +2759,31 @@ def test_every_category_has_a_guide_entry():
     missing = [cat for cat in c.CATEGORIES if cat not in c.CATEGORY_GUIDE]
     assert not missing, f"no guide entry for: {missing}"
     for cat, g in c.CATEGORY_GUIDE.items():
-        assert set(g) == {"what", "why", "cost", "differs"}, cat
-        assert all(len(v) > 40 for v in g.values()), cat
+        # `changes` and `assay` answer the question the prose already calls
+        # the one that most often decides an experiment — whether a route
+        # moves protein abundance or only its activity — per category rather
+        # than in the abstract.
+        assert set(g) == {"what", "why", "cost", "differs",
+                          "changes", "assay"}, cat
+        # The prose fields must actually explain something. `changes` and
+        # `assay` are deliberately terse table values ("abundance",
+        # "RT-qPCR then western/ELISA"), so they are only required to exist.
+        assert all(len(g[k]) > 40
+                   for k in ("what", "why", "cost", "differs")), cat
+        assert g["changes"] and g["assay"], cat
+
+
+def test_only_direct_gene_product_changes_activity_rather_than_abundance():
+    """The whole point of the distinction: every transcription-mediated route
+    moves how much product exists, so RT-qPCR sees it. A drug on the product
+    itself changes what existing protein does and barely moves its level —
+    which is why ivacaftor reads as a failure on a western blot."""
+    from promoter_tf_drugs import catalogue as c
+    activity = [cat for cat, g in c.CATEGORY_GUIDE.items()
+                if "ACTIVITY" in g["changes"].upper()]
+    assert activity == ["direct: gene product"]
+    # and its assay note must warn about the western blot explicitly
+    assert "western" in c.CATEGORY_GUIDE["direct: gene product"]["assay"]
 
 
 def test_guide_distinguishes_the_confusable_pairs():
@@ -3556,3 +3595,1469 @@ def test_same_drug_at_two_tfs_stays_two_routes():
 
     kept, _ = c.collapse_grades([G("Tretinoin", "RARA"), G("Tretinoin", "PPARD")])
     assert len(kept) == 2
+
+
+# ===================================================================== #
+# Specificity that counts SYSTEMS, not proteins or genes.               #
+# ===================================================================== #
+def test_shortlist_predicate_split_preserved_behaviour():
+    """The refactor that made a staged funnel possible must not have changed
+    what the five presets return."""
+    res = _result_for_shortlist()
+    rows = sl.enrich_rows(res)
+    for name, preset in sl.PRESETS.items():
+        assert sl.filter_rows(rows, **preset) == sl.filter_routes(res, **preset)
+
+
+def test_every_preset_key_has_a_predicate():
+    """A preset naming a filter that no longer exists must fail loudly rather
+    than silently widening the shortlist."""
+    keys = {k for p in sl.PRESETS.values() for k in p}
+    assert keys <= set(sl.PREDICATES), keys - set(sl.PREDICATES)
+
+
+def test_unknown_filter_name_raises():
+    """The structural guarantee that a diagnostic-only field cannot become a
+    gate: an unrecognised filter is an error, not a no-op."""
+    import pytest
+    with pytest.raises(KeyError):
+        sl.filter_rows([], n_genes=3)
+
+
+def test_require_chip_still_ignores_tfs_absent_from_the_block():
+    """A route whose factor is not in the block's TF table was never subject
+    to require_chip. Losing that guard would silently drop routes."""
+    row = {"tier": 3, "score": 1.0, "directness": 1, "acts_on": "GHOST",
+           "chip_peaks": None, "_chip_known": False}
+    assert sl._p_require_chip(row, True)
+    row["_chip_known"] = True
+    assert not sl._p_require_chip(row, True)
+
+
+# ------------------------------------------ regulon counts vs study effort
+def test_tiny_curated_regulon_is_understudied_not_specific():
+    """The trap: TRRUST is literature-derived, so a TF with 2 recorded targets
+    is almost certainly under-assayed rather than narrow. Scoring that as
+    perfect specificity rewards obscurity."""
+    from promoter_tf_drugs import regulon as r
+    ev = r.regulon_evidence("SP1", {"SP1": {"A", "B"}})
+    assert ev.understudied is True
+    assert ev.trustworthy is False
+    assert "curation depth" in ev.note
+
+    # The score itself is deliberately unchanged — a real file still beats a
+    # bundled guess. It is the CONFIDENCE in it that drops.
+    score, n, _ = r.transcriptional_specificity("SP1", {"SP1": {"A", "B"}})
+    assert n == 2 and score == 1.0
+
+
+def test_bundled_tier_is_not_a_trustworthy_count():
+    """5000 is an order-of-magnitude bucket someone typed, not a measurement."""
+    from promoter_tf_drugs import regulon as r
+    ev = r.regulon_evidence("SP1")
+    assert ev.trustworthy is False and "bucket" in ev.note
+
+
+def test_a_real_regulon_above_the_floor_is_trusted():
+    from promoter_tf_drugs import regulon as r
+    big = {"MYTF": {f"G{i}" for i in range(40)}}
+    ev = r.regulon_evidence("MYTF", big)
+    assert ev.trustworthy is True and ev.understudied is False
+    assert ev.provenance == "regulon file"
+
+
+def test_unknown_regulon_is_unmeasured_not_narrow():
+    from promoter_tf_drugs import regulon as r
+    ev = r.regulon_evidence("ZZZ9FAKE")
+    assert ev.n is None and ev.trustworthy is False
+    assert "not the same as narrow" in ev.note
+
+
+# --------------------------------------------------- systemic drug classes
+def test_glucocorticoid_is_flagged_despite_a_spotless_profile():
+    """The reason this module exists. Dexamethasone is clean, potent and
+    selective — and acts on the whole body. selectivity counts proteins,
+    regulon counts genes; neither counts systems."""
+    from promoter_tf_drugs import systemic as s
+    b = s.clinical_burden("Dexamethasone", notes="", target="NR3C1")
+    assert b.assessed and b.level == "high"
+    assert b.drug_class == "glucocorticoid"
+
+
+def test_global_regulator_target_raises_burden_for_an_unlisted_drug():
+    """The receptor is systemic even when the drug is not in the table."""
+    from promoter_tf_drugs import systemic as s
+    b = s.clinical_burden("SomeNovelCompound", notes="", target="SP1")
+    assert b.assessed and b.score >= 0.85
+    assert any("global regulator" in r for r in b.reasons)
+
+
+def test_unlisted_drug_is_unassessed_not_cleared():
+    """A clean row means 'not on our list', never 'safe'."""
+    from promoter_tf_drugs import systemic as s
+    b = s.clinical_burden("Maraviroc", notes="", target="CCR5")
+    assert b.assessed is False
+    assert "not the same as clean" in " ".join(b.reasons)
+
+
+def test_salt_form_resolves_to_its_class():
+    """Otherwise pipeline's salt collapsing and this table disagree about
+    what a drug is."""
+    from promoter_tf_drugs import systemic as s
+    assert s.classify("Levothyroxine Sodium").name == "thyroid hormone"
+    assert s.classify("Elacestrant Hydrochloride").name == "sex steroid"
+
+
+def test_burden_reads_the_same_withdrawn_strings_as_shortlist():
+    """Two spellings of 'withdrawn' would give one report two verdicts."""
+    from promoter_tf_drugs import systemic as s
+    b = s.clinical_burden("Plicamycin", notes="WITHDRAWN from market")
+    assert b.level == "prohibitive"
+    row = {"_notes": "WITHDRAWN from market"}
+    assert not sl._p_exclude_withdrawn(row, True)
+
+
+def test_black_box_is_high_but_not_prohibitive():
+    from promoter_tf_drugs import systemic as s
+    b = s.clinical_burden("SomeDrug", notes="black-box warning")
+    assert b.level == "high" and b.assessed
+
+
+# ------------------------------------------------- TF tissue breadth proxy
+def test_tissue_breadth_refuses_a_fraction_without_a_denominator():
+    """'Expressed in 30 tissues' means different things against HPA's ~50,
+    GTEx's ~54 and Open Targets' variable vocabulary. No denominator, no
+    score — inventing 50 would be fabricating the number."""
+    from promoter_tf_drugs import delivery as d
+    d._LOCAL_EXPRESSION.clear()
+    assert d.tissue_universe_size() is None
+    r = d.expression_breadth("GATA2")
+    assert r["score"] is None and r["basis"] == "not assessed"
+
+
+def test_tissue_breadth_is_higher_for_a_narrower_factor():
+    """Direction must match regulon.transcriptional_specificity — higher is
+    narrower. A sign flip here would invert the whole axis silently."""
+    from promoter_tf_drugs import delivery as d
+    d._LOCAL_EXPRESSION.clear()
+    d._LOCAL_EXPRESSION.update({
+        "NARROW": {"liver": 5.0},
+        "BROAD": {f"t{i}": 5.0 for i in range(10)},
+    })
+    try:
+        assert d.tissue_universe_size() == 11
+        narrow = d.expression_breadth("NARROW")["score"]
+        broad = d.expression_breadth("BROAD")["score"]
+        assert narrow > broad
+    finally:
+        d._LOCAL_EXPRESSION.clear()
+
+
+def test_nuclear_receptor_is_not_penalised_on_an_expression_proxy():
+    """mRNA presence is not activity. VDR is transcribed nearly everywhere
+    while 1,25-D signalling is not — and NRs were 201 of 216 routes in the
+    real CCR5 run, so a bad proxy here biases against the whole output."""
+    from promoter_tf_drugs import delivery as d
+    d._LOCAL_EXPRESSION.clear()
+    d._LOCAL_EXPRESSION.update({"VDR": {f"t{i}": 5.0 for i in range(40)}})
+    try:
+        r = d.expression_breadth("VDR", nuclear_receptor=True)
+        assert r["score"] is None
+        assert "ligand" in r["basis"] or "ligand" in r["note"]
+    finally:
+        d._LOCAL_EXPRESSION.clear()
+
+
+def test_cns_mpo_is_never_a_tissue_breadth_basis():
+    """The tempting wrong shortcut: MPO predicts crossing ONE barrier, and
+    says nothing about how many tissues a drug reaches."""
+    from promoter_tf_drugs import delivery as d
+    d._LOCAL_EXPRESSION.clear()
+    d._LOCAL_EXPRESSION.update({"X": {"liver": 3.0}})
+    try:
+        bases = {d.expression_breadth("X")["basis"],
+                 d.expression_breadth("Q")["basis"],
+                 d.expression_breadth("X", nuclear_receptor=True)["basis"]}
+        assert not any("mpo" in b.lower() or "cns" in b.lower() for b in bases)
+    finally:
+        d._LOCAL_EXPRESSION.clear()
+
+
+def test_cherry_pick_states_its_provenance_and_its_limit():
+    """A bare compound table invites the reading that these were selected
+    from the world. They were selected from this run's own predictions, so
+    the plate cannot find anything the model did not already propose."""
+    res = pipeline.run("DEMOGENE", demo=True, offline=True, design_screen=True)
+    md = pipeline.markdown_report(res)
+    assert "Cherry-pick list" in md
+    assert "proposed earlier in *this run*" in md
+    assert "cannot discover a mechanism the pipeline never predicted" in md
+    # every row says where it came from, and what priority means
+    assert "Pulled from" in md and "Priority means" in md
+
+    cp = res["results"][0]["screen_plan"]["compounds"]
+    assert cp["n_available"] >= len(cp["cherry_pick"])
+    assert all(c.get("source") for c in cp["cherry_pick"])
+
+
+# ===================================================================== #
+# Multi-gene panel: choosing between candidate genes.                   #
+# ===================================================================== #
+from promoter_tf_drugs import panel as pn          # noqa: E402
+
+
+def _panel_of(*genes, **kw):
+    p = pn.Panel()
+    for g in genes:
+        pg = pn.PanelGene(symbol=g)
+        pg.result = pipeline.run(g, demo=True, offline=True, **kw)
+        p.genes.append(pg)
+    return p
+
+
+def test_merged_panel_is_filterable_by_the_unchanged_shortlist():
+    """The reuse claim, asserted: a multi-gene result is structurally just a
+    results.json with more blocks."""
+    p = _panel_of("DEMOGENE", "SMN2")
+    merged = pn.merge_results(p)
+    rows = sl.filter_routes(merged)
+    assert {r["gene"] for r in rows} == {"DEMOGENE", "SMN2"}
+
+
+def test_merge_does_not_attribute_one_genes_direct_therapies_to_another():
+    """direct_therapies is top-level, not per-block. Blending it would give
+    every gene in the panel another gene's approved drugs."""
+    p = _panel_of("DEMOGENE", "SMN2")
+    merged = pn.merge_results(p)
+    assert merged["direct_therapies"] == []
+    per = merged["panel"]["per_gene"]
+    assert set(per) == {"DEMOGENE", "SMN2"}
+    for g in p.included:
+        assert per[g.symbol]["direct_therapies"] == g.result["direct_therapies"]
+
+
+def test_mixed_direction_panel_is_an_error_not_a_warning():
+    """An up gene and a down gene are not comparable at all."""
+    import pytest
+    p = pn.Panel()
+    for g, goal in (("DEMOGENE", "up"), ("SMN2", "down")):
+        pg = pn.PanelGene(symbol=g)
+        pg.result = pipeline.run(g, demo=True, offline=True, goal=goal)
+        p.genes.append(pg)
+    with pytest.raises(ValueError, match="goal"):
+        pn.parity(p)
+
+
+def test_parity_flags_genes_run_with_different_evidence():
+    """A gene run without a source loses stages for reasons unrelated to its
+    biology; comparing it like-for-like is the panel-level version of the bug
+    provenance.py exists to prevent."""
+    p = pn.Panel()
+    for g, ctc in (("DEMOGENE", True), ("SMN2", False)):
+        pg = pn.PanelGene(symbol=g)
+        pg.result = pipeline.run(g, demo=True, offline=True,
+                                 cell_type_check=ctc)
+        p.genes.append(pg)
+    par = pn.parity(p)
+    assert par["fair"] is False
+    assert any("cell_type_check" in w for w in par["warnings"])
+
+
+def test_not_interpretable_gene_is_excluded_and_named():
+    p = _panel_of("DEMOGENE")
+    p.genes[0].result["evidence_verdict"] = {"level": "not interpretable",
+                                             "reasons": ["scan is noise"]}
+    p.genes[0].excluded = "verdict 'not interpretable'"
+    assert p.included == []
+    assert p.dropped and p.dropped[0].symbol == "DEMOGENE"
+    assert p.dropped[0].verdict["reasons"] == ["scan is noise"]
+
+
+def test_one_failing_gene_does_not_kill_the_panel(monkeypatch):
+    real = pipeline.run
+
+    def flaky(gene, **kw):
+        if gene == "BOOM":
+            raise RuntimeError("Ensembl exploded")
+        return real(gene, **kw)
+
+    monkeypatch.setattr(pipeline, "run", flaky)
+    p = pn.run_panel(["DEMOGENE", "BOOM"], demo=True, offline=True)
+    assert [g.symbol for g in p.included] == ["DEMOGENE"]
+    assert p.dropped[0].error and "Ensembl exploded" in p.dropped[0].error
+
+
+# ------------------------------------------------------------- the funnel
+def _funnel_of(*genes, **criteria):
+    p = _panel_of(*genes)
+    merged, kept, stages, rec = pn.narrow(p, **criteria)
+    return p, merged, kept, stages, rec
+
+
+def test_funnel_counts_reconcile_at_every_stage():
+    """n_in == n_removed + n_remaining, and each stage's n_in is the previous
+    stage's n_remaining. Catches a stage filtering a stale row list."""
+    _, _, _, stages, _ = _funnel_of("DEMOGENE", "SMN2", max_regulon=600)
+    prev = None
+    for s in stages:
+        assert s.n_in == s.n_removed + s.n_remaining, s.name
+        if prev is not None:
+            assert s.n_in == prev, s.name
+        prev = s.n_remaining
+
+
+def test_funnel_is_monotonic():
+    _, _, _, stages, _ = _funnel_of("DEMOGENE", "SMN2", max_regulon=600)
+    counts = [s.n_remaining for s in stages]
+    assert counts == sorted(counts, reverse=True)
+
+
+def test_unrequested_stage_is_not_reported_as_broken():
+    """A threshold nobody set is a choice, not a missing measurement. Crying
+    wolf here would devalue the warning where it is real."""
+    _, _, _, stages, _ = _funnel_of("DEMOGENE")
+    tissue = [s for s in stages if "tissue" in s.name][0]
+    assert tissue.requested is False
+    assert tissue.did_nothing is False
+
+
+def test_stage_with_no_data_says_so_rather_than_reporting_a_clean_zero():
+    _, _, _, stages, _ = _funnel_of("DEMOGENE", min_tissue_breadth=0.3)
+    tissue = [s for s in stages if "tissue" in s.name][0]
+    assert tissue.requested is True
+    assert tissue.did_nothing is True
+    assert tissue.n_not_assessable == tissue.n_in
+
+
+def test_missing_datum_never_removes_a_row():
+    """Same principle _grade_ok already encodes: dropping a candidate for
+    lacking an inapplicable field is backwards."""
+    row = {"_tissue_breadth": None, "_burden": "low", "_regulon_size": None}
+    assert pn._p_min_tissue_breadth(row, 0.9)
+    assert sl._p_max_regulon(row, 10)
+
+
+def test_counts_are_gene_pairs_not_rows():
+    """With --all-tss a gene contributes several near-identical windows;
+    counting rows would let the most-annotated gene dominate."""
+    rows = [{"gene": "A", "drug": "Levothyroxine", "acts_on": "THRB"},
+            {"gene": "A", "drug": "Levothyroxine Sodium", "acts_on": "THRB"},
+            {"gene": "A", "drug": "Levothyroxine", "acts_on": "THRB"},
+            {"gene": "B", "drug": "Levothyroxine", "acts_on": "THRB"}]
+    pairs = pn._pairs(rows)
+    assert len(pairs["A"]) == 1        # salt form and duplicate collapse
+    assert len(pairs["B"]) == 1
+
+
+def test_unique_kills_exposes_a_redundant_stage():
+    """Two stages removing the same rows are not two independent tests."""
+    rows = [{"tier": 3, "score": 1.0, "gene": "A", "drug": "D%d" % i,
+             "acts_on": "SP1", "category": "x", "directness": 1,
+             "axes": {"specificity": 0.9}, "_notes": "",
+             "_regulon_size": 5000, "_burden": "high",
+             "_tissue_breadth": None} for i in range(4)]
+    dup = pn.Stage("dup", "a", {"max_regulon": 600}, "")
+    same = pn.Stage("same", "a", {"max_regulon": 600}, "")
+    _, res = pn.run_funnel(rows, [dup, same])
+    assert res[0].n_removed == 4
+    assert res[0].n_unique_kills == 0      # the later stage would have too
+
+
+def test_funnel_rejects_a_stage_naming_an_unknown_filter():
+    import pytest
+    bad = pn.Stage("bad", "a", {"n_genes": 3}, "")
+    with pytest.raises(KeyError):
+        pn.run_funnel([], [bad])
+
+
+# ---------------------------------------------------- recurrence stays out
+def test_recurrence_is_not_a_predicate_and_no_stage_names_it():
+    """The structural guarantee that a diagnostic cannot become a gate."""
+    assert "n_genes" not in pn.PREDICATES
+    assert "recurs_on" not in pn.PREDICATES
+    for s in pn.default_stages():
+        assert "n_genes" not in s.filters
+
+
+def test_recurrence_annotation_changes_no_rows():
+    _, _, kept, _, rec = _funnel_of("DEMOGENE", "SMN2")
+    before = len(kept)
+    pn.annotate_recurrence(kept, rec)
+    assert len(kept) == before
+
+
+def test_recurrence_counts_genes_not_rows():
+    rows = [{"gene": "A", "drug": "X", "acts_on": "T1"},
+            {"gene": "A", "drug": "X", "acts_on": "T2"},
+            {"gene": "A", "drug": "X Sodium", "acts_on": "T1"}]
+    assert pn.recurrence(rows)["x"]["n_genes"] == 1
+
+
+def test_recurrence_distinguishes_shared_regulator_from_promiscuity():
+    shared = pn.recurrence([{"gene": "A", "drug": "X", "acts_on": "VDR"},
+                            {"gene": "B", "drug": "X", "acts_on": "VDR"}])
+    promisc = pn.recurrence([{"gene": "A", "drug": "Y", "acts_on": "VDR"},
+                             {"gene": "B", "drug": "Y", "acts_on": "ESR1"}])
+    assert shared["x"]["targets"] == ["VDR"]
+    assert len(promisc["y"]["targets"]) == 2
+
+
+def test_placeholder_target_is_not_a_shared_regulator():
+    """catalogue writes an em-dash into acts_on for routes with no protein
+    target; a truthiness check let that through, and ['-'] then read as one
+    shared regulator."""
+    dash = "—"
+    rec = pn.recurrence([{"gene": "A", "drug": "Z", "acts_on": dash},
+                         {"gene": "B", "drug": "Z", "acts_on": dash}])
+    assert rec["z"]["targets"] == []
+    assert pn.real_target(dash) is None
+    assert pn.real_target("VDR") == "VDR"
+
+
+# ------------------------------------------------------------- the report
+def test_panel_report_renders_every_section():
+    p, merged, kept, stages, rec = _funnel_of("DEMOGENE", "SMN2")
+    merged.setdefault("panel", {})["parity"] = pn.parity(p)
+    md = pn.markdown_report(p, merged, kept, stages, rec, {"top": 20})
+    for heading in ("Genes in the comparison", "The funnel",
+                    "Where each gene dropped out", "Cross-gene recurrence",
+                    "What this cannot tell you"):
+        assert heading in md, heading
+    assert "alternatives you are choosing between" in md
+    assert "diagnostic, not a filter" in md
+
+
+def test_report_warns_that_the_winner_was_selected_on_a_maximum():
+    p, merged, kept, stages, rec = _funnel_of("DEMOGENE", "SMN2")
+    md = pn.markdown_report(p, merged, kept, stages, rec, {"top": 20})
+    assert "About the top row" in md
+    assert "maximum over" in md
+
+
+def test_empty_result_names_the_binding_stage():
+    p, merged, kept, stages, rec = _funnel_of("DEMOGENE", max_regulon=0,
+                                              max_tier=1)
+    md = pn.markdown_report(p, merged, [], stages, rec, {})
+    assert "Nothing survived" in md
+    assert "binding constraint is" in md
+
+
+def test_panel_cli_runs_end_to_end(tmp_path):
+    rc = pn.main(["--genes", "DEMOGENE,SMN2", "--demo", "--out", str(tmp_path)])
+    assert rc == 0
+    md = (tmp_path / "panel.md").read_text(encoding="utf-8")
+    assert "The funnel" in md
+    assert (tmp_path / "panel.json").exists()
+    assert (tmp_path / "panel.tsv").exists()
+
+
+# ------------------------------------- is the scanned window this gene's?
+from promoter_tf_drugs import neighbours as nbr        # noqa: E402
+
+
+class _NbClient:
+    """Serves the real Ensembl shape for the CCR5 locus."""
+    def __init__(self, rows=None):
+        self.rows = rows if rows is not None else [
+            {"external_name": "CCR2", "biotype": "protein_coding",
+             "start": 46353864, "end": 46360940, "strand": 1, "id": "g1"},
+            {"external_name": "CCR5AS", "biotype": "lncRNA",
+             "start": 46363984, "end": 46407184, "strand": -1, "id": "g2"},
+            {"external_name": "CCR5", "biotype": "protein_coding",
+             "start": 46370939, "end": 46377528, "strand": 1, "id": "g3"},
+        ]
+
+    def get(self, url, params=None):
+        return self.rows
+
+
+def test_antisense_overlap_is_detected_and_explained():
+    """The real CCR5 case: the scanned window sits entirely inside CCR5AS on
+    the opposite strand, so a site called there is not unambiguously CCR5's
+    and the direction logic does not carry."""
+    r = nbr.genes_in_window(_NbClient(), "3", 46365946, 46371945,
+                            strand=1, exclude="CCR5")
+    assert r["checked"] and r["n_antisense"] == 1
+    anti = [g for g in r["genes"] if g["relation"] == "antisense overlap"]
+    assert anti[0]["gene"] == "CCR5AS"
+    assert "OPPOSITE strand" in anti[0]["note"]
+    assert "direction logic" in r["summary"]
+
+
+def test_the_target_gene_itself_is_not_reported_as_a_neighbour():
+    r = nbr.genes_in_window(_NbClient(), "3", 46365946, 46371945,
+                            strand=1, exclude="CCR5")
+    assert "CCR5" not in [g["gene"] for g in r["genes"]]
+
+
+def test_a_near_neighbour_is_flagged_with_its_distance():
+    """CCR2 is 5 kb outside — a wider window would swallow a co-regulated
+    paralog, and nothing else in the pipeline would say so."""
+    r = nbr.genes_in_window(_NbClient(), "3", 46365946, 46371945,
+                            strand=1, exclude="CCR5")
+    near = [g for g in r["genes"] if g["relation"] == "nearby"]
+    assert near and near[0]["gene"] == "CCR2"
+    assert "kb outside" in near[0]["note"]
+
+
+def test_a_clean_window_says_so():
+    r = nbr.genes_in_window(_NbClient([]), "3", 1000, 2000, strand=1)
+    assert r["checked"] and r["clean"] and r["n_inside"] == 0
+    assert "alone" in r["summary"]
+
+
+def test_a_failed_lookup_is_not_a_clean_window():
+    """Same principle as provenance: absence of evidence must not read as
+    evidence of absence."""
+    class Boom:
+        def get(self, url, params=None):
+            raise RuntimeError("Ensembl 500")
+    r = nbr.genes_in_window(Boom(), "3", 1, 2, strand=1)
+    assert r["checked"] is False
+    assert r.get("clean") is not True
+
+
+def test_all_tss_window_overlap_is_measured():
+    """CCR5's two TSS windows shared 4275 of 6000 bp — largely one analysis
+    counted twice, which inflates that gene's route count."""
+    proms = [{"chrom": "3", "start": 46365946, "end": 46371945,
+              "transcript_id": "T1"},
+             {"chrom": "3", "start": 46367670, "end": 46373669,
+              "transcript_id": "T2"}]
+    ov = nbr.window_overlap(proms)
+    assert ov and ov[0]["overlap_bp"] == 4275
+    assert ov[0]["fraction"] > 0.7
+    assert "counted twice" in ov[0]["note"]
+
+
+def test_disjoint_windows_report_no_overlap():
+    proms = [{"chrom": "3", "start": 100, "end": 200, "transcript_id": "A"},
+             {"chrom": "3", "start": 5000, "end": 6000, "transcript_id": "B"}]
+    assert nbr.window_overlap(proms) == []
+
+
+# ===================================================================== #
+# The headline answer: predicted medications, with the reasoning, first; #
+# experimental protocol last.                                            #
+# ===================================================================== #
+from promoter_tf_drugs import predictions as prd        # noqa: E402
+
+
+def _demo_report(**kw):
+    res = pipeline.run("DEMOGENE", demo=True, offline=True, **kw)
+    return res, pipeline.markdown_report(res)
+
+
+def test_predicted_medications_lead_the_report():
+    """The first question anyone brings is 'what should I give, and why'.
+    It used to be answerable only by assembling eight separate tables."""
+    _, md = _demo_report()
+    assert "## Model-predicted medications for DEMOGENE" in md
+    i_pred = md.index("Model-predicted medications")
+    i_promoter = md.index("## Promoter of DEMOGENE")
+    assert i_pred < i_promoter, "predictions must precede the analysis detail"
+
+
+def test_every_prediction_carries_its_reasoning_chain():
+    res, md = _demo_report()
+    preds = prd.build(res["results"][0], goal="up")
+    assert preds
+    p = preds[0]
+    joined = " ".join(p.why)
+    assert "acts on" in joined or "directly" in joined   # mechanism
+    assert "direction" in joined or "activator" in joined or \
+           "repressor" in joined or "dual-role" in joined
+    assert "Binding:" in joined                          # why this promoter
+    assert "Evidence tier" in joined                     # how far it reaches
+
+
+def test_direction_clause_inverts_with_the_goal():
+    """Agonise an activator to raise a gene; block it to lower one."""
+    up = prd._direction_clause("activator", "up", False)
+    down = prd._direction_clause("activator", "down", False)
+    assert "agonising" in up and "blocking" in down
+    up_r = prd._direction_clause("repressor", "up", False)
+    assert "blocking" in up_r
+
+
+def test_dual_role_factor_is_not_claimed_to_have_a_known_direction():
+    c = prd._direction_clause("dual", "up", False)
+    assert "not settled" in c
+
+
+def test_unconfirmed_motif_is_described_as_a_prediction_not_binding():
+    tf = {"n_sites": 1, "best_rel_score": 0.78, "best_site_tss_offset": -439,
+          "chip_peaks": 0}
+    assert "sequence prediction only" in prd._promoter_clause(tf, False)
+    # ChIP available but absent is a different, stronger statement
+    assert "no ChIP peak" in prd._promoter_clause(tf, True)
+    tf["chip_peaks"] = 3
+    assert "actually binds" in prd._promoter_clause(tf, True)
+
+
+def test_prediction_section_repeats_the_run_verdict():
+    """A degraded run must say so where the drugs are read, not only in a
+    table further up that a reader may skip."""
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    res["evidence_verdict"] = {"level": "not interpretable", "reasons": []}
+    md = pipeline.markdown_report(res)
+    i = md.index("Model-predicted medications")
+    assert "Do not act on this list" in md[i:i + 1200]
+
+
+def test_predictions_state_they_are_hypotheses_not_recommendations():
+    _, md = _demo_report()
+    i = md.index("Model-predicted medications")
+    head = md[i:i + 1500]
+    assert "hypothesis generated from annotation" in head
+    assert "not a recommendation" in head
+
+
+def test_wet_lab_sections_come_after_everything_else():
+    """A CRISPRa protocol between the reader and the drug list buried the
+    answer under the method."""
+    _, md = _demo_report(design_screen=True, design_modality=True)
+    i_lab = md.index("# Testing any of this in the lab")
+    for earlier in ("Model-predicted medications", "Graded candidates",
+                    "How to read this"):
+        assert md.index(earlier) < i_lab, earlier
+    # and the long protocols sit inside that trailing part
+    for protocol in ("CRISPRa screen", "Reporter construct",
+                     "Cherry-pick list", "Designing a direct modality"):
+        assert md.index(protocol) > i_lab, protocol
+
+
+def test_lab_part_is_absent_when_no_experiment_was_designed():
+    """The divider should not appear for a run that designed nothing."""
+    _, md = _demo_report()
+    assert "# Testing any of this in the lab" not in md
+
+
+def test_lab_part_leads_with_the_one_control_that_matters():
+    _, md = _demo_report(design_screen=True)
+    i = md.index("# Testing any of this in the lab")
+    head = md[i:i + 900]
+    assert "scrambled-motif control" in head
+
+
+def test_empty_prediction_list_is_explained_not_blank():
+    lines = prd.render([], "XGENE", "up")
+    assert any("not an error" in ln for ln in lines)
+
+
+# ------------------------------- Open Targets schema break (API v26.9)
+def test_baseline_expression_schema_is_parsed():
+    """Target.expressions was removed, so every gene 400'd and the whole
+    tissue axis went dark. baselineExpression replaces it."""
+    from promoter_tf_drugs import delivery as d
+
+    class C:
+        def post(self, url, payload):
+            assert "baselineExpression" in payload["query"]
+            assert payload["variables"]["size"] > 0
+            return {"data": {"target": {"baselineExpression": {
+                "count": 3,
+                "rows": [
+                    {"median": 12.0, "unit": "TPM",
+                     "tissueBiosample": {"biosampleName": "Liver"}},
+                    {"median": 0.2, "unit": "TPM",
+                     "tissueBiosample": {"biosampleName": "Brain"}},
+                    {"median": 99.0, "unit": "CPM(pseudobulk sum[counts])",
+                     "tissueBiosample": {"biosampleName": "Spleen"}},
+                ]}}}}
+
+    d._LOCAL_EXPRESSION.clear()
+    d._EXPR_DISABLED["value"] = False
+    import promoter_tf_drugs.genetics as gen
+    old = gen._resolve_ensembl
+    gen._resolve_ensembl = lambda c, s: "ENSG0"
+    try:
+        t = d.tissue_expression(C(), "X")
+    finally:
+        gen._resolve_ensembl = old
+    # Liver: TPM 12 >= 1.0. Brain: TPM 0.2, below the TPM floor.
+    # Spleen: CPM 99, kept under the SEPARATE single-cell floor.
+    assert t == {"liver", "spleen"}, t
+
+
+def test_each_unit_is_thresholded_against_its_own_floor():
+    """TPM and CPM(pseudobulk) are different measurements on different data,
+    so they are kept but never compared against a single cutoff. A value of
+    0.5 is below the floor in either unit; 1000 clears it in either."""
+    from promoter_tf_drugs import delivery as d
+
+    def client_with(rows):
+        class C:
+            def post(self, url, payload):
+                return {"data": {"target": {"baselineExpression": {
+                    "count": len(rows), "rows": rows}}}}
+        return C()
+
+    cpm = "CPM(pseudobulk sum[counts])"
+    d._LOCAL_EXPRESSION.clear()
+    d._EXPR_DISABLED["value"] = False
+    import promoter_tf_drugs.genetics as gen
+    old = gen._resolve_ensembl
+    gen._resolve_ensembl = lambda c, s: "ENSG0"
+    try:
+        kept = d.tissue_expression(client_with([
+            {"median": 1000.0, "unit": cpm,
+             "tissueBiosample": {"biosampleName": "Kidney"}}]), "X")
+        assert kept == {"kidney"}       # single-cell data is USED, not dropped
+
+        below = d.tissue_expression(client_with([
+            {"median": 0.4, "unit": cpm,
+             "tissueBiosample": {"biosampleName": "Kidney"}}]), "X")
+        assert below == set()           # but still has to clear its own floor
+
+        unknown = d.tissue_expression(client_with([
+            {"median": 9e9, "unit": "some-future-unit",
+             "tissueBiosample": {"biosampleName": "Kidney"}}]), "X")
+        assert unknown == set()         # an unrecognised unit has no floor
+    finally:
+        gen._resolve_ensembl = old
+        d._EXPR_DISABLED["value"] = False
+
+
+def test_old_schema_still_parses_if_a_deployment_serves_it():
+    from promoter_tf_drugs import delivery as d
+
+    class C:
+        def post(self, url, payload):
+            if "baselineExpression" in payload["query"]:
+                return {"errors": [{"message": "Cannot query field"}]}
+            return {"data": {"target": {"expressions": [
+                {"tissue": {"label": "Liver"}, "rna": {"level": 3},
+                 "protein": {"level": 2}}]}}}
+
+    d._LOCAL_EXPRESSION.clear()
+    d._EXPR_DISABLED["value"] = False
+    import promoter_tf_drugs.genetics as gen
+    old = gen._resolve_ensembl
+    gen._resolve_ensembl = lambda c, s: "ENSG0"
+    try:
+        assert d.tissue_expression(C(), "X") == {"liver"}
+    finally:
+        gen._resolve_ensembl = old
+
+
+def test_api_route_still_refuses_to_supply_a_denominator():
+    """The API vocabulary is a variable biosample set, not a fixed tissue
+    panel, so a fraction against it would be fabricated."""
+    from promoter_tf_drugs import delivery as d
+    d._LOCAL_EXPRESSION.clear()
+    assert d.tissue_universe_size() is None
+
+
+# ===================================================================== #
+# Paralog families: can a selective ligand exist at this receptor?      #
+# ===================================================================== #
+from promoter_tf_drugs import paralogs as pl          # noqa: E402
+
+
+def test_family_members_are_recognised_as_relatives():
+    """Straight from the real CCR5 run: THRA and THRB both surfaced, and
+    dextrothyroxine/liothyronine/levothyroxine each scored against both."""
+    thrb = pl.paralog_specificity("THRB")
+    assert thrb["relatives"] == ["THRA"]
+    assert thrb["assessed"] and thrb["score"] < 1.0
+    assert "triiodothyronine" in thrb["ligand"]
+
+
+def test_more_relatives_means_a_lower_score():
+    """Direction must match every other specificity axis: higher = cleaner."""
+    alone = pl.paralog_specificity("NR1H4")["score"]      # FXR, family of 1
+    two = pl.paralog_specificity("ESR1")["score"]         # ESR1/ESR2
+    four = pl.paralog_specificity("NR3C1")["score"]       # GR/MR/PR/AR
+    assert alone > two > four
+
+
+def test_unlisted_factor_is_unassessed_not_selective():
+    """Most TFs have no ligand pocket at all. That is not selectivity."""
+    r = pl.paralog_specificity("NHLH1")
+    assert r["score"] is None and r["assessed"] is False
+    assert "UNASSESSED, not selective" in r["note"]
+
+
+def test_a_large_family_with_a_selective_agent_is_not_penalised():
+    """trifarotene exists BECAUSE the RAR pocket is conserved. Penalising the
+    molecule developed to solve the problem would be backwards."""
+    from promoter_tf_drugs import panel as p
+    row = {"_paralog_score": 0.4, "_paralog_selective_agents":
+           ["trifarotene (RARG-selective)"]}
+    assert p._p_min_paralog_specificity(row, 0.9)
+    bare = {"_paralog_score": 0.4, "_paralog_selective_agents": []}
+    assert not p._p_min_paralog_specificity(bare, 0.9)
+
+
+def test_missing_paralog_data_never_removes_a_row():
+    from promoter_tf_drugs import panel as p
+    assert p._p_min_paralog_specificity({"_paralog_score": None}, 0.9)
+
+
+def test_cross_reactive_pairs_finds_relatives_among_the_hits():
+    """Two family members both scoring well is one bet, not two."""
+    pairs = pl.cross_reactive_pairs(["THRA", "THRB", "RARA", "RARG", "VDR"])
+    fams = {p["family"]: p["members"] for p in pairs}
+    assert fams["thyroid hormone receptor"] == ["THRA", "THRB"]
+    assert fams["retinoic acid receptor"] == ["RARA", "RARG"]
+    # a lone member is not a pair
+    assert not any("VDR" in p["members"] and len(p["members"]) == 1
+                   for p in pairs)
+
+
+def test_cross_reactive_pairs_names_the_selective_agents():
+    pairs = pl.cross_reactive_pairs(["THRA", "THRB"])
+    assert any("resmetirom" in a for a in pairs[0]["selective_agents"])
+
+
+def test_paralog_stage_is_in_the_funnel():
+    from promoter_tf_drugs import panel as p
+    names = [s.name for s in p.default_stages()]
+    assert "Selective ligand achievable" in names
+    stage = [s for s in p.default_stages(min_paralog_specificity=0.6)
+             if s.name == "Selective ligand achievable"][0]
+    assert stage.filters["min_paralog_specificity"] == 0.6
+
+
+def test_ligand_count_is_not_used_as_a_specificity_signal():
+    """The whole point of using family size instead: ligand count measures
+    study effort, the same trap regulon size and evidence_depth correct for."""
+    import inspect
+    src = inspect.getsource(pl)
+    assert "n_ligands" not in src and "ligand_count" not in src
+
+
+# ------------------------------------ CTD promoted to empirical evidence
+def test_ctd_counts_as_measured_evidence():
+    """A curator recorded that someone dosed cells and the gene moved. That
+    is an observation, not an inference from a motif — and it is often the
+    only empirical source standing when LINCS is unreachable."""
+    from promoter_tf_drugs import provenance as pv
+    led = pv.Ledger()
+    led.record("chip", requested=True, ok=False)
+    led.record("lincs", requested=True, ok=False)
+    led.record("ctd", requested=True, ok=True, yielded=152)
+    assert "ctd" in led.EMPIRICAL
+    assert led.empirical_sources_ok() == 1
+    assert led.empirical_names() == ["ctd"]
+
+
+def test_verdict_names_the_evidence_that_did_arrive():
+    from promoter_tf_drugs import provenance as pv, motifs as m
+    led = pv.Ledger()
+    led.record("chip", requested=True, ok=False)
+    led.record("ctd", requested=True, ok=True, yielded=152)
+    led.record("genetics", requested=True, ok=True, yielded=8)
+    v = pv.verdict(led, m.scan_quality(900, 879, 4230, 1e-4))
+    assert v["n_empirical_sources"] == 2
+    assert set(v["empirical_available"]) == {"ctd", "genetics"}
+    assert "ctd" in v["headline"]
+    # a noise scan with SOME measurement is degraded, not uninterpretable
+    assert v["level"] == "degraded"
+
+
+def test_empty_ctd_is_a_failure_not_silence():
+    from promoter_tf_drugs import provenance as pv
+    led = pv.Ledger()
+    led.record("ctd", requested=True, ok=False, yielded=0)
+    assert led.get("ctd").state == "FAILED"
+    assert led.get("ctd").to_dict()["impact"]
+import json  # noqa: E402
+
+
+# ===================================================================== #
+# Things that were computed but never surfaced, and one flag that was    #
+# documented but never built. Each of these was a silent gap.            #
+# ===================================================================== #
+def test_control_gene_is_excluded_from_the_candidate_ranking():
+    """A control mixed in with candidates contaminates the comparison it
+    exists to validate, and inflates every drug's recurrence count by one."""
+    p = _panel_of("DEMOGENE", "SMN2")
+    merged, kept, stages, rec = pn.narrow(p, control="SMN2")
+    merged.setdefault("panel", {})["control_gene"] = "SMN2"
+    md = pn.markdown_report(p, merged, kept, stages, rec, {"top": 40})
+
+    assert "Negative control" in md
+    assert "It is not a candidate" in md
+    # recurrence was computed over candidates only, so nothing can claim to
+    # hit the control as corroboration
+    for entry in rec.values():
+        assert "SMN2" not in entry["genes"]
+    # and the surviving-routes table says it excluded the control
+    assert "the control gene SMN2 is" in md
+
+
+def test_control_surviving_as_well_as_candidates_is_flagged():
+    """The whole point: if the funnel treats a control like a candidate, it
+    is not discriminating and the shortlist is not evidence."""
+    p = _panel_of("DEMOGENE", "SMN2")
+    merged, kept, stages, rec = pn.narrow(p, control="SMN2")
+    merged.setdefault("panel", {})["control_gene"] = "SMN2"
+    md = pn.markdown_report(p, merged, kept, stages, rec, {})
+    # one of the three verdicts must be reached, never silence
+    assert any(s in md for s in ("not discriminating",
+                                 "is discriminating",
+                                 "margin as modest"))
+
+
+def test_renarrow_reuses_a_saved_panel_with_no_network(tmp_path):
+    """Tuning a cutoff should take a second, not the tens of minutes per gene
+    a fresh run costs. This was documented before it existed."""
+    out = tmp_path / "first"
+    assert pn.main(["--genes", "DEMOGENE,SMN2", "--demo",
+                    "--out", str(out)]) == 0
+
+    again = tmp_path / "second"
+    rc = pn.main(["--renarrow", str(out / "panel.json"),
+                  "--max-regulon", "200", "--out", str(again)])
+    assert rc == 0
+    md = (again / "panel.md").read_text(encoding="utf-8")
+    assert "The funnel" in md
+    # the tightened cutoff must actually have been applied
+    saved = json.loads((again / "panel.json").read_text(encoding="utf-8"))
+    assert saved["criteria"]["max_regulon"] == 200
+
+
+def test_renarrow_preserves_the_control_gene(tmp_path):
+    out = tmp_path / "a"
+    pn.main(["--genes", "DEMOGENE", "--control-gene", "SMN2", "--demo",
+             "--out", str(out)])
+    saved = json.loads((out / "panel.json").read_text(encoding="utf-8"))
+    assert saved["panel"]["control_gene"] == "SMN2"
+
+    again = tmp_path / "b"
+    assert pn.main(["--renarrow", str(out / "panel.json"),
+                    "--out", str(again)]) == 0
+    md = (again / "panel.md").read_text(encoding="utf-8")
+    assert "Negative control" in md
+
+
+def test_overlapping_tss_windows_are_reported():
+    """CCR5's two --all-tss windows shared 71% of their sequence, so they
+    were largely one analysis counted twice. window_overlap existed but was
+    never called."""
+    from promoter_tf_drugs import neighbours as nbr
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    # one promoter in demo mode, so nothing to overlap
+    assert res["tss_window_overlap"] == []
+
+    # two overlapping windows must produce a warning in the report
+    res["tss_window_overlap"] = nbr.window_overlap([
+        {"chrom": "3", "start": 46365946, "end": 46371945,
+         "transcript_id": "T1"},
+        {"chrom": "3", "start": 46367670, "end": 46373669,
+         "transcript_id": "T2"}])
+    md = pipeline.markdown_report(res)
+    assert "promoter windows overlap each other" in md
+    assert "not independent" in md
+
+
+def test_single_gene_report_names_the_receptor_family():
+    """The paralog axis was wired into the panel only, so it was invisible in
+    the single-gene run that most people actually do."""
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    md = pipeline.markdown_report(res)
+    i = md.index("Why each one")
+    body = md[i:i + 6000]
+    assert "Family:" in body
+    # and where selectivity WAS achieved it must say so rather than only
+    # reporting the family as a liability
+    assert ("subtype selectivity has been achieved" in body
+            or "no subtype-selective agent" in body)
+
+
+def test_family_clause_is_silent_for_a_lone_receptor():
+    from promoter_tf_drugs import predictions as prd
+    assert prd._family_clause("NR1H4") == ""      # FXR, no paralogue
+    assert prd._family_clause(None) == ""
+    assert prd._family_clause("NHLH1") == ""      # not a receptor at all
+    assert "THRA" in prd._family_clause("THRB")
+
+
+def test_trans_eqtl_section_renders_a_result_not_advice():
+    """It used to print 'look for trans-eQTLs of X in eQTLGen' once per
+    factor, identically, with no answer."""
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    res["results"][0]["genetics"] = {
+        "summary": "demo",
+        "trans_eqtl_summary": "**No factor can be supported this way.**",
+        "trans_eqtl": [
+            {"tf": "VDR", "gene": "DEMOGENE", "checked": True,
+             "supported": False, "hits": [], "note": "none"},
+        ],
+    }
+    md = pipeline.markdown_report(res)
+    assert "trans-eQTL" in md
+    assert "No factor can be supported this way" in md
+    assert "Absence is weak" in md
+    # and it must not fall back to the old per-factor advice
+    assert "look for trans-eQTLs of" not in md
+
+
+def test_all_tss_does_not_duplicate_a_gene_level_route():
+    """Real bug: CCR5 with --all-tss has two promoter blocks, and
+    catalogue.from_direct folds gene-level therapies into each one — so
+    Maraviroc filled both rows of a two-row shortlist, with its caveat
+    printed twice. A route on the gene product is not promoter-specific."""
+    res = pipeline.run("SMN2", demo=True, offline=True)
+    block = res["results"][0]
+    # simulate a second TSS window, as --all-tss produces
+    import copy
+    second = copy.deepcopy(block)
+    second["promoter"]["transcript_id"] = "ENST-SECOND"
+    res["results"].append(second)
+
+    rows = sl.enrich_rows(res)
+    seen = {}
+    for r in rows:
+        key = (r["gene"], r["drug"].lower(), r.get("acts_on"), r["category"])
+        seen[key] = seen.get(key, 0) + 1
+    assert all(n == 1 for n in seen.values()),         [k for k, n in seen.items() if n > 1]
+
+    # and the duplication is recorded rather than hidden
+    assert any(r.get("_n_windows", 1) == 2 for r in rows)
+
+
+def test_dedupe_keeps_the_strongest_instance_not_the_first():
+    rows = [
+        {"gene": "G", "drug": "X", "acts_on": "T", "category": "c",
+         "tier": 3, "score": 10.0},
+        {"gene": "G", "drug": "X", "acts_on": "T", "category": "c",
+         "tier": 1, "score": 5.0},
+    ]
+    kept = sl._dedupe_across_windows(rows)
+    assert len(kept) == 1
+    assert kept[0]["tier"] == 1          # tier beats score, as everywhere
+    assert kept[0]["_n_windows"] == 2
+
+
+def test_dedupe_collapses_the_salt_form_too():
+    rows = [
+        {"gene": "G", "drug": "Liothyronine", "acts_on": "THRB",
+         "category": "c", "tier": 3, "score": 9.0},
+        {"gene": "G", "drug": "Liothyronine Sodium", "acts_on": "THRB",
+         "category": "c", "tier": 3, "score": 9.0},
+    ]
+    assert len(sl._dedupe_across_windows(rows)) == 1
+
+
+def test_dedupe_keeps_the_same_drug_at_different_targets():
+    """Those are genuinely different routes."""
+    rows = [
+        {"gene": "G", "drug": "Tretinoin", "acts_on": "RARA",
+         "category": "c", "tier": 3, "score": 9.0},
+        {"gene": "G", "drug": "Tretinoin", "acts_on": "PPARD",
+         "category": "c", "tier": 3, "score": 9.0},
+    ]
+    assert len(sl._dedupe_across_windows(rows)) == 2
+
+
+# ===================================================================== #
+# Surviving the web services. Ensembl, ChEMBL and the maayanlab hosts    #
+# all return 500 while merely busy, and one of them used to take the     #
+# whole run down with it.                                                #
+# ===================================================================== #
+def test_one_unreachable_window_does_not_abort_the_run(monkeypatch):
+    """With --all-tss a gene has several windows. A transient 500 on one of
+    them used to raise after transcript selection, regulons and expression
+    had already been built — discarding all of it."""
+    from promoter_tf_drugs import genes as gm
+    calls = {"n": 0}
+
+    def flaky(client, species, chrom, start, end, strand, mask=None):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise gm.HttpError("HTTP 500 from Ensembl")
+        return "ACGT" * 300
+
+    gene = {"seq_region_name": "3", "strand": 1, "id": "ENSG0",
+            "display_name": "X", "assembly_name": "GRCh38",
+            "Transcript": [
+                {"id": "T1", "start": 1000, "end": 2000,
+                 "biotype": "protein_coding", "is_canonical": 1},
+                {"id": "T2", "start": 90000, "end": 99000,
+                 "biotype": "protein_coding"},
+            ]}
+    monkeypatch.setattr(gm, "fetch_sequence", flaky)
+    monkeypatch.setattr(gm, "_lookup_symbol", lambda c, s, sp: gene)
+
+    proms = gm.get_promoters(None, "X", all_tss=True)
+    assert len(proms) == 1            # the survivor, not an exception
+    assert calls["n"] == 2
+
+
+def test_every_window_failing_still_raises(monkeypatch):
+    """An empty promoter list would read downstream as 'this gene has no
+    promoter', which is a different and wrong claim."""
+    import pytest
+    from promoter_tf_drugs import genes as gm
+
+    def dead(*a, **k):
+        raise gm.HttpError("HTTP 500")
+
+    gene = {"seq_region_name": "3", "strand": 1, "id": "ENSG0",
+            "display_name": "X", "assembly_name": "GRCh38",
+            "Transcript": [{"id": "T1", "start": 1000, "end": 2000,
+                            "biotype": "protein_coding", "is_canonical": 1}]}
+    monkeypatch.setattr(gm, "fetch_sequence", dead)
+    monkeypatch.setattr(gm, "_lookup_symbol", lambda c, s, sp: gene)
+    with pytest.raises(gm.HttpError, match="could not fetch any promoter"):
+        gm.get_promoters(None, "X")
+
+
+def test_a_local_fasta_replaces_the_ensembl_sequence_call(tmp_path):
+    """Ensembl was the one stage with no offline route. The package already
+    writes promoter.fa, so a previous run is its own offline source."""
+    from promoter_tf_drugs import genes as gm
+    fa = tmp_path / "promoter.fa"
+    fa.write_text(">GENE|ENST1|chr7:1000-1011|strand=1|-1000/+200\n"
+                  "ACGTACGTACGT\n", encoding="utf-8")
+    assert gm.load_promoter_fasta(fa) == 1
+    try:
+        assert gm.local_sequence("7", 1000, 1011) == "ACGTACGTACGT"
+        assert gm.local_sequence("chr7", 1000, 1011) == "ACGTACGTACGT"
+        # a near-miss must NOT silently return the wrong window
+        assert gm.local_sequence("7", 1001, 1011) is None
+        assert gm.local_sequence("8", 1000, 1011) is None
+    finally:
+        gm._LOCAL_SEQ.clear()
+
+
+def test_local_fasta_is_preferred_over_the_network(tmp_path, monkeypatch):
+    from promoter_tf_drugs import genes as gm
+    fa = tmp_path / "p.fa"
+    fa.write_text(">G|T1|chr3:1-1200|strand=1|-1000/+200\n"
+                  + "A" * 1200 + "\n", encoding="utf-8")
+    gm.load_promoter_fasta(fa)
+
+    def boom(*a, **k):
+        raise AssertionError("must not hit the network when a FASTA matches")
+
+    gene = {"seq_region_name": "3", "strand": 1, "id": "ENSG0",
+            "display_name": "G", "assembly_name": "GRCh38",
+            "Transcript": [{"id": "T1", "start": 1001, "end": 2000,
+                            "biotype": "protein_coding", "is_canonical": 1}]}
+    monkeypatch.setattr(gm, "fetch_sequence", boom)
+    monkeypatch.setattr(gm, "_lookup_symbol", lambda c, s, sp: gene)
+    try:
+        proms = gm.get_promoters(None, "G", upstream=1000, downstream=200)
+        assert proms and proms[0].sequence == "A" * 1200
+    finally:
+        gm._LOCAL_SEQ.clear()
+
+
+def test_the_real_promoter_fa_output_round_trips():
+    """The offline route only works if this package's own output is readable
+    by it. Round-trip its FASTA rather than a hand-built one."""
+    from promoter_tf_drugs import genes as gm
+    import tempfile
+    from pathlib import Path as _P
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    with tempfile.TemporaryDirectory() as d:
+        pipeline.write_outputs(res, d)
+        n = gm.load_promoter_fasta(_P(d) / "promoter.fa")
+        try:
+            assert n == len(res["results"])
+            prom = res["results"][0]["promoter"]
+            got = gm.local_sequence(prom["chrom"], prom["start"], prom["end"])
+            assert got == res["results"][0]["sequence"]
+        finally:
+            gm._LOCAL_SEQ.clear()
+
+
+def test_a_500_is_treated_as_backoff_not_a_verdict():
+    """Public bioinformatics endpoints 500 under load as often as they 429.
+    Three attempts over 7s gave up while Ensembl was merely busy."""
+    from promoter_tf_drugs import http as h
+    assert h.DEFAULT_RETRIES >= 5
+    assert h.RETRY_CAP >= 10
+
+
+# ===================================================================== #
+# The last three plan items, and the cross-check the plan asked for.     #
+# ===================================================================== #
+def test_panel_regulon_stage_agrees_with_shortlist_specific():
+    """Both gate on max_regulon through the same predicate, so on one gene
+    they must return the same set. This is the check that the shared-
+    predicate refactor actually shares behaviour rather than merely code."""
+    res = pipeline.run("SMN2", demo=True, offline=True)
+
+    sl_keys = {(r["gene"], r["drug"].lower(), r.get("acts_on"))
+               for r in sl.filter_routes(res, max_regulon=600)}
+
+    p = pn.Panel()
+    pg = pn.PanelGene(symbol="SMN2")
+    pg.result = res
+    p.genes.append(pg)
+    merged = pn.merge_results(p)
+    rows = sl.enrich_rows(merged)
+    pn.annotate_axes(rows, merged)
+    kept, _ = pn.run_funnel(
+        rows, [pn.Stage("regulon", "a", {"max_regulon": 600}, "")])
+    pn_keys = {(r["gene"], r["drug"].lower(), r.get("acts_on")) for r in kept}
+
+    assert sl_keys == pn_keys, (sl_keys ^ pn_keys)
+
+
+def test_per_gene_top_stops_one_gene_filling_the_table():
+    """filter_rows sorts by (tier, -score) across the whole panel, so a gene
+    with more annotated pharmacology crowds out a genuinely cleaner gene —
+    the ranking answering the wrong question for a tool comparing genes."""
+    rows = ([{"gene": "A", "drug": f"a{i}", "tier": 3, "score": 90 - i}
+             for i in range(10)]
+            + [{"gene": "B", "drug": "b1", "tier": 3, "score": 10}])
+    capped = pn.cap_per_gene(rows, 2)
+    assert [r["gene"] for r in capped] == ["A", "A", "B"]
+    # global order within the cap is preserved
+    assert [r["drug"] for r in capped][:2] == ["a0", "a1"]
+    # no cap means no change
+    assert pn.cap_per_gene(rows, None) == rows
+    assert pn.cap_per_gene(rows, 0) == rows
+
+
+def test_per_gene_top_is_wired_to_the_cli():
+    flags = [o for a in pn.build_parser()._actions for o in a.option_strings]
+    assert "--per-gene-top" in flags
+    args = pn.build_parser().parse_args(["--genes", "A", "--per-gene-top", "3"])
+    assert args.per_gene_top == 3
+
+
+def test_both_clis_share_one_declaration_of_the_analysis_flags():
+    """They used to be shared by reaching into the other parser's private
+    _actions and registering the same Action objects in two parsers, which
+    shares mutable state between them."""
+    from promoter_tf_drugs import cli, panel as pnl
+    import inspect
+
+    assert hasattr(cli, "add_analysis_args")
+    assert "_add_action" not in inspect.getsource(pnl.build_parser)
+
+    single = {o for a in cli.build_parser()._actions
+              for o in a.option_strings if o.startswith("--")}
+    multi = {o for a in pnl.build_parser()._actions
+             for o in a.option_strings if o.startswith("--")}
+
+    # every analysis flag reaches both, and neither leaks the other's own
+    for shared in ("--pfm-file", "--chip-bed", "--promoter-fasta",
+                   "--regulon-file", "--expression-file", "--direction",
+                   "--all-tss", "--pvalue", "--demo", "--offline"):
+        assert shared in single, shared
+        assert shared in multi, shared
+    assert "--gene" in single and "--gene" not in multi
+    assert "--genes" in multi and "--genes" not in single
+
+
+def test_the_two_parsers_do_not_share_action_objects():
+    """Distinct Action instances: a default mutated on one parser must not
+    appear on the other.
+
+    Both parsers are held in locals for the comparison. Taking id() of
+    objects from a temporary lets CPython free them and reuse the addresses
+    for the second parser's actions, which made an earlier version of this
+    test fail at random.
+    """
+    from promoter_tf_drugs import cli, panel as pnl
+    single = cli.build_parser()
+    multi = pnl.build_parser()
+    shared = {id(x) for x in single._actions} & {id(x) for x in multi._actions}
+    assert not shared
+
+    # The property that actually matters, checked behaviourally rather than
+    # by identity: mutating one parser's action leaves the other alone.
+    a = [x for x in single._actions if "--pvalue" in x.option_strings][0]
+    b = [x for x in multi._actions if "--pvalue" in x.option_strings][0]
+    a.default = 12345
+    assert b.default != 12345
+
+
+# ===================================================================== #
+# The three remaining limits, corrected.                                #
+# ===================================================================== #
+def test_curated_tables_are_internally_consistent():
+    """A hand-entered table that is quietly wrong is worse than one known to
+    be incomplete, because the report presents both with equal confidence.
+    This is the check that runs on every commit."""
+    from promoter_tf_drugs import audit
+    problems = audit.check_internal()
+    bad = {k: v for k, v in problems.items() if v}
+    assert not bad, audit.summarise(problems)
+
+
+def test_audit_catches_a_drug_placed_in_two_systemic_classes():
+    """It would make `classify` depend on table declaration order, so the
+    burden a drug reports would change if someone reordered the file."""
+    from promoter_tf_drugs import audit, systemic
+    extra = systemic.SystemicClass(
+        "invented", 0.5, "a" * 50, frozenset({"dexamethasone"}))
+    orig = systemic.CLASSES
+    systemic.CLASSES = orig + (extra,)
+    try:
+        problems = audit.check_internal()
+        assert any("dexamethasone" in p
+                   for p in problems["systemic: drug in two classes"])
+        assert "problem(s) found" in audit.summarise(problems)
+    finally:
+        systemic.CLASSES = orig
+
+
+def test_audit_catches_a_name_that_would_not_survive_salt_stripping():
+    """classify() looks up the salt-free form, so a member stored WITH a
+    counterion could never be found."""
+    from promoter_tf_drugs import audit, systemic
+    extra = systemic.SystemicClass(
+        "invented", 0.5, "b" * 50, frozenset({"levothyroxine sodium"}))
+    orig = systemic.CLASSES
+    systemic.CLASSES = orig + (extra,)
+    try:
+        problems = audit.check_internal()
+        assert "levothyroxine sodium" in problems[
+            "systemic: name changes under salt_free_name"]
+    finally:
+        systemic.CLASSES = orig
+
+
+def test_audit_offline_needs_no_network():
+    """The consistency pass must work with no client at all, so it can run as
+    a test rather than only as a manual chore."""
+    from promoter_tf_drugs import audit
+    assert isinstance(audit.check_internal(), dict)
+    assert "internally consistent" in audit.summarise(
+        {k: [] for k in audit.check_internal()})
+
+
+def test_audit_reports_unresolvable_names_without_claiming_correctness():
+    from promoter_tf_drugs import audit
+
+    class C:
+        def get(self, url, params=None):
+            q = (params or {}).get("q")
+            if q == "ghostdrug":
+                return {"molecules": []}
+            return {"molecules": [{"molecule_chembl_id": "CHEMBL1",
+                                   "withdrawn_flag": q == "oldpill"}]}
+
+    r = audit.resolve_names(C(), ["dexamethasone", "ghostdrug", "oldpill"])
+    assert r["unresolved"] == ["ghostdrug"]
+    assert r["withdrawn_in_chembl"] == ["oldpill"]
+    assert len(r["resolved"]) == 2
+
+
+def test_audit_counts_lookup_errors_separately_from_unresolved():
+    """A name ChEMBL could not answer for is UNKNOWN, not missing — the same
+    distinction the evidence ledger makes everywhere else."""
+    from promoter_tf_drugs import audit
+
+    class Boom:
+        def get(self, url, params=None):
+            raise RuntimeError("HTTP 500")
+
+    r = audit.resolve_names(Boom(), ["a", "b"])
+    assert r["lookup_errors"] == 2
+    assert r["unresolved"] == []          # not silently called missing
+
+
+def test_direction_model_health_is_recorded_not_inferred():
+    """A ChEMBL outage and a target with genuinely few ligands both end as
+    'no direction model'. The ledger must say which."""
+    from promoter_tf_drugs import provenance as pv
+    assert "direction_model" in pv.FLAGS
+    assert "direction_model" in pv.IMPACT
+    led = pv.Ledger()
+    led.record("direction_model", requested=True, ok=False,
+               detail="12 of 12 grades could not be direction-checked")
+    assert led.get("direction_model").state == "FAILED"
+    assert led.get("direction_model").to_dict()["impact"]
+
+
+def test_every_panel_preset_sets_the_specificity_axes():
+    """The paralog axis was the one axis absent from the presets, which made
+    the four axes inconsistently active."""
+    from promoter_tf_drugs import panel as p
+    for name in ("narrow", "narrow+clean"):
+        pre = p.PANEL_PRESETS[name]
+        for axis in ("max_regulon", "max_burden", "min_paralog_specificity"):
+            assert axis in pre, f"{name} is missing {axis}"
+
+
+def test_paralog_axis_stays_off_by_default_and_says_why():
+    """It is a structural prior rather than a measurement, so auto-deleting
+    routes on it would be the thing this package criticises elsewhere. The
+    Family column is populated either way."""
+    from promoter_tf_drugs import panel as p
+    stage = [s for s in p.default_stages()
+             if s.name == "Selective ligand achievable"][0]
+    assert stage.filters["min_paralog_specificity"] is None
+    assert "prior rather than a measurement" in stage.why
+    assert "nothing is hidden" in stage.why
+
+
+def test_audit_covers_every_curated_drug_table():
+    """A 'full' audit that skipped direct.CURATED would leave unchecked the
+    one table the report prints FIRST and calls the better starting point."""
+    from promoter_tf_drugs import audit
+    tables = audit.all_curated_names()
+    for expected in ("systemic.CLASSES", "stabilizers.CURATED",
+                     "delivery.PGP_SUBSTRATES", "ligands.ROUTES",
+                     "direct.CURATED"):
+        assert expected in tables, expected
+        assert tables[expected], expected
+    assert sum(len(v) for v in tables.values()) > 200
+
+
+def test_withdrawn_disagreement_is_directional():
+    """We-say-available/ChEMBL-says-withdrawn puts a withdrawn drug at the
+    top of the report unflagged. The reverse is far less serious, because
+    approvals are regional and ChEMBL is not the regulator."""
+    from promoter_tf_drugs import audit, direct
+
+    class C:
+        def __init__(self, withdrawn_names):
+            self.w = {n.lower() for n in withdrawn_names}
+
+        def get(self, url, params=None):
+            q = (params or {}).get("q", "")
+            return {"molecules": [{"molecule_chembl_id": "CHEMBL1",
+                                   "withdrawn_flag": q.lower() in self.w}]}
+
+    rows = direct.CURATED
+    vals = list(rows.values()) if isinstance(rows, dict) else list(rows)
+    entries = [it for v in vals
+               for it in (v if isinstance(v, (list, tuple)) else [v])
+               if getattr(it, "drug", None)]
+    live = next(e.drug for e in entries if not getattr(e, "withdrawn", False))
+
+    r = audit.check_withdrawn_agreement(C([live]))
+    assert live in r["we_say_available_chembl_says_withdrawn"]
+
+    clean = audit.check_withdrawn_agreement(C([]))
+    assert clean["we_say_available_chembl_says_withdrawn"] == []
+
+
+def test_unanswerable_names_are_unchecked_not_agreed():
+    """A name ChEMBL could not answer for is UNKNOWN. Counting it as
+    agreement would be the absence-of-evidence bug again."""
+    from promoter_tf_drugs import audit
+
+    class Boom:
+        def get(self, url, params=None):
+            raise RuntimeError("HTTP 500")
+
+    r = audit.check_withdrawn_agreement(Boom())
+    assert r["unchecked"] and r["checked"] == len(r["unchecked"])
+    assert r["we_say_available_chembl_says_withdrawn"] == []
+
+
+def test_no_curated_entry_is_presented_as_available_while_flagged_withdrawn():
+    """Internal version of the online check: our own table must not contain
+    an entry that is both withdrawn and presented as raising protein without
+    the flag being visible downstream."""
+    from promoter_tf_drugs import direct
+    rows = direct.CURATED
+    vals = list(rows.values()) if isinstance(rows, dict) else list(rows)
+    for v in vals:
+        for e in (v if isinstance(v, (list, tuple)) else [v]):
+            if getattr(e, "withdrawn", False):
+                # a withdrawn entry must still carry its mechanism and gene so
+                # the report can explain why it is being shown at all
+                assert e.mechanism and e.gene, e.drug
