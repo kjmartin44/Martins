@@ -241,12 +241,59 @@ def _extract_rows(res):
     return out
 
 
+# Below this many distinct factors over a promoter-sized region, the result is
+# far likelier to be a parsing or pagination failure than a real absence of
+# binding. `peaks_from_api` already warns at this threshold; here it decides
+# whether the result may be used as scoring input at all.
+MIN_CREDIBLE_TFS = 3
+
+
 def chip_evidence(promoter, *, chip_bed=None, client=None, use_api: bool = False,
                   assembly: str = "hg38") -> dict[str, int]:
     """Unified entry point: local BED if given, else the API if requested."""
+    counts, _ = chip_evidence_status(promoter, chip_bed=chip_bed, client=client,
+                                     use_api=use_api, assembly=assembly)
+    return counts
+
+
+def chip_evidence_status(promoter, *, chip_bed=None, client=None,
+                         use_api: bool = False, assembly: str = "hg38"):
+    """As `chip_evidence`, but also report whether the source actually worked.
+
+    The counts alone cannot answer that. An empty dict means "this promoter has
+    no measured binding" when the BED parsed fine, and "the lookup broke" when
+    the API changed shape — opposite conclusions with identical representation.
+    Scoring must not treat the second as measured absence, so the caller is
+    handed an explicit verdict instead of having to guess from a count.
+
+    Returns (counts, status) where status has: requested, ok, detail, yielded.
+    """
     if chip_bed:
-        return peaks_in_region(chip_bed, promoter.chrom, promoter.start, promoter.end)
+        counts = peaks_in_region(chip_bed, promoter.chrom, promoter.start,
+                                 promoter.end)
+        # A local BED is parsed directly, so an empty result here is a real
+        # statement about this region rather than a transport failure.
+        return counts, {
+            "requested": True, "ok": True, "yielded": len(counts),
+            "detail": (f"local BED: peaks for {len(counts)} factor(s) over "
+                       f"the window" if counts else
+                       "local BED parsed, no peaks over this window — a real "
+                       "absence of measured binding here"),
+        }
+
     if use_api and client is not None:
-        return peaks_from_api(client, promoter.chrom, promoter.start, promoter.end,
-                              assembly=assembly)
-    return {}
+        counts = peaks_from_api(client, promoter.chrom, promoter.start,
+                                promoter.end, assembly=assembly)
+        ok = len(counts) >= MIN_CREDIBLE_TFS
+        return counts, {
+            "requested": True, "ok": ok, "yielded": len(counts),
+            "detail": (
+                f"ReMap API: peaks for {len(counts)} factor(s)" if ok else
+                f"ReMap API returned only {len(counts)} factor(s) for a "
+                f"promoter-sized region, which normally overlaps peaks for "
+                f"dozens. Treating this as a failed lookup rather than as "
+                f"measured absence. Use --chip-bed with a local ReMap BED."),
+        }
+
+    return {}, {"requested": False, "ok": False, "yielded": 0,
+                "detail": "no ChIP source given"}

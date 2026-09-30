@@ -3387,3 +3387,172 @@ def test_established_binders_enter_the_catalogue_at_curated_tier():
     # and tier ordering puts the de-risked one first
     ordered = cat.build(block, include_chromatin=False)["routes"]
     assert ordered[0]["drug"] == "EstablishedDrug"
+
+
+# ===================================================================== #
+# Evidence provenance: a failed lookup must never read as a measured    #
+# negative. This is the failure mode that made a whole CCR5 run look    #
+# complete while three of its four evidence sources had silently died.  #
+# ===================================================================== #
+def test_false_discovery_proportion_is_the_chance_share_not_its_complement():
+    """The direction of this number is the whole point, and it is easy to
+    invert: 1 - expected/observed is the share that is REAL."""
+    from promoter_tf_drugs import motifs as m
+    # 900 observed against ~744 expected: overwhelmingly noise.
+    q = m.scan_quality(900, 879, 4230, 1e-4)
+    assert q["false_discovery_proportion"] > 0.75
+    # A genuinely enriched scan must come out LOW, not high.
+    good = m.scan_quality(200, 800, 1200, 1e-5)
+    assert good["false_discovery_proportion"] < 0.25
+    # and the two framings must agree with each other
+    assert good["expected_real_sites"] > 0.5 * good["observed"]
+
+
+def test_fdp_and_enrichment_tell_the_same_story():
+    from promoter_tf_drugs import motifs as m
+    for n in (50, 300, 900, 2000):
+        q = m.scan_quality(n, 879, 4230, 1e-4)
+        if q["enrichment"] >= 2.0:
+            assert q["false_discovery_proportion"] <= 0.5
+        if q["enrichment"] <= 1.2:
+            assert q["false_discovery_proportion"] >= 0.8
+
+
+def test_broken_chip_api_is_a_failure_not_measured_absence():
+    """A ReMap response yielding one or two factors over a promoter is a
+    parsing failure. Scoring it as 'binding measured and absent' zeroes the
+    20-point evidence axis for every factor on a lie."""
+    from promoter_tf_drugs import evidence as ev
+
+    class _C:
+        def get(self, url): return {"peaks": [{"peakValues": {"name": {
+            "data": {"TF": "CTCF"}}}}]}
+
+    prom = _prom(1)
+    counts, status = ev.chip_evidence_status(prom, client=_C(), use_api=True)
+    assert counts == {"CTCF": 1}
+    assert status["requested"] is True
+    assert status["ok"] is False           # refused as scoring input
+    assert "--chip-bed" in status["detail"]
+
+
+def test_empty_local_bed_is_a_real_negative():
+    """Contrast with the above: a BED that parsed and found nothing IS
+    evidence of absence, and must not be downgraded to a failure."""
+    from promoter_tf_drugs import evidence as ev
+    import tempfile, os
+    fd, path = tempfile.mkstemp(suffix=".bed")
+    with os.fdopen(fd, "w") as fh:
+        fh.write("chr9\t1\t2\tSOMETF\n")       # nowhere near the promoter
+    try:
+        counts, status = ev.chip_evidence_status(_prom(1), chip_bed=path)
+        assert counts == {}
+        assert status["requested"] and status["ok"] is True
+    finally:
+        os.unlink(path)
+
+
+def test_unrequested_chip_is_not_a_failure():
+    from promoter_tf_drugs import evidence as ev
+    _, status = ev.chip_evidence_status(_prom(1))
+    assert status["requested"] is False
+    assert status["ok"] is False
+
+
+def test_ledger_distinguishes_not_requested_from_failed():
+    from promoter_tf_drugs import provenance as p
+    led = p.Ledger()
+    led.record("chip", requested=False, ok=False)
+    led.record("lincs", requested=True, ok=False, detail="API down")
+    assert led.get("chip").state == "not requested"
+    assert led.get("lincs").state == "FAILED"
+    assert [s.name for s in led.failures()] == ["lincs"]
+    # a not-requested source is never reported as broken
+    assert led.to_dict()["failed"] == ["lincs"]
+    # and a failed source names what it cost you
+    assert led.get("lincs").to_dict()["impact"]
+
+
+def test_ledger_keeps_the_best_outcome_across_promoters():
+    """With --all-tss the same source is recorded per TSS. One region with no
+    peaks must not mark a working source as broken."""
+    from promoter_tf_drugs import provenance as p
+    led = p.Ledger()
+    led.record("chip", requested=True, ok=False, detail="nothing here")
+    led.record("chip", requested=True, ok=True, yielded=40, detail="40 TFs")
+    assert led.usable("chip")
+
+
+def test_verdict_refuses_a_noise_scan_with_no_measurement():
+    from promoter_tf_drugs import provenance as p, motifs as m
+    led = p.Ledger()
+    led.record("chip", requested=True, ok=False)
+    v = p.verdict(led, m.scan_quality(900, 879, 4230, 1e-4))
+    assert v["level"] == "not interpretable"
+    assert v["n_empirical_sources"] == 0
+
+
+def test_verdict_upgrades_when_measurement_exists():
+    from promoter_tf_drugs import provenance as p, motifs as m
+    led = p.Ledger()
+    led.record("chip", requested=True, ok=True, yielded=40)
+    v = p.verdict(led, m.scan_quality(200, 800, 1200, 1e-5))
+    assert v["level"] == "interpretable"
+
+
+# --------------------------------------------------------------- congeners
+def test_salt_forms_collapse_to_one_active_moiety():
+    from promoter_tf_drugs import congeners as c
+    assert c.salt_free_name("Liothyronine Sodium") == "liothyronine"
+    assert c.salt_free_name("Elacestrant Hydrochloride") == "elacestrant"
+    assert c.salt_free_name("Seladelpar Lysine") == "seladelpar"
+    assert c.salt_free_name("Calcitriol") == "calcitriol"
+
+
+def test_leading_counterion_is_not_stripped():
+    """'Sodium Fluoride' is a drug; reducing it to 'fluoride' would be wrong.
+    Only trailing counterions are salts."""
+    from promoter_tf_drugs import congeners as c
+    assert c.salt_free_name("Sodium Fluoride") == "sodium fluoride"
+
+
+def test_esters_are_grouped_but_never_merged():
+    """Fluticasone Propionate and Fluticasone Furoate are different molecules.
+    Merging them would be a pharmacological claim, not a dedup."""
+    from promoter_tf_drugs import congeners as c
+    assert c.salt_free_name("Fluticasone Furoate") != \
+           c.salt_free_name("Fluticasone Propionate")
+    fam = c.family_of(["Fluticasone Furoate", "Fluticasone Propionate"])
+    assert fam["fluticasone"] == ["Fluticasone Furoate",
+                                  "Fluticasone Propionate"]
+
+
+def test_collapse_keeps_the_winner_and_names_the_alternates():
+    from promoter_tf_drugs import congeners as c
+
+    class G:
+        def __init__(self, n, t, s):
+            self.drug_name, self.tf_symbol, self.combined = n, t, s
+
+    rows = [G("Liothyronine", "THRB", 63.0),
+            G("Liothyronine Sodium", "THRB", 63.0),
+            G("Levothyroxine Sodium", "THRB", 62.0),
+            G("Calcitriol", "VDR", 58.7)]
+    kept, info = c.collapse_grades(rows)
+    names = [g.drug_name for g in kept]
+    assert "Liothyronine Sodium" not in names      # collapsed away
+    assert "Liothyronine" in names                  # winner survives
+    assert "Calcitriol" in names                    # untouched
+    assert info["Liothyronine"] == ["Liothyronine Sodium"]
+
+
+def test_same_drug_at_two_tfs_stays_two_routes():
+    """Those are genuinely different mechanisms, not duplicate chemistry."""
+    from promoter_tf_drugs import congeners as c
+
+    class G:
+        def __init__(self, n, t):
+            self.drug_name, self.tf_symbol = n, t
+
+    kept, _ = c.collapse_grades([G("Tretinoin", "RARA"), G("Tretinoin", "PPARD")])
+    assert len(kept) == 2

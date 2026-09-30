@@ -269,6 +269,21 @@ def scan_quality(n_hits: int, n_motifs: int, seq_length: int,
         advice = (f"{n_hits} sites against {expected:.0f} expected by chance "
                   f"over {seq_length} scannable bases ({ratio:.1f}x).")
 
+    # The share of the reported list expected to be chance. This is the
+    # quantity the ranking actually needs, and it is not the same claim as the
+    # enrichment ratio: 1.21x enrichment sounds like mild signal, but it means
+    # roughly 83% of the rows below are noise. Stating it as a proportion makes
+    # that unmissable, and it is a real Benjamini-style false discovery
+    # PROPORTION — expected false positives over observed — not a fitted score.
+    fdp = min(1.0, expected / n_hits) if n_hits > 0 else 0.0
+
     return {"observed": n_hits, "expected_by_chance": round(expected, 1),
             "scannable_bases": seq_length,
-            "enrichment": round(ratio, 2), "verdict": verdict, "advice": advice}
+            "enrichment": round(ratio, 2), "verdict": verdict, "advice": advice,
+            "false_discovery_proportion": round(fdp, 3),
+            "expected_real_sites": max(0, round(n_hits - expected)),
+            "fdp_note": (
+                f"about {fdp:.0%} of these {n_hits} sites are expected to be "
+                f"chance matches; roughly {max(0, round(n_hits - expected))} "
+                f"are real, but nothing here says WHICH — only ChIP evidence "
+                f"separates them.")}

@@ -48,10 +48,43 @@ echo === Running every method for %GENE% (%DIR%regulation) ===
 echo This takes 10-30 minutes on a first run. Results are cached afterwards.
 echo.
 
+REM --- scan window and threshold ---------------------------------------
+REM A 6 kb window at p=1e-4 across ~880 matrices expects ~740 chance hits.
+REM Real promoters do not contain 900 genuine sites, so that combination
+REM returns a list that is ~83%% noise no matter which gene you run - the
+REM ranking below it is then a ranking of chance matches. A core-promoter
+REM window at a stricter threshold is what makes the scan interpretable.
+REM Widen deliberately (and tighten --pvalue further if you do), not by
+REM default.
+set "WINDOW=--upstream 1000 --downstream 200 --pvalue 1e-5"
+
+REM --- ChIP evidence ---------------------------------------------------
+REM This is the step that turns "could bind" into "was observed bound", and
+REM it is worth more than every scoring tweak combined. A local ReMap BED is
+REM parsed directly; the API is used only as a fallback because a changed
+REM response shape silently yields no peaks at all.
+set "CHIP=--chip-api"
+if exist remap2022.bed.gz set "CHIP=--chip-bed remap2022.bed.gz"
+if "%CHIP%"=="--chip-api" echo   ^(no local remap2022.bed.gz - falling back to the ReMap API^)
+
+REM --- tissue expression ------------------------------------------------
+REM Open Targets' expression endpoint changes shape periodically; when it
+REM does, every factor reports "unknown" and the co-expression filter
+REM silently does nothing. A local HPA/GTEx table removes the dependency.
+set "EXPR="
+if exist rna_tissue_consensus.tsv set "EXPR=--expression-file rna_tissue_consensus.tsv"
+if "%EXPR%"=="" echo   ^(no local rna_tissue_consensus.tsv - using the Open Targets API^)
+
+REM --tf-weight: 0.7 puts most of each grade on the promoter call, which is
+REM only justified once ChIP evidence is actually present. Without it the
+REM weight sits back at 0.5 so a motif guess cannot carry a grade.
+set "TFW=--tf-weight 0.5"
+if not "%CHIP%"=="--chip-api" set "TFW=--tf-weight 0.7"
+
 python -m promoter_tf_drugs --gene %GENE% --direction %DIR% ^
     --pfm-file jaspar2024.txt %REGULON% ^
-    --chip-api --upstream 5000 --downstream 1000 --all-tss ^
-    --tf-weight 0.7 --proliferation %PROLIF% --cell-type-check %TISS% ^
+    %CHIP% %WINDOW% --all-tss ^
+    %TFW% --proliferation %PROLIF% --cell-type-check %TISS% %EXPR% ^
     --predict-direction --upstream-network --upstream-depth 3 ^
     --lincs --genetics --screen --design-screen ^
     --out "results\%GENE%_%DIR%" -v

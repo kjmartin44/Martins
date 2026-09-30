@@ -8,12 +8,14 @@ import math
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import (annotate, catalogue as cat_mod, cellcycle, delivery as dlv_mod,
+from . import (annotate, catalogue as cat_mod, cellcycle, congeners as cong_mod,
+               delivery as dlv_mod,
                demo_data, direct, discovery, drug_scoring, modalities as modal_mod,
                drugs as drugs_mod, evidence, genes, motifs as motifs_mod,
                genetics as gen_mod, ligands as lig_mod, modulators as mod_mod,
                network as net_mod,
-               outcome as outcome_mod, regulon as regulon_mod,
+               outcome as outcome_mod, provenance as prov_mod,
+               regulon as regulon_mod,
                screens as screens_mod, signatures as sig_mod,
                stabilizers as stab_mod)
 from .http import Client
@@ -144,7 +146,18 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
     _screen_cache: dict = {}   # receptor -> screen, shared across promoters
     _gene_linked: set = set()  # drugs CTD already reports as moving this gene
     _library: list = []        # approved-drug library, fetched once per run
+
+    # Which evidence sources actually produced evidence. Populated as the run
+    # goes; consulted by the scoring below and printed at the top of the
+    # report, so a failed lookup can never be read as a measured negative.
+    ledger = prov_mod.Ledger()
+
     regulons = regulon_mod.load_regulons(regulon_file) if regulon_file else None
+    ledger.record("regulon", requested=bool(regulon_file),
+                  ok=bool(regulons), yielded=len(regulons or {}),
+                  detail=(f"{len(regulons or {})} TFs with curated targets"
+                          if regulons else
+                          "no regulon file; coarse bundled tiers in use"))
     if expression_file:
         dlv_mod.load_expression_file(expression_file)
 
@@ -214,8 +227,9 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                 by_tf[s].hits.append(h)
 
         # --------------------------------------------------- 4. ChIP evidence
-        chip_counts = evidence.chip_evidence(
+        chip_counts, chip_status = evidence.chip_evidence_status(
             prom, chip_bed=chip_bed, client=client, use_api=chip_api)
+        chip_src = ledger.record("chip", **chip_status)
         for s, r in by_tf.items():
             r.chip_peaks = chip_counts.get(s.upper(), 0)
 
@@ -235,8 +249,13 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             if s in by_tf:
                 by_tf[s].drugs = ds
 
+        # Only *usable* ChIP counts as measured binding. Asking for ChIP and
+        # getting a broken response previously scored every factor a hard zero
+        # on the 20-point evidence axis — presenting a failed lookup as though
+        # binding had been measured and ruled out. A failed source falls back
+        # to the unverified discount instead.
         for r in by_tf.values():
-            r.score = score_tf(r, has_chip=bool(chip_bed) or chip_api, goal=goal)
+            r.score = score_tf(r, has_chip=chip_src.usable, goal=goal)
 
         ranked = sorted(by_tf.values(), key=lambda r: -r.score)
 
@@ -251,6 +270,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
 
         # ------------------------------------------- 6. grade each TF/drug pair
         grades = []
+        collapsed: dict = {}
         if grade_drugs:
             max_score = sum(WEIGHTS.values())
             grades = drug_scoring.grade_all(
@@ -259,6 +279,20 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                 evidence_lookup=demo_data.demo_evidence if demo else None,
                 predict_direction=predict_direction and not demo, goal=goal,
                 regulons=regulons)
+
+            # Collapse salt forms. One pharmacology was occupying five rows
+            # (Liothyronine / Liothyronine Sodium / Levothyroxine Sodium ...),
+            # pushing distinct chemistry off the bottom of every table and
+            # inflating the candidate count the Pareto accounting reports.
+            # Done here so every downstream consumer — catalogue, outcome
+            # chain, discovery — inherits one row per active moiety.
+            grades, collapsed = cong_mod.collapse_grades(grades)
+            for g in grades:
+                alts = collapsed.get(g.drug_name)
+                if alts:
+                    g.notes.append(
+                        "same active moiety as " + ", ".join(alts[:4])
+                        + (f" (+{len(alts) - 4} more)" if len(alts) > 4 else ""))
 
         # ------------------------------ 7. propagate to a transcriptional call
         estimates = []
@@ -367,6 +401,13 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                 hs = [h for h in hs if h.drugs]
                 if hs:
                     upstream_hits[r.symbol] = [h.to_dict() for h in hs[:10]]
+            ledger.record("upstream", requested=True, ok=bool(upstream_hits),
+                          yielded=len(upstream_hits),
+                          detail=(f"druggable routes for "
+                                  f"{len(upstream_hits)} factor(s)"
+                                  if upstream_hits else
+                                  "no signed causal path reached a druggable "
+                                  "node"))
 
         # ------------- 8b2. stabilisation routes for pocket-less factors
         stabilisation = {}
@@ -398,6 +439,18 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                 "tissue expression lookup",
                 lambda: dlv_mod.tissue_expression(client, prom.gene_symbol),
                 set())
+            expr_status = dlv_mod.expression_source_status()
+            # A gene with no tissues AND a working source is a real result;
+            # with a broken source it is nothing at all.
+            ledger.record("expression", requested=expr_status["requested"],
+                          ok=expr_status["ok"] and bool(gene_tissues),
+                          yielded=len(gene_tissues),
+                          detail=(expr_status["detail"] if not expr_status["ok"] else
+                                  f"{len(gene_tissues)} tissue(s) for "
+                                  f"{prom.gene_symbol}" if gene_tissues else
+                                  f"source available but returned no tissue "
+                                  f"for {prom.gene_symbol} — co-expression "
+                                  f"cannot be checked for any factor"))
             celltype["gene_tissues"] = sorted(gene_tissues)[:20]
             celltype["tfs"] = {}
             for r in ranked[:10]:
@@ -428,6 +481,15 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                                             direction=goal)),
                 [])
             sig_hits = sig_mod.flag_non_specific(sig_hits)
+            ledger.record(
+                "lincs", requested=True, ok=bool(sig_hits), yielded=len(sig_hits),
+                detail=(f"{len(sig_hits)} signature hit(s) for this gene"
+                        if sig_hits else
+                        "LINCS returned no signature for this gene. Either no "
+                        "approved compound has moved it in the profiled cell "
+                        "lines, or the query failed — check the gene is "
+                        "expressed in the L1000 panel before reading this as "
+                        "a negative."))
             if signature_file:
                 ref = sig_mod.load_signature_file(signature_file)
                 lincs["reference_signature_genes"] = len(ref)
@@ -443,6 +505,13 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                             gen_mod.GeneticEvidence(prom.gene_symbol))
             genetic["cis"] = cis.to_dict()
             genetic["summary"] = gen_mod.summarise(cis)
+            _phen = (genetic["cis"] or {}).get("phenotypes") or []
+            ledger.record("genetics", requested=True, ok=bool(_phen),
+                          yielded=len(_phen),
+                          detail=(f"{len(_phen)} associated phenotype(s)"
+                                  if _phen else
+                                  "no genetic association returned for this "
+                                  "gene"))
             genetic["trans"] = [
                 gen_mod.tf_link_support(client, r.symbol, prom.gene_symbol).to_dict()
                 for r in ranked[:3]]
@@ -486,11 +555,19 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         }
         all_routes = cat_mod.build(block_for_catalogue, goal=goal)
 
+        if screen_receptors and not demo:
+            ledger.record("screen", requested=True, ok=bool(screens),
+                          yielded=len(screens),
+                          detail=(f"{len(screens)} receptor(s) screened"
+                                  if screens else "no receptor screened"))
+
         outputs.append({
             "promoter": prom.to_dict(),
             "sequence": prom.sequence,
             "n_sites": len(hits),
             "scan_quality": quality,
+            "salt_forms_collapsed": collapsed if grade_drugs else {},
+            "evidence_verdict": prov_mod.verdict(ledger, quality),
             "n_tfs": len(by_tf),
             "tfs": [r.to_dict() for r in ranked],
             "direction_unknown": {
@@ -518,6 +595,9 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
 
     return {
         "direct_therapies": [t.to_dict() for t in direct_hits],
+        "evidence_sources": ledger.to_dict(),
+        "evidence_verdict": prov_mod.verdict(
+            ledger, (outputs[0] or {}).get("scan_quality") if outputs else None),
         "query": {
             "gene": gene, "species": species, "upstream": upstream,
             "downstream": downstream, "pvalue": pvalue, "demo": demo,
@@ -560,6 +640,51 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
         L.append("> **DEMO MODE.** Synthetic sequence, illustrative matrices and a "
                  "hand-entered drug table. Not usable for real conclusions.")
         L.append("")
+
+    # -------------------------------------------- can this run be read at all?
+    # Printed before any ranking. A reader who sees only the tables below
+    # cannot tell a measured negative from a lookup that broke, and every
+    # table in this report is structurally identical in both cases.
+    ev = result.get("evidence_verdict") or {}
+    srcs = (result.get("evidence_sources") or {}).get("sources") or {}
+    if ev or srcs:
+        L.append("## Evidence available in this run")
+        L.append("")
+        badge = {"not interpretable": "⛔ NOT INTERPRETABLE",
+                 "degraded": "⚠ DEGRADED",
+                 "interpretable": "✓ INTERPRETABLE"}.get(ev.get("level"), "")
+        if badge:
+            L.append(f"**{badge}** — {ev.get('headline', '')}")
+            L.append("")
+        for reason in ev.get("reasons") or []:
+            L.append(f"- {reason}")
+        if ev.get("reasons"):
+            L.append("")
+        if srcs:
+            L.append("| Source | State | What it returned |")
+            L.append("|---|---|---|")
+            for name, s in srcs.items():
+                state = {"ok": "ok", "FAILED": "**FAILED**",
+                         "not requested": "not requested"}.get(s["state"],
+                                                               s["state"])
+                L.append(f"| {name} | {state} | {s['detail']} |")
+            L.append("")
+        failed = [s for s in srcs.values() if s["state"] == "FAILED"]
+        if failed:
+            L.append("**A failed source is not a negative result.** These were "
+                     "requested and did not deliver, so nothing below rests on "
+                     "them:")
+            L.append("")
+            for s in failed:
+                L.append(f"- **{s['name']}** — {s.get('impact', '')}")
+            L.append("")
+        missing = [s for s in srcs.values() if s["state"] == "not requested"]
+        if missing:
+            L.append("Not requested (enable to strengthen the run): "
+                     + ", ".join(f"{s['name']} (`{s['enable_with']}`)"
+                                 for s in missing if s.get("enable_with"))
+                     + ".")
+            L.append("")
 
     direct_hits = result.get("direct_therapies") or []
     if direct_hits:
@@ -620,6 +745,11 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
             else:
                 L.append(f"*Scan quality: {q2['advice']}*")
             L.append("")
+            if q2.get("fdp_note"):
+                # The enrichment ratio understates this badly: 1.2x reads as
+                # mild signal but means ~5 of every 6 rows are chance.
+                L.append(f"*{q2['fdp_note']}*")
+                L.append("")
 
         nrs = [t for t in res["tfs"] if t.get("nuclear_receptor")]
         if nrs:

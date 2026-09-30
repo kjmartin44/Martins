@@ -29,6 +29,89 @@ Outputs: `report.md`, `results.json`, `tf_summary.tsv`, `sites.bed`
 
 ---
 
+## Read this first: did the evidence sources actually work?
+
+Every report now opens with an **Evidence available in this run** table, and
+it is the first thing to read, because of a failure mode that is otherwise
+invisible.
+
+Every optional analysis here degrades gracefully — a dead API costs you that
+section, not the run. That is right for robustness and wrong for inference,
+because the scoring layer cannot distinguish these:
+
+```
+the lookup ran and found nothing       -> evidence of absence
+the lookup broke and returned nothing  -> absence of evidence
+```
+
+Both arrive as an empty dict. A run where ChIP, tissue expression and LINCS
+have all silently died still prints grades, Pareto fronts and a tier-1 row,
+and is **structurally identical** to a run where all three worked. That report
+is more dangerous than no report: its confident scaffolding is intact while
+the empirical content underneath it is gone.
+
+So each source records what it was asked to do and what it managed to do:
+
+| state | meaning |
+|---|---|
+| `ok` | ran, and its result may be used as evidence |
+| `FAILED` | requested and did not deliver. Named, with what it cost you |
+| `not requested` | you did not ask for it. A choice, not a fault |
+
+Two places this changes a number rather than just a message:
+
+**A broken ChIP lookup no longer scores as measured absence.** ReMap's API
+response shape has changed between releases; when it does, a promoter comes
+back with one or two factors instead of dozens. That used to set
+`has_chip=True` and award every factor a hard zero on the 20-point evidence
+axis — presenting a failed request as though binding had been measured and
+ruled out. Below three factors over a promoter-sized region the result is now
+refused as scoring input and falls back to the unverified discount. A local
+`--chip-bed` that parses and finds nothing is the opposite case: a real
+negative, and it is kept as one.
+
+**An unavailable expression source is separated from a tissue-restricted
+gene.** Both produced "unknown" for every factor before.
+
+### The run-level verdict
+
+Two independent things have to hold before a ranking is evidence rather than a
+reading order: the scan has to have found signal above chance, **and** at
+least one source of measurement has to have worked. Neither suffices alone —
+an enriched scan with no ChIP is still unconfirmed sequence, and perfect ChIP
+over a noise scan confirms binding at sites you had no reason to look at. When
+both fail the report says **NOT INTERPRETABLE** at the top and explains why.
+
+### The scan's false discovery proportion
+
+`scan_quality` now reports the share of the hit list expected to be chance,
+alongside the enrichment ratio, because the ratio badly understates the
+problem. **1.2x enrichment sounds like mild signal; it means roughly 83% of
+the rows below it are noise.** The report prints both, plus how many sites are
+expected to be real — while stating plainly that nothing in the sequence says
+*which* ones. Only ChIP separates them.
+
+If you see a weak scan, the fix is usually the window rather than the
+threshold: a ±1 kb core-promoter window at `--pvalue 1e-5` is interpretable,
+whereas 5 kb/1 kb at `1e-4` expects ~740 chance hits across ~880 matrices and
+cannot be.
+
+### Salt forms are collapsed
+
+ChEMBL lists every marketed form separately, so one pharmacology was occupying
+five rows (`Liothyronine` / `Liothyronine Sodium` / `Levothyroxine Sodium` …)
+— pushing distinct chemistry off the bottom of tables that print 25 rows, and
+inflating the candidate count the Pareto accounting reports. Salts now collapse
+to one row per active moiety per target, carrying the alternates in its notes.
+
+Two deliberate limits. **Esters and prodrugs are grouped but never merged** —
+fluticasone propionate and fluticasone furoate are different molecules, and
+merging them would be a pharmacological claim this code has no business
+making. And **a name made only of counterion words is left alone**, so
+"Sodium Fluoride" does not become "sodium".
+
+---
+
 ## Cell-type reach (`--cell-type-check`, `--tissue cns`)
 
 Three things must overlap, and without this flag the pipeline checks none of

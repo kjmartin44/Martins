@@ -293,6 +293,30 @@ _EXPR_DISABLED = {"value": False, "reason": None}
 _LOCAL_EXPRESSION: dict[str, dict[str, float]] = {}
 
 
+def expression_source_status() -> dict:
+    """Is tissue-expression data actually available for this run?
+
+    `tissue_expression` returns an empty set both when a gene is genuinely
+    tissue-restricted and when the Open Targets schema changed and the lookup
+    disabled itself. `expression_overlap` then reports "unknown" for every
+    factor, which reads like a data gap in HPA rather than a broken endpoint.
+    This says which it was.
+    """
+    if _LOCAL_EXPRESSION:
+        return {"requested": True, "ok": True, "yielded": len(_LOCAL_EXPRESSION),
+                "detail": (f"local expression table: {len(_LOCAL_EXPRESSION)} "
+                           f"genes")}
+    if _EXPR_DISABLED["value"]:
+        return {"requested": True, "ok": False, "yielded": 0,
+                "detail": (f"Open Targets expression lookup failed and was "
+                           f"disabled for this run ({_EXPR_DISABLED['reason']}). "
+                           f"Pass --expression-file with an HPA "
+                           f"rna_tissue_consensus.tsv or a GTEx median-TPM "
+                           f"matrix to remove the dependency entirely.")}
+    return {"requested": True, "ok": True, "yielded": 0,
+            "detail": "Open Targets expression lookup in use"}
+
+
 def load_expression_file(path, *, min_value: float = 1.0) -> dict:
     """Load a tissue-expression table from disk, so this works with no network.
 
