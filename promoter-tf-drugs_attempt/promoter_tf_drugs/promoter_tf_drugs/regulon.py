@@ -1,0 +1,141 @@
+"""How many genes does this TF control? The specificity that actually matters.
+
+The drug-level `selectivity` score asks how many *proteins* a compound binds.
+That is the wrong denominator for this pipeline. Suppose you find a compound
+that hits exactly one target, with 1 nM affinity, no off-targets at all - a
+perfect score on molecular selectivity. If that target is SP1, the drug will
+move tens of thousands of promoters. Your gene is one of them.
+
+So specificity here has two independent layers, and a drug needs both:
+
+  molecular       how many proteins does the drug bind?      (drug_scoring)
+  transcriptional how many genes does that protein control?  (this module)
+
+A narrow TF is worth a great deal. Getting your gene via a factor with 40
+targets is a far cleaner experiment - and a far more plausible therapy - than
+getting it via a global regulator, even when the motif score is worse.
+
+Data sources, best first
+------------------------
+  TRRUST v2   curated human TF-target pairs, one small TSV.
+              https://www.grnpedia.org/trrust/  -> trrust_rawdata.human.tsv
+              Pass with --regulon-file. This is the recommended route.
+  DoRothEA    confidence-tiered regulons (A-E); A/B only is a good filter.
+  ChIP-Atlas  measured target genes per TF, larger and noisier.
+
+Without a file, a bundled qualitative tier table is used. Those tiers are
+deliberately coarse - "broad" vs "narrow", not invented counts - because a
+precise-looking fake number is worse than an honest bucket.
+"""
+
+from __future__ import annotations
+
+import logging
+from collections import defaultdict
+from pathlib import Path
+
+log = logging.getLogger(__name__)
+
+# Coarse tiers for well-characterised factors. Used only when no regulon file
+# is supplied. Approximate order of magnitude, not counts.
+TIER_TARGETS = {"global": 5000, "broad": 1200, "moderate": 300, "narrow": 60}
+
+GLOBAL_REGULATORS = {
+    "SP1", "SP3", "MYC", "MAX", "TP53", "NFKB1", "RELA", "CREB1", "E2F1", "E2F4",
+    "JUN", "JUNB", "FOS", "EGR1", "YY1", "CTCF", "TBP", "NFYA", "NFYB", "ELK1",
+    "ETS1", "USF1", "USF2", "SRF", "ATF1", "ATF2", "GABPA", "KLF4", "KLF5",
+}
+BROAD_REGULATORS = {
+    "NR3C1", "NR3C2", "ESR1", "ESR2", "AR", "PGR", "PPARG", "PPARA", "RARA",
+    "RXRA", "HIF1A", "EPAS1", "STAT1", "STAT3", "STAT5A", "SMAD2", "SMAD3",
+    "SREBF1", "SREBF2", "FOXO1", "FOXO3", "NFE2L2", "AHR", "CEBPB", "TCF7L2",
+    "RUNX1", "SOX2", "POU5F1", "HSF1",
+}
+MODERATE_REGULATORS = {
+    "VDR", "HNF4A", "HNF1A", "THRA", "THRB", "NR1H3", "NR1H4", "NR1I2", "NR1I3",
+    "ESRRA", "REST", "GATA1", "GATA3", "GATA4", "MEF2C", "MYOD1", "PAX6",
+    "NEUROD1", "TFEB", "NR4A1", "RORC", "PPARD", "NR1D1",
+}
+
+
+def tier_for(symbol: str) -> str:
+    s = symbol.upper()
+    if s in GLOBAL_REGULATORS:
+        return "global"
+    if s in BROAD_REGULATORS:
+        return "broad"
+    if s in MODERATE_REGULATORS:
+        return "moderate"
+    return "unknown"
+
+
+# ------------------------------------------------------------- file loading
+def load_regulons(path: str | Path) -> dict[str, set]:
+    """Parse TRRUST-style TSV: TF <tab> target <tab> mode <tab> pmid.
+
+    Also accepts a plain two-column TF/target TSV, and DoRothEA CSV exports
+    with tf/target columns.
+    """
+    path = Path(path)
+    regulons: dict[str, set] = defaultdict(set)
+    sep = "," if path.suffix.lower() == ".csv" else "\t"
+
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+        first = fh.readline()
+        cols = [c.strip().strip('"').lower() for c in first.split(sep)]
+        has_header = "tf" in cols or "source" in cols
+        if has_header:
+            tf_i = cols.index("tf") if "tf" in cols else cols.index("source")
+            tg_i = (cols.index("target") if "target" in cols
+                    else cols.index("gene") if "gene" in cols else 1)
+        else:
+            tf_i, tg_i = 0, 1
+            fh.seek(0)
+
+        for line in fh:
+            parts = [p.strip().strip('"') for p in line.rstrip("\n").split(sep)]
+            if len(parts) <= max(tf_i, tg_i):
+                continue
+            tf, target = parts[tf_i].upper(), parts[tg_i].upper()
+            if tf and target and tf != target:
+                regulons[tf].add(target)
+
+    log.info("loaded regulons for %d TFs from %s", len(regulons), path.name)
+    return dict(regulons)
+
+
+def regulon_size(symbol: str, regulons: dict | None = None) -> tuple[int | None, str]:
+    """(n_target_genes, provenance). None when genuinely unknown."""
+    s = symbol.upper()
+    if regulons and s in regulons:
+        return len(regulons[s]), "regulon file"
+    tier = tier_for(s)
+    if tier != "unknown":
+        return TIER_TARGETS[tier], f"bundled tier: {tier}"
+    return None, "unknown"
+
+
+# -------------------------------------------------------------- the scoring
+def transcriptional_specificity(symbol: str, regulons: dict | None = None
+                                ) -> tuple[float, int | None, str | None]:
+    """0..1. A TF controlling ~50 genes scores ~1.0; ~5000 scores ~0.2.
+
+    Log-scaled, because the difference between 50 and 500 targets matters far
+    more than between 5000 and 5500.
+    """
+    import math
+
+    n, provenance = regulon_size(symbol, regulons)
+    if n is None:
+        return 0.55, None, "regulon size unknown; scored neutral"
+    if n <= 50:
+        return 1.0, n, None
+
+    score = max(0.15, 1.0 - 0.42 * math.log10(n / 50.0))
+    note = None
+    if n >= 2000:
+        note = (f"{symbol} is a global regulator (~{n} target genes); any drug "
+                "acting through it will move much more than your gene")
+    elif n >= 600:
+        note = f"{symbol} controls ~{n} genes; expect broad transcriptional effects"
+    return round(score, 3), n, note

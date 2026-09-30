@@ -1,0 +1,831 @@
+symbol	name	role	nuclear_receptor	n_sites	best_rel_score	best_score_bits	best_site_tss_offset	best_site_sequence	matrix_id	chip_peaks	score	n_drugs	drugs
+NHLH1	nescient helix-loop-helix 1	activator	False	7	0.928	13.1	55	CTCAGCTGC	MA0048.3	0	65.9	0	
+ESRRG	estrogen related receptor gamma	activator	True	3	0.987	14.88	-999	CCAAGGTCA	MA0643.2	0	65.8	1	Diethylstilbestrol
+GATA2	GATA binding protein 2	activator	False	3	1.0	12.57	174	CTTATCT	MA0036.4	0	64.7	0	
+ETV2	ETS variant transcription factor 2	activator	False	4	0.922	11.29	104	ACAGGAAAC	MA0762.2	0	64.2	0	
+MAFG	MAF bZIP transcription factor G	activator	False	2	0.869	13.13	6	GATGTCTCAGCT	MA0659.4	0	62.5	0	
+OSR2	odd-skipped related transciption factor 2	activator	False	2	0.949	12.0	79	TCAGAAGC	MA1646.2	0	62.4	0	
+NR1I3	nuclear receptor subfamily 1 group I member 3	activator	True	2	1.0	12.87	-2691	TGAACTTT	MA1534.2	0	61.7	2	Clotrimazole; Meclizine
+PPARD	peroxisome proliferator activated receptor delta	repressor	True	1	0.839	7.55	184	AGGGTCACAGTTTG	MA1550.2	0	61.5	5	Bezafibrate; Elafibranor; Seladelpar; Seladelpar Lysine; Tretinoin
+PBX1	PBX homeobox 1	activator	False	1	0.971	12.8	-28	ATCAATCAT	MA0070.2	0	61.5	0	
+ESRRB	estrogen related receptor beta	activator	True	2	0.95	14.53	-999	CCAAGGTCAC	MA0141.4	0	61.4	1	Diethylstilbestrol
+GATA4	GATA binding protein 4	activator	False	2	1.0	14.32	174	CCTTATCT	MA0482.3	0	61.4	0	
+ZNF784	zinc finger protein 784	activator	False	1	0.972	13.45	42	ACTTACCG	MA1717.2	0	61.0	0	
+MAFK	MAF bZIP transcription factor K	repressor	False	2	0.862	12.12	6	GATGTCTCAGCT	MA0591.2	0	60.8	0	
+PGR	progesterone receptor	activator	True	2	0.971	11.3	-3492	ACATCATGT	MA2327.1	0	60.8	1	Mifepristone
+MEIS1	Meis homeobox 1	activator	False	1	0.943	12.35	-27	AATCAATCA	MA1639.2	0	60.7	0	
+DUX4	double homeobox 4	activator	False	1	0.941	11.21	-27	CAAATCAATCA	MA0468.1	0	60.6	0	
+ONECUT1	one cut homeobox 1	activator	False	1	0.939	11.61	-26	AAATCAATC	MA0679.3	0	60.6	0	
+BARX2	BARX homeobox 2	activator	False	1	0.983	11.97	-89	AAATCATTA	MA1471.2	0	59.8	0	
+RARA	retinoic acid receptor alpha	repressor	True	6	0.839	12.6	-2698	GTGATCAAAAGTTCATTT	MA0729.1	0	58.7	9	Acitretin; Adapalene; Alitretinoin; Etretinate; Isotretinoin; Tamibarotene; Tazarotene; Tretinoin; Trifarotene
+MAF	MAF bZIP transcription factor	activator	False	1	0.851	9.48	6	ATGTCTCAGCT	MA0501.2	0	58.6	0	
+VAX2	ventral anterior homeobox 2	repressor	False	5	1.0	8.28	-440	TAATTA	MA0723.3	0	58.5	0	
+NR2C2	nuclear receptor subfamily 2 group C member 2	activator	True	1	1.0	9.82	185	GGGTCA	MA1536.2	0	57.8	0	
+NKX3-2	NK3 homeobox 2	repressor	False	1	0.949	12.71	-96	ATACACTTAA	MA0122.4	0	57.1	0	
+SMAD2	SMAD family member 2	activator	False	2	1.0	12.14	430	CCAGAC	MA1964.2	0	56.8	0	
+BHLHA15	basic helix-loop-helix family member a15	activator	False	3	0.969	13.04	707	CCAGCTGT	MA1472.3	0	56.6	0	
+TRPS1	transcriptional repressor GATA binding 1	repressor	False	2	1.0	13.64	350	TCTTATCT	MA1970.2	0	56.4	0	
+PPARG	peroxisome proliferator activated receptor gamma	dual	True	6	0.872	11.7	-1003	AGAGCCAAGGTCA	MA0065.3	0	56.4	3	Bexarotene; Diclofenac Sodium; Resveratrol
+BACH1	BTB domain and CNC homolog 1	dual	False	2	0.862	12.12	6	GATGTCTCAGCT	MA0591.2	0	56.3	0	
+TFAP4	transcription factor AP-4	activator	False	8	0.945	13.16	706	ACCAGCTGTC	MA0691.1	0	55.9	0	
+FOXJ3	forkhead box J3	activator	False	1	0.94	11.32	-188	GTAAATAAA	MA0851.2	0	55.9	0	
+NEUROD2	neuronal differentiation 2	activator	False	3	0.944	11.62	707	ACAGCTGG	MA0668.3	0	55.9	0	
+NFIC	nuclear factor I C	activator	False	4	1.0	13.51	-1138	CTTGGCA	MA0161.3	0	55.9	0	
+HLF	HLF transcription factor, PAR bZIP family member	activator	False	1	0.914	10.46	-4364	TTGTGCAAT	MA0043.4	0	55.8	1	Belzutifan
+TCF7L2	transcription factor 7 like 2	repressor	False	1	1.0	14.56	220	ACATCAAAG	MA0523.2	0	55.5	0	
+TCF7	transcription factor 7	repressor	False	1	1.0	12.31	222	CTTTGAT	MA0769.3	0	55.4	0	
+KLF7	KLF transcription factor 7	activator	False	5	1.0	15.95	-1509	GGGCGGGG	MA1959.2	0	55.3	0	
+KLF10	KLF transcription factor 10	activator	False	4	1.0	18.13	-1510	GGGGCGGGG	MA1511.2	0	55.3	0	
+GLI1	GLI family zinc finger 1	activator	False	3	0.88	11.86	-570	TCACCACCCA	MA1990.2	0	55.0	0	
+RAX2	retina and anterior neural fold homeobox 2	activator	False	4	1.0	8.98	-3531	CAATTA	MA0717.2	0	55.0	0	
+HMGA1	high mobility group AT-hook 1	activator	False	3	1.0	12.74	-3657	ATTTTTAT	MA2124.1	0	55.0	0	
+SOX10	SRY-box transcription factor 10	activator	False	4	1.0	11.12	-4155	ACAAAG	MA0442.3	0	55.0	0	
+RBPJ	recombination signal binding protein for immunoglobulin kappa J region	activator	False	8	1.0	11.63	-4327	TGGGAA	MA1116.2	0	55.0	0	
+TCF12	transcription factor 12	activator	False	6	1.0	12.25	-4453	CAGCTG	MA0521.3	0	55.0	0	
+DLX3	distal-less homeobox 3	activator	False	4	1.0	9.14	-4851	CAATTA	MA0880.2	0	55.0	0	
+GBX2	gastrulation brain homeobox 2	activator	False	4	1.0	10.07	-4851	CAATTA	MA0890.2	0	55.0	0	
+RAX	retina and anterior neural fold homeobox	activator	False	4	1.0	9.7	-4851	CAATTA	MA0718.2	0	55.0	0	
+SHOX	SHOX homeobox	activator	False	4	1.0	8.91	-4851	TAATTG	MA0630.2	0	55.0	0	
+TLX2	T cell leukemia homeobox 2	activator	False	4	1.0	9.88	-4851	CAATTA	MA1577.2	0	55.0	0	
+KLF4	KLF transcription factor 4	activator	False	9	1.0	16.29	-4993	CCCCACCC	MA0039.5	0	55.0	0	
+ATOH1	atonal bHLH transcription factor 1	activator	False	4	0.998	12.45	-4951	ACCATATG	MA0461.3	0	54.9	0	
+HNF1A	HNF1 homeobox A	activator	False	1	0.931	13.13	220	TCTTTGATGT	MA1991.2	0	54.9	0	
+TEAD4	TEA domain transcription factor 4	activator	False	1	0.913	10.25	196	TCATTCCA	MA0809.3	0	54.9	0	
+FOXF2	forkhead box F2	activator	False	1	0.905	10.18	-189	CGTAAATAA	MA0030.2	0	54.8	0	
+ALX4	ALX homeobox 4	activator	False	2	0.935	13.0	-445	GGCTTTAATTAA	MA0853.2	0	54.6	0	
+GRHL2	grainyhead like transcription factor 2	activator	False	2	1.0	14.24	-651	AACAGGTT	MA1105.3	0	54.6	0	
+KLF5	KLF transcription factor 5	activator	False	5	0.981	16.62	-4994	GCCCCACCCA	MA0599.1	0	54.4	0	
+MYOG	myogenin	activator	False	5	0.98	13.68	-2784	ACAGCTGC	MA0500.3	0	54.4	0	
+FOS	Fos proto-oncogene, AP-1 transcription factor subunit	activator	False	5	0.978	12.67	-4593	TGACTCAC	MA0476.2	0	54.4	0	
+FLI1	Fli-1 proto-oncogene, ETS transcription factor	activator	False	4	0.867	11.97	-608	GACAACAGGTTGT	MA1956.2	0	54.3	0	
+LEF1	lymphoid enhancer binding factor 1	activator	False	1	0.91	10.55	222	TCTTTGAT	MA0768.3	0	54.2	0	
+RREB1	ras responsive element binding protein 1	activator	False	8	0.846	16.92	-553	TCCCACCCCAACCCCCACA	MA0073.2	0	54.2	0	
+PTF1A	pancreas associated transcription factor 1a	activator	False	6	0.971	13.12	-4541	ACAGATGTC	MA1618.2	0	54.1	0	
+FOSL2	FOS like 2, AP-1 transcription factor subunit	activator	False	4	0.969	13.8	-4594	AGTGAGTCAG	MA0478.2	0	54.1	0	
+TFAP2B	transcription factor AP-2 beta	activator	False	8	0.925	15.13	-986	TGCCCTCTGGGCT	MA0813.1	0	54.0	0	
+MAX	MYC associated transcriptional regulator X	repressor	False	1	0.883	11.34	135	AGCACTTGGT	MA0059.2	0	54.0	0	
+KLF6	KLF transcription factor 6	activator	False	3	0.956	13.64	-1510	CCCCGCCCC	MA1517.2	0	54.0	0	
+NR1H3	nuclear receptor subfamily 1 group H member 3	activator	True	4	0.873	11.4	684	TGAACTTAAATAGACT	MA0494.2	0	53.9	0	
+MSC	musculin	repressor	False	3	0.916	12.77	706	ACCAGCTGTC	MA0665.1	0	53.5	0	
+HESX1	HESX homeobox 1	repressor	False	4	1.0	10.04	-3531	TAATTG	MA0894.2	0	53.5	0	
+MXI1	MAX interactor 1, dimerization protein	repressor	False	4	1.0	11.79	-4387	CACATG	MA1108.3	0	53.5	0	
+HOXB2	homeobox B2	activator	False	1	1.0	8.96	-440	TAATTA	MA0902.3	0	53.3	0	
+HOXB3	homeobox B3	activator	False	1	1.0	8.5	-440	TAATTA	MA0903.2	0	53.3	0	
+LHX4	LIM homeobox 4	activator	False	1	1.0	9.23	-440	TAATTA	MA0704.2	0	53.3	0	
+PDX1	pancreatic and duodenal homeobox 1	activator	False	1	1.0	9.4	-440	TAATTA	MA0132.3	0	53.3	0	
+JUND	JunD proto-oncogene, AP-1 transcription factor subunit	activator	False	4	0.941	11.88	-4594	GTGAGTCAG	MA1141.2	0	53.2	0	
+NFATC4	nuclear factor of activated T cells 4	repressor	False	2	0.99	12.63	-598	ACGGAAACA	MA1525.3	0	53.2	0	
+JUNB	JunB proto-oncogene, AP-1 transcription factor subunit	activator	False	6	0.939	11.34	-4594	GTGAGTCAG	MA1135.2	0	53.2	0	
+EGR1	early growth response 1	activator	False	5	0.925	14.23	-1507	CCACCCCCGC	MA0162.5	0	53.1	0	
+PATZ1	POZ/BTB and AT hook containing zinc finger 1	repressor	False	4	0.969	17.83	-1505	GGGGGTGGGGG	MA1961.2	0	52.9	0	
+ESR1	estrogen receptor 1	activator	True	1	0.778	6.43	-996	GGGCTTCCGTGACCT	MA0112.4	0	52.9	7	Bazedoxifene; Clomiphene; Elacestrant; Elacestrant Hydrochloride; Fulvestrant; Imlunestrant; Ospemifene
+EBF1	EBF transcription factor 1	activator	False	4	0.877	13.02	895	GTCCCAGGGAA	MA0154.5	0	52.9	0	
+GLI2	GLI family zinc finger 2	activator	False	2	0.92	13.0	-570	CACCACCCA	MA0734.4	0	52.9	0	
+NFE2L1	NFE2 like bZIP transcription factor 1	dual	False	1	0.858	10.04	6	ATGTCTCAGCT	MA0089.3	0	52.9	0	
+MYC	MYC proto-oncogene, bHLH transcription factor	dual	False	2	0.883	11.34	135	AGCACTTGGT	MA0059.2	0	52.9	0	
+ELF1	E74 like ETS transcription factor 1	activator	False	5	0.926	12.72	-4062	CAGGAAGAG	MA0473.4	0	52.8	0	
+IRF1	interferon regulatory factor 1	activator	False	2	0.903	12.64	532	TGAAACTGATA	MA0050.4	0	52.7	0	
+ZNF281	zinc finger protein 281	repressor	False	4	0.96	17.38	-1505	GGGGGTGGGG	MA1630.3	0	52.6	0	
+PRDM4	PR/SET domain 4	activator	False	2	0.901	12.73	535	CCATGAAACTG	MA1647.3	0	52.6	0	
+EBF4	EBF transcription factor 4	activator	False	3	0.867	12.88	895	GTCCCAGGGAA	MA2122.1	0	52.6	0	
+MYF6	myogenic factor 6	activator	False	3	0.92	12.43	-2785	AACAGCTGCC	MA0667.1	0	52.6	0	
+NFIA	nuclear factor I A	activator	False	2	1.0	12.09	-1137	TGCCAA	MA0670.2	0	52.5	0	
+MEF2A	myocyte enhancer factor 2A	activator	False	4	0.914	11.57	-1888	TCAAAAATAG	MA0052.5	0	52.5	0	
+ASCL1	achaete-scute family bHLH transcription factor 1	repressor	False	3	0.967	12.36	-2784	GCAGCTGT	MA1100.3	0	52.5	0	
+FOXD3	forkhead box D3	repressor	False	1	0.878	10.53	-191	CCCGTAAATAAACC	MA0041.3	0	52.5	0	
+NR2F1	nuclear receptor subfamily 2 group F member 1	repressor	True	4	0.923	11.96	-998	CAAGGTCACGGA	MA0017.3	0	52.4	0	
+PLAG1	PLAG1 zinc finger	activator	False	3	0.813	12.86	-638	TGGGCTCACGGGTG	MA0163.1	0	52.4	0	
+NEUROD1	neuronal differentiation 1	activator	False	2	0.935	11.21	707	ACAGCTGG	MA1109.2	0	52.3	0	
+WT1	WT1 transcription factor	activator	False	4	0.892	13.06	-1507	CCACCCCCGC	MA1627.2	0	52.1	0	
+ZBTB26	zinc finger and BTB domain containing 26	repressor	False	5	0.952	12.05	-2540	ATCCAGAA	MA1579.2	0	52.1	0	
+SP1	Sp1 transcription factor	activator	False	2	1.0	18.07	-1510	GGGGCGGGG	MA0079.5	0	52.0	0	
+HOXB13	homeobox B13	repressor	False	3	0.95	12.47	-3660	TCAATAAAA	MA0901.3	0	52.0	0	
+ERF	ETS2 repressor factor	repressor	False	6	0.838	12.1	-605	ACGGAAACAACCTGTT	MA1939.2	0	51.9	0	
+GATA3	GATA binding protein 3	dual	False	2	1.0	13.67	350	TCTTATCT	MA0037.5	0	51.9	0	
+NFKB1	nuclear factor kappa B subunit 1	dual	False	2	0.874	11.46	-4104	AGGGGGACTCCCT	MA0105.4	0	51.9	1	Bortezomib
+POU6F1	POU class 6 homeobox 1	repressor	False	1	1.0	9.95	-440	TAATTA	MA0628.2	0	51.8	0	
+NR2F2	nuclear receptor subfamily 2 group F member 2	repressor	True	2	1.0	12.87	890	AAGGTCA	MA1111.2	0	51.8	0	
+KLF16	KLF transcription factor 16	repressor	False	6	0.93	15.72	-1505	CCCCCACCCCC	MA0741.1	0	51.8	0	
+ZBTB6	zinc finger and BTB domain containing 6	repressor	False	4	0.941	13.63	-4073	CCTAGAGCC	MA1581.2	0	51.7	0	
+PBX3	PBX homeobox 3	activator	False	1	0.841	10.8	245	TGAGTGAAAGA	MA1114.2	0	51.7	0	
+MZF1	myeloid zinc finger 1	dual	False	3	1.0	14.68	-689	AATCCCCA	MA0056.3	0	51.7	0	
+EGR4	early growth response 4	activator	False	4	0.877	12.45	-1508	CCACCCCCGCC	MA0733.2	0	51.7	0	
+SMAD4	SMAD family member 4	activator	False	2	1.0	12.19	-4502	TGTCTAG	MA1153.2	0	51.7	0	
+BATF	basic leucine zipper ATF-like transcription factor	activator	False	2	1.0	13.02	-4593	TGACTCA	MA0462.3	0	51.7	0	
+PLAGL2	PLAG1 like zinc finger 2	activator	False	2	1.0	16.25	-4998	GGGCCCCC	MA1548.2	0	51.7	0	
+REL	REL proto-oncogene, NF-kB subunit	activator	False	2	0.91	10.78	-692	GGGGATTTTC	MA0101.1	0	51.6	0	
+MEIS2	Meis homeobox 2	activator	False	2	0.996	13.33	-4045	TTGACAGG	MA0774.1	0	51.5	0	
+ETV5	ETS variant transcription factor 5	activator	False	3	0.884	11.33	-4125	AGAAATAGGAAG	MA1946.2	0	51.5	0	
+FOXI1	forkhead box I1	activator	False	3	0.884	11.33	-4125	AGAAATAGGAAG	MA1946.2	0	51.5	0	
+RXRB	retinoid X receptor beta	activator	True	1	0.788	3.94	184	AGGGTCACAGTTTG	MA0855.1	0	51.5	0	
+STAT5B	signal transducer and activator of transcription 5B	activator	False	2	0.906	11.56	729	TACCCAGAA	MA1625.2	0	51.3	0	
+HIC1	HIC ZBTB transcriptional repressor 1	repressor	False	1	0.966	11.51	406	GTGCCCAC	MA0739.2	0	51.2	0	
+HOXD3	homeobox D3	activator	False	2	0.978	12.13	-2109	CTAATGAC	MA0912.2	0	51.1	0	
+TFAP2E	transcription factor AP-2 epsilon	activator	False	2	0.968	12.74	-2010	GCCTCCGGG	MA1569.2	0	50.8	0	
+MYF5	myogenic factor 5	activator	False	2	0.968	13.01	-2784	ACAGCTGC	MA1641.2	0	50.7	0	
+SP3	Sp3 transcription factor	repressor	False	4	0.893	12.75	-1511	CCCCCGCCCCA	MA0746.3	0	50.6	0	
+KLF12	KLF transcription factor 12	repressor	False	2	1.0	18.27	-1510	GGGGCGGGG	MA0742.2	0	50.5	0	
+SP2	Sp2 transcription factor	repressor	False	2	1.0	17.82	-1510	GGGGCGGGG	MA0516.3	0	50.5	0	
+TCF3	transcription factor 3	dual	False	5	0.972	11.85	-759	ATCTGGCAT	MA0092.2	0	50.4	0	
+ARID5A	AT-rich interaction domain 5A	repressor	False	1	1.0	11.28	-576	TAATATTG	MA0602.2	0	50.4	0	
+PPARA	peroxisome proliferator activated receptor alpha	dual	True	4	1.0	12.7	-997	AAGGTCA	MA2338.1	0	50.2	0	
+POU5F1	POU class 5 homeobox 1	repressor	False	2	1.0	12.11	-2632	ATGCAAA	MA1115.2	0	50.2	0	
+STAT6	signal transducer and activator of transcription 6	activator	False	2	0.948	12.58	-2487	TTCTTGTGAA	MA0520.2	0	50.1	0	
+SIX4	SIX homeobox 4	activator	False	1	1.0	12.48	-852	AACCTGA	MA2001.2	0	50.1	0	
+ELK1	ETS transcription factor ELK1	activator	False	3	0.836	12.45	-2853	CCAGAAATGGTGTGA	MA1933.2	0	50.1	0	
+NKX2-2	NK2 homeobox 2	activator	False	2	0.939	11.99	-2454	CCACTCAG	MA1645.2	0	49.9	0	
+CTCF	CCCTC-binding factor	repressor	False	4	0.879	15.27	-4210	CCCACCAGGTGACAG	MA0139.2	0	49.9	0	
+EBF2	EBF transcription factor 2	activator	False	2	0.939	13.91	-2504	CCCATGGGA	MA1604.2	0	49.9	0	
+ETV1	ETS variant transcription factor 1	activator	False	2	0.938	12.52	-4063	ACAGGAAGA	MA0761.3	0	49.8	0	
+MYOD1	myogenic differentiation 1	activator	False	2	0.937	13.08	-2784	GCAGCTGTT	MA0499.3	0	49.8	0	
+MEF2C	myocyte enhancer factor 2C	activator	False	2	0.924	11.65	-1479	ATAGAAATAGC	MA0497.2	0	49.8	0	
+CEBPA	CCAAT enhancer binding protein alpha	activator	False	2	0.935	12.98	-4364	ATTGCACAAA	MA0102.5	0	49.7	0	
+GRHL1	grainyhead like transcription factor 1	activator	False	1	0.947	14.18	-652	AAACAGGTTT	MA0647.2	0	49.7	0	
+ZNF530	zinc finger protein 530	repressor	False	5	0.871	12.57	-4995	GCATGGGTGGGGCC	MA1981.2	0	49.6	0	
+NR1D2	nuclear receptor subfamily 1 group D member 2	repressor	True	3	0.839	6.07	-1100	TGGGTTAGTCTGCCT	MA1532.2	0	49.6	0	
+SREBF1	sterol regulatory element binding transcription factor 1	activator	False	2	0.92	12.16	-2847	CTCACACCAT	MA0595.1	0	49.3	0	
+FOXJ2	forkhead box J2	activator	False	2	0.915	11.78	-4126	AAATAGGAAGA	MA1952.2	0	49.1	0	
+TFEB	transcription factor EB	activator	False	1	0.961	12.32	-827	CACATGAC	MA0692.2	0	49.1	0	
+TGIF2	TGFB induced factor homeobox 2	repressor	False	3	0.85	10.27	-4241	TGATAGGTGTCT	MA0797.1	0	49.0	0	
+PRRX1	paired related homeobox 1	dual	False	4	1.0	9.25	-3531	CAATTA	MA0716.2	0	49.0	0	
+JUN	Jun proto-oncogene, AP-1 transcription factor subunit	dual	False	6	1.0	13.02	-4593	TGACTCA	MA0462.3	0	49.0	0	
+ZNF85	zinc finger protein 85	repressor	False	1	0.855	10.51	334	AAGATTTCAGCT	MA1720.2	0	49.0	0	
+TCF21	transcription factor 21	dual	False	3	0.914	13.37	706	GACAGCTGGT	MA0832.2	0	49.0	0	
+CTCFL	CCCTC-binding factor like	activator	False	2	0.904	11.13	-2149	CAGAGGGC	MA1102.3	0	48.8	0	
+RXRA	retinoid X receptor alpha	unknown	True	12	0.819	12.22	-505	GGGACACAGGGTTAA	MA0074.1	0	48.8	6	Acitretin; Alitretinoin; Bexarotene; Etretinate; Sulindac; Danthron
+ZNF766	zinc finger protein 766	unknown	False	3	0.979	13.94	-185	AATAAACCT	MA2098.1	0	48.8	0	
+NFAT5	nuclear factor of activated T cells 5	activator	False	1	0.948	11.28	-822	GTGGAAAA	MA0606.3	0	48.7	0	
+KLF15	KLF transcription factor 15	activator	False	1	1.0	17.16	-1509	CCCCGCCC	MA1513.2	0	48.7	0	
+RFX2	regulatory factor X2	activator	False	2	0.831	7.1	795	GTATGTATGACAAC	MA0600.3	0	48.7	0	
+NR2F6	nuclear receptor subfamily 2 group F member 6	repressor	True	4	0.837	12.06	-2698	GTGATCAAAAGTTCA	MA0728.1	0	48.6	0	
+SOX7	SRY-box transcription factor 7	activator	False	1	0.892	10.99	-583	AGAACAATAA	MA2095.1	0	48.6	0	
+FOXO1	forkhead box O1	dual	False	9	0.874	12.27	-608	GACAACAGGTTGT	MA1955.2	0	48.5	0	
+NR5A1	nuclear receptor subfamily 5 group A member 1	activator	True	2	0.854	11.7	-1002	GAGCCAAGGTCA	MA1540.3	0	48.5	0	
+ZNF75D	zinc finger protein 75D	unknown	False	4	0.846	10.88	-55	GTAGGAAATGCT	MA1601.2	0	48.4	0	
+NR4A2	nuclear receptor subfamily 4 group A member 2	activator	True	1	0.948	11.15	890	GAAGGTCA	MA0160.3	0	48.4	0	
+VEZF1	vascular endothelial zinc finger 1	activator	False	1	1.0	13.11	-2464	CCCCCC	MA1578.2	0	48.4	0	
+SRY	sex determining region Y	activator	False	1	1.0	9.4	-3473	AAACAAT	MA0084.2	0	48.3	0	
+HOXD13	homeobox D13	activator	False	1	1.0	12.19	-3659	CAATAAA	MA0909.4	0	48.3	0	
+MEIS3	Meis homeobox 3 pseudogene 1	activator	False	1	1.0	11.41	-4045	TTGACAG	MA0775.2	0	48.3	0	
+FIGLA	folliculogenesis specific bHLH transcription factor	activator	False	1	1.0	11.65	-4206	CACCTG	MA0820.2	0	48.3	0	
+CEBPD	CCAAT enhancer binding protein delta	activator	False	1	1.0	14.34	-4363	TTGCACAA	MA0836.3	0	48.3	0	
+DLX2	distal-less homeobox 2	activator	False	1	1.0	14.08	-4852	GCAATTAG	MA0885.3	0	48.3	0	
+DLX5	distal-less homeobox 5	activator	False	1	1.0	14.03	-4852	GCAATTAG	MA1476.3	0	48.3	0	
+SOX4	SRY-box transcription factor 4	activator	False	1	0.981	11.74	-1310	GACAAAGG	MA0867.3	0	48.3	0	
+MAFF	MAF bZIP transcription factor F	activator	False	2	0.886	11.99	-2520	TTCAGCATTTA	MA0495.4	0	48.3	0	
+TFAP2A	transcription factor AP-2 alpha	dual	False	10	0.932	16.16	-986	TGCCCTCTGGGCT	MA0872.1	0	48.2	0	
+ZNF341	zinc finger protein 341	activator	False	1	0.94	12.02	875	CAACAGCC	MA1655.2	0	48.2	0	
+ZBTB32	zinc finger and BTB domain containing 32	repressor	False	2	0.934	11.88	-4533	GGTACAGTAA	MA1580.1	0	48.2	0	
+SMAD5	SMAD family member 5	repressor	False	2	0.933	12.84	-2798	TGACTAGACA	MA1557.1	0	48.2	0	
+TGIF1	TGFB induced factor homeobox 1	repressor	False	3	0.822	5.46	-4241	TGATAGGTGTCT	MA0796.1	0	48.1	0	
+ZNF418	zinc finger protein 418	repressor	False	2	0.867	12.74	826	CAGAAACTACAAACA	MA1980.1	0	48.1	0	
+TFCP2L1	transcription factor CP2 like 1	activator	False	2	0.879	10.61	-2379	CTTGTTTCAGCCTG	MA0145.2	0	48.1	0	
+TFAP2C	transcription factor AP-2 gamma	dual	False	11	0.926	15.47	-986	TGCCCTCTGGGCT	MA0815.1	0	48.1	0	
+EGR3	early growth response 3	activator	False	2	0.865	11.41	-1508	CCACCCCCGCC	MA0732.2	0	48.0	0	
+SOX18	SRY-box transcription factor 18	activator	False	1	0.988	10.69	-4563	AACAATAC	MA1563.2	0	48.0	0	
+HOXC13	homeobox C13	activator	False	1	0.907	10.74	-740	CTCATAAAT	MA0907.2	0	47.9	0	
+NR4A1	nuclear receptor subfamily 4 group A member 1	activator	True	1	0.928	10.74	890	GAAGGTCA	MA1112.3	0	47.8	0	
+NR1I2	nuclear receptor subfamily 1 group I member 2	activator	True	1	0.873	12.02	625	CAAACTCCCTGCACC	MA1533.2	0	47.7	0	
+ZNF76	zinc finger protein 76	dual	False	5	0.875	16.09	730	ACCCAGAATGCATGACA	MA1716.2	0	47.7	0	
+SOX1	SRY-box transcription factor 1	activator	False	1	0.859	10.95	-581	CCCAATATTATTGTT	MA0870.1	0	47.6	0	
+PAX5	paired box 5	activator	False	1	0.934	12.44	-995	CCGTGACC	MA0014.4	0	47.6	0	
+NKX2-8	NK2 homeobox 8	activator	False	1	0.974	10.96	-4184	ACACTTGA	MA0673.2	0	47.6	0	
+STAT3	signal transducer and activator of transcription 3	activator	False	1	0.972	12.97	-2818	TGCTTGGAA	MA0144.3	0	47.5	0	
+ZNF148	zinc finger protein 148	repressor	False	2	0.899	14.06	-1505	CCCCACCCCC	MA1653.2	0	47.5	0	
+NR6A1	nuclear receptor subfamily 6 group A member 1	dual	True	3	0.887	14.12	-848	TATGGTCAAGTTCA	MA1541.2	0	47.4	0	
+THAP1	THAP domain containing 1	repressor	False	1	0.935	11.85	-719	GAAGGGCA	MA0597.3	0	47.4	0	
+SOX2	SRY-box transcription factor 2	activator	False	2	0.854	11.52	-3544	TGTTCTCATGCATAT	MA0142.1	0	47.3	0	
+SCRT1	scratch family transcriptional repressor 1	repressor	False	1	0.904	11.91	-607	ACAACAGGTT	MA0743.3	0	47.2	0	
+SCRT2	scratch family transcriptional repressor 2	repressor	False	1	0.904	12.42	-607	ACAACAGGTT	MA0744.3	0	47.2	0	
+ZNF143	zinc finger protein 143	activator	False	1	0.881	14.21	729	TACCCAGAATGCATGA	MA0088.2	0	47.2	0	
+TWIST1	twist family bHLH transcription factor 1	dual	False	3	0.938	11.61	-4540	ACAGATGT	MA1123.3	0	47.1	0	
+ZBTB18	zinc finger and BTB domain containing 18	repressor	False	2	0.898	10.62	-2435	GTCCAGAGGTG	MA0698.2	0	47.1	0	
+SPIB	Spi-B transcription factor	activator	False	2	0.849	11.06	-4898	TCGCTTCCCCACC	MA0081.3	0	47.1	0	
+HAND1	heart and neural crest derivatives expressed 1	dual	False	2	0.972	11.85	-759	ATCTGGCAT	MA0092.2	0	47.1	0	
+SOX11	SRY-box transcription factor 11	activator	False	1	0.956	11.99	-2618	GGACAAAG	MA0869.3	0	47.0	0	
+NFE2	nuclear factor, erythroid 2	unknown	False	2	0.851	9.48	6	ATGTCTCAGCT	MA0501.2	0	47.0	0	
+THRB	thyroid hormone receptor beta	unknown	True	7	0.854	14.52	-998	TGGGCTTCCGTGACCTTG	MA1576.2	0	46.8	7	Dextrothyroxine; Dextrothyroxine Sodium; Levothyroxine; Levothyroxine Sodium; Liothyronine; Liothyronine Sodium; Resmetirom
+ZEB1	zinc finger E-box binding homeobox 1	repressor	False	1	1.0	12.31	-4206	CACCTG	MA0103.4	0	46.8	0	
+BATF3	basic leucine zipper ATF-like transcription factor 3	repressor	False	1	1.0	13.12	-4593	TGACTCA	MA0835.3	0	46.8	0	
+TBP	TATA-box binding protein	unknown	False	1	1.0	9.99	-43	TATAAAA	MA0108.3	0	46.8	0	
+VDR	vitamin D receptor	unknown	True	2	1.0	12.54	-1881	GAGTTCA	MA0693.4	0	46.8	9	Alfacalcidol; Calcifediol; Calcipotriene; Calcitriol; Cholecalciferol; Dihydrotachysterol; Doxercalciferol; Ergocalciferol; Paricalcitol
+RARG	retinoic acid receptor gamma	unknown	True	5	0.851	11.85	-997	AAGGTCACGGAAGCCCA	MA0860.1	0	46.8	10	Acitretin; Adapalene; Alitretinoin; Etretinate; Isotretinoin; Palovarotene; Tamibarotene; Tazarotene; Tretinoin; Trifarotene
+HOXB8	homeobox B8	repressor	False	1	0.998	10.75	-4851	GCAATTA	MA1502.2	0	46.8	0	
+ELF5	E74 like ETS transcription factor 5	activator	False	1	0.944	11.25	-2384	AAGGAAGC	MA0136.4	0	46.7	0	
+NFYB	nuclear transcription factor Y subunit beta	activator	False	1	0.914	11.61	-1118	CCAGTGGCC	MA0502.3	0	46.7	0	
+ERG	ETS transcription factor ERG	activator	False	1	0.94	13.79	-4063	ACAGGAAGAG	MA0474.4	0	46.5	0	
+IKZF3	IKAROS family zinc finger 3	activator	False	1	0.939	13.11	-4062	CAGGAAGAG	MA1992.2	0	46.5	0	
+FOSB	FosB proto-oncogene, AP-1 transcription factor subunit	activator	False	1	0.939	11.34	-4594	GTGAGTCAG	MA1135.2	0	46.5	0	
+SOX21	SRY-box transcription factor 21	activator	False	1	0.822	5.66	-581	CCCAATATTATTGTT	MA0866.1	0	46.5	0	
+TBX5	T-box transcription factor 5	activator	False	1	0.935	10.29	-2438	AGGTGTGT	MA0807.1	0	46.4	0	
+DMRT1	doublesex and mab-3 related transcription factor 1	activator	False	1	0.931	11.02	-2617	GACAAAGTA	MA1603.2	0	46.3	0	
+FEZF2	FEZ family zinc finger 2	dual	False	3	0.909	11.41	-4331	CCCAGCCC	MA2341.1	0	46.3	0	
+GABPA	GA binding protein transcription factor subunit alpha	activator	False	1	0.93	14.08	-4063	CTCTTCCTGT	MA0062.4	0	46.2	0	
+INSM1	INSM transcriptional repressor 1	repressor	False	2	0.869	11.89	-4141	TGGATGGGGGTA	MA0155.1	0	46.2	0	
+GCM2	GCM transcription factor 2	activator	False	1	0.93	11.15	-4138	ATGGGGGT	MA0767.2	0	46.2	0	
+ELF3	E74 like ETS transcription factor 3	activator	False	1	0.927	12.54	-4062	CTCTTCCTG	MA0640.3	0	46.1	0	
+FOXD2	forkhead box D2	activator	False	1	0.925	11.14	-4551	CTAAGCTAACA	MA0847.4	0	46.1	0	
+ZNF140	zinc finger protein 140	repressor	False	2	0.806	12.18	912	CAGAGTGAAATGGCCGGGT	MA1589.2	0	45.9	0	
+EHF	ETS homologous factor	activator	False	1	0.916	11.99	-4062	CTCTTCCTG	MA0598.4	0	45.8	0	
+ZNF416	zinc finger protein 416	activator	False	1	0.868	10.75	-986	CCTCTGGGCT	MA1979.2	0	45.7	0	
+RFX6	regulatory factor X6	activator	False	1	0.91	12.15	-2592	CCAAGCAAC	MA1724.2	0	45.7	0	
+ARX	aristaless related homeobox	dual	False	1	0.945	11.32	-443	CTTTAATTAA	MA0874.2	0	45.6	0	
+ZKSCAN3	zinc finger with KRAB and SCAN domains 3	repressor	False	2	0.848	14.98	-4320	CCCAGGGTAACCCA	MA1973.2	0	45.6	0	
+NHLH2	nescient helix-loop-helix 2	activator	False	2	0.797	7.99	-2788	TTAAACAGCTGCCCCA	MA1529.2	0	45.6	0	
+POU2F3	POU class 2 homeobox 3	activator	False	1	0.907	10.32	-2633	CATGCAAAC	MA0627.3	0	45.6	0	
+PRDM5	PR/SET domain 5	repressor	False	2	0.845	11.0	-4090	GCTCTCCTGCT	MA1999.2	0	45.5	0	
+NFKB2	nuclear factor kappa B subunit 2	activator	False	1	0.904	12.74	-4103	GGGAGTCCCCC	MA0778.2	0	45.4	0	
+HSF2	heat shock transcription factor 2	activator	False	1	0.893	12.77	-1584	TTCTCGATGATTC	MA0770.1	0	45.4	0	
+GCM1	GCM transcription factor 1	activator	False	1	0.898	10.92	-4138	ATGGGGGTAG	MA0646.2	0	45.3	0	
+BCL11B	BCL11 transcription factor B	activator	False	1	0.896	10.51	-4342	GAACCACAT	MA1989.2	0	45.2	0	
+TLX1	T cell leukemia homeobox 1	activator	False	1	0.834	13.01	907	TGGCCGGGTGCCCA	MA0119.1	0	44.9	0	
+ASCL2	achaete-scute family bHLH transcription factor 2	dual	False	2	0.974	15.31	-2785	AACAGCTGCC	MA0816.1	0	44.9	0	
+HMX1	H6 family homeobox 1	repressor	False	1	0.935	11.61	-3533	AACAATTAA	MA0896.2	0	44.9	0	
+SPIC	Spi-C transcription factor	activator	False	1	0.885	11.56	-4127	GAAATAGGAAGAA	MA0687.2	0	44.9	0	
+SOX17	SRY-box transcription factor 17	activator	False	1	0.884	10.77	-3475	AAAACAATGT	MA0078.3	0	44.8	0	
+RORC	RAR related orphan receptor C	repressor	True	1	0.932	10.58	-4323	AAGTGGGTTA	MA1151.2	0	44.8	0	
+RELB	RELB proto-oncogene, NF-kB subunit	unknown	False	1	0.901	9.75	19	GTTCCCC	MA1117.2	0	44.7	0	
+POU1F1	POU class 1 homeobox 1	activator	False	1	0.863	10.45	-1556	CTCAGTAACATAAT	MA0784.3	0	44.5	0	
+USF1	upstream transcription factor 1	activator	False	1	0.873	10.22	-4208	ACCAGGTGAC	MA0093.4	0	44.5	0	
+RARB	retinoic acid receptor beta	unknown	True	5	0.817	9.11	-2699	AGTGATCAAAAGTTCA	MA0857.1	0	44.5	9	Acitretin; Adapalene; Alitretinoin; Etretinate; Isotretinoin; Tamibarotene; Tazarotene; Tretinoin; Trifarotene
+NFIL3	nuclear factor, interleukin 3 regulated	repressor	False	1	0.915	10.44	-4364	TTGTGCAAT	MA0025.3	0	44.3	0	
+TBX18	T-box transcription factor 18	repressor	False	1	0.914	11.08	-4509	AGGCGTGAG	MA1565.2	0	44.3	0	
+EGR2	early growth response 2	activator	False	1	0.85	9.78	-1508	CCACCCCCGCC	MA0472.2	0	44.2	0	
+SRF	serum response factor	activator	False	1	0.849	12.72	-1521	TGTCCCTATATGGGGC	MA0083.3	0	44.1	0	
+SREBF2	sterol regulatory element binding transcription factor 2	dual	False	5	0.836	12.45	-2853	CCAGAAATGGTGTGA	MA1933.2	0	44.1	0	
+NFIB	nuclear factor I B	activator	False	1	0.807	11.49	906	AATGGCCGGGTGCCCAA	MA1643.2	0	44.1	0	
+GFI1	growth factor independent 1 transcriptional repressor	repressor	False	1	0.904	9.91	-4015	CAATCAGTGTG	MA0038.3	0	44.0	0	
+E2F4	E2F transcription factor 4	activator	False	1	0.853	9.62	-2766	TTTTGGGGCCTTT	MA0470.3	0	44.0	0	
+THAP11	THAP domain containing 11	dual	False	3	0.831	12.11	-4349	ACCACATCCCCCAT	MA1573.2	0	43.9	0	
+STAT4	signal transducer and activator of transcription 4	unknown	False	1	0.961	13.23	102	TTACAGGAAA	MA0518.2	0	43.8	0	
+ZBTB7A	zinc finger and BTB domain containing 7A	repressor	False	1	0.886	10.52	-4062	CAGGAAGAG	MA0750.3	0	43.4	0	
+ZNF24	zinc finger protein 24	activator	False	1	0.834	10.83	-4867	AATCCATTCATTA	MA1124.1	0	43.3	0	
+POU2F1	POU class 2 homeobox 1	activator	False	1	0.832	8.15	-3658	AATAAAAATAATAAAGA	MA1962.1	0	43.3	0	
+PLAGL1	PLAG1 like zinc finger 1	dual	False	2	0.92	11.86	-4996	TGGGGCCC	MA1615.2	0	43.3	0	
+STAT1	signal transducer and activator of transcription 1	unknown	False	1	0.942	11.82	102	TTACAGGAA	MA0137.4	0	43.2	0	
+SMAD3	SMAD family member 3	dual	False	2	0.916	12.5	-2798	TGACTAGACA	MA0795.1	0	43.2	0	
+E2F3	E2F transcription factor 3	activator	False	1	0.826	5.18	-2767	TTTTGGGGCCTTTT	MA0469.4	0	43.1	0	
+ESRRA	estrogen related receptor alpha	dual	True	1	0.984	15.45	-999	CCAAGGTCA	MA0592.4	0	43.1	0	
+GATA5	GATA binding protein 5	unknown	False	1	0.999	11.9	174	AGATAAGG	MA0766.3	0	43.0	0	
+GATA6	GATA binding protein 6	unknown	False	2	1.0	13.81	350	TCTTATCT	MA1104.3	0	42.9	0	
+MTF1	metal regulatory transcription factor 1	activator	False	1	0.767	9.57	907	TGGGCACCCGGCCA	MA0863.1	0	42.9	0	
+ZBTB7B	zinc finger and BTB domain containing 7B	dual	False	1	0.885	11.06	-552	CAACCCCCAC	MA0694.2	0	42.7	0	
+RFX5	regulatory factor X5	activator	False	1	0.811	8.11	-4317	GTTACCCTGGGAAA	MA0510.3	0	42.6	0	
+RFX4	regulatory factor X4	activator	False	1	0.805	7.33	-2596	GACACCAAGCAAC	MA0799.3	0	42.5	0	
+ZNF75A	zinc finger protein 75A	unknown	False	2	0.89	13.72	-202	GCTTTTCTCACT	MA2097.1	0	42.4	0	
+ATF3	activating transcription factor 3	dual	False	1	1.0	12.99	-4593	TGACTCA	MA1988.2	0	42.3	0	
+REST	RE1 silencing transcription factor	repressor	False	2	0.736	7.54	-2463	TAACCACTCAGGACAGGGGG	MA0138.3	0	42.3	0	
+TGIF2LY	TGFB induced factor homeobox 2 like Y-linked	repressor	False	1	0.848	10.53	-4241	AGACACCTATCA	MA1572.1	0	42.3	0	
+FERD3L	Fer3 like bHLH transcription factor	repressor	False	1	0.844	7.32	-4543	TAGACATCTGTTAC	MA1485.1	0	42.2	0	
+RELA	RELA proto-oncogene, NF-kB subunit	dual	False	2	0.88	10.84	-4485	GGGGATTTCT	MA0107.1	0	42.1	0	
+TGIF2LX	TGFB induced factor homeobox 2 like X-linked	repressor	False	1	0.839	10.2	-4241	AGACACCTATCA	MA1571.1	0	42.0	0	
+GLIS1	GLIS family zinc finger 1	activator	False	1	0.788	3.3	-4254	AACCCACCCACGATG	MA0735.2	0	42.0	0	
+RXRG	retinoid X receptor gamma	unknown	True	2	0.839	10.27	-1892	AGTTCAAAAATAGGTAA	MA1149.2	0	42.0	4	Acitretin; Alitretinoin; Bexarotene; Etretinate
+ESR2	estrogen receptor 2	unknown	True	1	0.91	14.58	-996	AGGTCACGGAAGCCC	MA0258.2	0	41.9	18	Bazedoxifene; Diethylstilbestrol; Diethylstilbestrol Diphosphate; Estetrol; Estradiol Valerate; Estriol; Estrogens, Conjugated; Estrogens, Conjugated Synthetic A; Estrogens, Esterified; Estrone; Ethinyl Estradiol; Fulvestrant; Genistein; Lasofoxifene; Ospemifene; Quinestrol; Synthetic Conjugated Estrogens, B; Tamoxifen
+ELK3	ETS transcription factor ELK3	dual	False	1	0.874	12.27	-608	GACAACAGGTTGT	MA1955.2	0	41.8	0	
+ARID3B	AT-rich interaction domain 3B	unknown	False	2	1.0	10.42	-438	TATTAAT	MA0601.2	0	41.7	0	
+GLI3	GLI family zinc finger 3	dual	False	2	0.865	13.12	-4254	AACCCACCCACGATG	MA1491.3	0	41.6	0	
+ZNF274	zinc finger protein 274	unknown	False	3	0.976	17.98	-748	TGTGAGTCCTCA	MA1592.2	0	41.6	0	
+EN2	engrailed homeobox 2	dual	False	1	0.975	9.83	-4851	GCAATTA	MA0642.3	0	41.6	0	
+POU4F2	POU class 4 homeobox 2	dual	False	1	0.826	9.43	489	TTAATATTAAATTAC	MA0683.2	0	41.5	0	
+MSANTD3	Myb/SANT DNA binding domain containing 3	unknown	False	1	1.0	12.16	244	CACTCAC	MA1523.2	0	41.5	0	
+ZBTB7C	zinc finger and BTB domain containing 7C	unknown	False	3	0.922	11.2	-550	CAACCCCC	MA0695.2	0	41.5	0	
+FOXH1	forkhead box H1	dual	False	1	0.961	11.88	-1990	AATCCACT	MA0479.2	0	41.3	0	
+TFEC	transcription factor EC	dual	False	1	0.896	9.21	-827	CACATGAC	MA0871.3	0	41.1	0	
+PKNOX1	PBX/knotted 1 homeobox 1	unknown	False	2	0.875	11.21	245	TGAGTGAAAG	MA0782.3	0	41.0	0	
+NR2E1	nuclear receptor subfamily 2 group E member 1	dual	True	1	0.943	11.15	-3508	AAAAGTCAG	MA0676.1	0	40.6	0	
+SPI1	Spi-1 proto-oncogene	dual	False	2	0.827	10.37	-4065	GGACAGGAAGAGT	MA0080.7	0	40.5	0	
+KLF1	KLF transcription factor 1	unknown	False	5	1.0	15.77	-1509	GGGCGGGG	MA0493.3	0	40.3	0	
+KLF14	KLF transcription factor 14	unknown	False	4	1.0	17.52	-1510	GGGGCGGGG	MA0740.2	0	40.3	0	
+NEUROG2	neurogenin 2	unknown	False	3	1.0	15.97	-1527	GACATATGTC	MA0669.1	0	40.3	0	
+ZNF175	zinc finger protein 175	dual	False	1	0.926	12.23	-4063	ACAGGAAGA	MA2332.1	0	40.1	0	
+TAL1	TAL bHLH transcription factor 1, erythroid differentiation factor	unknown	False	3	0.916	11.74	706	ACCAGCTGTC	MA0091.2	0	40.1	0	
+KLF2	KLF transcription factor 2	unknown	False	4	0.99	14.43	-1509	CCCCGCCC	MA1515.2	0	40.0	0	
+BARX1	BARX homeobox 1	unknown	False	4	1.0	9.46	-3531	CAATTA	MA0875.2	0	40.0	0	
+DLX1	distal-less homeobox 1	unknown	False	4	1.0	9.55	-3531	CAATTA	MA0879.3	0	40.0	0	
+LBX2	ladybird homeobox 2	unknown	False	4	1.0	9.08	-3531	CAATTA	MA0699.2	0	40.0	0	
+BHLHE22	basic helix-loop-helix family member e22	unknown	False	6	1.0	12.48	-4453	CAGCTG	MA1635.2	0	40.0	0	
+ISL2	ISL LIM homeobox 2	unknown	False	3	1.0	9.77	-4588	CACTTA	MA0914.2	0	40.0	0	
+ALX3	ALX homeobox 3	unknown	False	4	1.0	8.72	-4851	CAATTA	MA0634.2	0	40.0	0	
+BSX	brain specific homeobox	unknown	False	4	1.0	9.02	-4851	CAATTA	MA0876.2	0	40.0	0	
+DLX6	distal-less homeobox 6	unknown	False	4	1.0	9.46	-4851	CAATTA	MA0882.2	0	40.0	0	
+NOBOX	NOBOX oogenesis homeobox	unknown	False	4	1.0	9.03	-4851	TAATTG	MA0125.2	0	40.0	0	
+ZFP809		unknown	False	4	0.996	16.07	-4330	TTCCCAGCC	MA2125.1	0	39.9	0	
+ZNF667	zinc finger protein 667	unknown	False	4	0.893	11.27	-632	CTATGGGCTCA	MA1984.2	0	39.9	0	
+KLF17	KLF transcription factor 17	unknown	False	5	0.859	12.0	-526	TCCACTCTCCCCGT	MA1514.2	0	39.8	0	
+TBX6	T-box transcription factor 6	dual	False	1	0.911	11.11	-2846	TGGTGTGAG	MA1567.3	0	39.7	0	
+PRDM9	PR/SET domain 9	unknown	False	8	0.86	14.61	-550	GGGGGTTGGGGTGGGATAGG	MA1723.2	0	39.6	0	
+DDIT3	DNA damage inducible transcript 3	dual	False	1	0.908	11.11	-2749	GTGCCATCCC	MA0019.2	0	39.6	0	
+GLIS3	GLIS family zinc finger 3	dual	False	1	0.783	8.57	-556	CAACCCCCACACAG	MA0737.1	0	39.6	0	
+HSF1	heat shock transcription factor 1	dual	False	1	0.882	12.31	-1584	TTCTCGATGATTC	MA0486.2	0	39.1	0	
+ZNF768	zinc finger protein 768	unknown	False	3	0.946	13.59	-1318	CTCTCTCTG	MA1731.2	0	38.9	0	
+TCF7L1	transcription factor 7 like 1	unknown	False	1	0.896	13.61	218	TAACATCAAAGA	MA1421.1	0	38.9	0	
+PROX1	prospero homeobox 1	dual	False	1	0.88	10.93	-4463	GAAGACTTCTCA	MA0794.1	0	38.7	0	
+KLF11	KLF transcription factor 11	unknown	False	5	0.936	14.46	-1505	CCCCACCCCC	MA1512.2	0	38.4	0	
+STAT2	signal transducer and activator of transcription 2	unknown	False	3	0.943	13.72	-2038	CAAACAGAAA	MA1623.2	0	38.4	0	
+EMX1	empty spiracles homeobox 1	unknown	False	1	1.0	9.99	-440	TAATTA	MA0612.3	0	38.3	0	
+EVX2	even-skipped homeobox 2	unknown	False	1	1.0	8.79	-440	TAATTA	MA0888.2	0	38.3	0	
+LHX8	LIM homeobox 8	unknown	False	1	1.0	8.79	-440	TAATTA	MA0705.2	0	38.3	0	
+LMX1B	LIM homeobox transcription factor 1 beta	unknown	False	1	1.0	13.11	-441	TTAATTAA	MA0703.3	0	38.3	0	
+MIX-A		unknown	False	1	1.0	11.71	-441	TTAATTA	MA0621.2	0	38.3	0	
+FOSL1	FOS like 1, AP-1 transcription factor subunit	unknown	False	4	0.942	12.21	-4594	CTGACTCAC	MA0477.3	0	38.3	0	
+THRA	thyroid hormone receptor alpha	unknown	True	1	0.788	11.25	-997	CTGGGCTTCCGTGACCTT	MA1969.2	0	38.2	7	Dextrothyroxine; Dextrothyroxine Sodium; Levothyroxine; Levothyroxine Sodium; Liothyronine; Liothyronine Sodium; Resmetirom
+SP8	Sp8 transcription factor	unknown	False	4	0.925	14.22	-1502	ACACCCCCACC	MA0747.2	0	38.1	0	
+ZNF549	zinc finger protein 549	unknown	False	3	0.936	12.83	-2786	AGCTGCCC	MA1728.2	0	38.1	0	
+ZNF317	zinc finger protein 317	unknown	False	2	1.0	14.67	-951	ACAGCAGA	MA1593.2	0	38.1	0	
+EBF3	EBF transcription factor 3	unknown	False	3	0.934	13.57	-2504	CCCATGGGA	MA1637.2	0	38.1	0	
+SP9	Sp9 transcription factor	unknown	False	5	0.92	13.71	-1511	CCCCGCCCCA	MA1564.2	0	37.9	0	
+ZNF257	zinc finger protein 257	unknown	False	4	0.925	12.15	-4290	GAGGCAGGGA	MA1710.2	0	37.7	0	
+ZNF331	zinc finger protein 331	unknown	False	5	0.915	14.0	-2002	TGCAGAACCC	MA1726.2	0	37.6	0	
+ZNF682	zinc finger protein 682	unknown	False	4	0.887	14.33	-1111	GGCTTAGCCCC	MA1599.2	0	37.5	0	
+KLF9	KLF transcription factor 9	unknown	False	5	0.902	14.46	-1505	CCCCCACCCCC	MA1107.3	0	37.4	0	
+ZKSCAN5	zinc finger with KRAB and SCAN domains 5	unknown	False	3	0.899	11.05	-2142	GGGGGTGAG	MA1652.2	0	37.0	0	
+SP4	Sp4 transcription factor	unknown	False	2	1.0	17.78	-1510	GGGGCGGGG	MA0685.2	0	37.0	0	
+ZNF708	zinc finger protein 708	unknown	False	3	0.896	11.41	-4531	ACTGTACCT	MA1730.2	0	36.9	0	
+HOXA4	homeobox A4	unknown	False	2	1.0	10.24	-2108	GTCATTA	MA1496.2	0	36.7	0	
+ZNF740	zinc finger protein 740	unknown	False	7	0.88	13.11	-1505	CCCCACCCCC	MA0753.3	0	36.7	0	
+GSX2	GS homeobox 2	unknown	False	2	1.0	9.82	-2551	GTCATTA	MA0893.3	0	36.7	0	
+HMBOX1	homeobox containing 1	unknown	False	2	1.0	10.64	-3910	TAGTTAA	MA0895.2	0	36.7	0	
+SOX8	SRY-box transcription factor 8	unknown	False	2	1.0	11.32	-4176	AACAATG	MA0868.3	0	36.7	0	
+GLIS2	GLIS family zinc finger 2	dual	False	1	0.809	8.75	-4253	ACCCACCCACGATG	MA0736.1	0	36.6	0	
+ZNF574	zinc finger protein 574	unknown	False	4	0.843	11.87	-985	GCCCAGAGGGCATC	MA1982.2	0	36.6	0	
+ZNF324	zinc finger protein 324	unknown	False	3	0.878	12.97	-4289	AGGCAGGGATGGAG	MA1977.2	0	36.3	0	
+ZNF701	zinc finger protein 701	unknown	False	3	0.829	11.65	983	GAGGACTGAGAGGGAGG	MA1987.2	0	36.1	0	
+ZNF423	zinc finger protein 423	unknown	False	3	0.858	12.38	-1837	CCCACCCTCGGGGGA	MA0116.1	0	35.9	0	
+NKX2-3	NK2 homeobox 3	unknown	False	2	0.966	11.53	-1993	CCACTTGT	MA0672.2	0	35.8	0	
+ZNF770	zinc finger protein 770	unknown	False	2	0.954	13.0	-2012	CAGCCTCC	MA2099.1	0	35.4	0	
+ZNF282	zinc finger protein 282	unknown	False	1	0.793	8.77	-242	TCATCCCACTACACA	MA1154.2	0	35.3	0	
+MGA	MAX dimerization protein MGA	unknown	False	2	0.952	11.51	-4508	AGGCGTGA	MA0801.1	0	35.2	0	
+ZNF816	zinc finger protein 816	unknown	False	4	0.836	13.18	-4971	TGGGGACTTGCAAAA	MA1719.2	0	35.1	0	
+OLIG3	oligodendrocyte transcription factor 3	unknown	False	2	0.944	11.67	-2863	ACCATATTTT	MA0827.1	0	35.0	0	
+OLIG2	oligodendrocyte transcription factor 2	unknown	False	2	0.93	11.57	-1527	GACATATGTC	MA0678.1	0	34.9	0	
+ZNF214	zinc finger protein 214	unknown	False	2	0.867	11.61	-860	TCATAAAGAACCT	MA1975.2	0	34.4	0	
+ZBTB24	zinc finger and BTB domain containing 24	unknown	False	2	0.824	10.83	-678	CCCAGGATCT	MA2330.1	0	34.1	0	
+ZIM3	zinc finger imprinted 3	unknown	False	2	0.899	12.05	-2037	AAACAGAAATA	MA1709.2	0	33.7	0	
+NEUROG1	neurogenin 1	unknown	False	1	1.0	15.67	-1527	GACATATGTC	MA0623.2	0	33.7	0	
+ZNF449	zinc finger protein 449	unknown	False	1	0.879	11.38	-547	CACCCCAACC	MA1656.2	0	33.5	0	
+ZNF184	zinc finger protein 184	unknown	False	2	0.891	11.32	-3524	TCGAAAAGTGCAT	MA2120.1	0	33.4	0	
+ZNF707	zinc finger protein 707	unknown	False	3	0.778	9.92	-2856	CACCATTTCTGGACC	MA1715.1	0	33.3	0	
+RHOXF1	Rhox homeobox family member 1	unknown	False	1	1.0	9.72	-4109	TGATCC	MA0719.2	0	33.3	0	
+NKX2-1	NK2 homeobox 1	unknown	False	1	1.0	13.14	-4184	CACTTGA	MA1994.2	0	33.3	0	
+BNC2	basonuclin zinc finger protein 2	unknown	False	1	1.0	12.83	-4593	TGAGTCA	MA1928.2	0	33.3	0	
+HOXB6	homeobox B6	unknown	False	1	1.0	10.13	-4851	TAATTGC	MA1500.2	0	33.3	0	
+ZNF211	zinc finger protein 211	unknown	False	1	0.999	16.06	-3549	CATATACCAT	MA1974.2	0	33.3	0	
+ZNF528	zinc finger protein 528	unknown	False	3	0.775	10.28	-4911	GCGAGTGAGGGCATCTC	MA1597.1	0	33.2	0	
+OSR1	odd-skipped related transcription factor 1	unknown	False	1	0.941	11.21	-991	GCTTCCGT	MA1542.2	0	32.8	0	
+NR5A2	nuclear receptor subfamily 5 group A member 2	unknown	True	1	0.942	13.14	-999	TGACCTTGG	MA0505.3	0	32.8	0	
+ATOH7	atonal bHLH transcription factor 7	unknown	False	1	0.962	12.08	-1527	GACATATGTC	MA1468.1	0	32.5	0	
+NFIX	nuclear factor I X	unknown	False	1	0.916	15.08	908	ATGGCCGGGTGCCC	MA1528.2	0	32.4	0	
+BHLHE23	basic helix-loop-helix family member e23	unknown	False	1	0.951	12.42	-1527	GACATATGTC	MA0817.2	0	32.2	0	
+PKNOX2	PBX/knotted 1 homeobox 2	unknown	False	2	0.851	10.43	-4241	TGATAGGTGTCT	MA0783.1	0	32.2	0	
+OLIG1	oligodendrocyte transcription factor 1	unknown	False	1	0.943	11.8	-1527	GACATATGTC	MA0826.1	0	32.0	0	
+ZSCAN4	zinc finger and SCAN domain containing 4	unknown	False	2	0.838	10.23	-2404	AACGCACACTGCAAA	MA1155.1	0	31.8	0	
+HMX3	H6 family homeobox 3	unknown	False	1	0.945	11.8	-3533	AACAATTAA	MA0898.2	0	31.7	0	
+IKZF1	IKAROS family zinc finger 1	unknown	False	1	0.942	11.42	-4064	GACAGGAA	MA1508.2	0	31.6	0	
+HSF4	heat shock transcription factor 4	unknown	False	1	0.93	14.17	-1584	TTCTCGATGATTC	MA0771.1	0	31.5	0	
+MAZ	MYC associated zinc finger protein	unknown	False	1	0.907	10.71	-1509	CCCCGCCC	MA1522.2	0	30.9	0	
+ZSCAN29	zinc finger and SCAN domain containing 29	unknown	False	1	0.918	13.22	-3603	TGTCTACACTA	MA1602.2	0	30.9	0	
+DMRTC2	DMRT like family C2	unknown	False	1	0.907	10.98	-2046	AATTGCCACAA	MA1479.2	0	30.6	0	
+ZNF320	zinc finger protein 320	unknown	False	2	0.796	13.58	-2509	TGGGGACCCATGGGAAATTC	MA1976.2	0	30.6	0	
+ZNF684	zinc finger protein 684	unknown	False	2	0.797	8.91	-4404	GCTGTCTACCTCAT	MA1600.2	0	30.6	0	
+ZNF135	zinc finger protein 135	unknown	False	1	0.803	9.51	629	TCTCAAACTCCCTG	MA1587.1	0	30.5	0	
+ZIC2	Zic family zinc finger 2	unknown	False	1	0.906	11.94	-2578	CACAGCATG	MA1629.2	0	30.5	0	
+KLF3	KLF transcription factor 3	unknown	False	1	0.887	10.42	-4995	GGCCCCACCC	MA1516.2	0	29.9	0	
+ZNF136	zinc finger protein 136	unknown	False	1	0.805	9.01	726	GCATTCTGGGTAGTT	MA1588.1	0	29.9	0	
+SPZ1	spermatogenic leucine zipper 1	unknown	False	1	0.885	10.51	-2470	GGGGGTTCAGC	MA0111.1	0	29.9	0	
+ZNF677	zinc finger protein 677	unknown	False	1	0.87	11.75	-1571	AACAAGGACAGC	MA2101.1	0	29.7	0	
+RFX1	regulatory factor X1	unknown	False	1	0.801	3.49	794	AGTTGTCATACATACC	MA0509.3	0	29.4	0	
+HMX2	H6 family homeobox 2	unknown	False	1	0.867	11.41	-3534	GAACAATTAATCGAA	MA0897.2	0	29.4	0	
+ZSCAN16	zinc finger and SCAN domain containing 16	unknown	False	2	0.753	-5.33	-3926	TATATTTAACAGAGCTCC	MA2100.1	0	29.2	0	
+ZNF16	zinc finger protein 16	unknown	False	1	0.85	17.27	-2508	AGTGGGGACCCATGGGAAATT	MA1654.2	0	28.8	0	
+ZNF610	zinc finger protein 610	unknown	False	1	0.839	10.29	-1510	CCCCCGCCCC	MA1713.2	0	28.8	0	
+PAX3	paired box 3	unknown	False	1	0.848	10.41	-4015	TGTCACACTGATTG	MA1546.2	0	28.8	0	
+ZNF157	zinc finger protein 157	unknown	False	2	0.737	7.64	-4060	TGTCAAGAAGTACACTCTTCC	MA2331.1	0	28.8	0	
+PAX2	paired box 2	unknown	False	1	0.838	8.86	-4158	GTAACAAAGCGTGGCA	MA0067.3	0	28.5	0	
+ZIC4	Zic family zinc finger 4	unknown	False	1	0.829	10.04	-2010	GAACCCCCGGAGGC	MA0751.2	0	28.3	0	
+EWSR1-FLI1		unknown	False	2	0.717	6.51	-2752	GGAGGGATGGCACGAAAC	MA0149.1	0	28.2	0	
+ZNF460	zinc finger protein 460	unknown	False	1	0.812	12.18	-2016	CCGGCAGCCTCCGGGG	MA1596.1	0	27.8	0	
+ZNF675	zinc finger protein 675	unknown	False	1	0.789	9.5	-2722	GGGCATGGAGTCTAGAGTG	MA1714.2	0	27.0	0	
+RFX3	regulatory factor X3	unknown	False	1	0.784	5.4	-4318	GGTTACCCTGGGAAAG	MA0798.3	0	26.9	0	
+ZNF410	zinc finger protein 410	unknown	False	1	0.776	3.12	-2124	ACATCCTCCAATACCC	MA0752.2	0	26.7	0	
+ZNF8	zinc finger protein 8	unknown	False	1	0.776	8.21	-3554	TCATGCATATACCATTCTGT	MA1718.1	0	26.6	0	
+RARA	retinoic acid receptor alpha	repressor	True	9	0.907	15.22	-108	GGGTCAAGCATGGTGCA	MA1149.2	0	72.2	9	Acitretin; Adapalene; Alitretinoin; Etretinate; Isotretinoin; Tamibarotene; Tazarotene; Tretinoin; Trifarotene
+ESRRG	estrogen related receptor gamma	activator	True	3	0.987	14.94	-2723	CCAAGGTCA	MA0643.2	0	64.6	1	Diethylstilbestrol
+ESRRB	estrogen related receptor beta	activator	True	3	0.95	14.55	-2723	CCAAGGTCAC	MA0141.4	0	63.5	1	Diethylstilbestrol
+RORB	RAR related orphan receptor B	activator	True	2	0.974	12.59	-97	AACTGGGTCA	MA1150.2	0	62.7	0	
+NFIA	nuclear factor I A	activator	False	3	1.0	12.09	291	TGCCAA	MA0670.2	0	62.2	0	
+NR1I3	nuclear receptor subfamily 1 group I member 3	activator	True	2	1.0	12.75	-4415	TGAACTTT	MA1534.2	0	61.7	2	Clotrimazole; Meclizine
+RORC	RAR related orphan receptor C	repressor	True	2	0.988	13.42	-97	AACTGGGTCA	MA1151.2	0	61.6	0	
+CTCF	CCCTC-binding factor	repressor	False	7	0.782	18.81	18	TTGCTGCTAGCTTCCCTGTCCACTAGATGGAGA	MA1930.2	0	61.3	0	
+RORA	RAR related orphan receptor A	unknown	True	3	0.966	14.89	-97	AAACTGGGTCA	MA0072.2	0	60.8	1	Cholesterol
+PRDM5	PR/SET domain 5	repressor	False	1	0.954	15.76	16	GCTCTCCATCT	MA1999.2	0	59.9	0	
+SOX10	SRY-box transcription factor 10	activator	False	4	1.0	11.29	-469	ACAAAG	MA0442.3	0	59.6	0	
+THAP1	THAP domain containing 1	repressor	False	2	0.962	13.36	164	GGAGGGCA	MA0597.3	0	59.0	0	
+RXRG	retinoid X receptor gamma	unknown	True	4	0.907	15.22	-108	GGGTCAAGCATGGTGCA	MA1149.2	0	58.7	4	Acitretin; Alitretinoin; Bexarotene; Etretinate
+HOXA10	homeobox A10	activator	False	1	0.97	11.13	122	GCAATTAAA	MA0899.2	0	58.5	0	
+STAT6	signal transducer and activator of transcription 6	activator	False	3	0.993	15.5	570	TTCCAGAGAA	MA0520.2	0	58.4	0	
+TFAP4	transcription factor AP-4	activator	False	8	0.88	13.53	327	GCGGAGGCAGGAG	MA1966.2	0	58.0	0	
+DLX5	distal-less homeobox 5	activator	False	1	0.94	11.42	122	GCAATTAA	MA1476.3	0	57.6	0	
+ETV5	ETS variant transcription factor 5	activator	False	4	0.863	13.27	327	AGCGGAGGCAGGAG	MA1945.2	0	57.5	0	
+FIGLA	folliculogenesis specific bHLH transcription factor	activator	False	3	0.863	13.27	327	AGCGGAGGCAGGAG	MA1945.2	0	57.5	0	
+DLX2	distal-less homeobox 2	activator	False	1	0.934	11.23	122	GCAATTAA	MA0885.3	0	57.4	0	
+ONECUT1	one cut homeobox 1	activator	False	2	0.953	12.44	298	AAATCAATG	MA0679.3	0	57.4	0	
+TCF12	transcription factor 12	activator	False	6	1.0	13.63	761	CACCTGC	MA1648.2	0	57.2	0	
+NFAT5	nuclear factor of activated T cells 5	activator	False	3	1.0	13.56	776	ATGGAAAA	MA0606.3	0	57.2	0	
+HOXD9	homeobox D9	repressor	False	1	0.975	12.77	122	GCAATTAAA	MA0913.3	0	57.1	0	
+CDX1	caudal type homeobox 1	activator	False	1	0.924	11.09	121	GGCAATTAAA	MA0878.3	0	57.1	0	
+ZNF24	zinc finger protein 24	activator	False	1	0.871	13.21	-68	GCTTCATTCACTC	MA1124.1	0	57.1	0	
+ETV2	ETS variant transcription factor 2	activator	False	4	0.847	11.58	327	GCGGAGGCAGGAG	MA1941.2	0	57.0	0	
+HOXB13	homeobox B13	repressor	False	5	0.95	12.55	-448	TCAATAAAA	MA0901.3	0	56.9	0	
+HMX1	H6 family homeobox 1	repressor	False	1	0.963	12.85	121	GGCAATTAA	MA0896.2	0	56.8	0	
+SHOX	SHOX homeobox	activator	False	4	1.0	8.89	-913	TAATTG	MA0630.2	0	56.5	0	
+TFCP2L1	transcription factor CP2 like 1	activator	False	3	0.878	10.57	437	CCTGCTCAACCTGG	MA0145.2	0	56.4	0	
+ONECUT3	one cut homeobox 3	activator	False	2	0.915	12.78	296	AAAAATCAATGT	MA0757.2	0	56.3	0	
+BCL6B	BCL6B transcription repressor	repressor	False	3	0.769	7.17	178	TACATTCTAGGACTTTA	MA0731.1	0	56.2	0	
+CREB1	cAMP responsive element binding protein 1	activator	False	1	1.0	14.32	263	TGATGTCA	MA0018.5	0	56.1	0	
+ZNF652	zinc finger protein 652	repressor	False	1	0.906	10.51	91	GAGAGTTAA	MA1657.2	0	56.0	0	
+TBX19	T-box transcription factor 19	activator	False	1	0.824	10.3	-62	TAGCACCATGGAGTGAA	MA0804.2	0	55.9	0	
+NKX2-8	NK2 homeobox 8	activator	False	1	0.976	10.95	242	ACACTTGA	MA0673.2	0	55.8	0	
+ZNF416	zinc finger protein 416	activator	False	3	0.873	10.99	485	CTTCTGGGCT	MA1979.2	0	55.6	0	
+PPARD	peroxisome proliferator activated receptor delta	repressor	True	2	0.838	7.68	-1541	AGGGTCACAGTTTG	MA1550.2	0	55.6	5	Bezafibrate; Elafibranor; Seladelpar; Seladelpar Lysine; Tretinoin
+NFATC4	nuclear factor of activated T cells 4	repressor	False	3	0.994	13.02	775	ATGGAAAAT	MA1525.3	0	55.5	0	
+GATA2	GATA binding protein 2	activator	False	3	1.0	12.31	-1551	CTTATCT	MA0036.4	0	55.3	0	
+GATA4	GATA binding protein 4	activator	False	3	1.0	14.02	-1551	CCTTATCT	MA0482.3	0	55.3	0	
+MIXL1	Mix paired-like homeobox	activator	False	4	1.0	8.68	-1576	CAATTA	MA0662.2	0	55.3	0	
+RAX2	retina and anterior neural fold homeobox 2	activator	False	4	1.0	8.95	-1576	CAATTA	MA0717.2	0	55.3	0	
+TLX2	T cell leukemia homeobox 2	activator	False	4	1.0	9.85	-1576	CAATTA	MA1577.2	0	55.3	0	
+BHLHA15	basic helix-loop-helix family member a15	activator	False	3	0.968	13.01	-1018	ACAGCTGG	MA1472.3	0	55.2	0	
+PPARG	peroxisome proliferator activated receptor gamma	dual	True	4	0.871	11.96	-2727	AGAGCCAAGGTCA	MA0065.3	0	55.1	3	Bexarotene; Diclofenac Sodium; Resveratrol
+GRHL2	grainyhead like transcription factor 2	activator	False	3	1.0	14.32	-2375	AACAGGTT	MA1105.3	0	55.0	0	
+HESX1	HESX homeobox 1	repressor	False	4	1.0	10.02	-913	TAATTG	MA0894.2	0	55.0	0	
+NFATC1	nuclear factor of activated T cells 1	activator	False	4	1.0	11.34	-2545	TGGAAA	MA0624.3	0	55.0	0	
+NR1H2	nuclear receptor subfamily 1 group H member 2	activator	True	3	1.0	11.73	-2720	AGGTCA	MA1996.2	0	55.0	0	
+NFIC	nuclear factor I C	activator	False	8	1.0	13.48	-2862	CTTGGCA	MA0161.3	0	55.0	0	
+NR2E3	nuclear receptor subfamily 2 group E member 3	activator	True	3	1.0	10.41	-2865	AAGCTT	MA0164.2	0	55.0	0	
+KLF4	KLF transcription factor 4	activator	False	8	1.0	16.05	-3227	CCCCACCC	MA0039.5	0	55.0	0	
+KLF7	KLF transcription factor 7	activator	False	6	1.0	16.33	-3233	GGGCGGGG	MA1959.2	0	55.0	0	
+KLF10	KLF transcription factor 10	activator	False	4	1.0	18.57	-3234	GGGGCGGGG	MA1511.2	0	55.0	0	
+PITX1	paired like homeodomain 1	activator	False	3	1.0	11.29	-3711	TAATCC	MA0682.3	0	55.0	0	
+RBPJ	recombination signal binding protein for immunoglobulin kappa J region	activator	False	4	1.0	11.83	-4229	TGGGAA	MA1116.2	0	55.0	0	
+HOXC4	homeobox C4	activator	False	4	1.0	9.65	-4274	TCATTA	MA1504.2	0	55.0	0	
+PBX2	PBX homeobox 2	activator	False	1	0.92	11.26	209	CATAAATAA	MA1113.3	0	54.8	0	
+ATOH1	atonal bHLH transcription factor 1	activator	False	3	0.993	12.28	-3251	GACATATG	MA0461.3	0	54.8	0	
+ETV1	ETS variant transcription factor 1	activator	False	2	0.88	13.53	327	GCGGAGGCAGGAG	MA1966.2	0	54.7	0	
+ZBTB26	zinc finger and BTB domain containing 26	repressor	False	7	0.962	12.48	798	TTCCAGAA	MA1579.2	0	54.4	0	
+MYOG	myogenin	activator	False	5	0.979	13.71	-4508	GCAGCTGT	MA0500.3	0	54.4	0	
+KLF5	KLF transcription factor 5	activator	False	5	0.977	16.03	-3234	CCCCCGCCCC	MA0599.1	0	54.3	0	
+PTF1A	pancreas associated transcription factor 1a	activator	False	6	0.975	13.01	-4508	ACAGCTGC	MA1619.2	0	54.3	0	
+TBXT	T-box transcription factor T	repressor	False	1	0.813	9.18	-61	TAGCACCATGGAGTGA	MA0009.2	0	54.1	0	
+TRPS1	transcriptional repressor GATA binding 1	repressor	False	3	1.0	13.33	-1375	TCTTATCT	MA1970.2	0	54.0	0	
+FOXD3	forkhead box D3	repressor	False	3	0.97	15.2	959	AGAGAAAATAAACA	MA0041.3	0	54.0	0	
+DMRT1	doublesex and mab-3 related transcription factor 1	activator	False	2	0.942	11.66	527	TACAATGTG	MA1603.2	0	54.0	0	
+FOXD2	forkhead box D2	activator	False	2	0.969	14.23	634	TAAAGCAAACA	MA0847.4	0	53.8	0	
+DLX4	distal-less homeobox 4	repressor	False	4	1.0	9.32	-1576	CAATTA	MA0881.2	0	53.8	0	
+MSX2	msh homeobox 2	repressor	False	4	1.0	10.23	-1576	CAATTA	MA0708.3	0	53.8	0	
+MEIS1	Meis homeobox 1	activator	False	21	0.945	12.35	-1751	AATCAATCA	MA1639.2	0	53.5	0	
+SP2	Sp2 transcription factor	repressor	False	3	1.0	18.26	-3234	GGGGCGGGG	MA0516.3	0	53.5	0	
+GSC	goosecoid homeobox	repressor	False	3	1.0	10.62	-3711	TAATCC	MA0648.2	0	53.5	0	
+STAT5B	signal transducer and activator of transcription 5B	activator	False	3	0.907	11.59	-996	TACCCAGAA	MA1625.2	0	53.5	0	
+POU4F3	POU class 4 homeobox 3	activator	False	1	0.871	10.43	208	TGCATAAATAAA	MA0791.2	0	53.4	0	
+ATF2	activating transcription factor 2	activator	False	1	0.906	11.0	262	TTGATGTCAT	MA1632.2	0	53.3	0	
+HMGA1	high mobility group AT-hook 1	activator	False	1	1.0	12.5	-445	ATTTTTAT	MA2124.1	0	53.3	0	
+HOXD13	homeobox D13	activator	False	1	1.0	12.29	-447	CAATAAA	MA0909.4	0	53.2	0	
+EBF1	EBF transcription factor 1	activator	False	3	0.878	13.2	-830	GTCCCAGGGAA	MA0154.5	0	53.2	0	
+EBF2	EBF transcription factor 2	activator	False	4	0.937	13.99	-4228	CCCATGGGA	MA1604.2	0	53.1	0	
+NHLH1	nescient helix-loop-helix 1	activator	False	7	0.926	12.99	-1670	CTCAGCTGC	MA0048.3	0	53.0	0	
+EBF4	EBF transcription factor 4	activator	False	3	0.869	13.05	-830	GTCCCAGGGAA	MA2122.1	0	52.9	0	
+TFAP2B	transcription factor AP-2 beta	activator	False	9	0.924	15.19	-2710	AGCCCAGAGGGCA	MA0813.1	0	52.8	0	
+EGR1	early growth response 1	activator	False	4	0.923	14.0	-3231	CCACCCCCGC	MA0162.5	0	52.7	0	
+FOXJ2	forkhead box J2	activator	False	2	0.986	12.14	958	ATAAACAA	MA0614.1	0	52.6	0	
+MYF6	myogenic factor 6	activator	False	3	0.92	12.45	-4509	AACAGCTGCC	MA0667.1	0	52.6	0	
+PATZ1	POZ/BTB and AT hook containing zinc finger 1	repressor	False	4	0.97	18.38	-3229	GGGGGTGGGGG	MA1961.2	0	52.6	0	
+ASCL1	achaete-scute family bHLH transcription factor 1	repressor	False	5	0.967	12.39	-4508	GCAGCTGT	MA1100.3	0	52.5	0	
+MEF2A	myocyte enhancer factor 2A	activator	False	4	0.914	11.71	-3612	TCAAAAATAG	MA0052.5	0	52.4	0	
+TEAD1	TEA domain transcription factor 1	activator	False	2	0.905	11.26	574	AGATTCCAG	MA0090.4	0	52.4	0	
+PBX3	PBX homeobox 3	activator	False	2	0.849	11.43	424	TGACTGACATC	MA1114.2	0	52.3	0	
+SIX2	SIX homeobox 2	activator	False	1	0.86	10.8	241	TGACACTTGAT	MA1119.2	0	52.3	0	
+NR1H3	nuclear receptor subfamily 1 group H member 3	activator	True	8	0.873	11.43	-1041	TGAACTTAAATAGACT	MA0494.2	0	52.3	0	
+NR2C2	nuclear receptor subfamily 2 group C member 2	activator	True	2	0.859	11.75	451	CAGGTCAGAGATGG	MA0504.2	0	52.3	0	
+ZNF281	zinc finger protein 281	repressor	False	4	0.959	17.87	-3229	GGGGGTGGGG	MA1630.3	0	52.3	0	
+MEIS3	Meis homeobox 3 pseudogene 1	activator	False	1	1.0	11.46	543	TTGACAG	MA0775.2	0	52.2	0	
+MEIS2	Meis homeobox 2	activator	False	1	0.998	13.44	543	TTGACAGG	MA0774.1	0	52.1	0	
+CTCFL	CCCTC-binding factor like	activator	False	3	0.903	11.36	-3873	CAGAGGGC	MA1102.3	0	52.1	0	
+TLX1	T cell leukemia homeobox 1	activator	False	3	0.836	13.13	-818	TGGCCGGGTGCCCA	MA0119.1	0	52.0	0	
+NR4A2	nuclear receptor subfamily 4 group A member 2	activator	True	2	0.948	11.34	-835	GAAGGTCA	MA0160.3	0	52.0	0	
+WT1	WT1 transcription factor	activator	False	3	0.893	12.83	-3231	CCACCCCCGC	MA1627.2	0	51.8	0	
+HSF2	heat shock transcription factor 2	activator	False	3	0.892	12.53	-3308	TTCTCGATGATTC	MA0770.1	0	51.8	0	
+HOXA1	homeobox A1	activator	False	2	1.0	8.99	-2164	TAATTA	MA1495.2	0	51.7	0	
+HOXB2	homeobox B2	activator	False	2	1.0	8.91	-2164	TAATTA	MA0902.3	0	51.7	0	
+HOXB5	homeobox B5	activator	False	2	1.0	9.28	-2164	TAATTA	MA0904.3	0	51.7	0	
+LMX1A	LIM homeobox transcription factor 1 alpha	activator	False	2	1.0	11.67	-2164	TTAATTA	MA0702.3	0	51.7	0	
+PDX1	pancreatic and duodenal homeobox 1	activator	False	2	1.0	9.35	-2164	TAATTA	MA0132.3	0	51.7	0	
+ESR1	estrogen receptor 1	activator	True	1	0.778	6.48	-2720	GGGCTTCCGTGACCT	MA0112.4	0	51.7	7	Bazedoxifene; Clomiphene; Elacestrant; Elacestrant Hydrochloride; Fulvestrant; Imlunestrant; Ospemifene
+SP1	Sp1 transcription factor	activator	False	2	1.0	18.51	-3234	GGGGCGGGG	MA0079.5	0	51.7	0	
+FOXI1	forkhead box I1	activator	False	2	0.883	11.6	590	GTCAGGAGGATG	MA1946.2	0	51.6	0	
+RELB	RELB proto-oncogene, NF-kB subunit	unknown	False	2	1.0	13.14	-4	ATTCCCC	MA1117.2	0	51.5	0	
+GLIS2	GLIS family zinc finger 2	dual	False	1	0.803	8.32	-3	TTCCCCCAACAGAG	MA0736.1	0	51.3	0	
+KLF16	KLF transcription factor 16	repressor	False	4	0.927	15.35	-3229	CCCCCACCCCC	MA0741.1	0	51.3	0	
+TCF3	transcription factor 3	dual	False	6	1.0	13.81	761	CACCTGC	MA0522.4	0	51.2	0	
+EGR4	early growth response 4	activator	False	3	0.874	12.18	-3232	CCACCCCCGCC	MA0733.2	0	51.2	0	
+NR2F1	nuclear receptor subfamily 2 group F member 1	repressor	True	5	0.921	12.17	-2722	CAAGGTCACGGA	MA0017.3	0	51.1	0	
+NEUROD2	neuronal differentiation 2	activator	False	2	0.943	11.74	-1018	ACAGCTGG	MA0668.3	0	51.1	0	
+ZNF418	zinc finger protein 418	repressor	False	4	0.865	12.91	-899	CAGAAACTACAAACA	MA1980.1	0	51.0	0	
+FLI1	Fli-1 proto-oncogene, ETS transcription factor	activator	False	4	0.866	12.17	-2332	GACAACAGGTTGT	MA1956.2	0	51.0	0	
+NEUROD1	neuronal differentiation 1	activator	False	2	0.933	11.33	-1018	ACAGCTGG	MA1109.2	0	50.8	0	
+TFAP2E	transcription factor AP-2 epsilon	activator	False	2	0.969	12.76	-3734	GCCTCCGGG	MA1569.2	0	50.7	0	
+MYF5	myogenic factor 5	activator	False	2	0.968	13.03	-4508	GCAGCTGT	MA1641.2	0	50.7	0	
+ONECUT2	one cut homeobox 2	activator	False	1	0.963	11.82	602	AATCGATA	MA0756.3	0	50.6	0	
+HNF4G	hepatocyte nuclear factor 4 gamma	activator	True	1	0.936	13.23	514	CAAAGTCCC	MA0484.3	0	50.6	0	
+ZNF148	zinc finger protein 148	repressor	False	3	0.9	13.73	-3229	CCCCACCCCC	MA1653.2	0	50.5	0	
+RREB1	ras responsive element binding protein 1	activator	False	8	0.847	16.59	-2277	TCCCACCCCAACCCCCACA	MA0073.2	0	50.5	0	
+HNF4A	hepatocyte nuclear factor 4 alpha	activator	True	1	0.93	13.07	514	CAAAGTCCC	MA0114.5	0	50.4	0	
+OSR2	odd-skipped related transciption factor 2	activator	False	2	0.947	12.1	-1646	TCAGAAGC	MA1646.2	0	50.3	0	
+KLF6	KLF transcription factor 6	activator	False	2	0.953	13.37	-3234	CCCCGCCCC	MA1517.2	0	50.3	0	
+SP3	Sp3 transcription factor	repressor	False	3	0.891	12.48	-3235	CCCCCGCCCCA	MA0746.3	0	50.2	0	
+HOXA2	homeobox A2	repressor	False	2	1.0	10.01	-2164	TAATTA	MA0900.3	0	50.2	0	
+NR2F2	nuclear receptor subfamily 2 group F member 2	repressor	True	2	1.0	13.01	-2721	AAGGTCA	MA1111.2	0	50.2	0	
+KLF12	KLF transcription factor 12	repressor	False	2	1.0	18.71	-3234	GGGGCGGGG	MA0742.2	0	50.2	0	
+POU5F1	POU class 5 homeobox 1	repressor	False	2	1.0	12.22	-4356	ATGCAAA	MA1115.2	0	50.2	0	
+FOXJ3	forkhead box J3	activator	False	2	0.94	11.5	-1912	GTAAATAAA	MA0851.2	0	50.0	0	
+HNF1A	HNF1 homeobox A	activator	False	2	0.932	12.93	-1505	TCTTTGATGT	MA1991.2	0	50.0	0	
+HOXA13	homeobox A13	activator	False	1	0.931	10.42	558	CCTATAAA	MA0650.4	0	50.0	0	
+YY1	YY1 transcription factor	dual	False	1	0.971	12.97	230	CAAGATGG	MA0095.4	0	49.9	0	
+MYOD1	myogenic differentiation 1	activator	False	2	0.938	13.05	-4508	GCAGCTGTT	MA0499.3	0	49.8	0	
+ALX4	ALX homeobox 4	activator	False	2	0.935	12.96	-2169	GGCTTTAATTAA	MA0853.2	0	49.8	0	
+IRF1	interferon regulatory factor 1	activator	False	2	0.902	12.75	-1193	TGAAACTGATA	MA0050.4	0	49.5	0	
+GATA3	GATA binding protein 3	dual	False	3	1.0	13.36	-1375	TCTTATCT	MA0037.5	0	49.5	0	
+MEF2C	myocyte enhancer factor 2C	activator	False	2	0.926	11.85	-3203	ATAGAAATAGC	MA0497.2	0	49.4	0	
+POU4F2	POU class 4 homeobox 2	dual	False	2	0.824	9.38	205	TGCATAAATAAAAAG	MA0683.2	0	49.4	0	
+PLAG1	PLAG1 zinc finger	activator	False	3	0.81	13.11	-2362	TGGGCTCACGGGTG	MA0163.1	0	49.3	0	
+STAT5A	signal transducer and activator of transcription 5A	activator	False	1	0.949	11.1	715	TCCCAGGAA	MA0519.2	0	49.3	0	
+MSX1	msh homeobox 1	dual	False	4	1.0	10.28	-1576	CAATTA	MA0666.3	0	49.3	0	
+PRRX1	paired related homeobox 1	dual	False	4	1.0	9.21	-1576	CAATTA	MA0716.2	0	49.3	0	
+GLI2	GLI family zinc finger 2	activator	False	2	0.918	12.88	-2294	CACCACCCA	MA0734.4	0	49.3	0	
+SNAI1	snail family transcriptional repressor 1	repressor	False	1	1.0	13.53	761	GCAGGTG	MA1558.2	0	49.1	0	
+REL	REL proto-oncogene, NF-kB subunit	activator	False	2	0.912	10.82	-2416	GGGGATTTTC	MA0101.1	0	49.1	0	
+PPARA	peroxisome proliferator activated receptor alpha	dual	True	5	1.0	12.84	-2721	AAGGTCA	MA2338.1	0	49.0	0	
+MSC	musculin	repressor	False	2	0.914	12.71	-1019	ACCAGCTGTC	MA0665.1	0	48.8	0	
+FOXC2	forkhead box C2	activator	False	1	0.967	13.0	958	AAAATAAACAA	MA0846.2	0	48.7	0	
+ERF	ETS2 repressor factor	repressor	False	5	0.838	12.2	-2329	ACGGAAACAACCTGTT	MA1939.2	0	48.7	0	
+NR1D2	nuclear receptor subfamily 1 group D member 2	repressor	True	3	0.837	5.98	-2824	TGGGTTAGTCTGCCT	MA1532.2	0	48.6	0	
+NR2F6	nuclear receptor subfamily 2 group F member 6	repressor	True	4	0.836	12.19	-4422	GTGATCAAAAGTTCA	MA0728.1	0	48.6	0	
+CUX2	cut like homeobox 2	repressor	False	1	0.946	11.27	601	CAATCGATA	MA0755.2	0	48.6	0	
+BARHL1	BarH like homeobox 1	activator	False	1	1.0	10.87	-2316	CGTTTA	MA0877.4	0	48.4	0	
+BARHL2	BarH like homeobox 2	activator	False	1	1.0	9.83	-2316	TAAACG	MA0635.2	0	48.4	0	
+SIX4	SIX homeobox 4	activator	False	1	1.0	12.52	-2576	AACCTGA	MA2001.2	0	48.4	0	
+KLF15	KLF transcription factor 15	activator	False	1	1.0	16.94	-3233	CCCCGCCC	MA1513.2	0	48.3	0	
+VEZF1	vascular endothelial zinc finger 1	activator	False	1	1.0	12.86	-4188	CCCCCC	MA1578.2	0	48.3	0	
+SMAD4	SMAD family member 4	activator	False	1	1.0	12.15	-4519	TGTCTAG	MA1153.2	0	48.3	0	
+SNAI3	snail family transcriptional repressor 3	repressor	False	1	0.973	14.21	759	GCAGGTGTA	MA1559.2	0	48.3	0	
+TGIF2	TGFB induced factor homeobox 2	repressor	False	2	0.843	9.74	673	TGACAAGTGTGA	MA0797.1	0	48.3	0	
+ZNF341	zinc finger protein 341	activator	False	1	0.938	12.03	-850	CAACAGCC	MA1655.2	0	48.3	0	
+MAFF	MAF bZIP transcription factor F	activator	False	2	0.885	11.81	-4244	TTCAGCATTTA	MA0495.4	0	48.2	0	
+FOXQ1	forkhead box Q1	repressor	False	1	1.0	13.41	957	ATTGTTTATT	MA0040.2	0	48.2	0	
+HAND1	heart and neural crest derivatives expressed 1	dual	False	4	0.971	11.81	-2483	ATCTGGCAT	MA0092.2	0	48.2	0	
+RFX2	regulatory factor X2	activator	False	2	0.832	7.16	-930	GTATGTATGACAAC	MA0600.3	0	48.1	0	
+NR4A1	nuclear receptor subfamily 4 group A member 1	activator	True	1	0.929	10.94	-835	GAAGGTCA	MA1112.3	0	48.1	0	
+GLI1	GLI family zinc finger 1	activator	False	2	0.877	11.67	-2294	TCACCACCCA	MA1990.2	0	48.0	0	
+BARX2	BARX homeobox 2	activator	False	1	0.983	11.95	-1813	AAATCATTA	MA1471.2	0	48.0	0	
+MAFG	MAF bZIP transcription factor G	activator	False	2	0.868	13.06	-1719	GATGTCTCAGCT	MA0659.4	0	47.9	0	
+POU4F1	POU class 4 homeobox 1	dual	False	1	0.887	11.1	208	TGCATAAATAAA	MA0790.2	0	47.9	0	
+NFIB	nuclear factor I B	activator	False	2	0.808	11.69	-819	AATGGCCGGGTGCCCAA	MA1643.2	0	47.8	0	
+SOX4	SRY-box transcription factor 4	activator	False	1	0.981	12.03	-3034	GACAAAGG	MA0867.3	0	47.8	0	
+HOXD3	homeobox D3	activator	False	1	0.98	12.12	-3833	CTAATGAC	MA0912.2	0	47.7	0	
+ZNF784	zinc finger protein 784	activator	False	1	0.972	13.36	-1683	ACTTACCG	MA1717.2	0	47.7	0	
+PBX1	PBX homeobox 1	activator	False	1	0.969	12.72	-1752	ATCAATCAT	MA0070.2	0	47.6	0	
+EGR3	early growth response 3	activator	False	2	0.862	11.14	-3232	CCACCCCCGCC	MA0732.2	0	47.5	0	
+STAT3	signal transducer and activator of transcription 3	activator	False	1	0.972	13.03	-4542	TGCTTGGAA	MA0144.3	0	47.5	0	
+ELF1	E74 like ETS transcription factor 1	activator	False	2	0.859	10.99	-2332	GACAACAGGTTGT	MA1953.2	0	47.5	0	
+ZBTB6	zinc finger and BTB domain containing 6	repressor	False	2	0.907	11.86	-2359	CCGTGAGCC	MA1581.2	0	47.4	0	
+ZNF157	zinc finger protein 157	unknown	False	3	0.792	13.08	38	AAGCTAGCAGCAAACCTTCCC	MA2331.1	0	47.4	0	
+NR5A1	nuclear receptor subfamily 5 group A member 1	activator	True	2	0.856	11.91	-2726	GAGCCAAGGTCA	MA1540.3	0	47.4	0	
+TGIF1	TGFB induced factor homeobox 1	repressor	False	2	0.811	4.43	673	TGACAAGTGTGA	MA0796.1	0	47.3	0	
+ZBTB18	zinc finger and BTB domain containing 18	repressor	False	2	0.901	10.79	-4159	GTCCAGAGGTG	MA0698.2	0	47.2	0	
+TCF7	transcription factor 7	repressor	False	1	1.0	12.15	-1503	CTTTGAT	MA0769.3	0	47.2	0	
+TFEB	transcription factor EB	activator	False	1	0.961	12.32	-2551	CACATGAC	MA0692.2	0	47.2	0	
+TCF7L2	transcription factor 7 like 2	repressor	False	1	0.999	14.67	-1505	ACATCAAAG	MA0523.2	0	47.2	0	
+EOMES	eomesodermin	repressor	False	1	0.918	11.26	677	AAGTGTGAT	MA0800.2	0	47.1	0	
+SOX11	SRY-box transcription factor 11	activator	False	1	0.957	12.27	-4342	GGACAAAG	MA0869.3	0	47.0	0	
+SNAI2	snail family transcriptional repressor 2	repressor	False	1	0.931	11.44	760	ACACCTGC	MA0745.3	0	47.0	0	
+ARID5A	AT-rich interaction domain 5A	repressor	False	1	1.0	11.24	-2300	TAATATTG	MA0602.2	0	46.9	0	
+MXI1	MAX interactor 1, dimerization protein	repressor	False	1	1.0	11.79	-2549	CACATG	MA1108.3	0	46.9	0	
+TFAP2A	transcription factor AP-2 alpha	dual	False	9	0.928	15.99	-2710	TGCCCTCTGGGCT	MA0872.1	0	46.9	0	
+GRHL1	grainyhead like transcription factor 1	activator	False	1	0.948	14.25	-2376	AAACAGGTTT	MA0647.2	0	46.8	0	
+TFAP2C	transcription factor AP-2 gamma	dual	False	10	0.925	15.47	-2710	AGCCCAGAGGGCA	MA0815.1	0	46.8	0	
+DUX4	double homeobox 4	activator	False	1	0.941	11.2	-1751	CAAATCAATCA	MA0468.1	0	46.8	0	
+ELK1	ETS transcription factor ELK1	activator	False	2	0.836	12.67	-4577	CCAGAAATGGTGTGA	MA1933.2	0	46.8	0	
+ELF5	E74 like ETS transcription factor 5	activator	False	1	0.945	11.54	-4108	AAGGAAGC	MA0136.4	0	46.7	0	
+FOXP2	forkhead box P2	repressor	False	1	0.949	11.41	958	AATAAACAA	MA0593.2	0	46.7	0	
+VDR	vitamin D receptor	unknown	True	2	1.0	12.59	-3605	GAGTTCA	MA0693.4	0	46.7	9	Alfacalcidol; Calcifediol; Calcipotriene; Calcitriol; Cholecalciferol; Dihydrotachysterol; Doxercalciferol; Ergocalciferol; Paricalcitol
+ZNF76	zinc finger protein 76	dual	False	5	0.877	16.21	-995	ACCCAGAATGCATGACA	MA1716.2	0	46.5	0	
+NKX2-2	NK2 homeobox 2	activator	False	1	0.939	11.91	-4178	CCACTCAG	MA1645.2	0	46.5	0	
+TBX5	T-box transcription factor 5	activator	False	1	0.933	10.41	-4162	AGGTGTGT	MA0807.1	0	46.3	0	
+HIC1	HIC ZBTB transcriptional repressor 1	repressor	False	1	0.964	11.45	-1319	GTGCCCAC	MA0739.2	0	46.3	0	
+PAX5	paired box 5	activator	False	1	0.932	12.38	-2719	CCGTGACC	MA0014.4	0	46.3	0	
+MAFK	MAF bZIP transcription factor K	repressor	False	2	0.861	12.1	-1719	GATGTCTCAGCT	MA0591.2	0	46.2	0	
+PRDM4	PR/SET domain 4	activator	False	1	0.902	12.76	-1190	CCATGAAACTG	MA1647.3	0	46.2	0	
+ZNF143	zinc finger protein 143	activator	False	1	0.882	14.26	-996	TACCCAGAATGCATGA	MA0088.2	0	46.1	0	
+SREBF1	sterol regulatory element binding transcription factor 1	activator	False	1	0.92	11.96	-4571	CTCACACCAT	MA0595.1	0	45.9	0	
+SOX17	SRY-box transcription factor 17	activator	False	1	0.877	10.66	988	AGGACAATGT	MA0078.3	0	45.9	0	
+NFYB	nuclear transcription factor Y subunit beta	activator	False	1	0.916	11.61	-2842	CCAGTGGCC	MA0502.3	0	45.8	0	
+NKX6-1	NK6 homeobox 1	dual	False	2	1.0	10.22	-2165	TAATTAA	MA0674.2	0	45.7	0	
+HSF1	heat shock transcription factor 1	dual	False	2	0.882	12.17	572	CTCTGGAATCTTC	MA0486.2	0	45.7	0	
+RFX6	regulatory factor X6	activator	False	1	0.912	12.19	-4316	CCAAGCAAC	MA1724.2	0	45.7	0	
+FOXF2	forkhead box F2	activator	False	1	0.906	10.3	-1913	CGTAAATAA	MA0030.2	0	45.6	0	
+THRB	thyroid hormone receptor beta	unknown	True	5	0.853	14.36	-2722	TGGGCTTCCGTGACCTTG	MA1576.2	0	45.6	7	Dextrothyroxine; Dextrothyroxine Sodium; Levothyroxine; Levothyroxine Sodium; Liothyronine; Liothyronine Sodium; Resmetirom
+POU2F3	POU class 2 homeobox 3	activator	False	1	0.908	10.35	-4357	CATGCAAAC	MA0627.3	0	45.6	0	
+RARG	retinoic acid receptor gamma	unknown	True	4	0.852	12.18	-2721	AAGGTCACGGAAGCCCA	MA0860.1	0	45.6	10	Acitretin; Adapalene; Alitretinoin; Etretinate; Isotretinoin; Palovarotene; Tamibarotene; Tazarotene; Tretinoin; Trifarotene
+NR6A1	nuclear receptor subfamily 6 group A member 1	dual	True	3	0.884	14.11	-2572	TATGGTCAAGTTCA	MA1541.2	0	45.6	0	
+CEBPA	CCAAT enhancer binding protein alpha	activator	False	1	0.906	10.98	-4473	GTGCCATCCC	MA0019.2	0	45.5	0	
+HOXC13	homeobox C13	activator	False	1	0.905	10.65	-2464	CTCATAAAT	MA0907.2	0	45.5	0	
+NKX3-2	NK3 homeobox 2	repressor	False	1	0.949	12.66	-1820	ATACACTTAA	MA0122.4	0	45.5	0	
+ZNF257	zinc finger protein 257	unknown	False	4	0.961	14.82	327	GAGGCAGGAG	MA1710.2	0	45.5	0	
+ZNF282	zinc finger protein 282	unknown	False	2	0.797	8.9	-5	AATTCCCCCAACAGA	MA1154.2	0	45.4	0	
+NR1I2	nuclear receptor subfamily 1 group I member 2	activator	True	1	0.87	11.81	-1100	CAAACTCCCTGCACC	MA1533.2	0	45.4	0	
+FOXD1	forkhead box D1	activator	False	1	0.897	8.57	-2456	GTAAGCA	MA0031.2	0	45.3	0	
+FOXO1	forkhead box O1	dual	False	7	0.874	12.44	-2332	GACAACAGGTTGT	MA1955.2	0	45.3	0	
+HOXD10	homeobox D10	activator	False	1	0.896	10.01	-2586	AGTCATAAAG	MA1506.2	0	45.2	0	
+ESRRA	estrogen related receptor alpha	dual	True	2	0.985	15.51	-2723	CCAAGGTCA	MA0592.4	0	45.2	0	
+SOX7	SRY-box transcription factor 7	activator	False	1	0.892	11.22	-2307	AGAACAATAA	MA2095.1	0	45.1	0	
+ZNF530	zinc finger protein 530	repressor	False	2	0.83	10.06	-2265	GGTGGGATAGGGGA	MA1981.2	0	45.1	0	
+FOS	Fos proto-oncogene, AP-1 transcription factor subunit	activator	False	1	0.817	8.73	-790	CATCATGTCACCA	MA1951.2	0	44.9	0	
+THRA	thyroid hormone receptor alpha	unknown	True	2	0.79	11.21	478	CTGTCCCCTTCTGGGCTC	MA1969.2	0	44.9	7	Dextrothyroxine; Dextrothyroxine Sodium; Levothyroxine; Levothyroxine Sodium; Liothyronine; Liothyronine Sodium; Resmetirom
+ASCL2	achaete-scute family bHLH transcription factor 2	dual	False	2	0.973	15.33	-4509	AACAGCTGCC	MA0816.1	0	44.9	0	
+SMAD5	SMAD family member 5	repressor	False	1	0.934	12.92	-4522	TGACTAGACA	MA1557.1	0	44.8	0	
+RXRA	retinoid X receptor alpha	unknown	True	12	0.823	12.48	-2229	GGGACACAGGGTTAA	MA0074.1	0	44.7	6	Acitretin; Alitretinoin; Bexarotene; Etretinate; Sulindac; Danthron
+TGIF2LX	TGFB induced factor homeobox 2 like X-linked	repressor	False	1	0.834	9.92	673	TCACACTTGTCA	MA1571.1	0	44.6	0	
+RARB	retinoic acid receptor beta	unknown	True	4	0.815	9.28	-4423	AGTGATCAAAAGTTCA	MA0857.1	0	44.5	9	Acitretin; Adapalene; Alitretinoin; Etretinate; Isotretinoin; Tamibarotene; Tazarotene; Tretinoin; Trifarotene
+HOXB6	homeobox B6	unknown	False	1	1.0	10.06	122	TAATTGC	MA1500.2	0	44.4	0	
+TCF21	transcription factor 21	dual	False	2	0.916	13.48	-1019	GACAGCTGGT	MA0832.2	0	44.3	0	
+POU1F1	POU class 1 homeobox 1	activator	False	1	0.864	10.34	-3280	CTCAGTAACATAAT	MA0784.3	0	44.3	0	
+ZBTB32	zinc finger and BTB domain containing 32	repressor	False	1	0.91	10.37	-3754	AATACAGTGT	MA1580.1	0	44.1	0	
+SOX1	SRY-box transcription factor 1	activator	False	1	0.858	10.87	-2305	AACAATAATATTGGG	MA0870.1	0	44.1	0	
+SREBF2	sterol regulatory element binding transcription factor 2	dual	False	4	0.836	12.67	-4577	CCAGAAATGGTGTGA	MA1933.2	0	44.1	0	
+MAF	MAF bZIP transcription factor	activator	False	1	0.849	9.4	-1719	ATGTCTCAGCT	MA0501.2	0	44.0	0	
+SCRT1	scratch family transcriptional repressor 1	repressor	False	1	0.904	11.99	-2331	ACAACAGGTT	MA0743.3	0	44.0	0	
+SCRT2	scratch family transcriptional repressor 2	repressor	False	1	0.902	12.51	-2331	ACAACAGGTT	MA0744.3	0	43.9	0	
+E2F6	E2F transcription factor 6	repressor	False	1	0.899	10.73	-3232	GGCGGGGG	MA0471.3	0	43.8	0	
+SRF	serum response factor	activator	False	1	0.849	12.68	-3245	TGTCCCTATATGGGGC	MA0083.3	0	43.8	0	
+TWIST1	twist family bHLH transcription factor 1	dual	False	2	0.93	11.27	-1734	CCAGATGA	MA1123.3	0	43.8	0	
+TBX18	T-box transcription factor 18	repressor	False	1	0.897	10.53	-4570	TGGTGTGAG	MA1565.2	0	43.7	0	
+EGR2	early growth response 2	activator	False	1	0.847	9.52	-3232	CCACCCCCGCC	MA0472.2	0	43.7	0	
+MAX	MYC associated transcriptional regulator X	repressor	False	1	0.884	11.4	-1590	AGCACTTGGT	MA0059.2	0	43.6	0	
+SPIB	Spi-B transcription factor	activator	False	1	0.834	9.74	-1855	ACAGTTCTTCTTT	MA0081.3	0	43.5	0	
+MTF1	metal regulatory transcription factor 1	activator	False	1	0.768	9.58	-818	TGGGCACCCGGCCA	MA0863.1	0	43.3	0	
+ZNF93	zinc finger protein 93	repressor	False	1	0.819	11.28	846	ACAAGCAGCGGCAG	MA1721.2	0	43.2	0	
+E2F3	E2F transcription factor 3	activator	False	1	0.827	5.26	-4491	AAAAGGCCCCAAAA	MA0469.4	0	43.1	0	
+ZNF140	zinc finger protein 140	repressor	False	1	0.807	12.54	-813	CAGAGTGAAATGGCCGGGT	MA1589.2	0	43.0	0	
+TCF4	transcription factor 4	dual	False	1	0.946	12.56	760	ACACCTGC	MA0830.3	0	43.0	0	
+SOX21	SRY-box transcription factor 21	activator	False	1	0.819	5.39	-2305	CCCAATATTATTGTT	MA0866.1	0	42.9	0	
+ZNF85	zinc finger protein 85	repressor	False	1	0.852	10.51	-1391	AAGATTTCAGCT	MA1720.2	0	42.9	0	
+HMX3	H6 family homeobox 3	unknown	False	1	0.947	11.99	121	GGCAATTAA	MA0898.2	0	42.8	0	
+IRF8	interferon regulatory factor 8	repressor	False	1	0.807	4.47	895	CGACACCGAAGCA	MA0652.2	0	42.7	0	
+PAX6	paired box 6	dual	False	1	0.851	11.43	-458	TTGACGCTAGAGTT	MA0069.1	0	42.6	0	
+RFX4	regulatory factor X4	activator	False	1	0.807	7.44	-4320	GACACCAAGCAAC	MA0799.3	0	42.5	0	
+ZSCAN16	zinc finger and SCAN domain containing 16	unknown	False	2	0.786	0.0	-81	AATTGTTGTCAAAGCTTC	MA2100.1	0	42.5	0	
+INSM1	INSM transcriptional repressor 1	repressor	False	1	0.852	11.25	-2781	TGTTTGGGGTCT	MA0155.1	0	42.4	0	
+PLAGL1	PLAG1 like zinc finger 1	dual	False	2	0.891	10.65	-4488	TGGGGCCT	MA1615.2	0	42.4	0	
+MZF1	myeloid zinc finger 1	dual	False	1	1.0	14.58	-2413	AATCCCCA	MA0056.3	0	42.4	0	
+RXRB	retinoid X receptor beta	activator	True	1	0.788	4.09	-1541	AGGGTCACAGTTTG	MA0855.1	0	42.3	0	
+NHLH2	nescient helix-loop-helix 2	activator	False	1	0.795	7.9	-4512	TTAAACAGCTGCCCCA	MA1529.2	0	42.2	0	
+ZBTB7B	zinc finger and BTB domain containing 7B	dual	False	2	0.882	10.89	-2276	CAACCCCCAC	MA0694.2	0	42.2	0	
+PKNOX1	PBX/knotted 1 homeobox 1	unknown	False	3	0.889	12.11	424	TGACTGACAT	MA0782.3	0	41.9	0	
+NKX2-1	NK2 homeobox 1	unknown	False	1	1.0	13.09	242	CACTTGA	MA1994.2	0	41.5	0	
+FOXH1	forkhead box H1	dual	False	1	0.959	11.76	-3714	AATCCACT	MA0479.2	0	41.1	0	
+ESR2	estrogen receptor 2	unknown	True	1	0.914	14.77	-2720	AGGTCACGGAAGCCC	MA0258.2	0	40.8	18	Bazedoxifene; Diethylstilbestrol; Diethylstilbestrol Diphosphate; Estetrol; Estradiol Valerate; Estriol; Estrogens, Conjugated; Estrogens, Conjugated Synthetic A; Estrogens, Esterified; Estrone; Ethinyl Estradiol; Fulvestrant; Genistein; Lasofoxifene; Ospemifene; Quinestrol; Synthetic Conjugated Estrogens, B; Tamoxifen
+ARX	aristaless related homeobox	dual	False	1	0.943	11.18	-2167	CTTTAATTAA	MA0874.2	0	40.7	0	
+THAP11	THAP domain containing 11	dual	False	2	0.793	9.47	-1003	ACTAAACTACCCAG	MA1573.2	0	40.7	0	
+ZBTB7C	zinc finger and BTB domain containing 7C	unknown	False	3	0.931	11.51	692	CCACCACC	MA0695.2	0	40.6	0	
+GATA6	GATA binding protein 6	unknown	False	3	1.0	13.49	-1375	TCTTATCT	MA1104.3	0	40.5	0	
+BARX1	BARX homeobox 1	unknown	False	4	1.0	9.43	-1576	CAATTA	MA0875.2	0	40.3	0	
+DLX1	distal-less homeobox 1	unknown	False	4	1.0	9.51	-1576	CAATTA	MA0879.3	0	40.3	0	
+LBX2	ladybird homeobox 2	unknown	False	4	1.0	9.04	-1576	CAATTA	MA0699.2	0	40.3	0	
+MSX3		unknown	False	4	1.0	10.28	-1576	CAATTA	MA0709.2	0	40.3	0	
+NOBOX	NOBOX oogenesis homeobox	unknown	False	4	1.0	9.0	-1576	TAATTG	MA0125.2	0	40.3	0	
+DPRX	divergent-paired related homeobox	unknown	False	1	0.954	11.82	236	TGATAATCC	MA1480.2	0	40.3	0	
+HMX2	H6 family homeobox 2	unknown	False	1	0.86	11.22	120	AGGCAATTAAAAACC	MA0897.2	0	40.2	0	
+TBP	TATA-box binding protein	unknown	False	4	1.0	10.07	-1767	TATAAAA	MA0108.3	0	40.2	0	
+PITX3	paired like homeodomain 3	unknown	False	3	1.0	10.56	-1932	TAATCC	MA0714.2	0	40.1	0	
+ZNF317	zinc finger protein 317	unknown	False	3	1.0	14.86	-2675	ACAGCAGA	MA1593.2	0	40.0	0	
+KLF1	KLF transcription factor 1	unknown	False	6	1.0	16.15	-3233	GGGCGGGG	MA0493.3	0	40.0	0	
+KLF14	KLF transcription factor 14	unknown	False	3	1.0	17.95	-3234	GGGGCGGGG	MA0740.2	0	40.0	0	
+HOXB4	homeobox B4	unknown	False	4	1.0	9.97	-3832	TCATTA	MA1499.2	0	40.0	0	
+HOXA4	homeobox A4	unknown	False	3	1.0	10.17	-4275	GTCATTA	MA1496.2	0	40.0	0	
+BHLHE22	basic helix-loop-helix family member e22	unknown	False	6	1.0	12.51	-4507	CAGCTG	MA1635.2	0	40.0	0	
+SMAD3	SMAD family member 3	dual	False	1	0.917	12.58	-4522	TGACTAGACA	MA0795.1	0	39.8	0	
+TBX6	T-box transcription factor 6	dual	False	1	0.911	11.28	-4570	TGGTGTGAG	MA1567.3	0	39.7	0	
+KLF2	KLF transcription factor 2	unknown	False	3	0.988	14.21	-3233	CCCCGCCC	MA1515.2	0	39.6	0	
+DDIT3	DNA damage inducible transcript 3	dual	False	1	0.906	10.98	-4473	GTGCCATCCC	MA0019.2	0	39.5	0	
+ZNF274	zinc finger protein 274	unknown	False	3	0.976	17.9	-2472	TGTGAGTCCTCA	MA1592.2	0	39.3	0	
+MYC	MYC proto-oncogene, bHLH transcription factor	dual	False	1	0.884	11.4	-1590	AGCACTTGGT	MA0059.2	0	39.1	0	
+REST	RE1 silencing transcription factor	repressor	False	1	0.739	7.87	-4187	TAACCACTCAGGACAGGGGG	MA0138.3	0	39.0	0	
+FEZF2	FEZ family zinc finger 2	dual	False	1	0.889	10.46	-3554	CCCACCCT	MA2341.1	0	39.0	0	
+IRF2	interferon regulatory factor 2	dual	False	1	0.812	11.04	766	GGAAAATGAGAGCTGC	MA0051.2	0	38.9	0	
+RELA	RELA proto-oncogene, NF-kB subunit	dual	False	1	0.882	10.91	-2416	GGGGATTTTC	MA0107.1	0	38.8	0	
+ELK3	ETS transcription factor ELK3	dual	False	1	0.874	12.44	-2332	GACAACAGGTTGT	MA1955.2	0	38.6	0	
+ZNF682	zinc finger protein 682	unknown	False	5	0.888	14.39	836	GGACCAGCCCC	MA1599.2	0	38.5	0	
+BACH1	BTB domain and CNC homolog 1	dual	False	1	0.861	12.1	-1719	GATGTCTCAGCT	MA0591.2	0	38.4	0	
+ZNF768	zinc finger protein 768	unknown	False	4	0.945	13.28	-3042	CTCTCTCTG	MA1731.2	0	38.4	0	
+STAT2	signal transducer and activator of transcription 2	unknown	False	4	0.942	13.96	-3762	CAAACAGAAA	MA1623.2	0	38.3	0	
+NFE2L1	NFE2 like bZIP transcription factor 1	dual	False	1	0.856	9.95	-1719	ATGTCTCAGCT	MA0089.3	0	38.2	0	
+HSF4	heat shock transcription factor 4	unknown	False	2	0.931	14.11	572	CTCTGGAATCTTC	MA0771.1	0	38.2	0	
+TP53	tumor protein p53	dual	False	1	0.801	8.17	843	GTCCTGCCGCTGCTTGTC	MA0106.3	0	38.2	0	
+EBF3	EBF transcription factor 3	unknown	False	4	0.933	13.65	-4228	CCCATGGGA	MA1637.2	0	38.0	0	
+DMRTC2	DMRT like family C2	unknown	False	2	0.909	11.07	531	AGTTGACACAT	MA1479.2	0	37.9	0	
+ZNF610	zinc finger protein 610	unknown	False	3	0.867	11.66	846	CTGCCGCTGC	MA1713.2	0	37.8	0	
+SP8	Sp8 transcription factor	unknown	False	4	0.925	14.01	-3226	ACACCCCCACC	MA0747.2	0	37.8	0	
+SP9	Sp9 transcription factor	unknown	False	4	0.919	13.48	-3235	CCCCGCCCCA	MA1564.2	0	37.6	0	
+ZNF331	zinc finger protein 331	unknown	False	3	0.915	14.01	-3726	TGCAGAACCC	MA1726.2	0	37.5	0	
+ZNF701	zinc finger protein 701	unknown	False	4	0.832	12.33	-742	GAGGACTGAGAGGGAGG	MA1987.2	0	37.3	0	
+FOXE1	forkhead box E1	unknown	False	2	0.918	11.95	633	TAAAGCAAACAC	MA1487.3	0	37.3	0	
+SPI1	Spi-1 proto-oncogene	dual	False	1	0.825	10.6	-1855	AAAGAAGAACTGT	MA0080.7	0	37.2	0	
+KLF9	KLF transcription factor 9	unknown	False	4	0.902	14.3	-3225	GACACCCCCAC	MA1107.3	0	37.1	0	
+GATA5	GATA binding protein 5	unknown	False	2	1.0	12.17	-1551	AGATAAGG	MA0766.3	0	37.0	0	
+ARID3B	AT-rich interaction domain 3B	unknown	False	2	1.0	10.32	-2162	TATTAAT	MA0601.2	0	36.7	0	
+DRGX	dorsal root ganglia homeobox	unknown	False	2	1.0	9.29	-2164	TAATTA	MA1481.2	0	36.7	0	
+EMX1	empty spiracles homeobox 1	unknown	False	2	1.0	9.94	-2164	TAATTA	MA0612.3	0	36.7	0	
+EVX2	even-skipped homeobox 2	unknown	False	2	1.0	8.74	-2164	TAATTA	MA0888.2	0	36.7	0	
+HOXC8	homeobox C8	unknown	False	2	1.0	8.52	-2164	TAATTA	MA1505.2	0	36.7	0	
+LHX8	LIM homeobox 8	unknown	False	2	1.0	8.74	-2164	TAATTA	MA0705.2	0	36.7	0	
+MIX-A		unknown	False	2	1.0	11.61	-2165	TTAATTA	MA0621.2	0	36.7	0	
+SP4	Sp4 transcription factor	unknown	False	2	1.0	18.22	-3234	GGGGCGGGG	MA0685.2	0	36.7	0	
+NEUROG2	neurogenin 2	unknown	False	2	1.0	15.96	-3251	GACATATGTC	MA0669.1	0	36.7	0	
+GSX2	GS homeobox 2	unknown	False	2	1.0	9.75	-3832	GTCATTA	MA0893.3	0	36.7	0	
+ZNF324	zinc finger protein 324	unknown	False	3	0.874	12.86	-1438	AGGTAAGGATTGTT	MA1977.2	0	36.6	0	
+ZNF740	zinc finger protein 740	unknown	False	5	0.879	12.77	-3229	CCCCACCCCC	MA0753.3	0	36.4	0	
+ZNF677	zinc finger protein 677	unknown	False	3	0.871	12.02	-3295	AACAAGGACAGC	MA2101.1	0	36.1	0	
+ZNF766	zinc finger protein 766	unknown	False	2	0.977	13.94	-1909	AATAAACCT	MA2098.1	0	36.1	0	
+NFIX	nuclear factor I X	unknown	False	2	0.916	15.17	-817	ATGGCCGGGTGCCC	MA1528.2	0	36.1	0	
+ZIC4	Zic family zinc finger 4	unknown	False	2	0.837	10.58	503	TGCCGCCCAGTGGG	MA0751.2	0	36.0	0	
+ZSCAN29	zinc finger and SCAN domain containing 29	unknown	False	2	0.872	10.29	623	CGTCCATGCTG	MA1602.2	0	36.0	0	
+PRDM9	PR/SET domain 9	unknown	False	11	0.861	15.31	-2274	GGGGGTTGGGGTGGGATAGG	MA1723.2	0	35.9	0	
+GLIS3	GLIS family zinc finger 3	dual	False	1	0.782	8.49	-2280	CAACCCCCACACAG	MA0737.1	0	35.8	0	
+KLF17	KLF transcription factor 17	unknown	False	4	0.856	11.56	-2250	TCCACTCTCCCCGT	MA1514.2	0	35.7	0	
+ZNF423	zinc finger protein 423	unknown	False	3	0.856	12.46	-3561	CCCACCCTCGGGGGA	MA0116.1	0	35.7	0	
+CUX1	cut like homeobox 1	unknown	False	1	0.964	12.85	601	CAATCGATA	MA0754.3	0	35.6	0	
+ZNF75D	zinc finger protein 75D	unknown	False	3	0.845	11.05	-1779	GTAGGAAATGCT	MA1601.2	0	35.5	0	
+TAL1	TAL bHLH transcription factor 1, erythroid differentiation factor	unknown	False	2	0.916	11.67	-1019	ACCAGCTGTC	MA0091.2	0	35.3	0	
+ZNF574	zinc finger protein 574	unknown	False	5	0.843	12.02	-2709	GCCCAGAGGGCATC	MA1982.2	0	35.3	0	
+PRDM14	PR/SET domain 14	unknown	False	1	0.937	11.87	549	GGGCTCTA	MA1998.2	0	35.2	0	
+ZNF770	zinc finger protein 770	unknown	False	2	0.952	12.84	-3736	CAGCCTCC	MA2099.1	0	35.2	0	
+STAT1	signal transducer and activator of transcription 1	unknown	False	2	0.943	11.94	-1623	TTACAGGAA	MA0137.4	0	35.2	0	
+ZNF708	zinc finger protein 708	unknown	False	2	0.9	11.52	921	CCTGTGCCT	MA1730.2	0	35.2	0	
+ZNF680	zinc finger protein 680	unknown	False	2	0.884	11.51	827	CCAAGATGACT	MA1729.2	0	35.1	0	
+OLIG3	oligodendrocyte transcription factor 3	unknown	False	2	0.943	11.55	-3251	GACATATGTC	MA0827.1	0	34.9	0	
+ZNF549	zinc finger protein 549	unknown	False	2	0.937	12.77	-4510	AGCTGCCC	MA1728.2	0	34.8	0	
+KLF11	KLF transcription factor 11	unknown	False	2	0.934	14.13	-3229	CCCCACCCCC	MA1512.2	0	34.7	0	
+OLIG2	oligodendrocyte transcription factor 2	unknown	False	2	0.93	11.56	-3251	GACATATGTC	MA0678.1	0	34.6	0	
+ZNF213	zinc finger protein 213	unknown	False	1	0.818	10.46	328	GCGGAGGCAGGA	MA2121.1	0	34.5	0	
+TBX1	T-box transcription factor 1	unknown	False	1	0.941	11.86	677	AAGTGTGA	MA0805.1	0	34.3	0	
+ZFP961		unknown	False	1	0.889	10.97	503	GGGCGGCA	MA2126.1	0	34.3	0	
+TBX4	T-box transcription factor 4	unknown	False	1	0.939	10.79	677	AAGTGTGA	MA0806.1	0	34.3	0	
+ZNF184	zinc finger protein 184	unknown	False	2	0.881	11.04	-1140	TAGAAAAGCTCAT	MA2120.1	0	34.0	0	
+MAZ	MYC associated zinc finger protein	unknown	False	2	0.908	10.47	-3233	CCCCGCCC	MA1522.2	0	33.9	0	
+ZNF320	zinc finger protein 320	unknown	False	5	0.794	13.83	-4233	TGGGGACCCATGGGAAATTC	MA1976.2	0	33.8	0	
+ZIC2	Zic family zinc finger 2	unknown	False	2	0.904	12.0	-4302	CACAGCATG	MA1629.2	0	33.8	0	
+MSANTD3	Myb/SANT DNA binding domain containing 3	unknown	False	1	1.0	12.02	-1481	CACTCAC	MA1523.2	0	33.7	0	
+ZIM3	zinc finger imprinted 3	unknown	False	2	0.901	12.32	-3761	AAACAGAAATA	MA1709.2	0	33.7	0	
+ZKSCAN5	zinc finger with KRAB and SCAN domains 5	unknown	False	2	0.9	11.44	-3866	GGGGGTGAG	MA1652.2	0	33.7	0	
+ZNF667	zinc finger protein 667	unknown	False	2	0.892	11.24	-2356	CTATGGGCTCA	MA1984.2	0	33.5	0	
+ZNF75A	zinc finger protein 75A	unknown	False	2	0.888	13.35	-1926	GCTTTTCTCACT	MA2097.1	0	33.4	0	
+TBR1	T-box brain transcription factor 1	unknown	False	1	0.911	10.72	677	AAGTGTGAT	MA0802.2	0	33.4	0	
+LMX1B	LIM homeobox transcription factor 1 beta	unknown	False	1	1.0	13.05	-2165	TTAATTAA	MA0703.3	0	33.4	0	
+HMBOX1	homeobox containing 1	unknown	False	1	1.0	10.66	-2348	TAGTTAA	MA0895.2	0	33.4	0	
+NEUROG1	neurogenin 1	unknown	False	1	1.0	15.66	-3251	GACATATGTC	MA0623.2	0	33.3	0	
+SPZ1	spermatogenic leucine zipper 1	unknown	False	2	0.884	10.69	-4194	GGGGGTTCAGC	MA0111.1	0	33.2	0	
+FOXN3	forkhead box N3	unknown	False	2	0.883	9.18	-4077	GGAAACAA	MA1489.1	0	33.2	0	
+ZNF449	zinc finger protein 449	unknown	False	2	0.876	11.21	-2271	CACCCCAACC	MA1656.2	0	33.0	0	
+ZSCAN31	zinc finger and SCAN domain containing 31	unknown	False	2	0.811	8.34	922	GCCTCACAGCCCTGTGCC	MA1722.2	0	32.5	0	
+STAT4	signal transducer and activator of transcription 4	unknown	False	1	0.962	13.39	-1623	TTACAGGAAA	MA0518.2	0	32.5	0	
+ZNF384	zinc finger protein 384	unknown	False	1	0.969	11.18	-3476	AAAAAAAC	MA1125.2	0	32.4	0	
+NFE2	nuclear factor, erythroid 2	unknown	False	2	0.849	9.4	-1719	ATGTCTCAGCT	MA0501.2	0	32.3	0	
+ATOH7	atonal bHLH transcription factor 7	unknown	False	1	0.961	12.07	-3251	GACATATGTC	MA1468.1	0	32.2	0	
+ZNF16	zinc finger protein 16	unknown	False	2	0.85	17.66	-4232	AGTGGGGACCCATGGGAAATT	MA1654.2	0	32.2	0	
+ZNF454	zinc finger protein 454	unknown	False	2	0.797	10.71	923	GCCTCACAGCCCTGTGC	MA1712.2	0	32.1	0	
+ARGFX	arginine-fifty homeobox	unknown	False	1	0.955	10.53	-2165	TTAATTAA	MA1463.2	0	32.1	0	
+BHLHE23	basic helix-loop-helix family member e23	unknown	False	1	0.95	12.41	-3251	GACATATGTC	MA0817.2	0	31.8	0	
+ZSCAN4	zinc finger and SCAN domain containing 4	unknown	False	2	0.838	10.29	-4128	AACGCACACTGCAAA	MA1155.1	0	31.8	0	
+MGA	MAX dimerization protein MGA	unknown	False	1	0.948	11.49	-4570	TGGTGTGA	MA0801.1	0	31.8	0	
+ZNF135	zinc finger protein 135	unknown	False	2	0.801	9.22	-1096	TCTCAAACTCCCTG	MA1587.1	0	31.7	0	
+ZFP335		unknown	False	1	0.944	10.56	-3505	ACAGGCA	MA2002.2	0	31.7	0	
+NR5A2	nuclear receptor subfamily 5 group A member 2	unknown	True	1	0.942	13.12	-2723	TGACCTTGG	MA0505.3	0	31.6	0	
+OLIG1	oligodendrocyte transcription factor 1	unknown	False	1	0.942	11.79	-3251	GACATATGTC	MA0826.1	0	31.6	0	
+OSR1	odd-skipped related transcription factor 1	unknown	False	1	0.94	11.05	-2715	GCTTCCGT	MA1542.2	0	31.5	0	
+EWSR1-FLI1		unknown	False	3	0.716	7.1	-4476	GGAGGGATGGCACGAAAC	MA0149.1	0	31.5	0	
+ZBTB24	zinc finger and BTB domain containing 24	unknown	False	2	0.824	10.77	-2402	CCCAGGATCT	MA2330.1	0	31.4	0	
+PKNOX2	PBX/knotted 1 homeobox 2	unknown	False	1	0.841	9.69	673	TGACAAGTGTGA	MA0783.1	0	31.3	0	
+IKZF1	IKAROS family zinc finger 1	unknown	False	1	0.918	10.58	-1622	TACAGGAA	MA1508.2	0	31.1	0	
+TCF7L1	transcription factor 7 like 1	unknown	False	1	0.894	13.75	-1507	TAACATCAAAGA	MA1421.1	0	30.5	0	
+ZNF669	zinc finger protein 669	unknown	False	1	0.811	10.69	666	GGGGTGGTGACAAGT	MA1985.1	0	30.5	0	
+ZNF675	zinc finger protein 675	unknown	False	2	0.789	9.85	-4446	GGGCATGGAGTCTAGAGTG	MA1714.2	0	30.3	0	
+ZFP14	ZFP14 zinc finger protein	unknown	False	1	0.849	11.57	919	AGAGGCACAGGGCTG	MA1972.1	0	30.3	0	
+ZFP809		unknown	False	1	0.888	10.94	-2266	ATCCCACCC	MA2125.1	0	30.0	0	
+ZNF707	zinc finger protein 707	unknown	False	2	0.778	9.69	-4580	CACCATTTCTGGACC	MA1715.1	0	30.0	0	
+ZNF214	zinc finger protein 214	unknown	False	1	0.869	11.6	-2584	TCATAAAGAACCT	MA1975.2	0	29.4	0	
+RFX1	regulatory factor X1	unknown	False	1	0.8	3.39	-931	AGTTGTCATACATACC	MA0509.3	0	28.8	0	
+ZNF136	zinc finger protein 136	unknown	False	1	0.805	8.98	-999	GCATTCTGGGTAGTT	MA1588.1	0	28.7	0	
+ZNF382	zinc finger protein 382	unknown	False	1	0.73	4.62	693	GAGAGACGCAAACACAGCCACCAC	MA1594.1	0	27.9	0	
+ZNF460	zinc finger protein 460	unknown	False	1	0.815	12.27	-3740	CCGGCAGCCTCCGGGG	MA1596.1	0	27.8	0	
+ZNF816	zinc finger protein 816	unknown	False	1	0.782	9.9	-4228	TGGGGACCCATGGGA	MA1719.2	0	26.8	0	
+ZNF410	zinc finger protein 410	unknown	False	1	0.776	2.93	-3848	ACATCCTCCAATACCC	MA0752.2	0	26.6	0	
+ZNF528	zinc finger protein 528	unknown	False	1	0.761	9.1	-1613	CCCATAGAAGACATTTG	MA1597.1	0	26.4	0	
