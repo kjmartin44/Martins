@@ -370,3 +370,119 @@ def load_signature_table(path, gene: str, *, direction: str = "up",
     hits.sort(key=lambda h: -h.weighted_score)
     log.info("loaded %d local signature hits for %s", len(hits), target)
     return hits
+
+# ------------------------------------------------- offline LINCS (Enrichr)
+# SigCom is the richest LINCS interface and also the least reliable: it was
+# returning HTTP 500 for an entire working session, which costs ~34s of
+# patient retrying per endpoint and leaves the report with no empirical
+# evidence at all.
+#
+# Enrichr publishes the same L1000 chemical-perturbation data as two plain
+# .gmt files, 16 MB and 14 MB, and they download in seconds:
+#
+#   https://maayanlab.cloud/Enrichr/geneSetLibrary?mode=text
+#       &libraryName=LINCS_L1000_Chem_Pert_up
+#       &libraryName=LINCS_L1000_Chem_Pert_down
+#
+# Fetch them once into data/ and the direct query runs offline forever.
+#
+# What is gained and lost against the API. Gained: it works, it is pinned and
+# reproducible, and the signature name carries the cell line, timepoint and
+# dose that the report already treats as decisive. Lost: the API returns a
+# continuous score per gene, whereas a .gmt is set membership - a gene is in
+# the signature or it is not. So a hit here means "this compound moved your
+# gene in a consensus signature", with no magnitude. Treated as a fixed
+# effect size and labelled as set membership, never as a measured z-score.
+GMT_SET_SCORE = 2.0          # nominal; membership carries no magnitude
+
+DEFAULT_GMT_PATHS = {
+    "up": ("data/lincs_chem_pert_up.gmt", "lincs_chem_pert_up.gmt"),
+    "down": ("data/lincs_chem_pert_down.gmt", "lincs_chem_pert_down.gmt"),
+}
+
+
+def _parse_sig_name(name: str) -> dict:
+    """Pull cell line, timepoint, drug and dose out of a signature label.
+
+    Enrichr labels look like `LJP006 HA1E 24H-AT-7519-10`: experiment and
+    cell line and duration, then the drug and dose joined by hyphens. The
+    drug itself frequently contains hyphens (AT-7519, DCC-2036), so the dose
+    is taken as the trailing numeric field and the drug is whatever remains.
+    """
+    head, _, tail = name.partition("-")
+    parts = head.split()
+    cell = parts[1] if len(parts) > 1 else None
+    time = parts[2] if len(parts) > 2 else None
+
+    drug, dose = tail, None
+    if tail:
+        bits = tail.rsplit("-", 1)
+        if len(bits) == 2:
+            try:
+                float(bits[1])
+                drug, dose = bits[0], bits[1]
+            except ValueError:
+                pass
+    return {"drug": (drug or name).strip(), "cell_line": cell,
+            "timepoint": time, "dose": dose}
+
+
+def load_enrichr_gmt(gene: str, *, direction: str = "up",
+                     up_path=None, down_path=None) -> list:
+    """Compounds whose L1000 consensus signature contains `gene`.
+
+    Reads the direction you asked for: `up` returns compounds that RAISED the
+    gene, `down` those that lowered it.
+    """
+    from pathlib import Path as _P
+
+    want = direction if direction in ("up", "down") else "up"
+    explicit = {"up": up_path, "down": down_path}[want]
+    candidates = ([explicit] if explicit else list(DEFAULT_GMT_PATHS[want]))
+
+    path = next((_P(c) for c in candidates if c and _P(c).exists()), None)
+    if path is None:
+        raise FileNotFoundError(
+            f"no local LINCS .gmt for direction {want!r}. Download it once:\n"
+            f"  curl -L -o data/lincs_chem_pert_{want}.gmt "
+            f'"https://maayanlab.cloud/Enrichr/geneSetLibrary?mode=text'
+            f'&libraryName=LINCS_L1000_Chem_Pert_{want}"')
+
+    target = gene.strip().upper()
+    hits: list = []
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            fields = line.rstrip("\n").split("\t")
+            if len(fields) < 3:
+                continue
+            if target not in {g.strip().upper() for g in fields[2:] if g.strip()}:
+                continue
+            meta = _parse_sig_name(fields[0])
+            h = SignatureHit(
+                drug=meta["drug"], gene=target, direction=want,
+                score=GMT_SET_SCORE if want == "up" else -GMT_SET_SCORE,
+                cell_line=meta["cell_line"], dose=meta["dose"],
+                timepoint=meta["timepoint"],
+                # A .gmt records membership, not whether the probe was
+                # physically measured. Treating it as inferred is the
+                # conservative reading, and matches how an is_landmark-less
+                # table is already handled.
+                is_landmark=None, query_type="direct")
+            h.notes.append(
+                "set membership in a LINCS consensus signature (Enrichr "
+                ".gmt): the compound moved this gene, with no magnitude "
+                "attached - confirm by RT-qPCR before relying on it")
+            hits.append(h)
+
+    for h in hits:
+        h.evidence_weight = INFERRED_WEIGHT
+        h.weighted_score = round(h.score * h.evidence_weight, 3)
+
+    log.info("LINCS .gmt (%s): %d compound signature(s) contain %s",
+             path.name, len(hits), target)
+    return hits
+
+
+def autoload_gmt_available(direction: str = "up") -> bool:
+    from pathlib import Path as _P
+    return any(_P(c).exists() for c in DEFAULT_GMT_PATHS.get(direction, ()))

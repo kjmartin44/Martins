@@ -100,6 +100,12 @@ def add_analysis_args(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
     p.add_argument("--lincs", action="store_true",
                    help="query LINCS L1000 drug/gene expression signatures; "
                         "distinguishes measured landmarks from inferred values")
+    p.add_argument("--gtf",
+                   help="GENCODE/Ensembl GTF for the neighbouring-gene check. "
+                        "Replaces the Ensembl overlap call, which 500s under "
+                        "load. data/gencode.basic.gtf.gz is picked up "
+                        "automatically if present (34 MB, from "
+                        "ftp.ebi.ac.uk/pub/databases/gencode)")
     p.add_argument("--promoter-fasta",
                    help="read promoter sequences from a local FASTA instead "
                         "of Ensembl, matched on exact coordinates. This "
@@ -111,6 +117,11 @@ def add_analysis_args(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
                         "rna_tissue_consensus.tsv or a GTEx median-TPM matrix). "
                         "Replaces the Open Targets lookup entirely — faster, "
                         "reproducible, and works with no network")
+    p.add_argument("--lincs-gmt", nargs=2, metavar=("UP_GMT", "DOWN_GMT"),
+                   help="Enrichr LINCS_L1000_Chem_Pert .gmt files. Replaces "
+                        "SigCom, which returns HTTP 500 for days at a time. "
+                        "data/lincs_chem_pert_{up,down}.gmt are picked up "
+                        "automatically if present (16 MB + 14 MB)")
     p.add_argument("--lincs-file",
                    help="local drug/gene signature table (drug,gene,score[,"
                         "cell_line,is_landmark]) exported from CLUE or iLINCS. "
@@ -229,8 +240,10 @@ def _execute(args) -> int:
         design_modality=args.design_modality,
         use_lincs=args.lincs,
         signature_file=args.signature_file, lincs_file=args.lincs_file,
+        lincs_gmt=args.lincs_gmt,
         expression_file=args.expression_file,
-        promoter_fasta=args.promoter_fasta, use_genetics=args.genetics,
+        promoter_fasta=args.promoter_fasta,
+        gtf=args.gtf, use_genetics=args.genetics,
         upstream_network=args.upstream_network,
         upstream_depth=args.upstream_depth,
         approved_only=not args.include_investigational,

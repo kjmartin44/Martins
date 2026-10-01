@@ -134,8 +134,10 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         cell_type_check: bool = False, include_stabilizers: bool = True,
         design_screen: bool = False, design_modality: bool = False,
         use_lincs: bool = False, signature_file: str | None = None,
-        lincs_file: str | None = None, expression_file: str | None = None,
+        lincs_file: str | None = None,
+        lincs_gmt: tuple | None = None, expression_file: str | None = None,
         promoter_fasta: str | None = None,
+        gtf: str | None = None,
         use_genetics: bool = False,
         upstream_network: bool = False,
         upstream_depth: int = 3,
@@ -192,6 +194,12 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                           "no regulon file; coarse bundled tiers in use"))
     if expression_file:
         dlv_mod.load_expression_file(expression_file)
+    if lincs_gmt:
+        sig_mod.DEFAULT_GMT_PATHS['up'] = (lincs_gmt[0],)
+        sig_mod.DEFAULT_GMT_PATHS['down'] = (lincs_gmt[1],)
+    if gtf:
+        # Removes the neighbour check's network dependency.
+        nbr_mod.load_gtf(gtf)
     if promoter_fasta:
         # Removes the one stage that had no offline route.
         genes.load_promoter_fasta(promoter_fasta)
@@ -549,6 +557,12 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                 lambda: (sig_mod.load_signature_table(
                              lincs_file, prom.gene_symbol, direction=goal)
                          if lincs_file else
+                         # A local Enrichr .gmt beats SigCom outright: it
+                         # works, it is reproducible, and SigCom has been
+                         # returning 500 for days at a time.
+                         sig_mod.load_enrichr_gmt(prom.gene_symbol,
+                                                  direction=goal)
+                         if sig_mod.autoload_gmt_available(goal) else
                          sig_mod.query_gene(client, prom.gene_symbol,
                                             direction=goal)),
                 [])
@@ -984,6 +998,20 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
             L.append("A tier-1 route with a mediocre score beats a tier-5 route "
                      "with a great one. These are not the same kind of claim and "
                      "averaging them would destroy the information you need.")
+            L.append("")
+            L.append("**Why established binders sit at tier 2, just under the "
+                     "direct agents.** A drug already measured to bind one of "
+                     "your factors has half its chain settled: the "
+                     "drug-to-receptor step has assay data behind it, so the "
+                     "pharmacology is de-risked and only the receptor-to-gene "
+                     "step is a hypothesis. A curated tier-3 ligand is "
+                     "annotation on *both* halves. But they stay below tier 1, "
+                     "because a direct agent acts on your gene itself and "
+                     "skips the receptor-to-gene inference entirely — a "
+                     "stronger claim however well-characterised the binder "
+                     "is. The cost of the indirect route is in the row: "
+                     "everything else that factor regulates moves with your "
+                     "gene.")
             L.append("")
             for tier_label, n in ar["by_tier"].items():
                 L.append(f"- {n} × {tier_label}")

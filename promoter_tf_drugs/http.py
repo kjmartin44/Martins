@@ -50,6 +50,15 @@ class Client:
         self.offline = offline
         self.min_interval = min_interval
         self._last_call = 0.0
+        # Hosts that have already exhausted their retries this run. Patience
+        # is the right response to a BUSY service and the wrong one to a
+        # DEAD service: six jittered attempts span ~34s, which rides out an
+        # Ensembl hiccup but is pure waiting against a host that has been
+        # down for hours. SigCom was down for an entire session, costing
+        # ~68s per run across its two endpoints, and ChEMBL is called
+        # hundreds of times. So a host gets the full patient treatment once,
+        # and fails fast afterwards.
+        self._down: dict = {}
 
     # ---------------------------------------------------------------- cache
     def _path(self, url: str, body: str | None, *, method: str = "GET",
@@ -121,6 +130,15 @@ class Client:
         cached = self._read_cache(cache_path)
         if cached is not None:
             return cached["payload"]
+
+        host = urllib.parse.urlsplit(url).netloc
+        if host in self._down:
+            # Already proven unreachable this run. The caller still gets an
+            # HttpError, so every _optional / except HttpError path behaves
+            # exactly as before — it just arrives immediately.
+            raise HttpError(
+                f"{host} already failed this run ({self._down[host]}); "
+                f"not retrying {url}")
 
         if self.offline:
             raise HttpError(
@@ -195,6 +213,16 @@ class Client:
                 if attempt + 1 < retries:
                     time.sleep(2 ** attempt)
 
+        reason = f"{type(last_exc).__name__}: {str(last_exc)[:80]}"
+        if host not in self._down:
+            self._down[host] = reason
+            log.warning(
+                "%s is unreachable after %d attempts (%s). Treating it as "
+                "down for the rest of this run: further requests to it fail "
+                "immediately instead of waiting ~%.0fs each. Everything not "
+                "depending on it is unaffected.",
+                host, retries, reason, sum(min(RETRY_CAP, 2.0 ** a)
+                                           for a in range(retries - 1)))
         raise HttpError(f"request failed after {retries} attempts: {url} ({last_exc})")
 
     def get(self, url: str, params: dict | None = None, **kw):

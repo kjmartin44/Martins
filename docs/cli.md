@@ -16,8 +16,9 @@ usage: promoter-tf-drugs [-h] --gene GENE [--out OUT] [--top TOP]
                          [--predict-direction] [--regulon-file REGULON_FILE]
                          [--no-direct] [--design-modality] [--design-screen]
                          [--no-stabilizers] [--cell-type-check] [--lincs]
-                         [--promoter-fasta PROMOTER_FASTA]
+                         [--gtf GTF] [--promoter-fasta PROMOTER_FASTA]
                          [--expression-file EXPRESSION_FILE]
+                         [--lincs-gmt UP_GMT DOWN_GMT]
                          [--lincs-file LINCS_FILE]
                          [--signature-file SIGNATURE_FILE] [--genetics]
                          [--proliferation {cycling,post-mitotic,mixed,unknown}]
@@ -97,6 +98,11 @@ options:
   --lincs               query LINCS L1000 drug/gene expression signatures;
                         distinguishes measured landmarks from inferred values
                         (default: False)
+  --gtf GTF             GENCODE/Ensembl GTF for the neighbouring-gene check.
+                        Replaces the Ensembl overlap call, which 500s under
+                        load. data/gencode.basic.gtf.gz is picked up
+                        automatically if present (34 MB, from
+                        ftp.ebi.ac.uk/pub/databases/gencode) (default: None)
   --promoter-fasta PROMOTER_FASTA
                         read promoter sequences from a local FASTA instead of
                         Ensembl, matched on exact coordinates. This package's
@@ -108,6 +114,12 @@ options:
                         rna_tissue_consensus.tsv or a GTEx median-TPM matrix).
                         Replaces the Open Targets lookup entirely — faster,
                         reproducible, and works with no network (default:
+                        None)
+  --lincs-gmt UP_GMT DOWN_GMT
+                        Enrichr LINCS_L1000_Chem_Pert .gmt files. Replaces
+                        SigCom, which returns HTTP 500 for days at a time.
+                        data/lincs_chem_pert_{up,down}.gmt are picked up
+                        automatically if present (16 MB + 14 MB) (default:
                         None)
   --lincs-file LINCS_FILE
                         local drug/gene signature table
@@ -201,8 +213,10 @@ usage: promoter-tf-drugs.panel [-h] [--genes GENES] [--gene-file GENE_FILE]
                                [--regulon-file REGULON_FILE] [--no-direct]
                                [--design-modality] [--design-screen]
                                [--no-stabilizers] [--cell-type-check]
-                               [--lincs] [--promoter-fasta PROMOTER_FASTA]
+                               [--lincs] [--gtf GTF]
+                               [--promoter-fasta PROMOTER_FASTA]
                                [--expression-file EXPRESSION_FILE]
+                               [--lincs-gmt UP_GMT DOWN_GMT]
                                [--lincs-file LINCS_FILE]
                                [--signature-file SIGNATURE_FILE] [--genetics]
                                [--proliferation {cycling,post-mitotic,mixed,unknown}]
@@ -317,6 +331,11 @@ options:
                         down-weights factors with no tissue overlap
   --lincs               query LINCS L1000 drug/gene expression signatures;
                         distinguishes measured landmarks from inferred values
+  --gtf GTF             GENCODE/Ensembl GTF for the neighbouring-gene check.
+                        Replaces the Ensembl overlap call, which 500s under
+                        load. data/gencode.basic.gtf.gz is picked up
+                        automatically if present (34 MB, from
+                        ftp.ebi.ac.uk/pub/databases/gencode)
   --promoter-fasta PROMOTER_FASTA
                         read promoter sequences from a local FASTA instead of
                         Ensembl, matched on exact coordinates. This package's
@@ -327,6 +346,11 @@ options:
                         rna_tissue_consensus.tsv or a GTEx median-TPM matrix).
                         Replaces the Open Targets lookup entirely — faster,
                         reproducible, and works with no network
+  --lincs-gmt UP_GMT DOWN_GMT
+                        Enrichr LINCS_L1000_Chem_Pert .gmt files. Replaces
+                        SigCom, which returns HTTP 500 for days at a time.
+                        data/lincs_chem_pert_{up,down}.gmt are picked up
+                        automatically if present (16 MB + 14 MB)
   --lincs-file LINCS_FILE
                         local drug/gene signature table
                         (drug,gene,score[,cell_line,is_landmark]) exported

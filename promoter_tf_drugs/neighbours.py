@@ -85,6 +85,13 @@ def genes_in_window(client, chrom: str, start: int, end: int, *,
     One cached Ensembl call per promoter, through the existing Client, so a
     re-run costs nothing.
     """
+    # A local GTF answers this with no network and no rate limit, so it wins
+    # outright. Ensembl's overlap endpoint 500s under load, and when it does
+    # this check silently reports "not checked" for every promoter.
+    if _GTF_GENES or autoload_gtf():
+        return genes_in_window_local(chrom, start, end, strand=strand,
+                                     padding=padding, exclude=exclude)
+
     c = str(chrom).replace("chr", "")
     lo, hi = max(1, start - padding), end + padding
     url = f"{ENSEMBL}/overlap/region/{species}/{c}:{lo}-{hi}"
@@ -170,3 +177,107 @@ def window_overlap(promoters) -> list:
                          f"twice, which inflates this gene's route count"),
             })
     return out
+
+# ------------------------------------------------- offline gene coordinates
+# The Ensembl overlap endpoint 500s under load like every other public
+# bioinformatics API, and when it does this check silently reports "not
+# checked" for every promoter. A GENCODE basic annotation is 34 MB and holds
+# every gene's coordinates, which is all this module needs - so the question
+# can be answered locally and permanently.
+#
+#   https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/
+#       release_47/gencode.v47.basic.annotation.gtf.gz
+#
+# Pass it with --gtf, or drop it at data/gencode.basic.gtf.gz and it is found
+# automatically.
+_GTF_GENES: list = []
+_GTF_SOURCE: str | None = None
+
+DEFAULT_GTF_PATHS = ("data/gencode.basic.gtf.gz", "gencode.basic.gtf.gz")
+
+
+def load_gtf(path) -> int:
+    """Index every gene's coordinates from a GENCODE/Ensembl GTF.
+
+    Only `gene` feature rows are read, so a 34 MB file reduces to roughly
+    80k tuples in memory and the parse takes a couple of seconds.
+    """
+    import gzip
+    import re
+    from pathlib import Path as _P
+
+    path = _P(path)
+    if not path.exists():
+        raise FileNotFoundError(f"{path} not found")
+
+    opener = (gzip.open if path.suffix == ".gz" else open)
+    name_re = re.compile(r'gene_name "([^"]+)"')
+    type_re = re.compile(r'gene_type "([^"]+)"')
+
+    genes = []
+    with opener(path, "rt", encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            if line.startswith("#"):
+                continue
+            f = line.split("	")
+            if len(f) < 9 or f[2] != "gene":
+                continue
+            m = name_re.search(f[8])
+            if not m:
+                continue
+            t = type_re.search(f[8])
+            genes.append((f[0].replace("chr", ""), int(f[3]), int(f[4]),
+                          1 if f[6] == "+" else -1, m.group(1),
+                          t.group(1) if t else "unknown"))
+
+    genes.sort(key=lambda g: (g[0], g[1]))
+    _GTF_GENES.clear()
+    _GTF_GENES.extend(genes)
+    global _GTF_SOURCE
+    _GTF_SOURCE = str(path)
+    log.info("indexed %d gene coordinates from %s - the neighbour check now "
+             "runs with no network", len(genes), path.name)
+    return len(genes)
+
+
+def autoload_gtf() -> bool:
+    """Use a GTF sitting at a conventional path, without being asked."""
+    from pathlib import Path as _P
+    if _GTF_GENES:
+        return True
+    for cand in DEFAULT_GTF_PATHS:
+        if _P(cand).exists():
+            try:
+                load_gtf(cand)
+                return True
+            except Exception as exc:                        # noqa: BLE001
+                log.warning("could not read %s: %s", cand, exc)
+    return False
+
+
+def genes_in_window_local(chrom, start, end, *, strand=1,
+                          padding=DEFAULT_PADDING, exclude=None) -> dict:
+    """The same answer as `genes_in_window`, from the local GTF."""
+    c = str(chrom).replace("chr", "")
+    lo, hi = max(1, start - padding), end + padding
+
+    rows = []
+    for gc, gs, ge, gstrand, name, biotype in _GTF_GENES:
+        if gc != c or ge < lo or gs > hi:
+            continue
+        if exclude and name.upper() == exclude.upper():
+            continue
+        kind, note = _relation({"start": gs, "end": ge, "strand": gstrand},
+                               start, end, strand)
+        rows.append({"gene": name, "biotype": biotype, "chrom": c,
+                     "start": gs, "end": ge, "strand": gstrand,
+                     "relation": kind, "note": note})
+
+    rows.sort(key=lambda r: (r["relation"] != "antisense overlap", r["start"]))
+    inside = [r for r in rows if r["relation"] != "nearby"]
+    antisense = [r for r in rows if r["relation"] == "antisense overlap"]
+    return {"checked": True, "window": f"chr{c}:{start}-{end}",
+            "padding": padding, "genes": rows, "n_inside": len(inside),
+            "n_antisense": len(antisense), "clean": not inside,
+            "source": _GTF_SOURCE,
+            "summary": _summarise(inside, antisense, rows)}

@@ -54,7 +54,7 @@ log = logging.getLogger(__name__)
 
 TIERS = {
     1: "clinical — approved for this gene, documented in humans",
-    2: "measured — observed experimentally (LINCS, ChIP)",
+    2: "measured — the drug's target engagement is observed (LINCS, ChIP, or a measured receptor binder)",
     3: "curated — mechanism annotated by a human curator",
     4: "predicted — a model says so",
     5: "hypothesis — generated, untested",
@@ -423,19 +423,33 @@ def from_screen(screens: dict) -> list[Route]:
             quad = h["quadrant"]
 
             if quad == "ESTABLISHED LIGAND, untested on this gene":
-                # Curated tier: the drug-receptor link is measured, and only
-                # the receptor-to-gene step is a hypothesis. Dropping these as
-                # "positive controls" discarded the most actionable class in
-                # the whole screen.
+                # Tier 2, not 3. What makes these different from every other
+                # curated TF ligand is that the drug-receptor step is
+                # MEASURED - that is what "established ligand" means - and
+                # only the receptor-to-gene step is a hypothesis. A curated
+                # tier-3 route is annotation on both halves.
+                #
+                # They stay BELOW tier 1: a direct agent acts on the gene
+                # itself and skips the receptor-to-gene inference entirely,
+                # so it is a stronger claim however well-characterised the
+                # binder is. Below the direct drugs, above everything
+                # curated, is exactly where the evidence puts them.
                 out.append(Route(
                     drug=h["drug"], category="TF: orthosteric ligand",
-                    mechanism=f"measured binder at {sym}, no reported effect "
-                              f"on this gene",
-                    acts_on=sym, tier=3, directness=1,
-                    axes=Axes(0.7, 0.5, 0.65, "curated"),
+                    mechanism=(f"binds {sym} (measured), and {sym} is "
+                               f"predicted to act on this promoter - so the "
+                               f"drug would reach your gene THROUGH {sym}, "
+                               f"not by touching it directly"),
+                    acts_on=sym, tier=2, directness=1,
+                    axes=Axes(0.7, 0.5, 0.65, "measured binding"),
                     approved=True, source="screening",
-                    notes=["pharmacology already de-risked; only the "
-                           "receptor-to-gene step is untested"]))
+                    notes=[f"half-measured: the {h['drug']}-{sym} interaction "
+                           f"has assay data behind it, so the pharmacology is "
+                           f"de-risked. What is untested is whether moving "
+                           f"{sym} moves your gene - the one step a binding "
+                           f"assay cannot tell you",
+                           f"everything else {sym} regulates moves too, which "
+                           f"a direct agent on your gene would avoid"]))
                 continue
 
             if quad != "NOVEL HYPOTHESIS":

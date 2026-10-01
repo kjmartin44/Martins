@@ -3406,33 +3406,68 @@ def test_quadrant_axes_are_independent():
     assert _quadrant(0.9, 0.2, False, False, False) == "no call"
 
 
-def test_established_binders_enter_the_catalogue_at_curated_tier():
-    """They used to be dropped entirely — only NOVEL HYPOTHESIS rows made it
-    into the unified table."""
+def test_established_binders_rank_below_direct_agents_but_above_curated():
+    """They used to be dropped entirely as "positive controls", then sat at
+    tier 3 among every other curated ligand.
+
+    Tier 2 is where the evidence puts them: the drug-receptor step is
+    MEASURED - that is what "established ligand" means - and only the
+    receptor-to-gene step is a hypothesis, whereas a curated tier-3 route is
+    annotation on both halves. They stay below tier 1 because a direct agent
+    acts on the gene itself and skips the receptor-to-gene inference."""
     from promoter_tf_drugs import catalogue as cat
-    block = {"screens": {"ESR1": {
+    block = {
+        "direct_therapies": [{
+            "drug": "DirectAgent", "modality": "small molecule",
+            "mechanism": "binds the gene product", "gene": "GENE",
+            "specificity": 0.55, "raises_protein": False, "approved": True,
+            "withdrawn": False, "approval_year": 2007, "source": "ChEMBL"}],
+        "drug_grades": [{
+            "drug_name": "CuratedLigand", "tf_symbol": "ESR1", "grade": "A",
+            "combined": 80.0, "tf_confidence": 0.8, "drug_quality": 0.9,
+            "components": {}, "evidence": {}, "notes": []}],
+        "screens": {"ESR1": {
+            "enrichment": {"usable": True},
+            "hits": [
+                {"drug": "EstablishedBinder", "probability": 0.95,
+                 "quadrant": "ESTABLISHED LIGAND, untested on this gene"},
+                {"drug": "NovelDrug", "probability": 0.8,
+                 "quadrant": "NOVEL HYPOTHESIS"},
+            ]}},
+    }
+    routes = cat.build(block, include_chromatin=False)["routes"]
+    tier = {r["drug"]: r["tier"] for r in routes}
+
+    assert tier["DirectAgent"] == 1
+    assert tier["EstablishedBinder"] == 2
+    assert tier["CuratedLigand"] == 3
+    assert tier["NovelDrug"] == 5
+
+    # the ordering the ranking actually has to produce
+    order = [r["drug"] for r in routes]
+    assert order.index("DirectAgent") < order.index("EstablishedBinder")
+    assert order.index("EstablishedBinder") < order.index("CuratedLigand")
+
+
+def test_established_binder_explains_how_it_reaches_the_gene():
+    """A bare "measured binder" label does not say what it would do to the
+    target gene, which is the question being asked of it."""
+    from promoter_tf_drugs import catalogue as cat
+    block = {"screens": {"VDR": {
         "enrichment": {"usable": True},
-        "hits": [
-            {"drug": "EstablishedDrug", "probability": 0.95,
-             "quadrant": "ESTABLISHED LIGAND, untested on this gene"},
-            {"drug": "NovelDrug", "probability": 0.8,
-             "quadrant": "NOVEL HYPOTHESIS"},
-        ]}}}
-    routes = {r["drug"]: r for r in
-              cat.build(block, include_chromatin=False)["routes"]}
-    assert routes["EstablishedDrug"]["tier"] == 3
-    assert routes["NovelDrug"]["tier"] == 5
-    assert routes["EstablishedDrug"]["category"] == "TF: orthosteric ligand"
-    # and tier ordering puts the de-risked one first
-    ordered = cat.build(block, include_chromatin=False)["routes"]
-    assert ordered[0]["drug"] == "EstablishedDrug"
+        "hits": [{"drug": "Doxercalciferol", "probability": 0.93,
+                  "quadrant": "ESTABLISHED LIGAND, untested on this gene"}]}}}
+    r = cat.build(block, include_chromatin=False)["routes"][0]
 
+    assert "THROUGH VDR" in r["mechanism"]
+    assert "not by touching it directly" in r["mechanism"]
+    joined = " ".join(r["notes"])
+    # the de-risked half, and the half that is not
+    assert "de-risked" in joined
+    assert "binding assay cannot tell you" in joined
+    # and the cost of going indirect
+    assert "everything else VDR regulates moves too" in joined
 
-# ===================================================================== #
-# Evidence provenance: a failed lookup must never read as a measured    #
-# negative. This is the failure mode that made a whole CCR5 run look    #
-# complete while three of its four evidence sources had silently died.  #
-# ===================================================================== #
 def test_false_discovery_proportion_is_the_chance_share_not_its_complement():
     """The direction of this number is the whole point, and it is easy to
     invert: 1 - expected/observed is the share that is REAL."""
@@ -4098,23 +4133,6 @@ def test_a_near_neighbour_is_flagged_with_its_distance():
     near = [g for g in r["genes"] if g["relation"] == "nearby"]
     assert near and near[0]["gene"] == "CCR2"
     assert "kb outside" in near[0]["note"]
-
-
-def test_a_clean_window_says_so():
-    r = nbr.genes_in_window(_NbClient([]), "3", 1000, 2000, strand=1)
-    assert r["checked"] and r["clean"] and r["n_inside"] == 0
-    assert "alone" in r["summary"]
-
-
-def test_a_failed_lookup_is_not_a_clean_window():
-    """Same principle as provenance: absence of evidence must not read as
-    evidence of absence."""
-    class Boom:
-        def get(self, url, params=None):
-            raise RuntimeError("Ensembl 500")
-    r = nbr.genes_in_window(Boom(), "3", 1, 2, strand=1)
-    assert r["checked"] is False
-    assert r.get("clean") is not True
 
 
 def test_all_tss_window_overlap_is_measured():
@@ -5061,3 +5079,60 @@ def test_no_curated_entry_is_presented_as_available_while_flagged_withdrawn():
                 # a withdrawn entry must still carry its mechanism and gene so
                 # the report can explain why it is being shown at all
                 assert e.mechanism and e.gene, e.drug
+
+def _no_local_gtf(monkeypatch):
+    """Force the network path. A local GTF now answers first, so a test that
+    wants to exercise the Ensembl route has to say so."""
+    from promoter_tf_drugs import neighbours as nbr
+    monkeypatch.setattr(nbr, "DEFAULT_GTF_PATHS", ())
+    monkeypatch.setattr(nbr, "_GTF_GENES", [])
+
+
+def test_a_clean_window_says_so(monkeypatch):
+    _no_local_gtf(monkeypatch)
+    r = nbr.genes_in_window(_NbClient([]), "3", 1000, 2000, strand=1)
+    assert r["checked"] and r["clean"] and r["n_inside"] == 0
+    assert "alone" in r["summary"]
+
+
+def test_a_failed_lookup_is_not_a_clean_window(monkeypatch):
+    """Same principle as provenance: absence of evidence must not read as
+    evidence of absence."""
+    _no_local_gtf(monkeypatch)
+
+    class Boom:
+        def get(self, url, params=None):
+            raise RuntimeError("Ensembl 500")
+    r = nbr.genes_in_window(Boom(), "3", 1, 2, strand=1)
+    assert r["checked"] is False
+    assert r.get("clean") is not True
+
+
+def test_a_local_gtf_is_preferred_over_the_network(tmp_path, monkeypatch):
+    """The whole point of the offline route: Ensembl's overlap endpoint 500s
+    under load, and when it does this check silently reports 'not checked'
+    for every promoter."""
+    from promoter_tf_drugs import neighbours as nbr2
+    gtf = tmp_path / "mini.gtf"
+    rows = [
+        ["chr3", "X", "gene", "46363984", "46407184", ".", "-", ".",
+         'gene_id "G1"; gene_type "lncRNA"; gene_name "CCR5AS";'],
+        ["chr3", "X", "gene", "46370939", "46377528", ".", "+", ".",
+         'gene_id "G2"; gene_type "protein_coding"; gene_name "CCR5";'],
+    ]
+    gtf.write_text(
+        "".join(chr(9).join(r) + chr(10) for r in rows),
+        encoding="utf-8")
+    assert nbr2.load_gtf(gtf) == 2
+    try:
+        def boom(*a, **k):
+            raise AssertionError("must not hit the network with a GTF loaded")
+        monkeypatch.setattr(nbr2, "peaks_from_api", boom, raising=False)
+
+        r = nbr2.genes_in_window(None, "3", 46369946, 46371145,
+                                 strand=1, exclude="CCR5")
+        assert r["checked"] and r["n_antisense"] == 1
+        assert r["genes"][0]["gene"] == "CCR5AS"
+        assert r["source"] and "mini.gtf" in r["source"]
+    finally:
+        nbr2._GTF_GENES.clear()
