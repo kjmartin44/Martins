@@ -106,6 +106,13 @@ def add_analysis_args(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
                         "load. data/gencode.basic.gtf.gz is picked up "
                         "automatically if present (34 MB, from "
                         "ftp.ebi.ac.uk/pub/databases/gencode)")
+    p.add_argument("--has-ptc", action="store_true",
+                   help="the gene carries a premature termination codon in "
+                        "the alleles you care about. Moves nonsense "
+                        "readthrough and NMD inhibition to the front of the "
+                        "post-transcriptional section, because for a PTC "
+                        "allele those address the problem and extra "
+                        "transcription does not")
     p.add_argument("--genome",
                    help="soft-masked genome FASTA, for fully offline runs. "
                         "With --gtf this removes the last Ensembl "
@@ -252,7 +259,8 @@ def _execute(args) -> int:
         expression_file=args.expression_file,
         promoter_fasta=args.promoter_fasta,
         gtf=args.gtf,
-        genome=args.genome, use_genetics=args.genetics,
+        genome=args.genome,
+        has_ptc=args.has_ptc, use_genetics=args.genetics,
         upstream_network=args.upstream_network,
         upstream_depth=args.upstream_depth,
         approved_only=not args.include_investigational,

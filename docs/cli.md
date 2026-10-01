@@ -16,7 +16,7 @@ usage: promoter-tf-drugs [-h] --gene GENE [--out OUT] [--top TOP]
                          [--predict-direction] [--regulon-file REGULON_FILE]
                          [--no-direct] [--design-modality] [--design-screen]
                          [--no-stabilizers] [--cell-type-check] [--lincs]
-                         [--gtf GTF] [--genome GENOME]
+                         [--gtf GTF] [--has-ptc] [--genome GENOME]
                          [--promoter-fasta PROMOTER_FASTA]
                          [--expression-file EXPRESSION_FILE]
                          [--lincs-gmt UP_GMT DOWN_GMT]
@@ -104,6 +104,12 @@ options:
                         load. data/gencode.basic.gtf.gz is picked up
                         automatically if present (34 MB, from
                         ftp.ebi.ac.uk/pub/databases/gencode) (default: None)
+  --has-ptc             the gene carries a premature termination codon in the
+                        alleles you care about. Moves nonsense readthrough and
+                        NMD inhibition to the front of the post-
+                        transcriptional section, because for a PTC allele
+                        those address the problem and extra transcription does
+                        not (default: False)
   --genome GENOME       soft-masked genome FASTA, for fully offline runs. With
                         --gtf this removes the last Ensembl dependency: gene
                         models come from the GTF and sequence from here. A
@@ -220,7 +226,8 @@ usage: promoter-tf-drugs.panel [-h] [--genes GENES] [--gene-file GENE_FILE]
                                [--regulon-file REGULON_FILE] [--no-direct]
                                [--design-modality] [--design-screen]
                                [--no-stabilizers] [--cell-type-check]
-                               [--lincs] [--gtf GTF] [--genome GENOME]
+                               [--lincs] [--gtf GTF] [--has-ptc]
+                               [--genome GENOME]
                                [--promoter-fasta PROMOTER_FASTA]
                                [--expression-file EXPRESSION_FILE]
                                [--lincs-gmt UP_GMT DOWN_GMT]
@@ -343,6 +350,12 @@ options:
                         load. data/gencode.basic.gtf.gz is picked up
                         automatically if present (34 MB, from
                         ftp.ebi.ac.uk/pub/databases/gencode)
+  --has-ptc             the gene carries a premature termination codon in the
+                        alleles you care about. Moves nonsense readthrough and
+                        NMD inhibition to the front of the post-
+                        transcriptional section, because for a PTC allele
+                        those address the problem and extra transcription does
+                        not
   --genome GENOME       soft-masked genome FASTA, for fully offline runs. With
                         --gtf this removes the last Ensembl dependency: gene
                         models come from the GTF and sequence from here. A

@@ -16,6 +16,9 @@ from . import (annotate, catalogue as cat_mod, cellcycle, congeners as cong_mod,
                genetics as gen_mod, ligands as lig_mod, modulators as mod_mod,
                neighbours as nbr_mod, network as net_mod,
                predictions as pred_mod, systemic as sys_mod,
+               compensation as comp_mod,
+               posttranscriptional as ptx_mod,
+               reactivation as react_mod,
                outcome as outcome_mod, provenance as prov_mod,
                regulon as regulon_mod,
                screens as screens_mod, signatures as sig_mod,
@@ -137,6 +140,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         lincs_file: str | None = None,
         lincs_gmt: tuple | None = None, expression_file: str | None = None,
         promoter_fasta: str | None = None,
+        has_ptc: bool | None = None,
         gtf: str | None = None,
         genome: str | None = None,
         use_genetics: bool = False,
@@ -319,10 +323,35 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         # on the 20-point evidence axis — presenting a failed lookup as though
         # binding had been measured and ruled out. A failed source falls back
         # to the unverified discount instead.
+        # Why the drug tables are always nuclear receptors. 62 factors had
+        # sites in a real CCR5 run; 5 had an approved drug; all 5 were NRs -
+        # and the highest-SCORING factors (PDX1, RBPJ, NFATC1) had none and
+        # so appeared in no drug table at all. The ranking below is therefore
+        # a filter with one surviving class, not a ranking of your gene's
+        # biology, and the report has to say so rather than letting the
+        # output look like a finding.
+        _drugged = [r for r in by_tf.values() if r.drugs]
+        _nr_drugged = [r for r in _drugged
+                       if r.annotation.get("nuclear_receptor")]
+        attrition = {
+            "n_tfs_with_sites": len(by_tf),
+            "n_with_drug": len(_drugged),
+            "n_drugged_nuclear_receptor": len(_nr_drugged),
+            "all_drugged_are_nr": bool(_drugged) and
+                                  len(_nr_drugged) == len(_drugged),
+        }
+
         for r in by_tf.values():
             r.score = score_tf(r, has_chip=chip_src.usable, goal=goal)
 
         ranked = sorted(by_tf.values(), key=lambda r: -r.score)
+
+        # The gene-specific signal lives in the high-scoring factors, and it
+        # is exactly what gets discarded for having no ligand. Name them, and
+        # route them into the searches that exist for this case.
+        _top_nodrug = [r for r in ranked[:25] if not r.drugs]
+        attrition["top25_without_drug"] = [r.symbol for r in _top_nodrug]
+        attrition["n_top25_without_drug"] = len(_top_nodrug)
 
         # ------------------------- 5b. is this factor active in these cells?
         cycle = cellcycle.filter_and_annotate(ranked, proliferation)
@@ -467,7 +496,13 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         upstream_hits = {}
         if upstream_network and not demo:
             edges = net_mod.fetch_network(client)
-            for r in ranked[:6]:
+            # The high-scoring factors with no ligand are precisely what this
+            # search exists for, so they go in first rather than depending on
+            # where they happen to fall in the ranking.
+            _priority = [r for r in ranked if r.symbol in
+                         set(attrition.get("top25_without_drug") or [])]
+            _rest = [r for r in ranked[:6] if r not in _priority]
+            for r in (_priority + _rest)[:8]:
                 # The point of this step is TFs with no direct pharmacology.
                 if r.drugs:
                     continue
@@ -652,6 +687,31 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                             f"support" if any(s.checked for s in supports)
                             else "eQTLGen file not retrieved"))
 
+        # ------- 8e1. the routes a promoter-level analysis cannot see
+        # Everything above acts on transcription. These act after it, around
+        # it, or on a different gene entirely - and for some genes that is
+        # where the whole problem is.
+        beyond = {}
+        if goal == "up":
+            beyond["post_transcriptional"] = {
+                "routes": [r.to_dict() for r in
+                           ptx_mod.routes_for(goal, has_ptc=has_ptc)],
+                "summary": ptx_mod.summarise(
+                    ptx_mod.routes_for(goal, has_ptc=has_ptc),
+                    has_ptc=has_ptc),
+            }
+            comp = comp_mod.assess(prom.gene_symbol, goal=goal,
+                                   client=None if demo else client)
+            comp["summary"] = comp_mod.summarise(comp)
+            beyond["compensation"] = comp
+
+            react = react_mod.assess(prom.gene_symbol, goal=goal)
+            react["summary"] = react_mod.summarise(react)
+            beyond["reactivation"] = react
+
+            beyond["product_stability"] = stab_mod.product_stabilisation(
+                prom.gene_symbol, goal=goal)
+
         # ---------------- 8e2. design a direct modality for this gene
         modality = {}
         if design_modality:
@@ -694,6 +754,19 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                             "no curated chemical-gene expression effects "
                             "returned for this gene"))
 
+        # Saturation check: when every surviving route comes from one or
+        # two receptor families, that is the signature of the attrition
+        # above rather than a finding about this gene.
+        from . import paralogs as _par
+        _fams = {}
+        for g in grades:
+            f = _par.family_of(g.tf_symbol or "")
+            if f:
+                _fams.setdefault(f.name, set()).add(g.tf_symbol)
+        attrition["receptor_families"] = {k: sorted(v)
+                                          for k, v in _fams.items()}
+        attrition["family_saturated"] = bool(grades) and len(_fams) <= 2             and len(_fams) > 0
+
         block_for_catalogue = {
             "direct_therapies": [t.to_dict() for t in direct_hits],
             "drug_grades": [g.to_dict() for g in grades],
@@ -718,6 +791,8 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             "n_sites": len(hits),
             "scan_quality": quality,
             "salt_forms_collapsed": collapsed if grade_drugs else {},
+            "attrition": attrition,
+            "beyond_transcription": beyond,
             "evidence_verdict": prov_mod.verdict(ledger, quality),
             "neighbours": neighbours,
             "n_tfs": len(by_tf),
@@ -985,6 +1060,41 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                          f"({_fmt_offset(t['best_site_tss_offset'])}) | "
                          f"{t['chip_peaks']} | {t['score']} |")
             L.append("")
+
+        at = res.get("attrition") or {}
+        if at.get("n_tfs_with_sites"):
+            L.append("#### Why the drug tables below look the way they do")
+            L.append("")
+            L.append(f"**{at['n_tfs_with_sites']} factor(s) had predicted "
+                     f"sites here. {at['n_with_drug']} of them have an "
+                     f"approved drug"
+                     + (f", and all {at['n_drugged_nuclear_receptor']} are "
+                        f"nuclear receptors.**" if at.get("all_drugged_are_nr")
+                        else f" ({at['n_drugged_nuclear_receptor']} of those "
+                             f"are nuclear receptors).**"))
+            L.append("")
+            L.append("Roughly 48 of the ~1,600 human transcription factors "
+                     "have a ligand-binding pocket, and the steroid, "
+                     "retinoid, thyroid and vitamin-D families are most of "
+                     "them. So the drug tables are not a ranking that "
+                     "hormone drugs won — they are what is left after every "
+                     "factor without a ligand has been dropped.")
+            L.append("")
+            lost = at.get("top25_without_drug") or []
+            if lost:
+                L.append(f"**{at.get('n_top25_without_drug')} of the top 25 "
+                         f"factors by score have no drug and appear in no "
+                         f"drug table:** " + ", ".join(lost[:12])
+                         + (" …" if len(lost) > 12 else "") + ".")
+                L.append("")
+                L.append("That is where the gene-specific signal is. A "
+                         "half-site like AGGTCA occurs every few kilobases "
+                         "by chance, so nuclear receptors surface for almost "
+                         "any promoter; these factors surfaced for *this* "
+                         "one. The routes that can reach them are the "
+                         "upstream-network, stabilisation and "
+                         "protein-level sections, not the ligand tables.")
+                L.append("")
 
         L.append("### Top-ranked transcription factors")
         L.append("")
@@ -1564,6 +1674,95 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                     if t.get("notes"):
                         L.append(f"- **{t['tf_symbol']} → {t['gene']}**: "
                                  f"{t['notes'][0]}")
+                L.append("")
+
+        bt = res.get("beyond_transcription") or {}
+        if bt:
+            L.append("### Routes a promoter analysis cannot see")
+            L.append("")
+            L.append("Everything above acts on transcription. These act "
+                     "after it, around it, or on a different gene entirely. "
+                     "For some genes that is where the whole problem is: if "
+                     "the transcript is destroyed, the allele is silenced, "
+                     "or the protein is degraded too fast, more "
+                     "transcription does not help and may not be possible.")
+            L.append("")
+
+            comp = bt.get("compensation") or {}
+            if comp.get("summary"):
+                L.append("#### Could a relative do the job instead?")
+                L.append("")
+                L.append(comp["summary"])
+                L.append("")
+                for n2 in (comp.get("notes") or [])[:3]:
+                    L.append(f"- {n2}")
+                L.append("")
+                k = comp.get("known_redundancy") or {}
+                if k and k.get("paralog") and k["paralog"] != "(none functional)":
+                    L.append(f"| | |")
+                    L.append(f"|---|---|")
+                    L.append(f"| paralog | **{k['paralog']}** |")
+                    L.append(f"| why it substitutes | {k['why_it_substitutes']} |")
+                    L.append(f"| why it is low | {k['silencing']} |")
+                    L.append(f"| precedent | {k['precedent']} |")
+                    L.append("")
+                    for c in (k.get("caveats") or [])[:2]:
+                        L.append(f"- {c}")
+                    L.append("")
+
+            react = bt.get("reactivation") or {}
+            if react.get("applicable"):
+                L.append("#### Is this a silenced allele rather than a low gene?")
+                L.append("")
+                for n2 in (react.get("notes") or [])[:2]:
+                    L.append(f"- {n2}")
+                L.append("")
+                L.append("| Mechanism | Silencing | Status | Where selectivity comes from |")
+                L.append("|---|---|---|---|")
+                for r2 in (react.get("routes") or [])[:4]:
+                    L.append(f"| {r2['mechanism']} | {r2['silencing_type']} | "
+                             f"{r2['status']} | {r2['specificity'][:70]} |")
+                L.append("")
+
+            ptx = bt.get("post_transcriptional") or {}
+            if ptx.get("routes"):
+                L.append("#### After transcription")
+                L.append("")
+                if ptx.get("summary"):
+                    L.append(ptx["summary"])
+                    L.append("")
+                L.append("| Mechanism | Raises | Status | Applies when |")
+                L.append("|---|---|---|---|")
+                for r2 in ptx["routes"][:6]:
+                    L.append(f"| {r2['mechanism']} | {r2['raises']} | "
+                             f"{r2['status']} | {r2['applies_when'][:58]} |")
+                L.append("")
+                lead = ptx["routes"][0]
+                L.append(f"**{lead['mechanism'].capitalize()}** — "
+                         f"{lead['what_it_does']}.")
+                L.append("")
+                for c in (lead.get("caveats") or [])[:2]:
+                    L.append(f"- {c}")
+                L.append("")
+
+            ps = bt.get("product_stability") or {}
+            if ps.get("routes"):
+                L.append("#### Raising the protein instead of the transcript")
+                L.append("")
+                for n2 in (ps.get("notes") or [])[:2]:
+                    L.append(f"- {n2}")
+                L.append("")
+                L.append("| Mechanism | Specificity | Status | Why |")
+                L.append("|---|---|---|---|")
+                for r2 in ps["routes"]:
+                    L.append(f"| {r2['mechanism']} | {r2['specificity']} | "
+                             f"{r2['status']} | {r2['specificity_note'][:62]} |")
+                L.append("")
+                L.append("*Three of these four raise most of the proteome, "
+                         "which makes them excellent diagnostics and poor "
+                         "therapies. The pharmacological chaperone is the "
+                         "exception — and it needs a chaperone to exist for "
+                         "your protein.*")
                 L.append("")
 
         imp = res.get("improvements") or {}

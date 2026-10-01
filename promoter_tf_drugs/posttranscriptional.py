@@ -187,12 +187,24 @@ def routes_for(goal: str = "up", *, has_ptc: bool | None = None) -> list:
         # Lowering a gene post-transcriptionally is the ASO/siRNA story, and
         # `modalities` already designs those properly.
         return []
-    out = list(ROUTES)
-    if has_ptc:
-        front = ("nonsense readthrough", "nonsense-mediated decay (NMD) "
-                 "inhibition")
-        out.sort(key=lambda r: (r.mechanism not in front, r.mechanism))
-    return out
+    # Default order: broadly applicable and approved first. Readthrough and
+    # NMD are allele-specific - they do nothing for a missense, frameshift
+    # or deletion allele - so leading with them would be wrong for most
+    # genes. With a known PTC they become the mechanisms that matter, and
+    # extra transcription becomes the thing that does not help.
+    ALLELE_SPECIFIC = ("nonsense readthrough",
+                       "nonsense-mediated decay (NMD) inhibition")
+    APPROVED_FIRST = {"approved": 0, "approved elsewhere": 1,
+                      "investigational": 2, "none": 3}
+
+    def key(r):
+        if has_ptc:
+            return (r.mechanism not in ALLELE_SPECIFIC,
+                    APPROVED_FIRST.get(r.status, 9))
+        return (r.mechanism in ALLELE_SPECIFIC,
+                APPROVED_FIRST.get(r.status, 9))
+
+    return sorted(ROUTES, key=key)
 
 
 def summarise(routes: list, *, has_ptc: bool | None = None) -> str:

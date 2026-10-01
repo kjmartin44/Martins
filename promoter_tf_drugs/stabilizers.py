@@ -299,3 +299,150 @@ def assess(tf: str, *, goal: str = "up", annotation: dict | None = None,
             "stabilisers raise activity with levels unchanged. Pick your assay "
             "accordingly — a western blot cannot see the second kind.")
     return result
+
+# ====================================================================== #
+# Stabilising YOUR GENE'S PRODUCT, not the transcription factor.         #
+#                                                                        #
+# Everything above asks how to make the cell transcribe more. This asks  #
+# a different question: given the protein the cell already makes, how do #
+# you make more of it survive? For a protein that is synthesised         #
+# normally and degraded too fast, transcription is not the problem and   #
+# raising it is not the fix.                                             #
+#                                                                        #
+# This is the mirror of the TF-stabilisation section above. That one     #
+# stabilises the factor so it drives your promoter harder; this one      #
+# leaves transcription alone and intervenes at the protein.              #
+# ====================================================================== #
+
+# Curated. Approved agents that raise protein levels by blocking
+# degradation. All of them are non-specific by construction - a proteasome
+# inhibitor stabilises most of the proteome - so the specificity has to come
+# from somewhere else or the route is not usable.
+PRODUCT_ROUTES = (
+    {
+        "mechanism": "proteasome inhibition",
+        "what_it_does": "blocks the 26S proteasome, so ubiquitinated "
+                        "proteins are not destroyed and levels rise",
+        "drugs": ["Bortezomib (FDA-approved, myeloma)",
+                  "Carfilzomib (FDA-approved)",
+                  "Ixazomib (FDA-approved, oral)"],
+        "status": "approved",
+        "raises": "abundance",
+        "specificity": 0.03,
+        "specificity_note": "essentially none: the proteasome degrades most "
+                            "of the proteome, so this raises thousands of "
+                            "proteins at once",
+        "caveats": [
+            "These are cytotoxic oncology drugs with neuropathy and "
+            "cardiotoxicity. Using one to raise a single protein is not a "
+            "plausible therapy outside malignancy.",
+            "Useful mainly as an EXPERIMENT: if your protein rises under "
+            "proteasome inhibition, degradation is the limiting step and "
+            "transcriptional routes are aimed at the wrong place.",
+        ],
+    },
+    {
+        "mechanism": "lysosomal / autophagy blockade",
+        "what_it_does": "prevents lysosomal degradation, raising proteins "
+                        "cleared by autophagy rather than the proteasome",
+        "drugs": ["Hydroxychloroquine (FDA-approved)",
+                  "Chloroquine (FDA-approved)"],
+        "status": "approved",
+        "raises": "abundance",
+        "specificity": 0.05,
+        "specificity_note": "non-specific, and the two degradation routes "
+                            "are distinct - which one clears your protein "
+                            "decides which drug could matter",
+        "caveats": [
+            "Retinal toxicity limits chronic dosing.",
+            "Equally a diagnostic: it tells you which degradation pathway "
+            "your protein uses.",
+        ],
+    },
+    {
+        "mechanism": "pharmacological chaperone",
+        "what_it_does": "binds a misfolding-prone protein and stabilises a "
+                        "foldable conformation, so it escapes quality "
+                        "control and traffics normally",
+        "drugs": ["Migalastat (FDA-approved, Fabry disease - stabilises "
+                  "mutant alpha-galactosidase A)",
+                  "Tafamidis (FDA-approved, ATTR - stabilises the "
+                  "transthyretin tetramer)",
+                  "Acoramidis (FDA-approved, ATTR)",
+                  "Lumacaftor, tezacaftor, elexacaftor (FDA-approved, CF - "
+                  "correctors that stabilise mutant CFTR folding)"],
+        "status": "approved",
+        "raises": "abundance",
+        "specificity": 0.85,
+        "specificity_note": "genuinely high: a chaperone binds one protein, "
+                            "and this is the only route in this section with "
+                            "real selectivity",
+        "caveats": [
+            "Needs a specific misfolding mutation with residual function. "
+            "Migalastat works only for amenable GLA variants - roughly a "
+            "third of patients - and does nothing for a null allele.",
+            "No chaperone exists unless someone has developed one for your "
+            "protein specifically; this is a discovery programme, not a "
+            "route you can take today.",
+        ],
+    },
+    {
+        "mechanism": "E3 ligase inhibition",
+        "what_it_does": "blocks the specific ligase that ubiquitinates your "
+                        "protein, so only your protein accumulates",
+        "drugs": ["No approved inhibitor of a named E3 for this purpose.",
+                  "MDM2 inhibitors (idasanutlin, navtemadlin) are the "
+                  "closest clinical example, raising p53."],
+        "status": "clinical",
+        "raises": "abundance",
+        "specificity": 0.7,
+        "specificity_note": "potentially high - an E3 has a limited "
+                            "substrate set - but it requires knowing which "
+                            "ligase degrades your protein",
+        "caveats": [
+            "The limiting knowledge is the ligase-substrate pair. For most "
+            "proteins nobody has identified it.",
+            "This is the mirror image of a PROTAC: the same biology used to "
+            "raise rather than destroy.",
+        ],
+    },
+)
+
+
+def product_stabilisation(gene: str, *, goal: str = "up") -> dict:
+    """Routes that raise the protein your gene encodes, not the factor.
+
+    Only meaningful for `up`: lowering a protein by accelerating its
+    degradation is the PROTAC/molecular-glue story, which `stabilizers`
+    already covers from the other direction.
+    """
+    if goal != "up":
+        return {}
+    return {
+        "gene": (gene or "").strip().upper(),
+        "routes": [dict(r) for r in PRODUCT_ROUTES],
+        "notes": [
+            "These leave transcription alone. If your protein is made "
+            "normally and degraded too fast, every transcriptional route in "
+            "this report is aimed at the wrong step - and nothing in this "
+            "package can tell the two apart.",
+            "The experiment that distinguishes them: compare transcript and "
+            "protein. Normal mRNA with low protein points here; low mRNA "
+            "points at everything above.",
+            "Specificity is the problem for three of these four. A "
+            "proteasome inhibitor raises most of the proteome, which makes "
+            "it an excellent diagnostic and a poor therapy. The pharmacological "
+            "chaperone is the exception, and it needs a chaperone to exist "
+            "for your protein.",
+        ],
+    }
+
+
+def summarise_product(result: dict) -> str:
+    if not result:
+        return ""
+    approved = sum(1 for r in result["routes"] if r["status"] == "approved")
+    return (f"{approved} of {len(result['routes'])} protein-level mechanisms "
+            f"have an FDA-approved agent, but only the pharmacological "
+            f"chaperone route is selective enough to be a therapy rather "
+            f"than an experiment.")

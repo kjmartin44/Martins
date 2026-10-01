@@ -5136,3 +5136,186 @@ def test_a_local_gtf_is_preferred_over_the_network(tmp_path, monkeypatch):
         assert r["source"] and "mini.gtf" in r["source"]
     finally:
         nbr2._GTF_GENES.clear()
+
+
+# ===================================================================== #
+# Routes a promoter analysis cannot see, and why the drug tables are    #
+# always nuclear receptors.                                             #
+# ===================================================================== #
+def test_attrition_explains_the_nuclear_receptor_tables():
+    """The observation this exists for: hormone and retinoid drugs rank high
+    for every gene and direction. They are not winning a ranking - they are
+    what survives after every factor without a ligand is dropped. ~48 of
+    ~1,600 human TFs have a ligand pocket."""
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    at = res["results"][0]["attrition"]
+    assert at["n_tfs_with_sites"] > at["n_with_drug"]
+    assert at["n_drugged_nuclear_receptor"] >= 1
+
+    md = pipeline.markdown_report(res)
+    assert "Why the drug tables below look the way they do" in md
+    assert "what is left after every factor without a ligand" in md
+
+
+def test_high_scoring_undruggable_factors_are_named():
+    """The gene-specific signal is in the factors that score well and have
+    no ligand - exactly what gets discarded. In a real CCR5 run that was
+    PDX1, RBPJ and NFATC1, and they appeared in no drug table."""
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    at = res["results"][0]["attrition"]
+    assert at["n_top25_without_drug"] >= 1
+    assert at["top25_without_drug"]
+
+    md = pipeline.markdown_report(res)
+    assert "appear in no drug table" in md
+    assert at["top25_without_drug"][0] in md
+
+
+def test_undruggable_top_factors_get_priority_in_the_upstream_search():
+    """They are what that search exists for, so they must not depend on
+    where they happen to fall in the ranking."""
+    import inspect
+    src = inspect.getsource(pipeline.run)
+    assert "_priority" in src
+    assert "top25_without_drug" in src
+
+
+# ------------------------------------------- post-transcriptional routes
+def test_ptc_moves_readthrough_to_the_front():
+    """For a nonsense allele, readthrough and NMD address the problem and
+    extra transcription does not - doubling transcription doubles the amount
+    of message that gets destroyed."""
+    from promoter_tf_drugs import posttranscriptional as ptx
+    with_ptc = ptx.routes_for("up", has_ptc=True)
+    assert with_ptc[0].mechanism == "nonsense readthrough"
+    assert "nonsense-mediated" in with_ptc[1].mechanism
+
+    plain = ptx.routes_for("up")
+    assert plain[0].mechanism != "nonsense readthrough"
+    assert len(plain) == len(with_ptc)        # reorders, never filters
+
+
+def test_ataluren_is_not_recorded_as_fda_approved():
+    """It has EMA conditional approval and the FDA did not approve it. The
+    user's criterion is FDA, so overstating this would be the one thing
+    that makes the list useless."""
+    from promoter_tf_drugs import posttranscriptional as ptx
+    rt = [r for r in ptx.ROUTES if r.mechanism == "nonsense readthrough"][0]
+    joined = " ".join(rt.drugs)
+    assert "Ataluren" in joined
+    assert "FDA did NOT approve" in joined or "did NOT approve" in joined
+    assert rt.status == "approved elsewhere"
+
+
+def test_post_transcriptional_states_what_is_not_approved():
+    from promoter_tf_drugs import posttranscriptional as ptx
+    nmd = [r for r in ptx.ROUTES if "nonsense-mediated" in r.mechanism][0]
+    assert nmd.status == "investigational"
+    assert "No approved NMD inhibitor" in " ".join(nmd.drugs)
+
+
+# --------------------------------------------------- paralog compensation
+def test_compensation_finds_the_documented_substitutes():
+    """You may not need to raise your gene. SMN2 for SMN1 and HBG for HBB
+    are how the field's clearest successes actually worked."""
+    from promoter_tf_drugs import compensation as comp
+    for gene, paralog in (("SMN1", "SMN2"), ("HBB", "HBG1/HBG2"),
+                          ("DMD", "UTRN")):
+        r = comp.assess(gene, goal="up")
+        assert r["recommended"] is True, gene
+        assert r["known_redundancy"]["paralog"] == paralog
+
+
+def test_compensation_distinguishes_no_paralog_from_unknown():
+    """Absence from a short curated table is not evidence that no paralog
+    substitutes."""
+    from promoter_tf_drugs import compensation as comp
+    none = comp.assess("SERPINA1", goal="up")
+    assert none["recommended"] is False          # genuinely none
+
+    unknown = comp.assess("ZZZ9FAKE", goal="up")
+    assert unknown["recommended"] is None        # not checked, not absent
+    assert "nobody has written one down" in " ".join(unknown["notes"])
+
+
+def test_compensation_is_not_the_receptor_family_question():
+    """paralogs.py asks how many relatives share a BINDING POCKET, as a
+    cross-reactivity risk. This asks whether a relative shares the gene's
+    FUNCTION, as an opportunity. Same word, inverted use."""
+    from promoter_tf_drugs import compensation as comp, paralogs as par
+    assert comp.assess("HBB", goal="up")["recommended"] is True
+    assert par.paralog_specificity("HBB")["assessed"] is False
+
+
+# ------------------------------------------------ silenced-allele routes
+def test_imprinted_gene_is_flagged_as_a_different_problem():
+    """A silenced allele needs a brake released, not more transcription -
+    and pushing the active copy harder is the wrong move."""
+    from promoter_tf_drugs import reactivation as react
+    r = react.assess("UBE3A", goal="up")
+    assert r["applicable"] is True
+    assert "imprinted locus" in " ".join(r["notes"])
+
+
+def test_unlisted_gene_says_silencing_was_never_measured():
+    from promoter_tf_drugs import reactivation as react
+    r = react.assess("ZZZ9FAKE", goal="up")
+    assert r["applicable"] is False
+    joined = " ".join(r["notes"])
+    assert "nothing in this package measures methylation" in joined
+
+
+def test_reactivation_states_where_selectivity_comes_from():
+    """Every mechanism here is non-specific by default; the selectivity has
+    to come from somewhere else or the route is unusable."""
+    from promoter_tf_drugs import reactivation as react
+    for r in react.ROUTES:
+        assert r.specificity and len(r.specificity) > 20
+    demeth = [r for r in react.ROUTES if "methylation" in r.mechanism][0]
+    assert "none at the locus level" in demeth.specificity
+
+
+# ------------------------------------------- target-protein stabilisation
+def test_product_stabilisation_is_about_the_gene_product_not_the_factor():
+    from promoter_tf_drugs import stabilizers as st
+    r = st.product_stabilisation("MYGENE", goal="up")
+    mechs = {x["mechanism"] for x in r["routes"]}
+    assert "proteasome inhibition" in mechs
+    assert "pharmacological chaperone" in mechs
+    assert any("transcription alone" in n for n in r["notes"])
+
+
+def test_only_the_chaperone_route_is_selective():
+    """Three of the four raise most of the proteome, which makes them good
+    diagnostics and poor therapies."""
+    from promoter_tf_drugs import stabilizers as st
+    routes = {x["mechanism"]: x for x in
+              st.product_stabilisation("G", goal="up")["routes"]}
+    assert routes["proteasome inhibition"]["specificity"] < 0.1
+    assert routes["lysosomal / autophagy blockade"]["specificity"] < 0.1
+    assert routes["pharmacological chaperone"]["specificity"] > 0.5
+
+
+def test_beyond_transcription_only_runs_for_up():
+    """Lowering a gene post-transcriptionally is the ASO/siRNA story, which
+    modalities already designs properly."""
+    from promoter_tf_drugs import (posttranscriptional as ptx,
+                                   compensation as comp,
+                                   reactivation as react,
+                                   stabilizers as st)
+    assert ptx.routes_for("down") == []
+    assert comp.assess("HBB", goal="down") == {}
+    assert react.assess("UBE3A", goal="down") == {}
+    assert st.product_stabilisation("G", goal="down") == {}
+
+
+def test_report_renders_the_beyond_transcription_section():
+    res = pipeline.run("HBB", demo=True, offline=True, has_ptc=True)
+    md = pipeline.markdown_report(res)
+    assert "Routes a promoter analysis cannot see" in md
+    assert "Could a relative do the job instead?" in md
+    assert "HBG1/HBG2" in md
+    assert "Raising the protein instead of the transcript" in md
+    # the PTC ordering reached the report
+    i = md.index("After transcription")
+    assert "readthrough" in md[i:i + 1200].lower()
