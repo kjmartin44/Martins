@@ -2640,17 +2640,61 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                          f"move it the way you want, {rc['opposite']} move it "
                          f"the opposite way, {rc['unclear']} unclear.")
                 L.append("")
+                L.append("**Expect the 'predicted by this run?' column to say "
+                         "no, and do not read that as a failed match.** CTD "
+                         "indexes MeSH, which is a vocabulary for the "
+                         "toxicology and pharmacology literature rather than "
+                         "a drug list, so what comes back is three different "
+                         "kinds of thing:")
+                L.append("")
+                L.append(f"- **chemical** ({rc.get('n_chemical', 0)}) "
+                         f"{chr(8212)} a compound. The only kind that can "
+                         f"match a candidate.")
+                L.append(f"- **exposure** ({rc.get('n_exposure', 0)}) "
+                         f"{chr(8212)} formaldehyde, asbestos, bisphenol, "
+                         f"tobacco smoke. Real measured effects on your "
+                         f"gene, and not things anyone can be given.")
+                L.append(f"- **category** ({rc.get('n_category', 0)}) "
+                         f"{chr(8212)} MeSH headings such as "
+                         f"\"Anti-HIV Agents\" or \"Plant Extracts\". Not "
+                         f"compounds at all, so the column is blank rather "
+                         f"than no.")
+                L.append("")
+                matched = rc.get("matched_any_direction", 0)
+                L.append(f"Across all three directions, **{matched} of "
+                         f"{rc['total']} matched a candidate from this run**. "
+                         + ("A low number here is the normal result: this "
+                            "report's drug tables are approved pharmacology, "
+                            "and most of CTD is not. It means the two "
+                            "sources are looking at different parts of "
+                            "chemical space, not that either is wrong."
+                            if matched <= 5 else
+                            "That overlap is the part of CTD this analysis "
+                            "independently arrived at."))
+                L.append("")
 
                 want = rl.get("wanted_direction") or []
                 if want:
                     L.append(f"**Reported to move {q['gene']} "
                              f"{'UP' if goal == 'up' else 'DOWN'}** — leads:")
                     L.append("")
-                    L.append("| Chemical | Predicted by this run? | CTD actions |")
-                    L.append("|---|---|---|")
-                    for e in want[:top_n]:
-                        L.append(f"| {e['chemical']} | "
-                                 f"{'yes' if e['in_candidates'] else '**no**'} | "
+                    L.append("| Chemical | Kind | Predicted by this run? | "
+                             "CTD actions |")
+                    L.append("|---|---|---|---|")
+                    # Compounds first: they are the only rows where the
+                    # match column carries information.
+                    _order = {"chemical": 0, "exposure": 1, "category": 2}
+                    for e in sorted(want,
+                                    key=lambda x: _order.get(x.get("kind"), 3)
+                                    )[:top_n]:
+                        kind = e.get("kind", "chemical")
+                        if kind == "category":
+                            mark = f"{chr(8212)} (not a compound)"
+                        elif e["in_candidates"]:
+                            mark = "**yes**"
+                        else:
+                            mark = "no"
+                        L.append(f"| {e['chemical']} | {kind} | {mark} | "
                                  f"{e['actions']} |")
                     if len(want) > top_n:
                         L.append(f"| … {len(want) - top_n} more | | |")
@@ -2658,13 +2702,20 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
 
                 only = rl.get("reported_but_not_predicted") or []
                 if only:
-                    L.append(f"**{len(only)} of these were NOT predicted by this "
-                             f"run at all.** They have a measured effect on your "
-                             "gene and no mechanism from this analysis — which "
-                             "makes them worth reading closely, since an "
-                             "empirical hit the model missed is either a route "
-                             "outside its scope or a clue that the scan is "
-                             "wrong.")
+                    L.append(f"**{len(only)} compounds have a measured "
+                             f"effect on this gene and no mechanism from "
+                             f"this analysis.** Exposures and MeSH headings "
+                             f"are excluded from that count, because the "
+                             f"scan was never going to propose formaldehyde "
+                             f"and listing it as a miss says nothing.")
+                    L.append("")
+                    L.append("Most of what remains is research chemistry "
+                             "rather than medicine: tool compounds, probes "
+                             "and natural-product fractions that are "
+                             "measured because somebody had them on a "
+                             "shelf. Read them as evidence the gene IS "
+                             "movable, and check the few that are approved "
+                             "drugs individually.")
                     L.append("")
                     L.append(", ".join(e["chemical"] for e in only[:25])
                              + (" …" if len(only) > 25 else ""))

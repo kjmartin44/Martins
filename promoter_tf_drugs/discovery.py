@@ -188,6 +188,62 @@ def link_direction(actions) -> str:
     return "unclear"
 
 
+# ----------------------------------------------------- what KIND of entry
+# CTD indexes MeSH, which is a vocabulary for the toxicology and
+# pharmacology literature rather than a drug list. A gene's chemical
+# interactions therefore arrive as a mixture of three things that a single
+# "predicted by this run?" column flattens into a wall of "no":
+#
+#   a drug        something somebody could be given
+#   an exposure   formaldehyde, asbestos, bisphenol S, tobacco smoke
+#   a category    "Anti-HIV Agents", "Plant Extracts", "Dietary Fats"
+#
+# Only the first can ever match a candidate, so reporting all three against
+# one column makes a correct answer look like a broken join. On a real CCR5
+# run, 33 of the 39 chemicals reported to lower the gene were exposures,
+# research tools or categories.
+
+# MeSH category and mixture headings. These are not compounds at all, so
+# they can never match and are never leads.
+_CATEGORY_WORDS = (
+    "agents", "extracts", "compounds", "derivatives", "preparations",
+    "substances", "pollution", "pollutants", "smoke", "dust", "fats",
+    "oils", "tannins", "alkaloids", "flavonoids", "polyphenols",
+    "mixtures", "particulate matter", "drugs, chinese herbal",
+    "biological factors", "air pollutants", "hazardous substances",
+)
+
+# Hallmarks of an environmental or occupational exposure rather than a
+# therapeutic. Deliberately conservative: a false "exposure" label would
+# hide a real lead, so anything uncertain stays a candidate chemical.
+_EXPOSURE_WORDS = (
+    "asbestos", "benzo(a)pyrene", "benzopyrene", "formaldehyde", "arsenic",
+    "cadmium", "chloroprene", "butadiene", "bisphenol", "phthalate",
+    "dioxin", "dibenzofuran", "biphenyl", "atrazine", "diuron",
+    "endosulfan", "pentachlorophenol", "methanesulfonate", "azoxymethane",
+    "tetrabromodiphenyl", "dinitrotoluene", "naphthylamine",
+    "sulfur mustard", "chloroethyl", "aflatoxin", "benzene", "crocidolite",
+    "perchlorate", "dodecyl sulfate", "tobacco",
+)
+
+
+def entry_kind(name: str) -> str:
+    """"category" | "exposure" | "chemical" for one CTD chemical name.
+
+    "chemical" is the permissive default: a name this cannot place stays
+    eligible to match a candidate, because a wrong "exposure" label would
+    quietly hide a real lead.
+    """
+    n = (name or "").strip().lower()
+    if not n:
+        return "chemical"
+    if any(w in n for w in _CATEGORY_WORDS):
+        return "category"
+    if any(w in n for w in _EXPOSURE_WORDS):
+        return "exposure"
+    return "chemical"
+
+
 def summarise_links(links: dict, goal: str, candidate_names: set) -> dict:
     """Turn the raw CTD table into something readable.
 
@@ -197,18 +253,30 @@ def summarise_links(links: dict, goal: str, candidate_names: set) -> dict:
     pipeline missed entirely — often the more interesting group, because they
     are empirical and we have no mechanism for them.
     """
+    from .congeners import salt_free_name
+
     wanted, opposed, unclear, ctd_only = [], [], [], []
     known = {n.lower() for n in candidate_names}
+    # Salt-free too, the way every other name comparison in this package
+    # works. CTD lists the parent and a drug table often lists a salt.
+    known_stems = {salt_free_name(n) for n in known}
 
     for chem, actions in sorted(links.items()):
         d = link_direction(actions)
+        stem = salt_free_name(chem)
+        kind = entry_kind(chem)
+        matched = (
+            chem in known or stem in known_stems
+            or any((len(chem) > 5 and chem in k) or (len(k) > 5 and k in chem)
+                   for k in known))
         entry = {
             "chemical": chem.title(),
             "direction": d,
+            "kind": kind,
             "actions": "; ".join(sorted(set(actions)))[:110],
-            "in_candidates": chem in known or any(
-                (len(chem) > 5 and chem in k) or (len(k) > 5 and k in chem)
-                for k in known),
+            # A category heading is not a compound, so "did this run predict
+            # it" has no answer rather than the answer "no".
+            "in_candidates": False if kind == "category" else matched,
         }
         if d == goal:
             wanted.append(entry)
@@ -216,7 +284,11 @@ def summarise_links(links: dict, goal: str, candidate_names: set) -> dict:
             opposed.append(entry)
         else:
             unclear.append(entry)
-        if not entry["in_candidates"] and d in (goal, "both"):
+        # Only an actual compound counts as something this run missed. An
+        # exposure or a MeSH heading was never a candidate, and listing
+        # them as misses implied the scan had overlooked formaldehyde.
+        if (not entry["in_candidates"] and d in (goal, "both")
+                and kind == "chemical"):
             ctd_only.append(entry)
 
     return {
@@ -230,6 +302,16 @@ def summarise_links(links: dict, goal: str, candidate_names: set) -> dict:
             "opposite": len(opposed),
             "unclear": len(unclear),
             "not_predicted_by_us": len(ctd_only),
+            # Across every direction, so a bucket with no match does not
+            # read as "the matching is broken" when it matched elsewhere.
+            "matched_any_direction": sum(
+                1 for e in wanted + opposed + unclear if e["in_candidates"]),
+            "n_category": sum(1 for e in wanted + opposed + unclear
+                              if e["kind"] == "category"),
+            "n_exposure": sum(1 for e in wanted + opposed + unclear
+                              if e["kind"] == "exposure"),
+            "n_chemical": sum(1 for e in wanted + opposed + unclear
+                              if e["kind"] == "chemical"),
         },
     }
 

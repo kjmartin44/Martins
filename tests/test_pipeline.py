@@ -2856,11 +2856,19 @@ def test_compounds_reported_but_not_predicted_are_surfaced():
     this analysis. Reporting only a count buries them."""
     from promoter_tf_drugs.discovery import summarise_links
     links = {"dexamethasone": ["increases^expression"],
+             "sirolimus": ["increases^expression"],
+             # An exposure, not a candidate anyone could have proposed. It
+             # used to be listed here as something the scan missed, which
+             # indicted the scan for not suggesting cadmium.
              "cadmium chloride": ["increases^expression"]}
     s = summarise_links(links, "up", {"Dexamethasone"})
     names = [e["chemical"] for e in s["reported_but_not_predicted"]]
-    assert names == ["Cadmium Chloride"]
+    assert names == ["Sirolimus"]
     assert s["counts"]["not_predicted_by_us"] == 1
+
+    cad = next(e for e in s["wanted_direction"]
+               if e["chemical"] == "Cadmium Chloride")
+    assert cad["kind"] == "exposure"
 
     matched = next(e for e in s["wanted_direction"]
                    if e["chemical"] == "Dexamethasone")
@@ -2906,7 +2914,7 @@ def test_reported_links_reach_the_report():
     assert "Compounds already reported to change this gene" in md
     assert "Dexamethasone" in md and "Cadmium Chloride" in md
     assert "WRONG way" in md
-    assert "NOT predicted by this run" in md
+    assert "measured effect on this gene and no mechanism" in md
 
 
 # --------------------------- outcome table must agree with discovery
@@ -7018,3 +7026,111 @@ def test_dispensable_factor_shows_no_most_dependent_lineage(tmp_path):
     body = [r for r in rows if r.startswith("| VDR |")]
     assert body
     assert body[0].rstrip().endswith("— |"), body[0]
+
+
+# ===================================================================== #
+# CTD: why "predicted by this run?" is almost always no.                #
+# ===================================================================== #
+def test_ctd_entry_kinds_separate_drugs_from_toxicants_and_headings():
+    """CTD indexes MeSH, not a drug list. Reporting an exposure and a
+    category against a "did this run predict it" column makes a correct
+    answer look like a broken join - which is how it read."""
+    from promoter_tf_drugs import discovery as disc
+    assert disc.entry_kind("Celecoxib") == "chemical"
+    assert disc.entry_kind("formaldehyde") == "exposure"
+    assert disc.entry_kind("Asbestos, Crocidolite") == "exposure"
+    assert disc.entry_kind("Bisphenol S") == "exposure"
+    assert disc.entry_kind("Anti-HIV Agents") == "category"
+    assert disc.entry_kind("Plant Extracts") == "category"
+    assert disc.entry_kind("Dietary Fats") == "category"
+
+
+def test_unplaceable_names_stay_eligible_to_match():
+    """The default has to be permissive: a wrong "exposure" label would
+    quietly hide a real lead."""
+    from promoter_tf_drugs import discovery as disc
+    assert disc.entry_kind("Sch 23390") == "chemical"
+    assert disc.entry_kind("some-new-compound-42") == "chemical"
+    assert disc.entry_kind("") == "chemical"
+
+
+def test_a_matching_candidate_is_reported_as_predicted():
+    """The thing the column exists for. If this ever reads no, the match
+    really is broken."""
+    from promoter_tf_drugs import discovery as disc
+    links = {"dexamethasone": ["decreases^expression"],
+             "formaldehyde": ["decreases^expression"]}
+    s = disc.summarise_links(links, "down", {"Dexamethasone", "Calcitriol"})
+    by = {e["chemical"]: e for e in s["wanted_direction"]}
+    assert by["Dexamethasone"]["in_candidates"] is True
+    assert by["Formaldehyde"]["in_candidates"] is False
+
+
+def test_salt_forms_match_the_ctd_parent_name():
+    """CTD lists the parent and a drug table often lists a salt. Every
+    other name comparison in this package is salt-free; this one was not."""
+    from promoter_tf_drugs import discovery as disc
+    s = disc.summarise_links({"levothyroxine": ["increases^expression"]},
+                             "up", {"Levothyroxine Sodium"})
+    assert s["wanted_direction"][0]["in_candidates"] is True
+
+
+def test_a_category_heading_is_blank_not_no():
+    """"Anti-HIV Agents" is not a compound, so "did this run predict it"
+    has no answer rather than the answer no."""
+    from promoter_tf_drugs import discovery as disc
+    s = disc.summarise_links({"anti-hiv agents": ["decreases^expression"]},
+                             "down", {"Maraviroc"})
+    e = s["wanted_direction"][0]
+    assert e["kind"] == "category"
+    assert e["in_candidates"] is False
+    assert s["counts"]["n_category"] == 1
+
+
+def test_exposures_are_not_counted_as_things_the_scan_missed():
+    """The old framing said an unmatched row was "a clue that the scan is
+    wrong". With a list led by asbestos and formaldehyde, that indicted
+    the scan for not proposing formaldehyde."""
+    from promoter_tf_drugs import discovery as disc
+    links = {"formaldehyde": ["decreases^expression"],
+             "asbestos, crocidolite": ["decreases^expression"],
+             "plant extracts": ["decreases^expression"],
+             "someneweddrug": ["decreases^expression"]}
+    s = disc.summarise_links(links, "down", set())
+    missed = {e["chemical"] for e in s["reported_but_not_predicted"]}
+    assert missed == {"Someneweddrug"}
+
+
+def test_cross_direction_match_count_is_reported():
+    """A bucket with no match reads as a broken join when the matching
+    worked elsewhere. On the real CCR5 run the wanted bucket matched 0 of
+    39 while 3 matched overall."""
+    from promoter_tf_drugs import discovery as disc
+    links = {"clofibrate": ["increases^expression"],
+             "celecoxib": ["decreases^expression"]}
+    s = disc.summarise_links(links, "down", {"Clofibrate"})
+    assert s["counts"]["matched_any_direction"] == 1
+    assert not any(e["in_candidates"] for e in s["wanted_direction"])
+
+
+def test_report_says_a_no_is_expected():
+    """The user read a column of 39 nos as a bug. It was correct, and the
+    report never said so."""
+    from promoter_tf_drugs import discovery as disc
+    links = {f"toxicant{i}": ["decreases^expression"] for i in range(6)}
+    links["formaldehyde"] = ["decreases^expression"]
+    links["plant extracts"] = ["decreases^expression"]
+    summary = disc.summarise_links(links, "down", set())
+
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    res["results"][0].setdefault("improvements", {})["reported_links"] = summary
+    md = pipeline.markdown_report(res)
+
+    assert "do not read that as a failed match" in md
+    assert "MeSH" in md
+    assert "different parts of chemical space" in md
+    # the kind column reached the table
+    header = [ln for ln in md.splitlines() if ln.startswith("| Chemical |")]
+    assert header and "Kind" in header[0]
+    i = md.splitlines().index(header[0])
+    assert md.splitlines()[i + 1].count("|") == header[0].count("|")
