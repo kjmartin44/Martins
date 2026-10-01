@@ -56,11 +56,12 @@ an antagonist.
 from __future__ import annotations
 
 import logging
+import math
 import re
 import shutil
 import subprocess
 import tempfile
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, field, asdict, field
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -442,3 +443,272 @@ def pose_is_in_ordered_region(contact_residues, ordered: set,
     if not contacts:
         return False
     return len(contacts & ordered) / len(contacts) >= min_fraction
+
+
+# ===================================================================== #
+# Docking as a way to FIND compounds, not just to explain one.          #
+# ===================================================================== #
+# predict_direction above takes a drug you already have and asks which
+# conformation it prefers. This asks the other question: dock the whole
+# approved library into the pocket and see what comes out. It needs no
+# prior ligands for the receptor, so unlike the ligand-based screen in
+# screening.py it can propose a scaffold nothing was trained on.
+#
+# That independence is the reason to run it. A compound a ligand model and
+# a dock both pick is supported by two arguments sharing no input.
+#
+# Two things it will not do, both worth saying plainly:
+#
+# It will not reach the factors you cannot currently drug. Docking needs a
+# pocket and a structure, and most transcription factors have neither -
+# they work through DNA-binding surfaces and intrinsically disordered
+# activation domains with nothing concave to dock into. The receptors that
+# dock well are the nuclear-receptor LBDs already dominating the report.
+# `assess_model` exists to refuse the rest rather than produce numbers for
+# them.
+#
+# And a docking score is not an affinity. These functions enrich for
+# binders and order them badly. The output is a shortlist to assay, not a
+# ranking to trust.
+
+# The gate. Docking is the method here most able to produce confident
+# nonsense, so before any score on an untested drug is reported, the same
+# pocket must rank the receptor's KNOWN ligands above decoys.
+MIN_DOCKING_AUC = 0.70
+# Fold enrichment in the top 1%, which is what virtual screening is
+# actually judged on and a harsher test than AUC: a method can hold a
+# respectable AUC while putting nothing useful at the top, and the top is
+# the only part anyone looks at. 1.0 is random.
+MIN_EF1 = 2.0
+MIN_VALIDATION_ACTIVES = 5
+
+
+def roc_auc(scores: list, labels: list, *, lower_is_better: bool = True
+            ) -> float | None:
+    """AUC via Mann-Whitney U, ties at half. None entries are failed docks
+    and are dropped rather than scored worst, which would flatter the
+    method by burying every compound it could not handle."""
+    pairs = [(s, y) for s, y in zip(scores, labels) if s is not None]
+    if not pairs:
+        return None
+    if lower_is_better:
+        pairs = [(-s, y) for s, y in pairs]
+    pos = [s for s, y in pairs if y]
+    neg = [s for s, y in pairs if not y]
+    if not pos or not neg:
+        return None
+    wins = sum((1.0 if p > n else 0.5 if p == n else 0.0)
+               for p in pos for n in neg)
+    return wins / float(len(pos) * len(neg))
+
+
+def enrichment_factor(scores: list, labels: list, *, fraction: float = 0.01,
+                      lower_is_better: bool = True) -> float | None:
+    """Fold enrichment of actives in the top `fraction` of the ranking."""
+    pairs = [(s, y) for s, y in zip(scores, labels) if s is not None]
+    if not pairs:
+        return None
+    n = len(pairs)
+    n_act = sum(1 for _, y in pairs if y)
+    if not n_act or n_act == n:
+        return None
+    k = max(1, int(math.ceil(n * fraction)))
+    pairs.sort(key=lambda t: t[0] if lower_is_better else -t[0])
+    hits = sum(1 for _, y in pairs[:k] if y)
+    return round((hits / float(k)) / (n_act / float(n)), 2)
+
+
+def _dock_smiles(smiles_list: list, receptor: Path, autobox: Path | None,
+                 *, exhaustiveness: int, seed: int, score_fn=None) -> list:
+    """Score each SMILES, None where docking or embedding failed.
+
+    `score_fn` exists so the gate and the ranking can be exercised without
+    a docking binary; it takes a SMILES and returns a score.
+    """
+    out: list = []
+    for smi in smiles_list:
+        if score_fn is not None:
+            try:
+                out.append(score_fn(smi))
+            except Exception:                               # noqa: BLE001
+                out.append(None)
+            continue
+        with tempfile.TemporaryDirectory() as tmp:
+            sdf = Path(tmp) / "lig.sdf"
+            try:
+                smiles_to_sdf(smi, sdf, seed=seed)
+            except Exception as exc:                        # noqa: BLE001
+                log.debug("embedding failed for %s: %s", smi[:40], exc)
+                out.append(None)
+                continue
+            try:
+                out.append(dock_one(receptor, sdf, autobox_ligand=autobox,
+                                    exhaustiveness=exhaustiveness, seed=seed))
+            except Exception as exc:                        # noqa: BLE001
+                log.debug("docking failed: %s", str(exc)[:80])
+                out.append(None)
+    return out
+
+
+def validate_pocket(receptor: Path, actives: list, decoys: list, *,
+                    autobox: Path | None = None, exhaustiveness: int = 8,
+                    seed: int = 0, score_fn=None) -> dict:
+    """Does docking into THIS pocket recover ligands known to bind it?
+
+    `actives` and `decoys` are `[{"smiles": ...}]`. Returns the measured
+    AUC and top-1% enrichment and whether they clear the bar. Nothing this
+    module says about an untested compound should be reported when this
+    says no.
+    """
+    if len(actives) < MIN_VALIDATION_ACTIVES:
+        return {"usable": False, "auc": None, "ef1": None,
+                "reason": (f"only {len(actives)} known ligand(s) for this "
+                           f"pocket, below the {MIN_VALIDATION_ACTIVES} "
+                           f"needed to test whether docking works here. An "
+                           f"unvalidated dock is exactly the thing that "
+                           f"produces confident nonsense")}
+    if not decoys:
+        return {"usable": False, "auc": None, "ef1": None,
+                "reason": "no decoys to validate against"}
+
+    smiles = [a["smiles"] for a in actives] + [d["smiles"] for d in decoys]
+    labels = [1] * len(actives) + [0] * len(decoys)
+    scores = _dock_smiles(smiles, receptor, autobox,
+                          exhaustiveness=exhaustiveness, seed=seed,
+                          score_fn=score_fn)
+
+    auc = roc_auc(scores, labels)
+    ef1 = enrichment_factor(scores, labels, fraction=0.01)
+    n_failed = sum(1 for s in scores if s is None)
+    if auc is None:
+        return {"usable": False, "auc": None, "ef1": None,
+                "n_failed": n_failed,
+                "reason": "every dock failed, so nothing could be measured"}
+
+    usable = auc >= MIN_DOCKING_AUC and (ef1 is None or ef1 >= MIN_EF1)
+    out = {"usable": usable, "auc": round(auc, 3), "ef1": ef1,
+           "n_actives": len(actives), "n_decoys": len(decoys),
+           "n_failed": n_failed}
+    if not usable:
+        out["reason"] = (
+            f"docking into this pocket ranks its own known ligands at AUC "
+            f"{auc:.2f}"
+            + (f" and {ef1}-fold enrichment in the top 1%" if ef1 else "")
+            + f", against a bar of {MIN_DOCKING_AUC} AUC and {MIN_EF1}-fold. "
+              f"It cannot separate this receptor's binders from random "
+              f"approved drugs, so its scores on untested compounds carry "
+              f"no information and are not reported.")
+    return out
+
+
+@dataclass
+class DockingScreen:
+    """A docking campaign against one pocket, with its validation."""
+    target: str
+    n_docked: int = 0
+    n_failed: int = 0
+    auc: float | None = None
+    ef1: float | None = None
+    usable: bool = False
+    hits: list = field(default_factory=list)
+    error: str | None = None
+    caveats: list = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return dict(self.__dict__)
+
+
+def screen_by_docking(receptor: Path, library: list, *, target: str = "?",
+                      actives: list | None = None, decoys: list | None = None,
+                      autobox: Path | None = None, top_n: int = 25,
+                      exhaustiveness: int = 8, seed: int = 0,
+                      score_fn=None) -> DockingScreen:
+    """Dock an approved library into one pocket, if the pocket validates.
+
+    `library` is `[{"name", "smiles"}]`. The validation runs first and the
+    library is not touched unless it passes, because the expensive part is
+    worth nothing when the cheap check says the pocket cannot be scored.
+    """
+    run = DockingScreen(target=target)
+
+    if score_fn is None and _docking_binary() is None:
+        run.error = (
+            "no docking binary on PATH. Install smina "
+            "(https://github.com/mwaskom/smina) or AutoDock Vina and make "
+            "it callable as 'smina' or 'vina'. Nothing else in the run is "
+            "affected.")
+        return run
+
+    val = validate_pocket(receptor, actives or [], decoys or [],
+                          autobox=autobox, exhaustiveness=exhaustiveness,
+                          seed=seed, score_fn=score_fn)
+    run.auc, run.ef1, run.usable = val.get("auc"), val.get("ef1"), \
+        bool(val.get("usable"))
+    if not run.usable:
+        run.error = val.get("reason")
+        return run
+
+    scores = _dock_smiles([d["smiles"] for d in library], receptor, autobox,
+                          exhaustiveness=exhaustiveness, seed=seed,
+                          score_fn=score_fn)
+    scored = [{"drug": d.get("name") or "?", "smiles": d["smiles"],
+               "score": s}
+              for d, s in zip(library, scores) if s is not None]
+    scored.sort(key=lambda h: h["score"])
+    run.n_docked = len(scored)
+    run.n_failed = len(library) - len(scored)
+    run.hits = scored[:top_n]
+
+    run.caveats.append(
+        f"this pocket validated at AUC {run.auc}"
+        + (f" with {run.ef1}-fold enrichment in the top 1%" if run.ef1 else "")
+        + ", so docking separates its known binders from random approved "
+          "drugs here. That is a statement about enrichment, not about the "
+          "order of the hits: a docking function pulls binders toward the "
+          "top of a list and ranks them poorly once there")
+    run.caveats.append(
+        "a score says a molecule can occupy the pocket. It does not say "
+        "whether the molecule activates or inhibits the receptor, and that "
+        "direction decides whether a hit raises or lowers your gene. "
+        "predict_direction above is the tool for that question")
+    if run.n_failed:
+        run.caveats.append(
+            f"{run.n_failed} compound(s) could not be docked, usually "
+            f"because no 3D conformer could be generated. They are absent "
+            f"from the ranking rather than ranked badly")
+    return run
+
+
+def consensus(docking: DockingScreen, ligand_hits: list, *,
+              top_frac: float = 0.2) -> list:
+    """Compounds in the top slice of BOTH the dock and the ligand screen.
+
+    The reason to run two methods. A docking score and a ligand-based
+    model share no input: one reads the pocket, the other reads chemistry
+    measured at the receptor. Agreement between them is worth more than a
+    better score from either, and disagreement is informative too -
+    ligand-only hits resemble known actives, dock-only hits are the novel
+    scaffolds the trained model could not have recognised.
+    """
+    if not docking or not docking.usable or not ligand_hits:
+        return []
+    n_d = max(1, int(len(docking.hits) * top_frac)) or 1
+    dock_top = {h["drug"].strip().lower(): h for h in docking.hits[:n_d]}
+    n_l = max(1, int(len(ligand_hits) * top_frac)) or 1
+
+    out = []
+    for h in ligand_hits[:n_l]:
+        name = (h.get("drug") or "").strip().lower()
+        if name in dock_top:
+            out.append({
+                "drug": h.get("drug"),
+                "docking_score": dock_top[name]["score"],
+                "ligand_quadrant": h.get("quadrant"),
+                "why": ("picked by both a pocket-shape argument and a "
+                        "chemistry argument trained on this receptor's "
+                        "measured ligands. The two share no input, so this "
+                        "is the strongest computational support available "
+                        "here - and still a binding hypothesis, with the "
+                        "direction unaddressed by either"),
+            })
+    return out

@@ -7134,3 +7134,264 @@ def test_report_says_a_no_is_expected():
     assert header and "Kind" in header[0]
     i = md.splitlines().index(header[0])
     assert md.splitlines()[i + 1].count("|") == header[0].count("|")
+
+
+# ===================================================================== #
+# Structural liabilities: what makes a PREDICTION unbelievable.         #
+# ===================================================================== #
+_QUERCETIN = "O=c1c(O)c(-c2ccc(O)c(O)c2)oc2cc(O)cc(O)c12"
+_CURCUMIN = "COc1cc(/C=C/C(=O)CC(=O)/C=C/c2ccc(O)c(OC)c2)ccc1O"
+_DIAZEPAM_S = "CN1c2ccc(Cl)cc2C(=NCC1=O)c1ccccc1"
+_DOXORUBICIN = ("C[C@H]1O[C@@H](O[C@H]2C[C@@](O)(Cc3c(O)c4C(=O)c5c(O)cccc5"
+                "C(=O)c4c(O)c23)C(=O)CO)[C@H](N)[C@@H](O)[C@@H]1O")
+
+
+def test_pains_match_lowers_confidence_in_the_evidence():
+    """A PAINS hit says activity measured for this molecule may be an
+    assay artefact. It does not say the drug is unsafe - quercetin and
+    doxorubicin are both flagged and doxorubicin is approved."""
+    from promoter_tf_drugs import liabilities as lb
+    q = lb.assess("quercetin", _QUERCETIN)
+    assert q.assessed and q.pains
+    assert q.evidence_multiplier < 1.0
+    joined = " ".join(q.notes)
+    assert "artefact" in joined
+    assert "says nothing about the drug's safety" in joined
+
+
+def test_a_clean_molecule_is_not_penalised():
+    from promoter_tf_drugs import liabilities as lb
+    d = lb.assess("diazepam", _DIAZEPAM_S)
+    assert d.assessed
+    assert not d.pains
+    assert d.evidence_multiplier == 1.0
+
+
+def test_an_approved_drug_is_not_demoted_for_failing_lead_like_rules():
+    """Doxorubicin breaks three Lipinski rules and carries Brenk alerts,
+    and is approved and in use. Filtering on those would discard the best
+    candidates in the report."""
+    from promoter_tf_drugs import liabilities as lb
+    d = lb.assess("doxorubicin", _DOXORUBICIN)
+    assert d.lipinski_violations >= 2
+    # only PAINS moves the multiplier, and only as an evidence discount
+    only_brenk = lb.assess("curcumin", _CURCUMIN)
+    assert only_brenk.brenk and not only_brenk.pains
+    assert only_brenk.evidence_multiplier == 1.0
+    assert any("settled when the compound was approved" in n
+               for n in only_brenk.notes)
+
+
+def test_the_pains_set_is_not_exhaustive_and_says_so():
+    """Curcumin is the most cited interference compound in the literature
+    and is NOT in Baell's SMARTS set. A clean PAINS result is therefore
+    weak evidence of a clean compound, and the module documents it."""
+    from promoter_tf_drugs import liabilities as lb
+    assert not lb.assess("curcumin", _CURCUMIN).pains
+    assert "Curcumin does not" in lb.__doc__
+    assert "Read it one way only" in lb.__doc__
+
+
+def test_no_structure_is_not_a_clean_result():
+    from promoter_tf_drugs import liabilities as lb
+    x = lb.assess("mystery", None)
+    assert x.assessed is False
+    assert x.evidence_multiplier == 1.0
+    assert any("not a clean result" in n for n in x.notes)
+    msg = lb.summarise({"mystery": x})
+    assert "gap in the data, not a clean result" in msg
+
+
+# ===================================================================== #
+# Docking used to FIND compounds, and the gate that makes it usable.    #
+# ===================================================================== #
+def _scorer(separation, seed=0):
+    """Actives score `separation` kcal/mol better, with realistic overlap."""
+    import random
+    rng = random.Random(seed)
+
+    def fn(smi):
+        base = rng.gauss(-7.0, 1.2)
+        return base - separation if smi.startswith("ACT") else base
+    return fn
+
+
+def _dock_sets(n_act=20, n_dec=180):
+    return ([{"smiles": f"ACT{i}"} for i in range(n_act)],
+            [{"smiles": f"DEC{i}"} for i in range(n_dec)])
+
+
+def test_roc_auc_and_enrichment_agree_with_hand_worked_cases():
+    from promoter_tf_drugs import docking as dk
+    # perfect separation, lower is better
+    assert dk.roc_auc([-10, -9, -1, 0], [1, 1, 0, 0]) == 1.0
+    # perfectly inverted
+    assert dk.roc_auc([0, -1, -9, -10], [1, 1, 0, 0]) == 0.0
+    # ties count half
+    assert dk.roc_auc([-5, -5], [1, 0]) == 0.5
+    # a failed dock is dropped, never scored worst
+    assert dk.roc_auc([-10, None, -1, 0], [1, 1, 0, 0]) == 1.0
+    assert dk.roc_auc([None, None], [1, 0]) is None
+
+    # 2 actives in 100, both in the top 1 (k=1 -> one slot)
+    scores = [-10.0] + [0.0] * 99
+    labels = [1] + [0] * 98 + [1]
+    assert dk.enrichment_factor(scores, labels, fraction=0.01) == 50.0
+
+
+def test_a_pocket_that_cannot_rank_its_own_ligands_is_refused():
+    """The gate. Docking is the method here most able to produce confident
+    nonsense, so it has to recover known binders before anything it says
+    about an unknown is reported."""
+    from promoter_tf_drugs import docking as dk
+    import pathlib
+    act, dec = _dock_sets()
+    v = dk.validate_pocket(pathlib.Path("x.pdb"), act, dec,
+                           score_fn=_scorer(0.0, seed=1))
+    assert v["usable"] is False
+    assert v["auc"] < dk.MIN_DOCKING_AUC
+    assert "carry no information" in v["reason"]
+
+
+def test_a_pocket_that_recovers_its_ligands_is_allowed_through():
+    from promoter_tf_drugs import docking as dk
+    import pathlib
+    act, dec = _dock_sets()
+    v = dk.validate_pocket(pathlib.Path("x.pdb"), act, dec,
+                           score_fn=_scorer(3.0, seed=1))
+    assert v["usable"] is True
+    assert v["auc"] >= dk.MIN_DOCKING_AUC
+    assert v["ef1"] >= dk.MIN_EF1
+
+
+def test_enrichment_is_a_harsher_gate_than_auc():
+    """A method can hold a respectable AUC while putting nothing useful in
+    the top 1%, which is the only part of a ranked list anyone reads. Both
+    gates exist because AUC alone would pass that."""
+    from promoter_tf_drugs import docking as dk
+    import pathlib
+    act, dec = _dock_sets()
+    v = dk.validate_pocket(pathlib.Path("x.pdb"), act, dec,
+                           score_fn=_scorer(0.5, seed=1))
+    assert 0.6 < v["auc"] < 0.7
+    assert v["ef1"] == 0.0
+    assert v["usable"] is False
+
+
+def test_too_few_known_ligands_means_the_dock_cannot_be_validated():
+    from promoter_tf_drugs import docking as dk
+    import pathlib
+    act, dec = _dock_sets()
+    v = dk.validate_pocket(pathlib.Path("x.pdb"), act[:3], dec,
+                           score_fn=_scorer(3.0))
+    assert v["usable"] is False
+    assert "confident nonsense" in v["reason"]
+
+
+def test_the_library_is_not_docked_when_the_pocket_fails():
+    """The validation is cheap and the library is not. Running 4,000 docks
+    to then discard them would be the expensive way to learn nothing."""
+    from promoter_tf_drugs import docking as dk
+    import pathlib
+    act, dec = _dock_sets()
+    lib = [{"name": f"d{i}", "smiles": f"LIB{i}"} for i in range(500)]
+    seen = []
+
+    def counting(smi):
+        seen.append(smi)
+        return _scorer(0.0, seed=1)(smi)
+
+    run = dk.screen_by_docking(pathlib.Path("x.pdb"), lib, target="BAD",
+                               actives=act, decoys=dec, score_fn=counting)
+    assert run.usable is False and run.hits == []
+    assert not any(s.startswith("LIB") for s in seen)
+
+
+def test_a_validated_screen_returns_a_sorted_shortlist():
+    from promoter_tf_drugs import docking as dk
+    import pathlib
+    act, dec = _dock_sets()
+    lib = [{"name": f"d{i}", "smiles": f"LIB{i}"} for i in range(500)]
+    run = dk.screen_by_docking(pathlib.Path("x.pdb"), lib, target="GOOD",
+                               actives=act, decoys=dec, top_n=10,
+                               score_fn=_scorer(3.0, seed=1))
+    assert run.usable and run.n_docked == 500
+    assert len(run.hits) == 10
+    scores = [h["score"] for h in run.hits]
+    assert scores == sorted(scores), "lower kcal/mol must come first"
+    joined = " ".join(run.caveats)
+    assert "ranks them poorly once there" in joined
+    assert "does not say whether the molecule activates or inhibits" in joined
+
+
+def test_missing_docking_binary_is_reported_not_raised():
+    from promoter_tf_drugs import docking as dk
+    import pathlib
+    act, dec = _dock_sets()
+    run = dk.screen_by_docking(pathlib.Path("x.pdb"), [], target="T",
+                               actives=act, decoys=dec)
+    if run.error:
+        assert "no docking binary" in run.error
+        assert "Nothing else in the run is affected" in run.error
+
+
+def test_consensus_needs_both_methods_to_agree():
+    """The reason to run two. A dock reads the pocket and a ligand model
+    reads chemistry measured at the receptor; they share no input."""
+    from promoter_tf_drugs import docking as dk
+    import pathlib
+    act, dec = _dock_sets()
+    lib = [{"name": f"d{i}", "smiles": f"LIB{i}"} for i in range(500)]
+    run = dk.screen_by_docking(pathlib.Path("x.pdb"), lib, target="GOOD",
+                               actives=act, decoys=dec, top_n=20,
+                               score_fn=_scorer(3.0, seed=1))
+    agreeing = [{"drug": run.hits[0]["drug"], "quadrant": "NOVEL HYPOTHESIS"}]
+    assert len(dk.consensus(run, agreeing)) == 1
+    assert dk.consensus(run, [{"drug": "nothing-like-it"}]) == []
+    # and an unusable dock can never contribute a consensus hit
+    run.usable = False
+    assert dk.consensus(run, agreeing) == []
+
+
+def test_docking_module_states_it_will_not_widen_coverage():
+    """The honest limit, and the one most likely to be misread: docking
+    needs a pocket, so it adds confidence on the receptors already in the
+    report rather than reaching the undruggable factors."""
+    from promoter_tf_drugs import docking as dk
+    src = dk.__doc__ + (dk.screen_by_docking.__doc__ or "")
+    import inspect
+    body = inspect.getsource(dk)
+    assert "will not reach the factors you cannot currently drug" in body
+    assert "not an affinity" in body
+
+
+# ===================================================================== #
+# Family-pooled screening: more receptors, validated by transfer.       #
+# ===================================================================== #
+def test_family_transfer_is_measured_on_held_out_target_ligands():
+    """A family model trained on siblings must be shown to rank the
+    TARGET's own ligands, or it is just the family's pharmacology wearing
+    the target's name."""
+    import inspect
+    from promoter_tf_drugs import screening as scr
+    src = inspect.getsource(scr.screen_family)
+    assert "transfer_auc" in src
+    assert "MIN_TRANSFER_AUC" in src
+    # the target's ligands must be excluded from training
+    assert "own_smiles" in src
+    assert "would leak the answer" in src
+
+
+def test_family_screen_refuses_when_it_cannot_validate():
+    """Without enough of the target's own ligands there is nothing to
+    measure transfer against, and an unvalidated family model is exactly
+    what fills a report with a family's chemistry."""
+    from promoter_tf_drugs import screening as scr
+    assert scr.MIN_VALIDATION_ACTIVES >= 5
+    assert scr.MIN_TRANSFER_AUC == scr.MIN_BINDING_AUC
+
+
+def test_transfer_auc_returns_none_rather_than_guessing():
+    from promoter_tf_drugs import screening as scr
+    assert scr.transfer_auc(None, [], []) is None
+    assert scr.transfer_auc(None, [{"smiles": "C"}], []) is None

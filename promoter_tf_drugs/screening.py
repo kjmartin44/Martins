@@ -451,3 +451,194 @@ def screen_receptor(client: Client, target_chembl_id: str, *, goal: str = "up",
         "hits": [h.to_dict() for h in hits],
         "enrichment": enrichment_check(hits),
     }
+
+
+# ================================================================= #
+# Screening a receptor that has too few ligands to model on its own #
+# ================================================================= #
+# The single-target screen needs MIN_ACTIVES measured ligands, which almost
+# nothing clears. That is why the screening section returns the same
+# retinoid and steroid receptors whatever gene goes in: the filter selects
+# for how much medicinal chemistry a receptor has attracted.
+#
+# Nuclear receptors share a ligand-binding domain fold, so a model trained
+# on a receptor's RELATIVES may still recognise its ligands. That is the
+# standard way to borrow strength, and it is also an easy way to fool
+# yourself, because a family model will happily report the family's
+# chemistry as if it were the target's.
+#
+# So nothing is reported on faith. The model is trained on the siblings
+# ONLY, with the target held out entirely, and then asked to rank the
+# target's own measured ligands against decoys it has never seen. That
+# leave-one-target-out AUC is a direct measurement of whether pooling
+# transfers to this particular receptor, and it is the gate. A family whose
+# chemistry does not transfer is refused and says so.
+
+# Enough of the target's own ligands to measure transfer against. Below
+# this the family model cannot be validated, so it is not reported - an
+# unvalidated family model is exactly the thing that would fill the report
+# with a family's pharmacology dressed as the target's.
+MIN_VALIDATION_ACTIVES = 5
+
+# Transfer AUC below which the family's chemistry does not carry to this
+# receptor. Same bar the single-target model has to clear.
+MIN_TRANSFER_AUC = MIN_BINDING_AUC
+
+
+def transfer_auc(model, own_actives: list, decoys: list) -> float | None:
+    """How well a sibling-trained model ranks the target's OWN ligands.
+
+    The target contributed nothing to training, so this is an honest
+    out-of-target estimate rather than a cross-validation within one
+    receptor's chemistry.
+    """
+    from . import agonism
+
+    if len(own_actives) < MIN_VALIDATION_ACTIVES or not decoys:
+        return None
+    try:
+        from sklearn.metrics import roc_auc_score
+    except ImportError:
+        return None
+
+    smiles = ([a["smiles"] for a in own_actives]
+              + [d["smiles"] for d in decoys])
+    X, _, keep = agonism.fingerprints(smiles)
+    if len(keep) < MIN_VALIDATION_ACTIVES:
+        return None
+    import numpy as np
+    y = np.array([1] * len(own_actives) + [0] * len(decoys))[keep]
+    if y.sum() < MIN_VALIDATION_ACTIVES or (1 - y).sum() < 2:
+        return None
+    probs = model.clf.predict_proba(X)[:, 1]
+    try:
+        return float(roc_auc_score(y, probs))
+    except ValueError:
+        return None
+
+
+def screen_family(client: Client, symbol: str, *, goal: str = "up",
+                  library: list[dict] | None = None, top_n: int = 25,
+                  decoy_ratio: int = 3, seed: int = 0,
+                  gene_linked: set | None = None) -> dict:
+    """Screen `symbol` using a model trained on its receptor family.
+
+    For a receptor with too few of its own ligands to train on. Returns the
+    same shape as `screen_receptor`, with `family_model: True` and the
+    measured transfer AUC, or an `error` saying which step refused.
+    """
+    import random
+
+    from . import agonism, paralogs
+    from .drugs import _chembl_targets
+
+    fam = paralogs.family_of(symbol)
+    if fam is None:
+        return {"target": symbol, "hits": [],
+                "error": f"{symbol} is not in a curated receptor family, so "
+                         f"there are no relatives to borrow ligands from."}
+
+    siblings = sorted(m for m in fam.members if m.upper() != symbol.upper())
+    if not siblings:
+        return {"target": symbol, "hits": [],
+                "error": f"{symbol} is the only member of {fam.name} here."}
+
+    # The target's own ligands, which are the validation set and are never
+    # trained on.
+    own_ids = _chembl_targets(client, symbol, None)
+    own: list = []
+    for tid in own_ids[:2]:
+        own.extend(agonism.fetch_actives(client, tid))
+    if len(own) < MIN_VALIDATION_ACTIVES:
+        return {
+            "target": symbol, "hits": [], "family": fam.name,
+            "n_own_actives": len(own),
+            "error": (f"{symbol} has {len(own)} measured ligand(s) of its "
+                      f"own, below the {MIN_VALIDATION_ACTIVES} needed to "
+                      f"test whether {fam.name} chemistry transfers to it. A "
+                      f"family model could be built and not checked, which "
+                      f"would report the family's pharmacology as this "
+                      f"receptor's. Not reported."),
+        }
+
+    # Siblings' ligands, which are the training set.
+    pooled: list = []
+    contributing: list = []
+    own_smiles = {a["smiles"] for a in own}
+    for sib in siblings:
+        tids = _chembl_targets(client, sib, None)
+        got: list = []
+        for tid in tids[:1]:
+            got.extend(agonism.fetch_actives(client, tid))
+        # A ligand shared with the target would leak the answer.
+        got = [g for g in got if g["smiles"] not in own_smiles]
+        if got:
+            contributing.append({"symbol": sib, "n_actives": len(got)})
+            pooled.extend(got)
+
+    if len(pooled) < MIN_ACTIVES:
+        return {
+            "target": symbol, "hits": [], "family": fam.name,
+            "n_pooled_actives": len(pooled),
+            "error": (f"{fam.name} contributed {len(pooled)} ligand(s) "
+                      f"across {len(siblings)} relative(s), below the "
+                      f"{MIN_ACTIVES} needed to train. The family is as "
+                      f"under-studied as the receptor."),
+        }
+
+    lib = library if library is not None else approved_library(client)
+    pooled_smiles = {a["smiles"] for a in pooled}
+    pool = [d for d in lib if d["smiles"] not in pooled_smiles
+            and d["smiles"] not in own_smiles]
+    rng = random.Random(seed)
+    decoys = rng.sample(pool, min(len(pool), len(pooled) * decoy_ratio))
+
+    model, cv_auc = build_binding_model(pooled, decoys, seed=seed)
+    if model is None:
+        return {"target": symbol, "hits": [], "family": fam.name,
+                "error": "family binding model could not be trained"}
+
+    # The gate: does this family's chemistry actually carry to this
+    # receptor? Measured against ligands the model has never seen.
+    val_decoys = rng.sample(pool, min(len(pool), max(20, len(own) * 3)))
+    t_auc = transfer_auc(model, own, val_decoys)
+    if t_auc is None:
+        return {"target": symbol, "hits": [], "family": fam.name,
+                "error": "transfer to this receptor could not be measured"}
+    if t_auc < MIN_TRANSFER_AUC:
+        return {
+            "target": symbol, "hits": [], "family": fam.name,
+            "model_auc": round(cv_auc, 3) if cv_auc else None,
+            "transfer_auc": round(t_auc, 3),
+            "error": (f"a model trained on {fam.name} relatives ranks "
+                      f"{symbol}'s own {len(own)} known ligands at AUC "
+                      f"{t_auc:.2f}, below {MIN_TRANSFER_AUC}. The family "
+                      f"shares a fold and not a usable preference, so its "
+                      f"chemistry does not predict this receptor. Not "
+                      f"reported."),
+        }
+
+    hits = screen(model, lib, goal="up",
+                  known_ids={a["chembl_id"] for a in own},
+                  top_n=top_n, gene_linked=gene_linked,
+                  known_potency={a["chembl_id"]: a["pchembl"]
+                                 for a in own if a.get("pchembl")})
+    for h in hits:
+        h.notes.append(
+            f"predicted by a model trained on {symbol}'s {fam.name} "
+            f"relatives, not on {symbol} itself. That model ranks "
+            f"{symbol}'s own known ligands at AUC {t_auc:.2f}, which is why "
+            f"it is reported - but a family model predicts family binding, "
+            f"and subtype selectivity is exactly what it cannot see")
+
+    return {
+        "target": symbol, "hits": [h.to_dict() for h in hits],
+        "family": fam.name, "family_model": True,
+        "contributing": contributing,
+        "n_own_actives": len(own), "n_pooled_actives": len(pooled),
+        "n_decoys": len(decoys), "library_size": len(lib),
+        "model_auc": round(cv_auc, 3) if cv_auc else None,
+        "transfer_auc": round(t_auc, 3),
+        "enrichment": enrichment_check(hits),
+        "family_note": fam.note,
+    }
