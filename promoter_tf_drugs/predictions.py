@@ -36,6 +36,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from . import delivery
+
 # How much a tier should move you, in words rather than a number.
 TIER_CONFIDENCE = {
     1: "documented in humans for this gene",
@@ -61,9 +63,13 @@ class Prediction:
     why: list = field(default_factory=list)
     caveats: list = field(default_factory=list)
     falsifier: str | None = None
+    # "yes" / "no" / —. Screening-stage question, so it is carried
+    # on every prediction rather than computed only under --tissue cns.
+    bbb: str = "—"
 
     def to_dict(self) -> dict:
         return {"drug": self.drug, "target": self.target,
+                "bbb": self.bbb,
                 "category": self.category, "tier": self.tier,
                 "grade": self.grade, "score": self.score,
                 "p_move": self.p_move, "limiting_step": self.limiting_step,
@@ -187,6 +193,9 @@ def build(block: dict, *, goal: str = "up", has_chip: bool = False,
             mechanism=r.get("mechanism") or "", tier=r["tier"],
             grade=(g or {}).get("grade"), score=r["score"],
         )
+        p.bbb = delivery.bbb_verdict(
+            r["drug"], ((g or {}).get("evidence") or {}).get("properties")
+        )["cell"]
         if o:
             p.p_move = o.get("p_point")
             p.p_range = (o.get("p_low"), o.get("p_high"))
@@ -274,14 +283,19 @@ def render(preds: list, gene: str, goal: str, *, verdict: dict | None = None
     # the rightmost column of a numbered table read as the sort key — while
     # visibly disagreeing with the actual order. It conveys magnitude, not
     # rank, so it is stated once below and per-drug in the detail.
-    L.append("| # | Medication | Acts on | Tier | Grade | Score |")
-    L.append("|---|---|---|---|---|---|")
+    L.append("| # | Medication | Acts on | BBB? | Tier | Grade | Score |")
+    L.append("|---|---|---|---|---|---|---|")
     for i, p in enumerate(preds, 1):
-        L.append(f"| {i} | **{p.drug}** | {p.target or '—'} | {p.tier} | "
-                 f"{p.grade or '—'} | {p.score} |")
+        L.append(f"| {i} | **{p.drug}** | {p.target or '—'} | {p.bbb} | "
+                 f"{p.tier} | {p.grade or '—'} | {p.score} |")
     L.append("")
     L.append("*Ordered by evidence tier first, then score. A tier-1 route "
-             "with a mediocre score beats a tier-5 route with a great one.*")
+             "with a mediocre score beats a tier-5 route with a great one. "
+             "**BBB?** is not part of the ordering — it is an "
+             "applicability filter you apply yourself, since whether brain "
+             "exposure is wanted or unwanted depends on where your gene needs "
+             "to move. See the note under the graded table for what a yes "
+             "does and does not establish.*")
     L.append("")
 
     probs = [p.p_move for p in preds if p.p_move is not None]

@@ -137,6 +137,14 @@ def add_analysis_args(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
                         "SigCom, which returns HTTP 500 for days at a time. "
                         "data/lincs_chem_pert_{up,down}.gmt are picked up "
                         "automatically if present (16 MB + 14 MB)")
+    p.add_argument("--lincs-geneinfo", metavar="TSV",
+                   help="CLUE geneinfo table, which records whether each gene "
+                        "was MEASURED on the L1000 array (978 landmarks) or "
+                        "imputed from those that were. Without it every LINCS "
+                        "hit is tiered as predicted, so measured evidence "
+                        "ranks BELOW a curated ligand. "
+                        "data/lincs_geneinfo.txt is picked up automatically "
+                        "if present (1.1 MB)")
     p.add_argument("--lincs-file",
                    help="local drug/gene signature table (drug,gene,score[,"
                         "cell_line,is_landmark]) exported from CLUE or iLINCS. "
@@ -266,6 +274,7 @@ def _execute(args) -> int:
         design_modality=args.design_modality,
         use_lincs=args.lincs,
         signature_file=args.signature_file, lincs_file=args.lincs_file,
+        lincs_geneinfo=args.lincs_geneinfo,
         lincs_gmt=args.lincs_gmt,
         expression_file=args.expression_file,
         promoter_fasta=args.promoter_fasta,

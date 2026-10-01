@@ -400,17 +400,40 @@ def from_lincs(lincs: dict) -> list[Route]:
     for h in (lincs or {}).get("hits", []):
         if h.get("non_specific"):
             continue
-        measured = h.get("is_landmark") is True
+        # Three levels, because CLUE records three and a binary collapsed
+        # the middle one - which demoted every hit on a non-landmark gene
+        # (CCR5, VDR, HBB are all "best inferred") to tier 4, BELOW a
+        # curated ligand annotation. That understated it: the signature was
+        # measured, and only the value for this gene was imputed, whereas a
+        # tier-3 ligand route is annotation on two separate steps.
+        fs = h.get("feature_space")
+        measured = h.get("is_landmark") is True or fs == "landmark"
+        if measured:
+            tier, basis = 2, "measured"
+        elif fs == "best inferred":
+            tier, basis = 3, "imputed from measured landmarks"
+        else:
+            tier, basis = 4, "predicted"
+
+        extra = []
+        if measured:
+            pass
+        elif fs == "best inferred":
+            extra.append("value IMPUTED from the 978 measured landmarks, not "
+                         "measured for this gene - high confidence among "
+                         "inferred genes, still not a measurement")
+        else:
+            extra.append("value INFERRED, not measured")
+
         out.append(Route(
             drug=h["drug"], category="empirical signature",
             mechanism="moved this gene in a cell-based transcriptomic assay",
             acts_on="(unknown / whole cell)",
-            tier=2 if measured else 4, directness=0,
-            axes=Axes(min(1.0, abs(h["score"]) / 5.0), 0.40,
-                      0.6, "measured" if measured else "predicted"),
+            tier=tier, directness=0,
+            axes=Axes(min(1.0, abs(h["score"]) / 5.0), 0.40, 0.6, basis),
             approved=True, source="signatures",
             notes=([f"cell line {h['cell_line']}"] if h.get("cell_line") else [])
-                  + ([] if measured else ["value INFERRED, not measured"])))
+                  + extra))
     return out
 
 

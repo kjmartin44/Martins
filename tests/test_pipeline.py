@@ -5550,3 +5550,284 @@ def test_the_drug_direction_vocabulary_is_consistent_across_sources():
     assert dr.desired_direction("activator", "down") == "down"
     for action in ("AGONIST", "ANTAGONIST", "INHIBITOR", "MODULATOR"):
         assert dr._direction_for_action(action) in ("up", "down", "unclear")
+
+
+# ===================================================================== #
+# The BBB column: a yes / no per drug, and the three ways it can lie.   #
+# ===================================================================== #
+# ChEMBL molecule_properties as the API actually returns them - the
+# spelling that was silently unreadable before normalise_properties.
+_CHEMBL_DIAZEPAM = {"full_mwt": 284.7, "psa": 32.7, "alogp": 2.82,
+                    "hbd": 0, "cx_most_bpka": 3.4}
+_CHEMBL_ATENOLOL = {"full_mwt": 266.3, "psa": 84.6, "alogp": 0.1,
+                    "hbd": 3, "cx_most_bpka": 9.6}
+_CHEMBL_PLICAMYCIN = {"full_mwt": 1085.2, "psa": 331.0, "alogp": -1.2,
+                      "hbd": 9}
+
+
+def test_chembl_property_names_are_readable_at_all():
+    """The bug this fixes: drugs.py passes ChEMBL's `molecule_properties`
+    through verbatim, and every MPO parameter except `hbd` arrived under a
+    key nothing read. Real rows scored on one parameter, fell below
+    MIN_MPO_PARAMETERS and came back unassessed - indistinguishable from a
+    compound with no structure at all."""
+    norm = dlv.normalise_properties(_CHEMBL_DIAZEPAM)
+    assert norm["mw"] == 284.7
+    assert norm["tpsa"] == 32.7
+    assert norm["logp"] == 2.82
+    assert norm["pka"] == 3.4
+
+    score, n, _ = dlv.cns_mpo(properties=_CHEMBL_DIAZEPAM)
+    assert n >= dlv.MIN_MPO_PARAMETERS, "ChEMBL names must reach the scorer"
+    assert score is not None
+
+
+def test_short_names_still_work_and_win_over_the_chembl_spelling():
+    """Both spellings must work, and an explicitly supplied short name must
+    not be overridden by whatever ChEMBL happened to return."""
+    both = dlv.normalise_properties({"mw": 100.0, "full_mwt": 999.0})
+    assert both["mw"] == 100.0
+
+
+def test_normalise_drops_nulls_rather_than_coercing_them():
+    """A None MW read as 0.0 would score as a perfect parameter."""
+    norm = dlv.normalise_properties({"full_mwt": None, "psa": "",
+                                     "alogp": "not a number", "hbd": 2})
+    assert "mw" not in norm
+    assert "tpsa" not in norm
+    assert "logp" not in norm
+    assert norm["hbd"] == 2.0
+
+
+def test_bbb_verdict_has_three_states_and_unknown_is_not_no():
+    """The third state is the one that matters: a DGIdb row carries a name
+    and a mechanism but no structure, and that is not evidence of failure
+    to cross."""
+    yes = dlv.bbb_verdict("diazepam", _CHEMBL_DIAZEPAM)
+    assert yes["label"] == "yes" and yes["crosses_bbb"] is True
+
+    no = dlv.bbb_verdict("plicamycin", _CHEMBL_PLICAMYCIN)
+    assert no["label"] == "no" and no["crosses_bbb"] is False
+
+    unknown = dlv.bbb_verdict("mystery compound", {})
+    assert unknown["crosses_bbb"] is None
+    assert unknown["label"] == "—"
+    assert "UNKNOWN rather than no" in unknown["why"]
+
+
+def test_pgp_substrate_overrides_a_passing_score():
+    """MPO predicts passive diffusion. The commonest reason a suitable
+    molecule never reaches brain is being pumped back out, so a known
+    substrate cannot read yes however good its physicochemistry."""
+    props = {"full_mwt": 284.7, "psa": 32.7, "alogp": 2.82}
+    assert "loperamide" in dlv.PGP_SUBSTRATES
+    v = dlv.bbb_verdict("loperamide", props)
+    assert v["label"] == "no"
+    assert v["pgp_substrate"] is True
+    assert "pumped back out" in v["why"]
+    # and the override is not quietly re-flagged as merely undecided
+    assert v["borderline"] is False
+
+
+def test_atenolol_is_borderline_not_a_yes():
+    """The documented false positive, and it survives a complete parameter
+    set: with ChEMBL's own pKa it clears the threshold by 0.04 while being
+    a textbook poor penetrant. A margin that thin must not render as an
+    answer."""
+    v = dlv.bbb_verdict("atenolol", _CHEMBL_ATENOLOL)
+    assert v["borderline"] is True
+    assert abs(v["margin"]) <= dlv.BORDERLINE_MARGIN
+    assert v["cell"] == "yes?", "a coin flip must not print as a plain yes"
+    assert "noise of the threshold" in v["why"]
+
+
+def test_a_comfortable_pass_is_not_marked_borderline():
+    """Otherwise the question mark means nothing."""
+    v = dlv.bbb_verdict("diazepam", _CHEMBL_DIAZEPAM)
+    assert v["borderline"] is False
+    assert v["cell"] == "yes"
+    assert v["margin"] > dlv.BORDERLINE_MARGIN
+
+
+def test_bbb_threshold_matches_the_delivery_section():
+    """One drug, two places in the report. If these diverged, a candidate
+    could read yes in the table and unlikely in the delivery notes."""
+    import inspect
+    src = inspect.getsource(dlv.bbb_verdict)
+    assert "4.0 * (n_params / 6.0)" in src
+    a = dlv.assess_delivery("diazepam", compartment="cns",
+                            properties=_CHEMBL_DIAZEPAM)
+    v = dlv.bbb_verdict("diazepam", _CHEMBL_DIAZEPAM)
+    assert a.cns_mpo == v["mpo"]
+
+
+def test_bbb_column_renders_for_every_graded_drug():
+    """The request was a yes/no on every row, not only under --tissue cns -
+    whether a candidate can reach its tissue is a screening question."""
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    md = pipeline.markdown_report(res)
+    header = [ln for ln in md.splitlines()
+              if ln.startswith("| Grade | Combined |")]
+    assert header, "graded table missing"
+    assert "BBB?" in header[0]
+    # the separator row must have grown with the header, or the table breaks
+    i = md.splitlines().index(header[0])
+    assert md.splitlines()[i + 1].count("|") == header[0].count("|")
+
+
+def test_predicted_medications_table_carries_the_same_column():
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    md = pipeline.markdown_report(res)
+    header = [ln for ln in md.splitlines()
+              if ln.startswith("| # | Medication |")]
+    assert header and "BBB?" in header[0]
+    i = md.splitlines().index(header[0])
+    assert md.splitlines()[i + 1].count("|") == header[0].count("|")
+
+
+def test_bbb_does_not_reorder_anything():
+    """It is an applicability filter the reader applies, not a score. If it
+    entered the ranking, a peripheral target would be penalised for having
+    candidates that cannot reach brain - which is irrelevant to it.
+
+    Flipping every verdict must leave both orderings byte-identical."""
+    from promoter_tf_drugs import predictions as pr
+
+    block = {
+        "all_routes": {"routes": [
+            {"drug": "Alpha", "acts_on": "VDR", "category": "ligand",
+             "tier": 3, "score": 50.0, "directness": 1, "mechanism": "agonist"},
+            {"drug": "Beta", "acts_on": "VDR", "category": "ligand",
+             "tier": 3, "score": 40.0, "directness": 1, "mechanism": "agonist"},
+        ]},
+        # Alpha cannot cross, Beta can - the reverse of the score order.
+        "drug_grades": [
+            {"drug_name": "Alpha", "grade": "A",
+             "evidence": {"properties": _CHEMBL_PLICAMYCIN}},
+            {"drug_name": "Beta", "grade": "B",
+             "evidence": {"properties": _CHEMBL_DIAZEPAM}},
+        ],
+        "tfs": [], "outcome_estimates": [],
+    }
+    preds = pr.build(block, goal="up")
+    assert [p.drug for p in preds] == ["Alpha", "Beta"], \
+        "score order must survive a disagreeing BBB verdict"
+    assert [p.bbb for p in preds] == ["no", "yes"], \
+        "and the verdicts really do disagree with the order"
+
+    # the column is never named as a sort key
+    import inspect
+    src = inspect.getsource(pr.build) + inspect.getsource(pr.render)
+    assert "key=lambda" not in src or "bbb" not in src.split("key=lambda")[1][:120]
+
+
+def test_footnote_describes_only_the_states_present():
+    """A note warning about a borderline pass in a table with none is
+    noise; one that stays silent about unknowns when 20 rows are unknown is
+    worse."""
+    only_unknown = " ".join(pipeline._bbb_footnote({"—": 5}))
+    assert "is not a no" in only_unknown
+    assert "question mark" not in only_unknown
+
+    with_borderline = " ".join(pipeline._bbb_footnote({"yes?": 1, "no": 2}))
+    assert "question mark" in with_borderline
+    assert "Atenolol" in with_borderline
+    assert "is not a no" not in with_borderline
+
+    assert pipeline._bbb_footnote({}) == []
+
+
+def test_footnote_states_what_a_yes_does_not_establish():
+    note = " ".join(pipeline._bbb_footnote({"yes": 3}))
+    assert "passive diffusion" in note
+    assert "P-glycoprotein" in note
+    # and the reliable direction is named as such
+    assert "A **no** is the more reliable direction" in note
+
+
+# ===================================================================== #
+# Why ligand-based drugs were outranking the empirical ones.            #
+# ===================================================================== #
+def _lincs_hit(**kw):
+    h = {"drug": "X", "gene": "G", "score": 9.0,
+         "feature_space": None, "is_landmark": None}
+    h.update(kw)
+    return {"hits": [h]}
+
+
+def test_measured_lincs_evidence_outranks_a_curated_ligand():
+    """The bug the user spotted. from_lincs tiered a hit as 2 only when
+    `is_landmark` was exactly True, and the offline .gmt loader never set
+    it - so every offline LINCS hit landed at tier 4, BELOW the tier-3
+    curated ligands. A drug observed to move the gene was being ranked
+    under a drug that merely binds a factor near it."""
+    from promoter_tf_drugs import catalogue as cat
+    measured = cat.from_lincs(_lincs_hit(feature_space="landmark"))[0]
+    assert measured.tier == 2, "a measured observation must beat a ligand"
+
+    ligand_tier = 3
+    assert measured.tier < ligand_tier
+
+
+def test_the_three_level_feature_space_is_not_collapsed_to_a_binary():
+    """CLUE records three confidence levels and the old flag had two, so
+    the 9,196 `best inferred` genes - which includes most genes anyone
+    asks about - were lumped in with pure prediction."""
+    from promoter_tf_drugs import catalogue as cat
+    tiers = {fs: cat.from_lincs(_lincs_hit(feature_space=fs))[0].tier
+             for fs in ("landmark", "best inferred", "inferred")}
+    assert tiers["landmark"] == 2          # measured on the array
+    assert tiers["best inferred"] == 3     # imputed from measured landmarks
+    assert tiers["inferred"] == 4          # predicted
+    assert tiers["landmark"] < tiers["best inferred"] < tiers["inferred"]
+
+
+def test_unknown_feature_space_is_tiered_as_predicted_not_as_measured():
+    """Without the geneinfo table nothing is known about the gene, and the
+    safe direction is to claim less."""
+    from promoter_tf_drugs import catalogue as cat
+    assert cat.from_lincs(_lincs_hit(feature_space=None))[0].tier == 4
+
+
+def test_is_landmark_true_still_promotes_for_the_csv_path():
+    """--lincs-file carries is_landmark directly and must keep working."""
+    from promoter_tf_drugs import catalogue as cat
+    r = cat.from_lincs(_lincs_hit(is_landmark=True, feature_space=None))[0]
+    assert r.tier == 2
+
+
+def test_geneinfo_table_distinguishes_the_three_levels():
+    """Reads the real CLUE table when it is present; skipped otherwise so
+    the suite does not depend on a 1.1 MB download."""
+    import pathlib
+    import pytest
+    from promoter_tf_drugs import signatures as sg
+    if not any(pathlib.Path(p).exists()
+               for p in sg.DEFAULT_GENEINFO_PATHS):
+        pytest.skip("data/lincs_geneinfo.txt not present")
+    assert sg.load_geneinfo() > 10_000
+    assert sg.feature_space("GAPDH") == "landmark"
+    assert sg.feature_space("NOT_A_REAL_GENE_XYZ") is None
+    # the middle level exists and is populated - the whole point
+    assert sg.feature_space("VDR") == "best inferred"
+
+
+def test_confidence_note_says_which_level_it_is():
+    """A tier is a number; the note is what makes it checkable."""
+    import pathlib
+    import pytest
+    from promoter_tf_drugs import signatures as sg
+    if not any(pathlib.Path(p).exists()
+               for p in sg.DEFAULT_GENEINFO_PATHS):
+        pytest.skip("data/lincs_geneinfo.txt not present")
+    assert "landmark" in sg.confidence_note("GAPDH").lower()
+    assert sg.confidence_note("NOT_A_REAL_GENE_XYZ")
+
+
+def test_geneinfo_load_is_idempotent():
+    """feature_space() calls it on every lookup, so a non-idempotent load
+    would re-parse the table once per gene."""
+    from promoter_tf_drugs import signatures as sg
+    first = sg.load_geneinfo()
+    assert sg.load_geneinfo() == first
+    assert sg.load_geneinfo() == first

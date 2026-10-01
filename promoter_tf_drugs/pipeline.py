@@ -139,7 +139,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         design_screen: bool = False, design_modality: bool = False,
         use_lincs: bool = False, signature_file: str | None = None,
         lincs_file: str | None = None,
-        lincs_gmt: tuple | None = None, expression_file: str | None = None,
+        lincs_geneinfo=None, lincs_gmt: tuple | None = None, expression_file: str | None = None,
         promoter_fasta: str | None = None,
         has_ptc: bool | None = None,
         gtf: str | None = None,
@@ -202,6 +202,12 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                           "no regulon file; coarse bundled tiers in use"))
     if expression_file:
         dlv_mod.load_expression_file(expression_file)
+    if lincs_geneinfo:
+        # Explicit path wins over the data/ autoload. Loaded before
+        # any signature lookup, because the feature space decides the
+        # evidence tier and a late load would tier the early hits as
+        # predicted.
+        sig_mod.load_geneinfo(lincs_geneinfo)
     if lincs_gmt:
         sig_mod.DEFAULT_GMT_PATHS['up'] = (lincs_gmt[0],)
         sig_mod.DEFAULT_GMT_PATHS['down'] = (lincs_gmt[1],)
@@ -876,6 +882,62 @@ def _fmt_offset(o) -> str:
     return f"{o:+d}" if isinstance(o, int) else "?"
 
 
+def _bbb_footnote(counts: dict) -> list:
+    """What the BBB column means, stated where it is read.
+
+    `counts` maps the cells actually printed ("yes", "yes?", "no", "no?",
+    "—") to how many rows carried them, so the note describes this table
+    rather than warning about states that did not occur in it.
+    """
+    if not counts:
+        return []
+    total = sum(counts.values())
+    n_unknown = counts.get("—", 0)
+    n_yes = counts.get("yes", 0)
+    n_borderline = counts.get("yes?", 0) + counts.get("no?", 0)
+
+    out = ["**BBB?** is CNS MPO (Wager et al.) against the same scaled "
+           "threshold the delivery section uses, so a drug cannot read "
+           "\"yes\" here and \"unlikely\" there. It answers whether the "
+           "molecule can reach brain at all: for a CNS target that decides "
+           "whether a candidate is usable, and for a peripheral target it "
+           "decides whether brain exposure is an unwanted side effect rather "
+           "than the goal."]
+    if n_yes or n_borderline:
+        out.append("")
+        out.append("A **yes** predicts *passive diffusion only*, and is the "
+                   "weaker of the two answers. Active efflux by "
+                   "P-glycoprotein at the endothelium pumps an otherwise "
+                   "suitable molecule straight back out; known substrates "
+                   "are checked here and a hit overrides a pass outright.")
+    if n_borderline:
+        out.append("")
+        out.append(f"**A question mark means undecided** — the score landed "
+                   f"within noise of the threshold, and {n_borderline} of "
+                   f"{total} row(s) here did. This is not pedantry. "
+                   f"**Atenolol clears a complete five-parameter MPO by 0.04 "
+                   f"and is a textbook poor penetrant**, so a margin that "
+                   f"thin carries no information. Read a question-marked "
+                   f"cell as \"look this one up\", never as the answer it "
+                   f"leans toward.")
+    if n_unknown:
+        out.append("")
+        out.append(f"**— is not a no.** {n_unknown} of {total} row(s) "
+                   f"returned no physicochemical properties — common for "
+                   f"DGIdb- and Open Targets-sourced rows, which carry a "
+                   f"name and a mechanism but no structure. Nothing was "
+                   f"measured and nothing is being claimed; look the "
+                   f"compound up before excluding it on this column.")
+    out.append("")
+    out.append("A **no** is the more reliable direction. A molecule failing "
+               "on size, polarity or lipophilicity does not cross by "
+               "diffusion, and no formulation fixes that short of bypassing "
+               "the barrier — intrathecal delivery, convection-enhanced "
+               "delivery, or focused ultrasound.")
+    out.append("")
+    return out
+
+
 def markdown_report(result: dict, top_n: int = 25) -> str:
     q = result["query"]
     goal = q.get("goal", "up")
@@ -1272,18 +1334,26 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
             L.append("Combined = geometric mean of TF confidence and drug quality. "
                      "A weak TF prediction caps the grade no matter how good the drug.")
             L.append("")
-            L.append("| Grade | Combined | Drug | TF | TF conf. | Drug qual. | "
-                     "Potency | Protein select. | Gene select. | Evidence | Flags |")
-            L.append("|---|---|---|---|---|---|---|---|---|---|---|")
+            L.append("| Grade | Combined | Drug | BBB? | TF | TF conf. | "
+                     "Drug qual. | Potency | Protein select. | Gene select. | "
+                     "Evidence | Flags |")
+            L.append("|---|---|---|---|---|---|---|---|---|---|---|---|")
+            bbb_seen: dict = {}
             for g in res["drug_grades"][:top_n]:
                 c = g["components"]
                 flags = "; ".join(g["notes"])[:70] or "—"
+                v = dlv_mod.bbb_verdict(
+                    g["drug_name"],
+                    (g.get("evidence") or {}).get("properties"))
+                bbb_seen[v["cell"]] = bbb_seen.get(v["cell"], 0) + 1
                 L.append(f"| **{g['grade']}** | {g['combined']} | {g['drug_name']} | "
+                         f"{v['cell']} | "
                          f"{g['tf_symbol']} | {g['tf_confidence']} | {g['drug_quality']} | "
                          f"{c['potency']} | {c['selectivity']} | "
                          f"{c.get('regulon', '—')} | {c.get('evidence_depth', '—')} | "
                          f"{flags} |")
             L.append("")
+            L.extend(_bbb_footnote(bbb_seen))
 
         if res.get("cell_cycle_summary") or res.get("cell_cycle_blocked"):
             L.append("### Cell-cycle compatibility")

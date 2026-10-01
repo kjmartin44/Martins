@@ -50,6 +50,7 @@ Thumbs.db
 # Downloaded reference corpora used by the offline routes. All re-fetchable
 # in seconds, and together ~63 MB - the repo tracks the code that reads them.
 /data/*.gmt
+/data/lincs_geneinfo.txt
 /data/gencode*.gtf*
 /data/*.gtf
 /data/*.gtf.gz

@@ -99,6 +99,7 @@ class SignatureHit:
     query_type: str = "direct"  # "direct" | "connectivity"
     reference_drug: str | None = None
     non_specific: bool = False
+    feature_space: str | None = None   # landmark | best inferred | inferred
     notes: list = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -463,11 +464,15 @@ def load_enrichr_gmt(gene: str, *, direction: str = "up",
                 score=GMT_SET_SCORE if want == "up" else -GMT_SET_SCORE,
                 cell_line=meta["cell_line"], dose=meta["dose"],
                 timepoint=meta["timepoint"],
-                # A .gmt records membership, not whether the probe was
-                # physically measured. Treating it as inferred is the
-                # conservative reading, and matches how an is_landmark-less
-                # table is already handled.
-                is_landmark=None, query_type="direct")
+                # Real confidence, not a guess: CLUE says whether this
+                # gene was measured on the array or imputed from the 978
+                # landmarks. Defaulting to None demoted every hit on a
+                # non-landmark gene below curated annotation.
+                is_landmark=(feature_space(target) == "landmark"
+                             if feature_space(target) else None),
+                query_type="direct")
+            h.feature_space = feature_space(target)
+            h.notes.append(confidence_note(target))
             h.notes.append(
                 "set membership in a LINCS consensus signature (Enrichr "
                 ".gmt): the compound moved this gene, with no magnitude "
@@ -486,3 +491,79 @@ def load_enrichr_gmt(gene: str, *, direction: str = "up",
 def autoload_gmt_available(direction: str = "up") -> bool:
     from pathlib import Path as _P
     return any(_P(c).exists() for c in DEFAULT_GMT_PATHS.get(direction, ()))
+
+# ------------------------------------------- L1000 measurement confidence
+# The package carried a binary is_landmark, and `catalogue.from_lincs` read
+# it as "tier 2 if measured, else tier 4" - so an empirical hit on a
+# non-landmark gene ranked BELOW a curated ligand annotation. That is too
+# harsh for most genes, because CLUE distinguishes three levels and the
+# binary collapses the middle one:
+#
+#   landmark        978  directly measured on the array
+#   best inferred  9196  imputed from the landmarks, high confidence
+#   inferred       2154  imputed, lower confidence
+#
+# CCR5, VDR and HBB are all "best inferred". Treating that as equivalent to
+# "a model says so" understates it: the signature itself was measured, and
+# the value for your gene was imputed by a model trained on 978 genes that
+# were. Tiering it alongside curated annotation is the honest middle.
+#
+#   https://s3.amazonaws.com/macchiato.clue.io/builds/LINCS2020/geneinfo_beta.txt
+_FEATURE_SPACE: dict = {}
+DEFAULT_GENEINFO_PATHS = ("data/lincs_geneinfo.txt", "lincs_geneinfo.txt")
+
+
+def load_geneinfo(path=None) -> int:
+    """Index each gene's L1000 measurement confidence."""
+    from pathlib import Path as _P
+    TAB = chr(9)
+    if _FEATURE_SPACE:
+        return len(_FEATURE_SPACE)
+    for cand in ([path] if path else list(DEFAULT_GENEINFO_PATHS)):
+        if not cand or not _P(cand).exists():
+            continue
+        text = _P(cand).read_text(encoding="utf-8", errors="replace")
+        lines = text.splitlines()
+        if not lines:
+            continue
+        hdr = lines[0].split(TAB)
+        try:
+            i_sym = hdr.index("gene_symbol")
+            i_fs = hdr.index("feature_space")
+        except ValueError:
+            continue
+        for ln in lines[1:]:
+            f = ln.split(TAB)
+            if len(f) > max(i_sym, i_fs) and f[i_sym]:
+                _FEATURE_SPACE[f[i_sym].strip().upper()] = f[i_fs].strip()
+        log.info("L1000 measurement confidence indexed for %d genes from %s",
+                 len(_FEATURE_SPACE), _P(cand).name)
+        return len(_FEATURE_SPACE)
+    return 0
+
+
+def feature_space(gene: str) -> str | None:
+    """"landmark" | "best inferred" | "inferred", or None if unknown."""
+    load_geneinfo()
+    return _FEATURE_SPACE.get((gene or "").strip().upper())
+
+
+def confidence_note(gene: str) -> str:
+    fs = feature_space(gene)
+    if fs == "landmark":
+        return (f"{gene.upper()} is one of the 978 L1000 LANDMARK genes, so "
+                f"its value was physically measured on the array. This is "
+                f"the strongest form this evidence takes.")
+    if fs == "best inferred":
+        return (f"{gene.upper()} is 'best inferred': the signature was "
+                f"measured, but the value for this gene was imputed from the "
+                f"978 landmarks rather than measured directly. High "
+                f"confidence among inferred genes, and still not a "
+                f"measurement of your gene - confirm by RT-qPCR.")
+    if fs == "inferred":
+        return (f"{gene.upper()} is 'inferred' at the lower confidence level. "
+                f"Its value is a model output two steps from any "
+                f"measurement; treat it as a lead, not evidence.")
+    return (f"{gene.upper()} is not in the L1000 gene space, or the "
+            f"confidence table is not loaded, so whether any value for it "
+            f"was measured or imputed is unknown - treated as inferred.")

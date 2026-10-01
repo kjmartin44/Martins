@@ -19,7 +19,7 @@ usage: promoter-tf-drugs [-h] --gene GENE [--out OUT] [--top TOP]
                          [--gtf GTF] [--has-ptc] [--genome GENOME]
                          [--promoter-fasta PROMOTER_FASTA]
                          [--expression-file EXPRESSION_FILE]
-                         [--lincs-gmt UP_GMT DOWN_GMT]
+                         [--lincs-gmt UP_GMT DOWN_GMT] [--lincs-geneinfo TSV]
                          [--lincs-file LINCS_FILE]
                          [--signature-file SIGNATURE_FILE] [--genetics]
                          [--proliferation {cycling,post-mitotic,mixed,unknown}]
@@ -135,6 +135,13 @@ options:
                         data/lincs_chem_pert_{up,down}.gmt are picked up
                         automatically if present (16 MB + 14 MB) (default:
                         None)
+  --lincs-geneinfo TSV  CLUE geneinfo table, which records whether each gene
+                        was MEASURED on the L1000 array (978 landmarks) or
+                        imputed from those that were. Without it every LINCS
+                        hit is tiered as predicted, so measured evidence ranks
+                        BELOW a curated ligand. data/lincs_geneinfo.txt is
+                        picked up automatically if present (1.1 MB) (default:
+                        None)
   --lincs-file LINCS_FILE
                         local drug/gene signature table
                         (drug,gene,score[,cell_line,is_landmark]) exported
@@ -241,6 +248,7 @@ usage: promoter-tf-drugs.panel [-h] [--genes GENES] [--gene-file GENE_FILE]
                                [--promoter-fasta PROMOTER_FASTA]
                                [--expression-file EXPRESSION_FILE]
                                [--lincs-gmt UP_GMT DOWN_GMT]
+                               [--lincs-geneinfo TSV]
                                [--lincs-file LINCS_FILE]
                                [--signature-file SIGNATURE_FILE] [--genetics]
                                [--proliferation {cycling,post-mitotic,mixed,unknown}]
@@ -387,6 +395,12 @@ options:
                         SigCom, which returns HTTP 500 for days at a time.
                         data/lincs_chem_pert_{up,down}.gmt are picked up
                         automatically if present (16 MB + 14 MB)
+  --lincs-geneinfo TSV  CLUE geneinfo table, which records whether each gene
+                        was MEASURED on the L1000 array (978 landmarks) or
+                        imputed from those that were. Without it every LINCS
+                        hit is tiered as predicted, so measured evidence ranks
+                        BELOW a curated ligand. data/lincs_geneinfo.txt is
+                        picked up automatically if present (1.1 MB)
   --lincs-file LINCS_FILE
                         local drug/gene signature table
                         (drug,gene,score[,cell_line,is_landmark]) exported

@@ -74,6 +74,12 @@ OPENTARGETS = "https://api.platform.opentargets.org/api/v4/graphql"
 # An MPO needs at least this many of its six parameters to mean anything.
 MIN_MPO_PARAMETERS = 3
 
+# How close to the threshold counts as undecided. Atenolol clears a complete
+# five-parameter MPO by 0.04, so anything inside this band is a coin flip and
+# saying "yes" for it would be the single most misleading thing this column
+# could do.
+BORDERLINE_MARGIN = 0.25
+
 PGP_SUBSTRATES = {
     "digoxin", "loperamide", "domperidone", "fexofenadine", "cyclosporine",
     "tacrolimus", "sirolimus", "everolimus", "paclitaxel", "docetaxel",
@@ -137,10 +143,57 @@ def _hump(x: float, lo_zero: float, lo_one: float,
     return (hi_zero - x) / (hi_zero - hi_one)
 
 
+# ChEMBL returns `molecule_properties` under its own field names, and
+# `drugs.py` passes that dict through verbatim. Every MPO parameter except
+# `hbd` therefore arrived under a key nothing here was reading, so real
+# ChEMBL-sourced rows scored on one parameter, fell below
+# MIN_MPO_PARAMETERS and came back unassessed - indistinguishable from a
+# compound with no structure at all. The functions below accept either
+# spelling so that both paths work and neither silently wins.
+#
+# `cx_most_bpka` is the most-basic pKa, which is exactly the term whose
+# absence lets atenolol read as brain-penetrant. ChEMBL carries it, so
+# normalising these names is also what makes that parameter available.
+_PROP_ALIASES: dict = {
+    "mw":   ("mw", "full_mwt", "mw_freebase", "molecular_weight"),
+    "logp": ("logp", "cx_logp", "alogp"),
+    "logd": ("logd", "cx_logd"),
+    "tpsa": ("tpsa", "psa", "polar_surface_area"),
+    "hbd":  ("hbd", "hbd_lipinski", "num_h_donors"),
+    "pka":  ("pka", "cx_most_bpka"),
+}
+
+
+def normalise_properties(properties: dict | None) -> dict:
+    """Physicochemical properties under the names this module reads.
+
+    Accepts a raw ChEMBL `molecule_properties` dict or one already using
+    short names. The first alias that carries a usable number wins, so a
+    short name supplied explicitly takes precedence over the ChEMBL
+    spelling. Unparseable and null values are dropped rather than coerced,
+    because a 0.0 for MW would score as a perfect parameter.
+    """
+    src = properties or {}
+    out: dict = {}
+    for canonical, aliases in _PROP_ALIASES.items():
+        for key in aliases:
+            if key not in src:
+                continue
+            val = src[key]
+            if val is None or val == "":
+                continue
+            try:
+                out[canonical] = float(val)
+            except (TypeError, ValueError):
+                continue
+            break
+    return out
+
+
 def cns_mpo(smiles: str | None = None, *, properties: dict | None = None
             ) -> tuple[float | None, int, dict]:
     """(score, n_parameters, components). Score is out of n_parameters."""
-    props = dict(properties or {})
+    props = normalise_properties(properties)
 
     if smiles:
         try:
@@ -182,12 +235,9 @@ def is_pgp_substrate(drug_name: str, properties: dict | None = None
         return True, (f"{drug_name} is a known P-glycoprotein substrate: it will "
                       "be actively pumped out of brain endothelium regardless of "
                       "favourable physicochemistry")
-    p = properties or {}
-    try:
-        mw = float(p.get("mw") or 0)
-        tpsa = float(p.get("tpsa") or 0)
-    except (TypeError, ValueError):
-        return None, None
+    p = normalise_properties(properties)
+    mw = p.get("mw") or 0.0
+    tpsa = p.get("tpsa") or 0.0
     if mw > 400 and tpsa > 75:
         return None, ("structurally consistent with P-gp efflux (MW>400, "
                       "TPSA>75), though substrate prediction is unreliable — "
@@ -671,3 +721,71 @@ def expression_overlap(gene_tissues: set, tf_tissues: set) -> dict:
         result["compatible"] = True
         result["note"] = f"co-expressed in {len(shared)} tissue(s)"
     return result
+
+def bbb_verdict(drug_name: str, properties: dict | None = None,
+                smiles: str | None = None) -> dict:
+    """A yes / no / unknown call on blood-brain-barrier penetration.
+
+    Reuses `cns_mpo` and the same scaled threshold `assess_delivery` applies
+    (4.0 x n_params / 6), so a drug cannot read "yes" here and "unlikely"
+    there. Computed for every drug rather than only under --tissue cns,
+    because whether a candidate can reach the brain is a screening question,
+    not a late one.
+
+    Three states, and the third matters: `None` means no physicochemical
+    properties were returned for this compound - common for DGIdb-sourced
+    rows - and that is not the same as "no".
+
+    What a "yes" does NOT mean
+    -------------------------
+    MPO predicts PASSIVE DIFFUSION. The commonest reason a suitable molecule
+    never reaches brain is active efflux by P-glycoprotein at the
+    endothelium, and a known substrate is pumped straight back out whatever
+    its score. That is checked here and overrides a pass.
+
+    Atenolol is the worked counter-example and it survives even a complete
+    parameter set: with ChEMBL's own pKa (9.6, strongly basic) it scores
+    3.37 against a 3.33 threshold and reads "yes", while being a textbook
+    poor penetrant. It passes by 0.04 - which is noise, not a finding. So
+    the margin is returned alongside the label, and `borderline` is True
+    within BORDERLINE_MARGIN of the threshold. A borderline pass is a
+    coin-flip dressed as an answer; treat one on a basic amine as a no until
+    something measured says otherwise.
+    """
+    score, n_params, components = cns_mpo(smiles, properties=properties)
+    if score is None or n_params < MIN_MPO_PARAMETERS:
+        return {"crosses_bbb": None, "label": "—", "cell": "—",
+                "mpo": score, "parameters": n_params,
+                "margin": None, "borderline": False,
+                "why": ("no physicochemical properties returned for this "
+                        "compound, so this is UNKNOWN rather than no")}
+
+    threshold = 4.0 * (n_params / 6.0)
+    ok = score >= threshold
+    margin = round(score - threshold, 2)
+    borderline = abs(margin) <= BORDERLINE_MARGIN
+    pgp, pgp_note = is_pgp_substrate(drug_name, properties)
+
+    label = "yes" if ok else "no"
+    why = (f"CNS MPO {score:.2f}/{n_params} against a {threshold:.2f} "
+           f"threshold")
+    if ok and pgp:
+        # Efflux overrides a good score outright.
+        label = "no"
+        borderline = False
+        why += "; but a known P-glycoprotein substrate, which is pumped back out"
+    elif borderline:
+        why += (f"; margin {margin:+.2f}, which is within noise of the "
+                f"threshold - read this as undecided, not as a {label}")
+    elif ok and n_params < 6 and margin < 1.0:
+        why += (f"; only {n_params} of 6 parameters, so the score is scaled "
+                f"and a thin pass is less informative than it looks")
+
+    # One rendering for every table, so the same drug cannot read "yes" in
+    # one and "yes?" in another. A borderline result keeps the direction it
+    # leans and marks itself as undecided rather than hiding in a footnote.
+    cell = f"{label}?" if borderline else label
+
+    return {"crosses_bbb": (label == "yes"), "label": label, "cell": cell,
+            "mpo": score, "parameters": n_params, "pgp_substrate": pgp,
+            "margin": margin, "borderline": borderline, "why": why}
