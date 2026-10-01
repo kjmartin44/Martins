@@ -299,26 +299,117 @@ def render(preds: list, gene: str, goal: str, *, verdict: dict | None = None
                  f"decide whether to pursue a promoter route at all.")
         L.append("")
 
+    # Grouped by TARGET, not by drug. Every drug acting through the same
+    # factor shares its binding evidence, its collateral and its receptor
+    # family word for word - in a ten-row section that repeated the same
+    # falsifying experiment ten times, the tier line eight times and the
+    # direction clause seven. Saying the shared thing once and the
+    # distinguishing thing per drug loses nothing and removes about half
+    # the section.
+    SHARED_PREFIXES = ("The factor is annotated", "The factor has no",
+                       "Binding:", "Collateral:", "Family:", "Evidence tier")
+
+    def _m(q):
+        """The drug's own mechanism clause, for deciding if it distinguishes."""
+        c = next((x for x in q.why if not x.startswith(SHARED_PREFIXES)), "")
+        return c.split(": ", 1)[-1] if ": " in c else c
+
+    by_target: dict = {}
+    for p in preds:
+        by_target.setdefault(p.target or "—", []).append(p)
+
     L.append("### Why each one")
     L.append("")
-    for i, p in enumerate(preds, 1):
-        L.append(f"**{i}. {p.drug}**"
-                 + (f" — via {p.target}" if p.target else ""))
+
+    tiers = {p.tier for p in preds}
+    if len(tiers) == 1:
+        t = tiers.pop()
+        L.append(f"Every route below is **evidence tier {t}** — "
+                 f"{TIER_CONFIDENCE.get(t, '')}.")
         L.append("")
-        for clause in p.why:
+    # The direction rule is one sentence that applies to every group; only
+    # each factor's ROLE differs, so the rule is stated once and the groups
+    # carry the role.
+    roles = {c.split("**")[1] for p in preds for c in p.why
+             if c.startswith("The factor is annotated") and "**" in c}
+    if len(roles) >= 1:
+        want = "raise" if goal == "up" else "lower"
+        L.append(f"**The direction rule**, which applies to every group "
+                 f"below: you want to {want} the gene, so you agonise an "
+                 f"activator and block a repressor"
+                 + (" — and a dual-role factor settles neither way, because "
+                    "it activates at some promoters and represses at others."
+                    if "dual-role" in roles else ".") )
+        L.append("")
+
+    falsifiers = {p.falsifier for p in preds if p.falsifier}
+    if len(falsifiers) == 1:
+        L.append(f"**One experiment falsifies all of them:** "
+                 f"{falsifiers.pop()}")
+        L.append("")
+
+    n = 0
+    for target, group in by_target.items():
+        group.sort(key=lambda p: -p.score)
+        head = group[0]
+        label = (f"Through **{target}**" if target != "—"
+                 else "**Acting on the gene directly**")
+        L.append(f"#### {label}"
+                 + (f" — {len(group)} candidates" if len(group) > 1 else ""))
+        L.append("")
+
+        # the factor-level argument, stated once for the whole group
+        for clause in head.why:
+            if not clause.startswith(SHARED_PREFIXES):
+                continue
+            if clause.startswith("Evidence tier") and len(tiers) == 0:
+                continue
+            if clause.startswith("The factor is annotated") and roles:
+                # the rule is stated above; only the role is news here
+                role = clause.split("**")[1] if "**" in clause else "?"
+                L.append(f"- Role: **{role}**")
+                continue
             L.append(f"- {clause}")
-        if p.p_move is not None:
-            rng = ""
-            if p.p_range and p.p_range[0] is not None:
-                rng = f" (range {p.p_range[0]}–{p.p_range[1]})"
-            L.append(f"- Predicted probability the gene actually moves: "
-                     f"**{p.p_move:.2f}**{rng}"
-                     + (f", limited by *{p.limiting_step}*."
-                        if p.limiting_step else "."))
-        if p.caveats:
-            L.append(f"- ⚠ {p.caveats[0]}")
-        if p.falsifier:
-            L.append(f"- *Would falsify it:* {p.falsifier}")
+        L.append("")
+
+        # caveats shared by every drug in the group belong to the factor
+        group_caveats = set()
+        if len(group) > 1:
+            common = [set(q.caveats or []) for q in group]
+            group_caveats = set.intersection(*common) if common else set()
+            for c in sorted(group_caveats):
+                L.append(f"- ⚠ {c}")
+            if group_caveats:
+                L.append("")
+
+        # then only what distinguishes each drug
+        for p in group:
+            n += 1
+            bits = []
+            if p.grade:
+                bits.append(f"grade {p.grade}")
+            if p.p_move is not None:
+                bits.append(f"P={p.p_move:.2f}")
+            # Only print the mechanism when it distinguishes this drug from
+            # its group-mates; "ligand at the transcription factor" on every
+            # row of a group is the same noise in a different place.
+            mech = next((c for c in p.why
+                         if not c.startswith(SHARED_PREFIXES)), "")
+            mech = mech.split(": ", 1)[-1].rstrip(".") if ": " in mech else ""
+            if len({_m(q) for q in group}) <= 1:
+                mech = ""
+            line = f"{n}. **{p.drug}**"
+            if bits:
+                line += f" — {', '.join(bits)}"
+            if mech:
+                line += f" — {mech}"
+            L.append(line)
+            # A caveat every drug in the group shares is a property of the
+            # factor, and Collateral has already said it above.
+            if p.caveats and p.caveats[0] not in group_caveats:
+                L.append(f"   - ⚠ {p.caveats[0]}")
+            if p.falsifier and len(falsifiers) > 1:
+                L.append(f"   - *Would falsify it:* {p.falsifier}")
         L.append("")
 
     L.append("*Not medical advice. \"Approved\" means approved for its own "

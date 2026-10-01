@@ -1392,6 +1392,15 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
             L.append("| sequester ligand | down |")
             L.append("")
 
+            # Work out which notes every receptor repeats, and say them once.
+            _allnotes = [set((a.get("notes") or [])[:4]) for a in lax.values()]
+            _shared_ligand_notes = (set.intersection(*_allnotes)
+                                    if len(_allnotes) > 1 else set())
+            for n2 in sorted(_shared_ligand_notes):
+                L.append(f"- {n2}")
+            if _shared_ligand_notes:
+                L.append("")
+
             for sym, a in list(lax.items())[:6]:
                 L.append(f"#### {sym} — ligand: {a.get('ligand') or 'unknown'}")
                 L.append("")
@@ -1433,9 +1442,15 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                              f"these with the list above: {opp}.*")
                     L.append("")
 
-                for n2 in a["notes"][:4]:
+                # Notes shared by every receptor on this axis are
+                # properties of the axis, not of the receptor, and printing
+                # them per receptor is the same text three times.
+                _own = [n2 for n2 in a["notes"][:4]
+                        if n2 not in _shared_ligand_notes]
+                for n2 in _own:
                     L.append(f"- {n2}")
-                L.append("")
+                if _own:
+                    L.append("")
 
             covered = lig_mod.covered_receptors()
             scanned = [t["symbol"] for t in (res.get("tfs") or [])][:25]
