@@ -7395,3 +7395,209 @@ def test_transfer_auc_returns_none_rather_than_guessing():
     from promoter_tf_drugs import screening as scr
     assert scr.transfer_auc(None, [], []) is None
     assert scr.transfer_auc(None, [{"smiles": "C"}], []) is None
+
+
+# ===================================================================== #
+# Preparing a receptor and finding its pocket.                          #
+# ===================================================================== #
+def _pdb_atom(rec, serial, name, resn, chain, resi, x, y, z, elem):
+    return (f"{rec:<6}{serial:>5} {name:^4} {resn:>3} {chain}"
+            f"{resi:>4}    {x:>8.3f}{y:>8.3f}{z:>8.3f}"
+            f"{1.0:>6.2f}{20.0:>6.2f}          {elem:>2}")
+
+
+def _fake_pdb(with_ligand=True, coactivator=True, n_lig=24):
+    lines, n = [], 1
+    for i in range(1, 41):
+        lines.append(_pdb_atom("ATOM", n, "CA", "ALA", "A", i,
+                               10.0 + i, 5.0, 5.0, "C")); n += 1
+    for i in range(1, 21):
+        lines.append(_pdb_atom("ATOM", n, "CA", "GLY", "B", i,
+                               90.0 + i, 90.0, 90.0, "C")); n += 1
+    if coactivator:
+        for i, resn in enumerate(["LEU", "LYS", "LYS", "LEU", "LEU"], 1):
+            lines.append(_pdb_atom("ATOM", n, "CA", resn, "P", i,
+                                   15.0 + i, 9.0, 5.0, "C")); n += 1
+    lines.append("TER")
+    if with_ligand:
+        for i in range(n_lig):
+            lines.append(_pdb_atom("HETATM", n, "C1", "LIG", "A", 900,
+                                   22.0 + (i % 5) * 0.9, 6.0 + (i % 3) * 0.8,
+                                   5.5 + (i % 4) * 0.7, "C")); n += 1
+    for i in range(20):
+        lines.append(_pdb_atom("HETATM", n, "O", "HOH", "A", 1000 + i,
+                               60.0 + i, 60.0, 60.0, "O")); n += 1
+    for i in range(5):
+        lines.append(_pdb_atom("HETATM", n, "O", "SO4", "A", 1100,
+                               70.0 + i, 70.0, 70.0, "O")); n += 1
+    lines.append(_pdb_atom("HETATM", n, "ZN", " ZN", "A", 1200,
+                           80.0, 80.0, 80.0, "ZN"))
+    return "\n".join(lines) + "\nEND\n"
+
+
+def test_solvent_and_ions_are_never_mistaken_for_the_ligand():
+    """Every structure has waters, a sulfate and often a zinc. Boxing on
+    one of them puts the search 50 angstroms from the site."""
+    from promoter_tf_drugs import docking as dk
+    groups = dk.hetatm_groups(_fake_pdb())
+    names = {g["resname"] for g in groups}
+    assert "LIG" in names
+    assert not names & {"HOH", "SO4", "ZN"}
+
+    lig = dk.best_ligand(_fake_pdb())
+    assert lig["resname"] == "LIG" and lig["n_atoms"] == 24
+
+
+def test_a_fragment_is_too_small_to_mark_a_drug_pocket():
+    from promoter_tf_drugs import docking as dk
+    assert dk.best_ligand(_fake_pdb(n_lig=4)) is None
+    assert dk.MIN_LIGAND_ATOMS >= 10
+
+
+def test_receptor_preparation_empties_the_pocket(tmp_path):
+    """Docking into a structure with its crystal ligand still in place is
+    docking into an occupied site, and every compound scores weakly for a
+    reason that has nothing to do with the compounds."""
+    from promoter_tf_drugs import docking as dk
+    text = _fake_pdb()
+    out = dk.prepare_receptor(text, tmp_path / "rec.pdb", keep_chain="A")
+    body = out.read_text()
+    assert "HETATM" not in body
+    assert "HOH" not in body
+    chains = {ln[21] for ln in body.splitlines() if ln.startswith("ATOM")}
+    assert chains == {"A"}
+
+
+def test_the_box_sits_on_the_ligand_and_has_a_floor(tmp_path):
+    """Computed here rather than left to the binary, because
+    --autobox_ligand is a smina flag and AutoDock Vina has no equivalent."""
+    import pytest
+    from pathlib import Path
+    from promoter_tf_drugs import docking as dk
+    text = _fake_pdb()
+    lig = dk.best_ligand(text)
+    lp = dk.write_ligand_pdb(text, lig, tmp_path / "lig.pdb")
+    box = dk.box_from_ligand(lp.read_text())
+    cx, cy, cz, sx, sy, sz = box
+    assert abs(cx - lig["centre"][0]) < 2.0
+    assert abs(cy - lig["centre"][1]) < 2.0
+    # a compact ligand must still get a searchable box
+    assert min(sx, sy, sz) >= 12.0
+
+    with pytest.raises(ValueError):
+        dk.box_from_ligand("no coordinates here")
+
+
+def test_written_ligand_contains_only_that_ligand(tmp_path):
+    from promoter_tf_drugs import docking as dk
+    text = _fake_pdb()
+    lp = dk.write_ligand_pdb(text, dk.best_ligand(text), tmp_path / "l.pdb")
+    body = lp.read_text()
+    assert "HOH" not in body and "SO4" not in body
+    assert all(ln.startswith(("HETATM", "END"))
+               for ln in body.splitlines() if ln.strip())
+
+
+class _FakeRCSB:
+    """Two entries: an apo structure first, then one with a ligand."""
+    def __init__(self, ids=("1APO", "2HOL"), apo_only=False):
+        self.ids, self.apo_only = ids, apo_only
+
+    def post(self, url, payload):
+        return {"result_set": [{"identifier": i} for i in self.ids]}
+
+    def request(self, url, parse_json=True):
+        pid = url.rsplit("/", 1)[-1].replace(".pdb", "")
+        return _fake_pdb(with_ligand=(not self.apo_only and pid != "1APO"))
+
+
+def test_choose_pocket_skips_apo_and_reads_the_conformation(tmp_path):
+    """A structure without a co-crystallised ligand gives no reliable box,
+    and the conformation matters because an agonist-bound pocket is the
+    one a compound that RAISES your gene has to fit."""
+    import pytest
+    from pathlib import Path
+    from promoter_tf_drugs import docking as dk
+    pk = dk.choose_pocket(_FakeRCSB(), "P00000", tmp_path)
+    assert pk is not None
+    assert pk.pdb_id == "2HOL"
+    assert pk.ligand_resname == "LIG"
+    assert pk.state == "active"
+    assert "LXXLL" in pk.note
+    assert "HETATM" not in Path(pk.path).read_text()
+
+
+def test_no_holo_structure_is_refused_rather_than_guessed(tmp_path):
+    """A guessed box is the commonest way a docking campaign quietly
+    measures nothing."""
+    from promoter_tf_drugs import docking as dk
+    assert dk.choose_pocket(_FakeRCSB(apo_only=True), "P0", tmp_path) is None
+
+    res = dk.dock_screen_for_target(
+        _FakeRCSB(apo_only=True), "T", "P0",
+        [{"name": "d", "smiles": "LIB0"}],
+        actives=[{"smiles": f"ACT{i}"} for i in range(10)],
+        work_dir=tmp_path, score_fn=lambda s: -7.0)
+    assert res["usable"] is False
+    assert "refused rather than approximated" in res["error"]
+
+
+def test_orchestrator_runs_end_to_end_and_ranks(tmp_path):
+    from promoter_tf_drugs import docking as dk
+    import random
+    rng = random.Random(0)
+    actives = [{"smiles": f"ACT{i}"} for i in range(15)]
+    library = ([{"name": f"approved{i}", "smiles": f"LIB{i}"}
+                for i in range(200)]
+               + [{"name": f"known{i}", "smiles": f"ACT{i}"}
+                  for i in range(15)])
+
+    def score(smi):
+        base = rng.gauss(-7.0, 1.1)
+        return base - 2.5 if smi.startswith("ACT") else base
+
+    res = dk.dock_screen_for_target(
+        _FakeRCSB(), "T", "P0", library, actives=actives,
+        work_dir=tmp_path, top_n=10, score_fn=score)
+    assert res["usable"] is True
+    assert res["auc"] >= dk.MIN_DOCKING_AUC
+    assert res["pocket"]["pdb_id"] == "2HOL"
+    scores = [h["score"] for h in res["hits"]]
+    assert scores == sorted(scores)
+
+
+def test_vina_is_refused_because_it_needs_pdbqt(tmp_path, monkeypatch):
+    """AutoDock Vina ships a Windows binary and takes PDBQT for both
+    receptor and ligand, which this path does not prepare. Failing inside
+    the binary with a parse error would be the unhelpful way to find out."""
+    import pytest
+    from pathlib import Path
+    from promoter_tf_drugs import docking as dk
+    monkeypatch.setattr(dk, "_docking_binary", lambda: "/usr/bin/vina")
+    assert dk.engine_name("/usr/bin/vina") == "vina"
+    with pytest.raises(RuntimeError, match="PDBQT"):
+        dk.dock_one_boxed(tmp_path / "r.pdb", tmp_path / "l.sdf",
+                          (0, 0, 0, 20, 20, 20))
+
+    chk = dk.check_setup()
+    assert chk["ok"] is False
+    assert any("smina or gnina" in m for m in chk["missing"])
+
+
+def test_check_setup_names_what_is_missing(monkeypatch):
+    """The first thing anyone runs, and it has to say what to install."""
+    from promoter_tf_drugs import docking as dk
+    monkeypatch.setattr(dk, "_docking_binary", lambda: None)
+    chk = dk.check_setup()
+    assert chk["ok"] is False
+    assert any("docking binary" in m for m in chk["missing"])
+    assert "smina" in dk.SETUP
+    assert "wsl --install" in dk.SETUP
+
+
+def test_setup_text_covers_windows():
+    """smina has no Windows build, and saying so beats letting someone
+    spend an afternoon looking for one."""
+    from promoter_tf_drugs import docking as dk
+    assert "Windows" in dk.SETUP
+    assert "no Windows build" in dk.SETUP

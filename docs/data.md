@@ -119,6 +119,71 @@ drugged successfully at partial occupancy. And nothing here concerns your
 gene, so it bounds the cost of acting on a factor and says nothing about
 the benefit.
 
+## Docking
+
+Docking is opt-in and separate from the main pipeline, because it needs an
+external binary and fetched structures. Check whether your machine can run
+it:
+
+```
+python -m promoter_tf_drugs.docking --check
+```
+
+It reports what is present and what to install. Two things are needed: a
+docking binary on PATH, and RDKit.
+
+smina is the binary to get. It is a single static file and takes a PDB
+receptor with an SDF ligand directly, which is why it is preferred here.
+On Linux, WSL or macOS:
+
+```
+curl -L -o smina https://sourceforge.net/projects/smina/files/smina.static/download
+chmod +x smina && sudo mv smina /usr/local/bin/
+```
+
+There is no Windows build of smina, so on Windows run this inside WSL
+(`wsl --install`, then the lines above). AutoDock Vina does ship a Windows
+executable, but it requires PDBQT input for both receptor and ligand that
+this path does not prepare, so it is detected and refused with an
+explanation rather than failing inside the binary.
+
+Then run a screen:
+
+```
+python -m promoter_tf_drugs.docking --gene VDR --state active --top 25
+```
+
+What happens, in order. The gene symbol resolves to a UniProt accession,
+RCSB is searched for structures, and one with a co-crystallised ligand is
+chosen; a structure without one gives no reliable box and is skipped, and
+if none has one the run is refused rather than docking into a guessed
+site. The chosen structure is stripped of its ligand, waters and ions,
+because docking into an occupied pocket scores every compound weakly for
+reasons unconnected to the compounds. The box is placed on the removed
+ligand.
+
+Then the gate. The receptor's own measured ligands are docked alongside
+decoys, and the ranking is scored by ROC AUC and by enrichment in the top
+1 percent. Both must clear a bar before any score on an untested compound
+is reported. Below it, nothing is reported and the reason is given.
+
+`--state active` restricts to agonist-bound conformations, read from the
+file by detecting a bound LXXLL coactivator peptide. That matters when you
+want a compound that raises your gene: an agonist has to fit the active
+conformation.
+
+Costs roughly four seconds per compound per CPU core, so `--library-limit`
+defaults to 600 rather than the whole approved set. Structures are cached
+under `--work-dir`.
+
+Two limits worth knowing before investing the time. Docking needs a pocket
+and a structure, so it does not reach transcription factors that have
+neither, which is most of them; the receptors it works on are the
+nuclear-receptor ligand-binding domains already prominent in the report.
+And a docking score is not an affinity: these functions enrich for binders
+and rank them poorly, so the output is a shortlist to assay rather than a
+predicted order.
+
 ## Output files
 
 Every completed analysis writes five files:
