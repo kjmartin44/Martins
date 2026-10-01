@@ -11,6 +11,7 @@ from pathlib import Path
 from . import (annotate, catalogue as cat_mod, cellcycle, congeners as cong_mod,
                delivery as dlv_mod,
                tfactivity as tfa_mod,
+               depmap as depmap_mod,
                demo_data, direct, discovery, drug_scoring, eqtl as eqtl_mod,
                modalities as modal_mod,
                drugs as drugs_mod, evidence, genes, motifs as motifs_mod,
@@ -54,6 +55,11 @@ class TFResult:
     n_regulon: int | None = None
     regulon_provenance: str | None = None
     regulon_understudied: bool = False
+    # What a cell loses without this factor, from DepMap CRISPR knockout.
+    # The same collateral question as n_regulon, measured instead of
+    # curated, and available for factors no curator has written up.
+    dependency: str | None = None
+    dependency_burden: float | None = None
 
     @property
     def best_hit(self):
@@ -77,6 +83,8 @@ class TFResult:
             "n_regulon": self.n_regulon,
             "regulon_provenance": self.regulon_provenance,
             "regulon_understudied": self.regulon_understudied,
+            "dependency": self.dependency,
+            "dependency_burden": self.dependency_burden,
             "drugs": [d.to_dict() for d in self.drugs],
         }
 
@@ -156,6 +164,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         use_lincs: bool = False, signature_file: str | None = None,
         lincs_file: str | None = None,
         lincs_geneinfo=None, tf_activity: bool = False,
+        depmap_file: str | None = None,
         activity_tissue: str | None = None,
         activity_permutations: int = 0, lincs_gmt: tuple | None = None, expression_file: str | None = None,
         promoter_fasta: str | None = None,
@@ -665,6 +674,41 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                 n is not None and prov == "regulon file"
                 and n < regulon_mod.MIN_CREDIBLE_REGULON)
 
+        # ---- what does the cell lose without this factor?
+        # The regulon count says how many genes a factor controls, from
+        # literature curation. This says what a cell cannot do without it,
+        # measured by CRISPR knockout across ~1,100 lines. Same collateral
+        # question, answered rather than approximated - and it covers the
+        # factors the curated tables leave at "not counted".
+        dependencies: dict = {}
+        _dm_path = depmap_mod.resolve(depmap_file)
+        if _dm_path:
+            # Every ranked factor, not a slice: the file is read in one
+            # streaming pass whatever is asked for, so narrowing the
+            # request saves nothing and loses the factors further down -
+            # which are exactly the ones with no curated regulon.
+            wanted = [r.symbol for r in ranked]
+            deps = _optional(
+                "DepMap dependency",
+                lambda: depmap_mod.assess_many(wanted, effect_path=_dm_path),
+                {})
+            dependencies = {k: v.to_dict() for k, v in (deps or {}).items()}
+            for r in ranked:
+                d = (deps or {}).get(r.symbol.upper())
+                if d is not None:
+                    r.dependency = d.verdict
+                    r.dependency_burden = d.burden
+            ledger.record(
+                "depmap", requested=True, ok=True, yielded=len(dependencies),
+                detail=(f"{len(dependencies)} of {len(wanted)} factor(s) "
+                        f"scored in {Path(_dm_path).name}"
+                        if dependencies else
+                        f"no requested factor appears in "
+                        f"{Path(_dm_path).name}"))
+        elif depmap_file:
+            ledger.record("depmap", requested=True, ok=False, yielded=0,
+                          detail=f"{depmap_file} not found")
+
         # ---- 8c-bis. is the factor actually ACTIVE, not merely motif-matched?
         # The independent check on everything above. A PWM scan of a 6 kb
         # window returns mostly noise at p=1e-4, so a site is evidence that
@@ -992,6 +1036,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             "cell_type": celltype,
             "tf_activity": activity,
             "activity_drugs": activity_drugs,
+            "dependencies": dependencies,
             "modality_design": modality,
             "screen_plan": screen_plan,
             "lincs": lincs,
@@ -1038,6 +1083,102 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
 # ------------------------------------------------------------------ reports
 def _fmt_offset(o) -> str:
     return f"{o:+d}" if isinstance(o, int) else "?"
+
+
+def _dep_label(tf: dict) -> str:
+    """The DepMap verdict, shortened for a table cell."""
+    v = tf.get("dependency")
+    if not v:
+        return "not scored"
+    return {
+        "essential in nearly every line": "yes, nearly all",
+        "essential in most lines": "yes, most",
+        "essential in a substantial minority": "some lines",
+        "essential in a minority of lines": "some lines",
+        "essential in a handful of lines": "a few lines",
+        "dispensable across the panel": "no",
+    }.get(v, v)
+
+
+def _depmap_section(deps: dict, res: dict) -> list:
+    """What a cell loses without each factor, and what that does not mean."""
+    from . import depmap as dm
+
+    if not deps:
+        return []
+    n_scanned = len(res.get("tfs") or [])
+    L = ["### What a cell loses without each factor (DepMap)", ""]
+    L.append("The regulon column counts how many genes a factor controls, "
+             "from literature curation, which measures how much anyone has "
+             "published as much as what the factor does. This is the same "
+             "collateral question answered by measurement: CRISPR knockout "
+             "of each factor across roughly 1,100 cancer cell lines.")
+    L.append("")
+    L.append("It also reaches factors the curated tables cannot. A factor "
+             "nobody has written a regulon for still has a knockout "
+             "phenotype here.")
+    L.append("")
+    L.append(dm.summarise({k: _as_dep(v) for k, v in deps.items()},
+                          requested=n_scanned))
+    L.append("")
+    L.append("| Factor | Cells need it? | Mean effect | Lines dependent | "
+             "Most dependent lineage |")
+    L.append("|---|---|---|---|---|")
+    rows = sorted(deps.values(), key=lambda d: d.get("mean_effect") or 0.0)
+    for d in rows[:25]:
+        # Only when there is a dependency to localise. For a dispensable
+        # factor the "most dependent" lineage is whichever one drifted
+        # furthest below zero, which is noise dressed as a finding.
+        lin = (d.get("top_lineages") or [{}])[0]
+        lin_cell = "—"
+        if d.get("n_dependent") and lin.get("lineage"):
+            lin_cell = f"{lin['lineage']} ({lin['mean_effect']:+.2f})"
+        L.append(f"| {d['gene']} | {d['verdict']} | "
+                 f"{d['mean_effect']:+.2f} | "
+                 f"{d['n_dependent']}/{d['n_lines']} "
+                 f"({d['fraction_dependent']:.0%}) | {lin_cell} |")
+    L.append("")
+    L.append("**Mean effect** is on DepMap's own scale: 0 means knockout "
+             "changed nothing, and -1 is the median of known "
+             "common-essential genes. A line counts as dependent below "
+             "-0.5.")
+    L.append("")
+    L.append("#### What this does not mean")
+    L.append("")
+    L.append("- **These are cancer cell lines dividing in a dish.** "
+             "Essentiality here is a statement about proliferating "
+             "transformed cells. A factor whose job is in a post-mitotic "
+             "or differentiated cell looks dispensable for reasons that "
+             "have nothing to do with its importance in your tissue.")
+    L.append("- **Knockout is not inhibition.** The protein is removed "
+             "entirely, including scaffolding roles no ligand would touch. "
+             "Essential genes are drugged successfully at partial "
+             "occupancy all the time, so a dependency is a reason for "
+             "care rather than a veto.")
+    L.append("- **Nothing here is about your gene.** This bounds the cost "
+             "of acting on a factor. Whether acting on it moves your gene "
+             "is the rest of the report.")
+    L.append("- **A dispensable result is not permission.** It bounds the "
+             "proliferative cost and nothing else.")
+    L.append("")
+    sel = [d for d in deps.values() if d.get("selective")]
+    if sel:
+        L.append(f"**The selective ones are the interesting ones.** "
+                 f"{', '.join(d['gene'] for d in sel[:6])} matter in a "
+                 f"minority of lines rather than all of them, so the "
+                 f"requirement has a context. The lineage column is where "
+                 f"to look for what that context is, and whether your "
+                 f"tissue shares it is the question this panel cannot "
+                 f"answer.")
+        L.append("")
+    return L
+
+
+def _as_dep(d: dict):
+    """A dict row back into the shape depmap.summarise reads."""
+    from . import depmap as dm
+    return dm.Dependency(**{k: v for k, v in d.items()
+                            if k in dm.Dependency.__dataclass_fields__})
 
 
 def _drug_glossary(routes: list, res: dict) -> list:
@@ -1492,9 +1633,15 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
 
         L.append("### Top-ranked transcription factors")
         L.append("")
-        L.append("| Rank | TF | Role | NR | Other genes it controls | Sites | "
-                 "Best rel. score | Offset | ChIP | Approved drugs | Score |")
-        L.append("|---|---|---|---|---|---|---|---|---|---|---|")
+        has_dep = any(t.get("dependency") for t in (res.get("tfs") or []))
+        dep_col = " Cells need it? |" if has_dep else ""
+        dep_sep = "---|" if has_dep else ""
+        L.append("| Rank | TF | Role | NR | Other genes it controls |"
+                 + dep_col +
+                 " Sites | Best rel. score | Offset | ChIP | "
+                 "Approved drugs | Score |")
+        L.append("|---|---|---|---|---|" + dep_sep +
+                 "---|---|---|---|---|---|")
         any_regulon = False
         any_understudied = False
         for i, t in enumerate(res["tfs"][:top_n], 1):
@@ -1508,14 +1655,20 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                 if t.get("regulon_understudied"):
                     any_understudied = True
                     reg += " \u26a0"
+            dep_cell = ""
+            if has_dep:
+                dep_cell = f" {_dep_label(t)} |"
             L.append(f"| {i} | {t['symbol']} | {t['role']} | "
-                     f"{'yes' if t['nuclear_receptor'] else ''} | {reg} | "
-                     f"{t['n_sites']} | "
+                     f"{'yes' if t['nuclear_receptor'] else ''} | {reg} |"
+                     + dep_cell +
+                     f" {t['n_sites']} | "
                      f"{t['best_rel_score']} | {_fmt_offset(t['best_site_tss_offset'])} | "
                      f"{t['chip_peaks']} | {len(t['drugs'])} | {t['score']} |")
         L.append("")
         L.extend(_regulon_column_note(any_regulon, any_understudied,
                                       res.get("tfs") or []))
+
+        L.extend(_depmap_section(res.get("dependencies") or {}, res))
 
         act = res.get("tf_activity") or {}
         if act.get("n_testable"):

@@ -203,6 +203,13 @@ def add_analysis_args(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
                    help="tissue name as spelled in the expression table "
                         "(e.g. liver, brain, kidney) to infer TF activity "
                         "in. Required by --tf-activity")
+    p.add_argument("--depmap-file", metavar="CSV",
+                   help="DepMap CRISPRGeneEffect.csv. Measures what happens "
+                        "to a cell when each factor is knocked out, which is "
+                        "the collateral question the regulon count stands in "
+                        "for. data/CRISPRGeneEffect.csv is picked up "
+                        "automatically if present; Model.csv beside it adds "
+                        "lineage")
     p.add_argument("--activity-permutations", type=int, default=0,
                    metavar="N",
                    help="build an empirical null from N resampled target "
@@ -296,6 +303,7 @@ def _execute(args) -> int:
         design_modality=args.design_modality,
         use_lincs=args.lincs,
         signature_file=args.signature_file, lincs_file=args.lincs_file,
+        depmap_file=args.depmap_file,
         tf_activity=args.tf_activity,
         activity_tissue=args.activity_tissue,
         activity_permutations=args.activity_permutations,

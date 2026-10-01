@@ -28,7 +28,7 @@ usage: promoter-tf-drugs [-h] --gene GENE [--out OUT] [--top TOP]
                          [--include-unknown-direction] [--no-mechanisms]
                          [--no-improvements] [--no-outcome] [--screen]
                          [--tissue {cns}] [--tf-activity]
-                         [--activity-tissue TISSUE]
+                         [--activity-tissue TISSUE] [--depmap-file CSV]
                          [--activity-permutations N] [--tf-weight TF_WEIGHT]
                          [--chip-bed CHIP_BED] [--chip-api]
                          [--include-investigational] [--no-dgidb]
@@ -202,6 +202,12 @@ options:
                         tissue name as spelled in the expression table (e.g.
                         liver, brain, kidney) to infer TF activity in.
                         Required by --tf-activity (default: None)
+  --depmap-file CSV     DepMap CRISPRGeneEffect.csv. Measures what happens to
+                        a cell when each factor is knocked out, which is the
+                        collateral question the regulon count stands in for.
+                        data/CRISPRGeneEffect.csv is picked up automatically
+                        if present; Model.csv beside it adds lineage (default:
+                        None)
   --activity-permutations N
                         build an empirical null from N resampled target sets
                         instead of the analytic one. The analytic p-value
@@ -279,7 +285,7 @@ usage: promoter-tf-drugs.panel [-h] [--genes GENES] [--gene-file GENE_FILE]
                                [--include-unknown-direction] [--no-mechanisms]
                                [--no-improvements] [--no-outcome] [--screen]
                                [--tissue {cns}] [--tf-activity]
-                               [--activity-tissue TISSUE]
+                               [--activity-tissue TISSUE] [--depmap-file CSV]
                                [--activity-permutations N]
                                [--tf-weight TF_WEIGHT] [--chip-bed CHIP_BED]
                                [--chip-api] [--include-investigational]
@@ -478,6 +484,11 @@ options:
                         tissue name as spelled in the expression table (e.g.
                         liver, brain, kidney) to infer TF activity in.
                         Required by --tf-activity
+  --depmap-file CSV     DepMap CRISPRGeneEffect.csv. Measures what happens to
+                        a cell when each factor is knocked out, which is the
+                        collateral question the regulon count stands in for.
+                        data/CRISPRGeneEffect.csv is picked up automatically
+                        if present; Model.csv beside it adds lineage
   --activity-permutations N
                         build an empirical null from N resampled target sets
                         instead of the analytic one. The analytic p-value

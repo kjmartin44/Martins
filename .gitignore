@@ -54,3 +54,7 @@ Thumbs.db
 /data/gencode*.gtf*
 /data/*.gtf
 /data/*.gtf.gz
+
+/data/CRISPR*.csv
+/data/Model.csv
+/data/depmap*.csv

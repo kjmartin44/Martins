@@ -87,6 +87,38 @@ a row. Every route in a report is off-label by construction, so the approved
 indication is the baseline the proposal departs from rather than a
 recommendation.
 
+## DepMap dependency data
+
+`--depmap-file` reads a DepMap CRISPR knockout release and reports what a
+cell loses without each candidate factor. The regulon count answers the
+same collateral question from literature curation; this answers it by
+measurement, and it covers the factors no curator has written up.
+
+Download `CRISPRGeneEffect.csv` from the current release at
+https://depmap.org/portal/data_page/ and put it in `data/`, where it is
+picked up automatically. `Model.csv` from the same download adds the
+lineage column and is optional; it is looked for beside the effect file
+first, then in `data/`.
+
+The effect file is cell lines by genes and around 500 MB. It is streamed
+once and only the requested columns are kept, so the size costs a pass over
+the file rather than memory. Column names carry the Entrez id, as in
+`TP53 (7157)`, and the loader strips it.
+
+Scores are on DepMap's Chronos scale. Zero means knockout changed nothing
+and -1 is the median of known common-essential genes. A cell line counts as
+dependent below -0.5, and a gene is pan-essential when at least 90 percent
+of lines are.
+
+Three limits decide whether any of it transfers. The panel is cancer cell
+lines dividing in vitro, so a factor whose role is in a post-mitotic or
+differentiated cell looks dispensable for reasons unrelated to its
+importance. Knockout is not inhibition: the protein is removed entirely,
+including scaffolding roles no ligand would touch, and essential genes are
+drugged successfully at partial occupancy. And nothing here concerns your
+gene, so it bounds the cost of acting on a factor and says nothing about
+the benefit.
+
 ## Output files
 
 Every completed analysis writes five files:

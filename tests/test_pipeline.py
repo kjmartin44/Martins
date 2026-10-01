@@ -6800,3 +6800,221 @@ def test_quadrant_table_shows_the_indication():
     assert md.splitlines()[i + 1].count("|") == header[0].count("|")
     assert "topical only" in md
     assert "Read the indication column before the scores" in md
+
+
+# ===================================================================== #
+# DepMap: what a cell loses without each factor.                        #
+# ===================================================================== #
+_DM_LINEAGES = ["Lung", "Breast", "Skin", "Blood", "Colon"]
+
+
+def _depmap_release(tmp_path, profiles, n_lines=200, seed=0):
+    """A DepMap release shaped like the real files.
+
+    CRISPRGeneEffect.csv is cell lines by genes, and every column name
+    carries the Entrez id: `A1BG (1)`. A loader that does not strip that
+    finds no genes at all.
+    """
+    import csv
+    import random
+    rng = random.Random(seed)
+    models = [f"ACH-{i:06d}" for i in range(n_lines)]
+
+    def val(kind, lineage):
+        if kind == "pan":
+            return rng.gauss(-1.1, 0.15)
+        if kind == "most":
+            return rng.gauss(-0.7, 0.2)
+        if kind == "selective":
+            return (rng.gauss(-1.0, 0.2) if lineage == "Blood"
+                    else rng.gauss(-0.05, 0.1))
+        if kind == "none":
+            return rng.gauss(0.0, 0.1)
+        return None
+
+    eff = tmp_path / "CRISPRGeneEffect.csv"
+    with open(eff, "w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow([""] + [f"{g} ({i+1})"
+                           for i, g in enumerate(profiles)])
+        for j, m in enumerate(models):
+            lin = _DM_LINEAGES[j % len(_DM_LINEAGES)]
+            row = [m]
+            for kind in profiles.values():
+                if kind == "sparse" and j % 40:
+                    row.append("")
+                else:
+                    v = val(kind, lin)
+                    row.append("" if v is None else f"{v:.4f}")
+            w.writerow(row)
+
+    mod = tmp_path / "Model.csv"
+    with open(mod, "w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow(["ModelID", "OncotreeLineage"])
+        for j, m in enumerate(models):
+            w.writerow([m, _DM_LINEAGES[j % len(_DM_LINEAGES)]])
+    return eff, mod
+
+
+def test_depmap_separates_pan_essential_from_dispensable(tmp_path):
+    """The reason to load this at all: a factor every cell needs is a
+    different proposition from one no cell misses, and the curated regulon
+    count cannot tell them apart."""
+    from promoter_tf_drugs import depmap as dm
+    eff, mod = _depmap_release(
+        tmp_path, {"RPL5": "pan", "MYC": "most", "CCR5": "none"})
+    deps = dm.assess_many(["RPL5", "MYC", "CCR5"],
+                          effect_path=eff, model_path=mod)
+
+    assert deps["RPL5"].fraction_dependent >= dm.PAN_ESSENTIAL_FRACTION
+    assert deps["RPL5"].verdict == "essential in nearly every line"
+    assert deps["CCR5"].fraction_dependent == 0.0
+    assert deps["CCR5"].verdict == "dispensable across the panel"
+    assert deps["RPL5"].burden > deps["MYC"].burden > deps["CCR5"].burden
+
+
+def test_entrez_suffix_is_stripped_from_column_names(tmp_path):
+    """Every DepMap column is `SYMBOL (entrez)`. A plain symbol match
+    against the raw header finds nothing, silently."""
+    from promoter_tf_drugs import depmap as dm
+    assert dm._symbol("A1BG (1)") == "A1BG"
+    assert dm._symbol("TP53 (7157)") == "TP53"
+    eff, _ = _depmap_release(tmp_path, {"TP53": "pan"})
+    data = dm.load_gene_effect(eff, ["TP53"])
+    assert "TP53" in data and len(data["TP53"]) == 200
+
+
+def test_a_gene_absent_from_the_release_is_omitted_not_called_safe(tmp_path):
+    """'Not in this release' and 'knockout did nothing' are different
+    statements, and only one of them is reassuring."""
+    from promoter_tf_drugs import depmap as dm
+    eff, _ = _depmap_release(tmp_path, {"RPL5": "pan"})
+    deps = dm.assess_many(["RPL5", "NOTINRELEASE"], effect_path=eff)
+    assert "RPL5" in deps
+    assert "NOTINRELEASE" not in deps
+
+
+def test_a_sparsely_scored_gene_is_refused(tmp_path):
+    """Summarising ten cell lines as if they were a thousand would put a
+    confident verdict on nothing."""
+    from promoter_tf_drugs import depmap as dm
+    eff, _ = _depmap_release(tmp_path, {"SPARSE1": "sparse", "RPL5": "pan"})
+    deps = dm.assess_many(["SPARSE1", "RPL5"], effect_path=eff)
+    assert "SPARSE1" not in deps
+    d = dm.assess("SPARSE1", [None] * 190 + [-1.0] * 5)
+    assert d.n_lines == 0
+    assert d.verdict == "not measured"
+    assert any("too few to summarise" in c for c in d.caveats)
+
+
+def test_a_selective_dependency_is_localised_to_its_lineage(tmp_path):
+    """The informative case. A factor needed in a minority of lines has a
+    context, and the lineage is where to look for what it is."""
+    from promoter_tf_drugs import depmap as dm
+    eff, mod = _depmap_release(tmp_path, {"MEIS1": "selective"})
+    d = dm.assess_many(["MEIS1"], effect_path=eff, model_path=mod)["MEIS1"]
+    assert d.selective is True
+    assert d.top_lineages
+    assert d.top_lineages[0]["lineage"] == "Blood"
+    assert d.top_lineages[0]["mean_effect"] < -0.5
+    assert any("has a context" in c for c in d.caveats)
+
+
+def test_model_csv_is_found_beside_the_effect_file(tmp_path):
+    """DepMap ships them in one download. Looking only in data/ dropped
+    the whole lineage column for anyone who pointed --depmap-file at their
+    download folder."""
+    from promoter_tf_drugs import depmap as dm
+    eff, mod = _depmap_release(tmp_path, {"MEIS1": "selective"})
+    assert mod.parent == eff.parent
+    lin = dm.load_lineages(beside=eff)
+    assert len(lin) == 200
+    # and without the hint it does not find it
+    assert dm.load_lineages() == {} or "ACH-000000" not in dm.load_lineages()
+
+
+def test_missing_depmap_file_costs_only_this_section(tmp_path):
+    from promoter_tf_drugs import depmap as dm
+    assert dm.resolve(str(tmp_path / "nope.csv")) is None
+    assert dm.assess_many(["TP53"],
+                          effect_path=str(tmp_path / "nope.csv")) == {}
+    msg = dm.summarise({})
+    assert "not loaded" in msg or "No DepMap data" in msg
+    assert "depmap.org" in msg
+
+
+def test_every_dependency_says_it_is_cancer_lines_in_a_dish(tmp_path):
+    """The limit that decides whether any of this transfers. A factor
+    whose job is in a post-mitotic cell looks dispensable for reasons that
+    have nothing to do with its importance."""
+    from promoter_tf_drugs import depmap as dm
+    eff, _ = _depmap_release(tmp_path, {"RPL5": "pan", "CCR5": "none"})
+    deps = dm.assess_many(["RPL5", "CCR5"], effect_path=eff)
+    for d in deps.values():
+        assert any("cancer cell lines" in c for c in d.caveats)
+    assert any("knockout is not inhibition" in c
+               for c in deps["RPL5"].caveats)
+    assert any("says nothing about a differentiated" in c
+               for c in deps["CCR5"].caveats)
+
+
+def test_pan_essential_is_a_caution_not_a_veto(tmp_path):
+    """Essential genes are drugged successfully at partial occupancy, and
+    knockout removes scaffolding a ligand would not touch."""
+    from promoter_tf_drugs import depmap as dm
+    eff, _ = _depmap_release(tmp_path, {"RPL5": "pan"})
+    d = dm.assess_many(["RPL5"], effect_path=eff)["RPL5"]
+    joined = " ".join(d.caveats)
+    assert "reason for caution, not a veto" in joined
+
+
+def test_depmap_column_appears_only_when_there_is_data():
+    """An empty column would read as 'no cell needs any of these'."""
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    md = pipeline.markdown_report(res)
+    header = [ln for ln in md.splitlines() if ln.startswith("| Rank | TF |")]
+    assert header
+    assert "Cells need it?" not in header[0]
+    assert "What a cell loses without each factor" not in md
+
+
+def test_depmap_column_and_section_render(tmp_path):
+    from promoter_tf_drugs import depmap as dm
+    eff, mod = _depmap_release(
+        tmp_path, {"RARA": "pan", "RXRA": "selective", "VDR": "none"})
+    deps = dm.assess_many(["RARA", "RXRA", "VDR"],
+                          effect_path=eff, model_path=mod)
+
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    res["results"][0]["dependencies"] = {k: v.to_dict()
+                                         for k, v in deps.items()}
+    for t in res["results"][0]["tfs"]:
+        d = deps.get(t["symbol"].upper())
+        if d:
+            t["dependency"] = d.verdict
+    md = pipeline.markdown_report(res)
+
+    header = [ln for ln in md.splitlines() if ln.startswith("| Rank | TF |")]
+    assert "Cells need it?" in header[0]
+    i = md.splitlines().index(header[0])
+    assert md.splitlines()[i + 1].count("|") == header[0].count("|")
+
+    assert "What a cell loses without each factor" in md
+    assert "cancer cell lines dividing in a dish" in md
+    assert "Knockout is not inhibition" in md
+    assert "A dispensable result is not permission" in md
+
+
+def test_dispensable_factor_shows_no_most_dependent_lineage(tmp_path):
+    """For a factor nothing depends on, the 'most dependent' lineage is
+    whichever drifted furthest below zero - noise dressed as a finding."""
+    from promoter_tf_drugs import depmap as dm
+    eff, mod = _depmap_release(tmp_path, {"VDR": "none"})
+    deps = dm.assess_many(["VDR"], effect_path=eff, model_path=mod)
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    rows = pipeline._depmap_section(
+        {k: v.to_dict() for k, v in deps.items()}, res)
+    body = [r for r in rows if r.startswith("| VDR |")]
+    assert body
+    assert body[0].rstrip().endswith("— |"), body[0]
