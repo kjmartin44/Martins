@@ -9,7 +9,8 @@
 | `--pfm-file` | JASPAR text matrices: a `>matrix_id name` header followed by A, C, G, and T count rows. Without a local file, motifs come from JASPAR. |
 | `--matrix-id` | Repeat to select matrix IDs. |
 | `--chip-bed` | Plain or gzip BED with target information in the name column. See `evidence.py` for supported names. Coordinates must match the promoter assembly. |
-| `--regulon-file` | TRRUST TSV, a two-column TF/target TSV, or a DoRothEA CSV with TF/source and target/gene headers. Used for target counts. |
+| `--regulon-file` | TRRUST TSV, a two-column TF/target TSV, or a CollecTRI or DoRothEA table with source/target/weight columns, comma or tab separated. Used for target counts, and for signed regulons when `--tf-activity` is on. |
+| `--lincs-geneinfo` | CLUE geneinfo table. Records whether each gene was measured on the L1000 array or imputed from the 978 landmarks, which sets the evidence tier of a LINCS hit. |
 | `--expression-file` | HPA long table with `Gene name`, `Tissue`, and `nTPM`, or a wide table whose first column contains gene symbols and remaining columns contain numeric tissue values. Gzip and ZIP are detected from file content. |
 | `--lincs-file` | Comma- or tab-separated table with `drug`, `gene`, and signed `score`; optional `cell_line`, `dose`, `time`, and `is_landmark`. Gzip files use a `.gz` suffix. |
 | `--signature-file` | Two columns: gene and score. Currently used only to count reference genes in the LINCS section. |
@@ -27,6 +28,64 @@ It is a tissue lookup and cannot be used as an expression matrix.**
 Record the source release, download date, assembly, and file hash when obtaining
 new datasets. The repository does not currently provide a complete provenance
 manifest or redistribution-license inventory for these files.
+
+## Regulon tables for TF activity
+
+`--tf-activity` infers which factors are active from whether their target
+genes moved. That needs a signed regulon, meaning each edge is labelled as
+activation or repression. Two tables work, and they are not equivalent.
+
+TRRUST is in this checkout at `data/trrust.tsv`. It covers 329 factors and
+labels 47 percent of its human edges; the rest are recorded as `Unknown`.
+An unlabelled edge still supports the two-tailed test that asks whether the
+regulon moved, but it cannot say which way the factor went.
+
+CollecTRI is the better input. It signs every edge and covers roughly three
+times as many factors, which is the main limit on how many can be tested at
+all. Fetch it once:
+
+```python
+import decoupler as dc
+dc.get_collectri(organism="human").to_csv(
+    "data/collectri.tsv", sep="\t", index=False)
+```
+
+Anything at `data/collectri.tsv` or `data/collectri.csv` is picked up
+automatically, ahead of TRRUST. Pass `--regulon-file` to override. The
+separator is read from the first line rather than the file name, so either
+suffix works.
+
+## LINCS signature files for the drug scan
+
+The drug scan asks which compounds move a factor's regulon, so it needs
+both Enrichr LINCS gene set libraries present:
+
+```
+data/lincs_chem_pert_up.gmt     16 MB
+data/lincs_chem_pert_down.gmt   14 MB
+```
+
+Both are picked up automatically when they exist, and the scan is skipped
+without comment when they do not. Each factor costs about a second, so the
+scan covers the top eight ranked factors rather than all of them.
+
+## Drug descriptions
+
+Report tables name a compound and its mechanism against one receptor, which
+is not enough to judge whether a row is applicable. `indications.py` adds
+what the molecule is and what it is approved to treat, from three sources,
+and every entry records which one it used.
+
+| source | what it is | limits |
+| --- | --- | --- |
+| `curated` | A short hand-written entry for the compounds these reports return. | Exact, and incomplete by construction. |
+| `ChEMBL` | `/drug_indication`, taken at the highest phase reached. Needs the network; cached like every request. | The list includes uses studied but never approved. Approved entries are preferred and studied-only ones are labelled. |
+| `class` | The systemic class from `systemic.py`. | Gives the kind of drug, not its indication. |
+
+None of this is a label. Check the prescribing information before acting on
+a row. Every route in a report is off-label by construction, so the approved
+indication is the baseline the proposal departs from rather than a
+recommendation.
 
 ## Output files
 

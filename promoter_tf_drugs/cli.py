@@ -191,9 +191,12 @@ def add_analysis_args(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
     p.add_argument("--tf-activity", action="store_true",
                    help="infer which factors are actually ACTIVE from their "
                         "targets' expression (VIPER-style), instead of only "
-                        "guessing from motifs. Needs --regulon-file for the "
-                        "regulons and --expression-file plus "
-                        "--activity-tissue for the signature. This is the "
+                        "guessing from motifs. Uses --regulon-file, or "
+                        "data/collectri.tsv or data/trrust.tsv if present, "
+                        "plus --expression-file and --activity-tissue for "
+                        "the signature. CollecTRI is the better table: it "
+                        "signs every edge and covers about three times as "
+                        "many factors as TRRUST. This is the "
                         "independent check on the motif scan: a site with a "
                         "flat regulon is probably scan noise")
     p.add_argument("--activity-tissue", metavar="TISSUE",

@@ -69,13 +69,31 @@ MIN_BINDING_AUC = 0.70     # below this the model is not discriminating
 class ScreenHit:
     drug: str
     chembl_id: str
-    probability: float             # of the wanted direction
+    # The model's score. For a molecule the model was TRAINED on this is an
+    # in-sample fit, so `probability_in_sample` says which it is. It is kept
+    # rather than withheld because the enrichment check needs it: whether
+    # known actives outscore novel candidates is the diagnostic that catches
+    # an inverted ranking. It is not a number to rank drugs by.
+    probability: float | None
     nearest_tanimoto: float
-    novelty: float                 # 1 - nearest_tanimoto
+    # None for a known ligand. A training molecule is its own nearest
+    # neighbour, so 1 - tanimoto is structurally 0.0 for every one of them -
+    # an artifact of the lookup, not an assessment of novelty.
+    novelty: float | None
     quadrant: str
     known_ligand: bool
     max_phase: float | None
+    # The measured potency that made it a known ligand. This is the real
+    # number for an established binder, and what its row is ranked by.
+    measured_pchembl: float | None = None
+    probability_in_sample: bool = False
+    # What the molecule is, and what it is approved to treat. This table
+    # is where a reader first meets a drug name, and a quadrant plus a
+    # probability does not say whether a topical acne gel and an infused
+    # cytotoxic are both on the list - which, for the receptors that
+    # qualify for a screen, they usually are.
     indication_hint: str | None = None
+    treats: str | None = None
     notes: list = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -144,9 +162,17 @@ def _quadrant(prob: float, tanimoto: float, in_domain: bool,
 
 def screen(model, library: list[dict], *, goal: str = "up",
            known_ids: set | None = None, domain_cutoff: float = 0.35,
-           top_n: int = 50, gene_linked: set | None = None) -> list[ScreenHit]:
-    """Score a drug library against a trained per-receptor model."""
+           top_n: int = 50, gene_linked: set | None = None,
+           known_potency: dict | None = None) -> list[ScreenHit]:
+    """Score a drug library against a trained per-receptor model.
+
+    `known_potency` maps a known ligand's ChEMBL id to its measured pChEMBL.
+    Supplying it is what lets the established-ligand rows be ranked by
+    measured affinity instead of by a model score that was fitted on those
+    same molecules.
+    """
     from . import agonism
+    from . import indications as _ind
 
     if model is None:
         raise ValueError(
@@ -171,6 +197,8 @@ def screen(model, library: list[dict], *, goal: str = "up",
         known = drug["chembl_id"] in known_ids
         linked = (drug["name"] or "").strip().lower() in (gene_linked or set())
         quad = _quadrant(p_want, tan, in_domain, known, linked)
+        potency = (known_potency or {}).get(drug["chembl_id"]) if known else None
+        desc = _ind.describe(drug["name"])
 
         if quad == "predicted inactive":
             continue
@@ -183,10 +211,16 @@ def screen(model, library: list[dict], *, goal: str = "up",
                 "Requires a binding assay before it means anything.")
         elif quad == "ESTABLISHED LIGAND, untested on this gene":
             notes.append(
-                "binds this receptor with measured activity, and has no "
-                "reported effect on your gene. The pharmacology is already "
-                "de-risked; only the receptor-to-gene step is untested, which "
-                "makes this the cheapest experiment on the list.")
+                "binds this receptor with measured activity"
+                + (f" (pChEMBL {potency:.1f})" if potency is not None else "")
+                + ", and has no reported effect on your gene. The "
+                "pharmacology is already de-risked; only the "
+                "receptor-to-gene step is untested, which makes this the "
+                "cheapest experiment on the list.")
+            notes.append(
+                "the model score on this row is an in-sample fit - the "
+                "molecule is one the model was trained on - so the row is "
+                "ranked by its measured potency instead")
         elif quad == "confirms a reported link":
             notes.append("binds this receptor AND is already reported to "
                          "affect your gene — a mechanism for a known effect, "
@@ -196,9 +230,16 @@ def screen(model, library: list[dict], *, goal: str = "up",
 
         hits.append(ScreenHit(
             drug=drug["name"], chembl_id=drug["chembl_id"],
-            probability=round(p_want, 3), nearest_tanimoto=round(tan, 3),
-            novelty=round(1.0 - tan, 3), quadrant=quad, known_ligand=known,
-            max_phase=drug.get("max_phase"), notes=notes,
+            probability=round(p_want, 3),
+            probability_in_sample=known,
+            nearest_tanimoto=round(tan, 3),
+            novelty=(None if known else round(1.0 - tan, 3)),
+            quadrant=quad, known_ligand=known,
+            max_phase=drug.get("max_phase"),
+            measured_pchembl=(round(potency, 2) if potency is not None
+                              else None),
+            indication_hint=desc["what_it_is"], treats=desc["treats"],
+            notes=notes,
         ))
 
     # Established binders that are untested on the gene come first: they are
@@ -207,7 +248,19 @@ def screen(model, library: list[dict], *, goal: str = "up",
              "confirms a reported link": 1,
              "predicted binder, close to known chemistry": 2,
              "NOVEL HYPOTHESIS": 3, "no call": 4}
-    hits.sort(key=lambda h: (order[h.quadrant], -h.probability))
+
+    def rank(h):
+        # Within a quadrant, rank by whichever number is real for it:
+        # measured potency for a known ligand, model score for a prediction.
+        # Sorting both by the model score put the best-memorised training
+        # molecule on top, which is not a property of the drug.
+        if h.measured_pchembl is not None:
+            return (order[h.quadrant], -h.measured_pchembl)
+        if h.probability is not None:
+            return (order[h.quadrant], -h.probability)
+        return (order[h.quadrant], 0.0)
+
+    hits.sort(key=rank)
     return hits[:top_n]
 
 
@@ -359,7 +412,9 @@ def screen_receptor(client: Client, target_chembl_id: str, *, goal: str = "up",
 
     hits = screen(model, lib, goal="up",      # P(binder), not P(agonist)
                   known_ids=active_ids, top_n=top_n,
-                  gene_linked=gene_linked)
+                  gene_linked=gene_linked,
+                  known_potency={a["chembl_id"]: a["pchembl"]
+                                 for a in actives if a.get("pchembl")})
 
     # Direction is a separate, optional annotation.
     ligands = agonism.fetch_labelled_ligands(client, target_chembl_id)

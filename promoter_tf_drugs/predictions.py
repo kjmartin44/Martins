@@ -37,6 +37,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from . import delivery
+from . import indications
 
 # How much a tier should move you, in words rather than a number.
 TIER_CONFIDENCE = {
@@ -66,10 +67,16 @@ class Prediction:
     # "yes" / "no" / —. Screening-stage question, so it is carried
     # on every prediction rather than computed only under --tissue cns.
     bbb: str = "—"
+    # What the molecule is, and what it is approved to treat. Every route
+    # here is off-label by construction, so the approved indication is the
+    # baseline the proposal departs from.
+    what_it_is: str | None = None
+    treats: str | None = None
 
     def to_dict(self) -> dict:
         return {"drug": self.drug, "target": self.target,
-                "bbb": self.bbb,
+                "bbb": self.bbb, "what_it_is": self.what_it_is,
+                "treats": self.treats,
                 "category": self.category, "tier": self.tier,
                 "grade": self.grade, "score": self.score,
                 "p_move": self.p_move, "limiting_step": self.limiting_step,
@@ -193,6 +200,9 @@ def build(block: dict, *, goal: str = "up", has_chip: bool = False,
             mechanism=r.get("mechanism") or "", tier=r["tier"],
             grade=(g or {}).get("grade"), score=r["score"],
         )
+        desc = indications.describe(
+            r["drug"], mechanism=(r.get("mechanism") or "").strip() or None)
+        p.what_it_is, p.treats = desc["what_it_is"], desc["treats"]
         p.bbb = delivery.bbb_verdict(
             r["drug"], ((g or {}).get("evidence") or {}).get("properties")
         )["cell"]
@@ -283,11 +293,22 @@ def render(preds: list, gene: str, goal: str, *, verdict: dict | None = None
     # the rightmost column of a numbered table read as the sort key — while
     # visibly disagreeing with the actual order. It conveys magnitude, not
     # rank, so it is stated once below and per-drug in the detail.
-    L.append("| # | Medication | Acts on | BBB? | Tier | Grade | Score |")
-    L.append("|---|---|---|---|---|---|---|")
+    L.append("| # | Medication | What it is | Approved to treat | "
+             "Acts on | BBB? | Tier | Grade | Score |")
+    L.append("|---|---|---|---|---|---|---|---|---|")
     for i, p in enumerate(preds, 1):
-        L.append(f"| {i} | **{p.drug}** | {p.target or '—'} | {p.bbb} | "
+        what = p.what_it_is or "—"
+        treats = p.treats or "not established here"
+        L.append(f"| {i} | **{p.drug}** | {what} | {treats} | "
+                 f"{p.target or '—'} | {p.bbb} | "
                  f"{p.tier} | {p.grade or '—'} | {p.score} |")
+    L.append("")
+    L.append("**Every row is off-label.** The drug was approved for what "
+             "the fourth column says, and is listed here for something "
+             "else. That column is the baseline this proposal departs "
+             "from, and the distance between it and your gene is part of "
+             "what you are judging - a topical acne gel and an infused "
+             "cytotoxic can sit on adjacent rows with similar scores.")
     L.append("")
     L.append("*Ordered by evidence tier first, then score. A tier-1 route "
              "with a mediocre score beats a tier-5 route with a great one. "

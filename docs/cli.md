@@ -190,9 +190,12 @@ options:
                         (default: None)
   --tf-activity         infer which factors are actually ACTIVE from their
                         targets' expression (VIPER-style), instead of only
-                        guessing from motifs. Needs --regulon-file for the
-                        regulons and --expression-file plus --activity-tissue
-                        for the signature. This is the independent check on
+                        guessing from motifs. Uses --regulon-file, or
+                        data/collectri.tsv or data/trrust.tsv if present, plus
+                        --expression-file and --activity-tissue for the
+                        signature. CollecTRI is the better table: it signs
+                        every edge and covers about three times as many
+                        factors as TRRUST. This is the independent check on
                         the motif scan: a site with a flat regulon is probably
                         scan noise (default: False)
   --activity-tissue TISSUE
@@ -463,9 +466,12 @@ options:
   --tissue {cns}        down-weight drugs unlikely to reach this compartment
   --tf-activity         infer which factors are actually ACTIVE from their
                         targets' expression (VIPER-style), instead of only
-                        guessing from motifs. Needs --regulon-file for the
-                        regulons and --expression-file plus --activity-tissue
-                        for the signature. This is the independent check on
+                        guessing from motifs. Uses --regulon-file, or
+                        data/collectri.tsv or data/trrust.tsv if present, plus
+                        --expression-file and --activity-tissue for the
+                        signature. CollecTRI is the better table: it signs
+                        every edge and covers about three times as many
+                        factors as TRRUST. This is the independent check on
                         the motif scan: a site with a flat regulon is probably
                         scan noise
   --activity-tissue TISSUE

@@ -65,6 +65,7 @@ CATEGORIES = [
     "direct: gene or transcript",
     "direct: gene product",
     "TF: orthosteric ligand",
+    "TF: inferred activity change",
     "TF: allosteric modulator",
     "TF: stabiliser or glue",
     "TF: endogenous ligand",
@@ -104,6 +105,27 @@ CATEGORY_GUIDE = {
                 "not solved for immune cells, muscle or most tumours.",
         "differs": "Unlike 'direct: gene product', this changes how much "
                    "protein is made rather than what existing protein does.",
+    },
+    "TF: inferred activity change": {
+        "changes": "abundance",
+        "assay": "RT-qPCR for your gene, plus a reporter or ChIP for the "
+                 "factor to show the effect runs through it",
+        "what": "A compound whose own LINCS signature moves this factor's "
+                "known targets, found without any record that it binds the "
+                "factor.",
+        "why": "It is the only category here that can reach a factor with "
+               "no medicinal chemistry behind it. Every other route needs "
+               "somebody to have assayed a compound at the target first, "
+               "which is why the other tables fill up with nuclear "
+               "receptors.",
+        "cost": "The attribution is weak. The regulon moved; which of the "
+                "factors that share those targets moved it is not settled, "
+                "and a compound that simply arrests the cell cycle shifts "
+                "every proliferation-linked regulon.",
+        "differs": "Unlike 'empirical signature', which is a drug measured "
+                   "to move YOUR GENE, this is a drug measured to move the "
+                   "FACTOR'S TARGETS - one further inferential step from "
+                   "the thing you care about.",
     },
     "direct: gene product": {
         "changes": "ACTIVITY ONLY",
@@ -437,6 +459,45 @@ def from_lincs(lincs: dict) -> list[Route]:
     return out
 
 
+def from_activity_drugs(activity_drugs: dict) -> list[Route]:
+    """Compounds whose LINCS signature moves a factor's regulon.
+
+    Tier 3, not 2, and the distinction is the whole point. Tier 2 is "the
+    drug's target engagement is observed". Here nothing about the drug's
+    engagement with the factor is observed at all: what was measured is
+    that the factor's TARGETS moved when the compound was given. The
+    observation is real and the attribution to this particular factor is
+    an inference, which is the same standing as a curated mechanism.
+
+    Specificity is scored low on purpose. A compound reaching this table
+    did so by moving a whole regulon, which is the opposite of acting
+    narrowly, and the effect can run through anything upstream of the
+    factor or through general toxicity.
+    """
+    out = []
+    for tf, hits in (activity_drugs or {}).items():
+        for h in hits:
+            n_sig, n_tot = h["n_significant"], h["n_signatures"]
+            out.append(Route(
+                drug=h["drug"],
+                category="TF: inferred activity change",
+                mechanism=(f"{h['direction']} this factor's regulon across "
+                           f"{n_sig} of {n_tot} LINCS profiles "
+                           f"(median z {h['median_z']:+.2f})"),
+                acts_on=tf,
+                tier=3, directness=1,
+                # Strength from how reproducible it was, not from one
+                # profile: the repetition is the evidence here.
+                axes=Axes(min(1.0, abs(h["median_z"]) / 4.0),
+                          0.25, 0.5,
+                          f"regulon shift in {n_sig}/{n_tot} profiles"),
+                approved=True, source="tfactivity",
+                notes=([f"consistent in {h['consistency']:.0%} of profiles, "
+                        f"{len(h['cell_lines'])} cell line(s)"]
+                       + list(h.get("caveats") or [])[:2])))
+    return out
+
+
 def from_screen(screens: dict) -> list[Route]:
     out = []
     for sym, sc in (screens or {}).items():
@@ -524,6 +585,8 @@ def build(result_block: dict, *, goal: str = "up",
     routes += from_upstream(result_block.get("upstream") or {})
     routes += from_lincs(result_block.get("lincs") or {})
     routes += from_screen(result_block.get("screens") or {})
+    routes += from_activity_drugs(
+        result_block.get("activity_drugs") or {})
     if include_chromatin:
         routes += chromatin_routes(goal)
 

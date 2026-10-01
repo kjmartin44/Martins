@@ -48,6 +48,12 @@ class TFResult:
     chip_peaks: int = 0
     drugs: list = field(default_factory=list)
     score: float = 0.0
+    # How many other genes this factor controls. Set after ranking, because
+    # it needs the regulon table. None means nobody has counted, which is a
+    # different statement from a small number.
+    n_regulon: int | None = None
+    regulon_provenance: str | None = None
+    regulon_understudied: bool = False
 
     @property
     def best_hit(self):
@@ -68,8 +74,17 @@ class TFResult:
             "matrix_id": b.matrix_id if b else None,
             "chip_peaks": self.chip_peaks,
             "score": round(self.score, 1),
+            "n_regulon": self.n_regulon,
+            "regulon_provenance": self.regulon_provenance,
+            "regulon_understudied": self.regulon_understudied,
             "drugs": [d.to_dict() for d in self.drugs],
         }
+
+
+# How many ranked factors the LINCS drug scan covers. Each is a pass over
+# roughly 33,000 signatures, about a second, so this is a wall-clock cap
+# rather than a claim that the rest are uninteresting.
+ACTIVITY_DRUG_FACTORS = 8
 
 
 def _optional(name: str, fn, default):
@@ -210,13 +225,26 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
     # reads: it returns bare sets and discards the Activation/Repression
     # column, which is exactly what a direction needs.
     signed_regulons = None
+    regulon_source = None
     if tf_activity:
-        if not regulon_file:
-            log.warning("--tf-activity needs --regulon-file; skipping")
-        else:
+        if regulon_file:
             signed_regulons = _optional(
                 "signed regulon parse",
                 lambda: tfa_mod.load_signed_regulons(regulon_file), None)
+            regulon_source = regulon_file
+        else:
+            # Fall back to whatever is in data/, preferring CollecTRI. Asking
+            # for --regulon-file when a usable table is sitting in the
+            # default location is friction with no purpose.
+            signed_regulons, regulon_source = _optional(
+                "signed regulon autoload",
+                tfa_mod.autoload_regulons, ({}, None))
+            if not signed_regulons:
+                log.warning(
+                    "--tf-activity found no regulon table. Pass "
+                    "--regulon-file, or put one at %s. %s",
+                    " or ".join(tfa_mod.DEFAULT_REGULON_PATHS),
+                    tfa_mod.COLLECTRI_SOURCE)
     if lincs_geneinfo:
         # Explicit path wins over the data/ autoload. Loaded before
         # any signature lookup, because the feature space decides the
@@ -620,6 +648,23 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                 if a.multiplier != 1.0 or a.notes:
                     celltype["delivery"].append(a.to_dict())
 
+        # ---- how many other genes does each factor control?
+        # The collateral question, and the reason a high-scoring route can
+        # still be a bad idea: a drug acting through a factor moves
+        # everything that factor controls, not only your gene. Counted here
+        # for every ranked factor rather than only the ones that acquired a
+        # drug, so the column is populated even when the drug lookup is
+        # empty.
+        for r in ranked:
+            n, prov = regulon_mod.regulon_size(r.symbol, regulons)
+            r.n_regulon, r.regulon_provenance = n, prov
+            # A low curated count usually means nobody looked, not that the
+            # factor is selective. regulon.py already draws this line; the
+            # flag carries it onto the row so the table can show it.
+            r.regulon_understudied = bool(
+                n is not None and prov == "regulon file"
+                and n < regulon_mod.MIN_CREDIBLE_REGULON)
+
         # ---- 8c-bis. is the factor actually ACTIVE, not merely motif-matched?
         # The independent check on everything above. A PWM scan of a 6 kb
         # window returns mostly noise at p=1e-4, so a site is evidence that
@@ -641,6 +686,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                 "tissue": activity_tissue,
                 "n_testable": len(acts),
                 "n_regulons": len(signed_regulons),
+                "regulon_source": regulon_source,
                 "permutations": activity_permutations,
                 # Only the factors this run actually found sites for, plus
                 # the overall top calls for context.
@@ -678,6 +724,42 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                 "tf_activity", requested=True, ok=False, yielded=0,
                 detail=("--tf-activity needs --regulon-file and "
                         "--activity-tissue; motif scores are unchecked"))
+
+        # ---- 8c-ter. which approved drugs move those factors?
+        # The drug lookup can only return compounds somebody assayed at the
+        # target, so a factor with no medicinal chemistry behind it comes
+        # back empty however important it is. This asks the LINCS data
+        # already on disk instead: whose own perturbation signature shifts
+        # this factor's regulon? It needs no annotated binding, so it can
+        # reach factors the other sources cannot.
+        activity_drugs: dict = {}
+        if signed_regulons and sig_mod.autoload_gmt_available("up") \
+                and sig_mod.autoload_gmt_available("down"):
+            # Capped: each factor is a full pass over ~33,000 signatures,
+            # about a second, and the ranking below the top few is not
+            # worth the wall clock.
+            for r in ranked[:ACTIVITY_DRUG_FACTORS]:
+                reg = signed_regulons.get(r.symbol.upper())
+                if not reg:
+                    continue
+                found = _optional(
+                    f"LINCS drug scan for {r.symbol}",
+                    lambda g=reg, s=r.symbol: tfa_mod.drugs_moving_factor(
+                        s, g), [])
+                if found:
+                    activity_drugs[r.symbol] = [h.to_dict() for h in found]
+            # ok=True even when nothing was found. The scan RAN; finding
+            # no compound is a negative result, not a failed lookup, and
+            # conflating the two is the thing provenance.py exists to stop.
+            ledger.record(
+                "activity_drugs", requested=True, ok=True,
+                yielded=sum(len(v) for v in activity_drugs.values()),
+                detail=(f"{sum(len(v) for v in activity_drugs.values())} "
+                        f"compound(s) across {len(activity_drugs)} factor(s) "
+                        f"move a regulon consistently"
+                        if activity_drugs else
+                        "no compound moved any testable factor's regulon "
+                        "consistently enough to report"))
 
         # ------------------ 8d. empirical: did any drug actually move this gene?
         lincs = {}
@@ -909,6 +991,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             "ligand_axes": ligand_axes,
             "cell_type": celltype,
             "tf_activity": activity,
+            "activity_drugs": activity_drugs,
             "modality_design": modality,
             "screen_plan": screen_plan,
             "lincs": lincs,
@@ -955,6 +1038,164 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
 # ------------------------------------------------------------------ reports
 def _fmt_offset(o) -> str:
     return f"{o:+d}" if isinstance(o, int) else "?"
+
+
+def _drug_glossary(routes: list, res: dict) -> list:
+    """Every distinct drug in this block, with what it is and what it treats.
+
+    One entry per drug rather than a column on each table. The tables are
+    already wide, the same drug appears in several of them, and a sentence
+    repeated five times is what made these reports long. Salts collapse
+    onto one entry.
+    """
+    from . import indications as ind_mod
+
+    mechanisms = {}
+    for r in routes:
+        name = r.get("drug")
+        if name and name not in mechanisms:
+            mechanisms[name] = (r.get("mechanism") or "").strip() or None
+
+    described = ind_mod.describe_all(list(mechanisms), mechanisms=mechanisms)
+    if not described:
+        return []
+
+    known = {k: v for k, v in described.items() if v.get("treats")}
+    unknown = [k for k, v in described.items() if not v.get("treats")]
+
+    L = ["### What these drugs are", ""]
+    L.append("Every route in this report is off-label by construction: the "
+             "drug was approved for one thing and is being considered for "
+             "another. The approved use is the baseline that departure is "
+             "measured from, so it is listed here once per drug rather "
+             "than repeated in each table above.")
+    L.append("")
+
+    if known:
+        L.append("| Drug | What it is | Approved to treat |")
+        L.append("|---|---|---|")
+        for name in sorted(known):
+            d = known[name]
+            L.append(f"| {name} | {d['what_it_is'] or '—'} | "
+                     f"{d['treats']} |")
+        L.append("")
+
+    if unknown:
+        L.append(f"**No description established for {len(unknown)}**: "
+                 + ", ".join(sorted(unknown)[:25])
+                 + ("…" if len(unknown) > 25 else "")
+                 + ". That means this package could not find one offline, "
+                 "not that the compound has no approved use. Several are "
+                 "environmental agents and research chemicals from the CTD "
+                 "tables, which have no indication because they are not "
+                 "drugs.")
+        L.append("")
+
+    L.append(ind_mod.summarise(described))
+    L.append("")
+    return L
+
+
+def _screen_scope_note(ran: list, skipped: list) -> list:
+    """Why the screen covers the receptors it does, and no others.
+
+    Written because the section looks nearly identical across unrelated
+    genes, which invites the reading that these drugs are being selected
+    for the gene. They are not. They are the receptors with enough
+    measured ligands to train a model on.
+    """
+    from .agonism import PCHEMBL_CUTOFF
+    from .screening import MIN_ACTIVES, MIN_BINDING_AUC
+
+    out = ["## Virtual screening", ""]
+    out.append(f"A screen needs a model, and a model needs data. This one "
+               f"trains on measured binding at the receptor, so it runs "
+               f"only where ChEMBL holds at least {MIN_ACTIVES} ligands at "
+               f"pChEMBL {PCHEMBL_CUTOFF:.0f} or better, and only when the "
+               f"trained model separates known actives from decoys at CV "
+               f"AUC {MIN_BINDING_AUC} or above.")
+    out.append("")
+    if ran:
+        out.append(f"**Screened:** {', '.join(sorted(ran))}.")
+    if skipped:
+        out.append(f"**Not screened:** {', '.join(sorted(skipped))} "
+                   f"{chr(8212)} each one's reason is stated under its own "
+                   f"heading below. A skip is always a limit of the "
+                   f"available data, either too few measured ligands or a "
+                   f"model that could not separate them from decoys, and "
+                   f"never a judgement about the receptor.")
+    out.append("")
+    out.append("**This is why the same receptor families appear here "
+               "whatever gene you run.** The filter selects for how much "
+               "medicinal chemistry a receptor has attracted, not for "
+               "anything about your promoter. Nuclear receptors, and the "
+               "retinoid and steroid receptors above all, have ligand "
+               "series running to thousands of compounds; most "
+               "transcription factors have none at all. So a receptor "
+               "reaching this section means it is well studied, and the "
+               "drugs listed under it are that receptor's pharmacology, "
+               "not a result about your gene.")
+    out.append("")
+    out.append("Read these rows as *candidate ligands for a factor that has "
+               "a site in your promoter*. Whether moving that factor moves "
+               "your gene is a separate question, and the activity and "
+               "evidence sections above speak to it. A long list here is "
+               "evidence about the receptor's chemistry; it is not evidence "
+               "that the gene will respond.")
+    out.append("")
+    return out
+
+
+def _regulon_column_note(any_regulon: bool, any_understudied: bool,
+                         tfs: list) -> list:
+    """What the regulon column means, and the two ways it misleads."""
+    if not any_regulon:
+        return ["*No regulon counts are available. Pass `--regulon-file` "
+                "with a TRRUST-style table to fill the column; without one "
+                "there is no basis for saying how much else a factor "
+                "controls.*", ""]
+
+    out = ["**Other genes it controls** is the collateral question. A drug "
+           "acting through a factor moves everything that factor regulates, "
+           "so this column says how wide the effect will be. Read it against "
+           "the score: a strong route through a factor that controls two "
+           "thousand genes is a worse starting point than a weaker route "
+           "through one that controls thirty."]
+
+    exact = [t for t in tfs if t.get("n_regulon") is not None
+             and "tier" not in (t.get("regulon_provenance") or "")]
+    tiered = [t for t in tfs if "tier" in (t.get("regulon_provenance") or "")]
+    uncounted = [t for t in tfs if t.get("n_regulon") is None]
+
+    if tiered:
+        out.append("")
+        out.append(f"A count written `~N` is a bundled estimate for a factor "
+                   f"the regulon file does not list ({len(tiered)} here), not "
+                   f"a count of curated edges. Treat it as an order of "
+                   f"magnitude.")
+    if uncounted:
+        out.append("")
+        out.append(f"`not counted` means the regulon table has no entry and "
+                   f"there is no bundled estimate either ({len(uncounted)} "
+                   f"here). It is not a small number. Most of the roughly "
+                   f"1,600 human transcription factors have no curated "
+                   f"regulon at all.")
+    if any_understudied:
+        out.append("")
+        out.append("A ⚠ marks a count below the credible floor. These "
+                   "are the trap on this column: a factor with eight curated "
+                   "targets is far more likely to be understudied than "
+                   "selective, and reading a small number as specificity "
+                   "selects for obscurity. The same correction applies here "
+                   "that `drug_scoring` applies to protein selectivity.")
+    out.append("")
+    out.append("Counts come from literature curation, so they measure what "
+               "has been published as much as what the factor does. SP1 has "
+               "thousands of recorded targets partly because it regulates "
+               "many genes and partly because thousands of people assayed "
+               "it.")
+    out.append("")
+    return out
 
 
 def _bbb_footnote(counts: dict) -> list:
@@ -1251,14 +1492,30 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
 
         L.append("### Top-ranked transcription factors")
         L.append("")
-        L.append("| Rank | TF | Role | NR | Sites | Best rel. score | Offset | ChIP | Approved drugs | Score |")
-        L.append("|---|---|---|---|---|---|---|---|---|---|")
+        L.append("| Rank | TF | Role | NR | Other genes it controls | Sites | "
+                 "Best rel. score | Offset | ChIP | Approved drugs | Score |")
+        L.append("|---|---|---|---|---|---|---|---|---|---|---|")
+        any_regulon = False
+        any_understudied = False
         for i, t in enumerate(res["tfs"][:top_n], 1):
+            n = t.get("n_regulon")
+            if n is None:
+                reg = "not counted"
+            else:
+                any_regulon = True
+                reg = f"~{n}" if "tier" in (t.get("regulon_provenance") or "") \
+                    else str(n)
+                if t.get("regulon_understudied"):
+                    any_understudied = True
+                    reg += " \u26a0"
             L.append(f"| {i} | {t['symbol']} | {t['role']} | "
-                     f"{'yes' if t['nuclear_receptor'] else ''} | {t['n_sites']} | "
+                     f"{'yes' if t['nuclear_receptor'] else ''} | {reg} | "
+                     f"{t['n_sites']} | "
                      f"{t['best_rel_score']} | {_fmt_offset(t['best_site_tss_offset'])} | "
                      f"{t['chip_peaks']} | {len(t['drugs'])} | {t['score']} |")
         L.append("")
+        L.extend(_regulon_column_note(any_regulon, any_understudied,
+                                      res.get("tfs") or []))
 
         act = res.get("tf_activity") or {}
         if act.get("n_testable"):
@@ -1366,6 +1623,20 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                      "edges, so those support a two-tailed test (did the "
                      "regulon move) and no directional one. A row with a "
                      "dash under NES is that case.")
+            src = (act.get("regulon_source") or "").lower()
+            if "collectri" not in src:
+                L.append(f"- **Coverage is the binding constraint, and it is "
+                         f"fixable.** {act['n_regulons']} factors had a "
+                         f"regulon here, against roughly 1,600 human "
+                         f"transcription factors, so most were never "
+                         f"testable. CollecTRI covers about three times as "
+                         f"many and signs every edge, which would widen this "
+                         f"section and let more of the dash rows resolve to "
+                         f"a direction. Fetch it with "
+                         f"`import decoupler as dc; "
+                         f"dc.get_collectri(organism='human')`, save it to "
+                         f"`data/collectri.tsv`, and it is picked up "
+                         f"automatically.")
             if not act.get("permutations"):
                 L.append("- **The p-values are analytic and "
                          "anticonservative.** They assume targets are "
@@ -1373,6 +1644,84 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                          "structure being measured. Re-run with "
                          "`--activity-permutations 2000` before relying on "
                          "one.")
+            L.append("")
+
+        ad = res.get("activity_drugs") or {}
+        if ad:
+            n_pairs = sum(len(v) for v in ad.values())
+            L.append("### Drugs that move a factor, found without any "
+                     "record that they bind it")
+            L.append("")
+            L.append("Every drug table above came from asking a database "
+                     "which compounds were assayed at the target. That "
+                     "question cannot return anything for a factor nobody "
+                     "has done chemistry on, which is most of them, and it "
+                     "is why those tables fill up with nuclear receptors.")
+            L.append("")
+            L.append("This asks the LINCS data instead. Each compound in "
+                     "LINCS has its own transcriptional signature, so the "
+                     "same regulon statistic used above can be run on it: "
+                     "does this compound move the factor's known targets? "
+                     "No annotated binding is needed, so a factor with no "
+                     "pharmacology at all can still return candidates.")
+            L.append("")
+            L.append(f"**{n_pairs} compound-factor pair(s) across "
+                     f"{len(ad)} factor(s).**")
+            L.append("")
+            L.append("| Factor | Drug | Effect on factor | Median z | "
+                     "Profiles agreeing | Significant | Cell lines |")
+            L.append("|---|---|---|---|---|---|---|")
+            for tf, hits in ad.items():
+                for h in hits[:10]:
+                    L.append(
+                        f"| {tf} | {h['drug']} | {h['direction']} | "
+                        f"{h['median_z']:+.2f} | "
+                        f"{h['n_agreeing']}/{h['n_signatures']} "
+                        f"({h['consistency']:.0%}) | "
+                        f"{h['n_significant']} at q<0.05 | "
+                        f"{len(h['cell_lines'])} |")
+            L.append("")
+            L.append("**Repetition is the evidence here, not any single "
+                     "profile.** The scan tests one regulon against roughly "
+                     "33,000 signatures, so nominal significance is reached "
+                     "about 1,650 times by chance. Significance is counted "
+                     "after Benjamini-Hochberg across those signatures, and "
+                     "a compound has to clear three further bars: profiled "
+                     "at least "
+                     f"{tfa_mod.MIN_SIGNATURES} times, moving the regulon "
+                     f"the same way in at least "
+                     f"{tfa_mod.MIN_CONSISTENCY:.0%} of them, with a median "
+                     f"effect of at least z {tfa_mod.MIN_MEDIAN_Z}. A "
+                     "compound profiled once is never reported.")
+            L.append("")
+            L.append("#### What a row here does not mean")
+            L.append("")
+            L.append("- **It is not a binding claim.** What was measured is "
+                     "that the factor's targets moved when the compound was "
+                     "given. The effect can run through anything upstream "
+                     "of the factor, and the compound may never touch it.")
+            L.append("- **The attribution to this factor is the weak "
+                     "step.** Regulons overlap, so a compound that moves a "
+                     "shared set of targets will score against every factor "
+                     "that claims them. The activity section above names "
+                     "the overlapping factor for each one.")
+            L.append("- **Proliferation is the confound to rule out "
+                     "first.** A compound that arrests the cell cycle moves "
+                     "every regulon enriched for cell-cycle genes, so a "
+                     "growth inhibitor can look like a specific effect on "
+                     "any such factor. If the agreeing compounds share an "
+                     "antiproliferative mechanism, suspect that before "
+                     "crediting the factor.")
+            L.append("- **LINCS cell lines are not your tissue.** These are "
+                     "mostly cancer lines at micromolar doses for six to "
+                     "twenty-four hours, which is a different regime from a "
+                     "therapeutic exposure.")
+            L.append("")
+            L.append("These rows enter the route tables as **tier 3**, "
+                     "alongside curated mechanisms rather than with the "
+                     "tier-2 measured ones. The observation is real; the "
+                     "attribution to the factor is an inference, and tier 3 "
+                     "is what that combination is worth.")
             L.append("")
 
         ar = res.get("all_routes") or {}
@@ -1517,6 +1866,10 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                     for c in absent:
                         L.append(f"- **{c}** — {guide[c]['what']}")
                     L.append("")
+
+        ar_g = res.get("all_routes") or {}
+        if ar_g.get("routes"):
+            L.extend(_drug_glossary(ar_g["routes"], res))
 
         if res.get("drug_grades"):
             L.append("### Graded candidates")
@@ -2307,7 +2660,13 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                          "model can settle it — a coactivator recruitment assay can.*")
                 L.append("")
 
-        for sym, sc in (res.get("screens") or {}).items():
+        all_screens = res.get("screens") or {}
+        if all_screens:
+            ran = [s for s, v in all_screens.items() if not v.get("error")]
+            skipped = [s for s, v in all_screens.items() if v.get("error")]
+            L.extend(_screen_scope_note(ran, skipped))
+
+        for sym, sc in all_screens.items():
             L.append(f"### Virtual screen of approved drugs against {sym}")
             L.append("")
             if sc.get("error"):
@@ -2329,21 +2688,55 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                 L.append("")
                 continue
             L.append("")
-            L.append("| Quadrant | Drug | P(wanted direction) | Novelty | Note |")
-            L.append("|---|---|---|---|---|")
+            L.append("| Quadrant | Drug | What it is | Approved to treat | "
+                     "Measured pChEMBL | P(binds), model | Novelty |")
+            L.append("|---|---|---|---|---|---|---|")
             for h in sc["hits"][:top_n]:
-                L.append(f"| {h['quadrant']} | {h['drug']} | {h['probability']} | "
-                         f"{h['novelty']} | {(h['notes'] or [''])[0][:60]} |")
+                pch = h.get("measured_pchembl")
+                prob = h.get("probability")
+                # A model score on a molecule the model was trained on is an
+                # in-sample fit. It is shown, because hiding it would hide
+                # the enrichment diagnostic, but marked so it is not read as
+                # a prediction and not mistaken for the ranking key.
+                prob_cell = (f"{prob} (in-sample)"
+                             if h.get("probability_in_sample") else prob)
+                L.append(f"| {h['quadrant']} | {h['drug']} | "
+                         f"{h.get('indication_hint') or '—'} | "
+                         f"{h.get('treats') or 'not established here'} | "
+                         f"{pch if pch is not None else '—'} | "
+                         f"{prob_cell if prob is not None else '—'} | "
+                         f"{h['novelty'] if h.get('novelty') is not None else '—'} |")
             L.append("")
-            L.append("*Two independent axes here. **ESTABLISHED LIGAND, "
+            L.append("Two independent axes here. **ESTABLISHED LIGAND, "
                      "untested on this gene** is the most actionable class: "
                      "the drug reliably binds this receptor and has no "
                      "reported effect on your gene, so the pharmacology is "
-                     "already de-risked and only the receptor-to-gene step is "
-                     "a hypothesis. NOVEL HYPOTHESIS rows are hypotheses on "
-                     "both counts — novel chemistry AND an untested gene link "
-                     "— so expect most to be wrong and treat each as requiring "
-                     "a binding assay first.*")
+                     "already de-risked and only the receptor-to-gene step "
+                     "is a hypothesis. NOVEL HYPOTHESIS rows are hypotheses "
+                     "on both counts, novel chemistry and an untested gene "
+                     "link, so expect most to be wrong and treat each as "
+                     "needing a binding assay first.")
+            L.append("")
+            L.append("**Read the indication column before the scores.** A "
+                     "receptor only reaches this section when it has a "
+                     "large ligand series, and such series are rarely "
+                     "homogeneous: a topical gel, an oral oncology agent "
+                     "and a withdrawn compound can sit on adjacent rows "
+                     "with near-identical numbers. The scores rank binding "
+                     "to the receptor and say nothing about whether the "
+                     "drug could be given for your purpose.")
+            L.append("")
+            L.append("**The two score columns are not interchangeable, and "
+                     "each quadrant has only one real number.** An "
+                     "established ligand was a training molecule for this "
+                     "model, so its model score is an in-sample fit and its "
+                     "novelty is structurally zero, because the nearest "
+                     "known ligand the lookup finds is itself. Those rows "
+                     "are ranked by measured pChEMBL, which is data. "
+                     "Predicted rows have no measurement, so they are ranked "
+                     "by the model score, which is a prediction. Comparing a "
+                     "pChEMBL to a probability compares a measurement to a "
+                     "guess.")
             L.append("")
 
         du = res.get("direction_unknown") or {}

@@ -6173,3 +6173,630 @@ def test_activity_is_recorded_in_the_ledger_when_it_cannot_run():
     assert 'ledger.record(\n                "tf_activity"' in src or \
         '"tf_activity", requested=True, ok=False' in src
     assert "motif scores are unchecked" in src
+
+
+# ===================================================================== #
+# How many other genes does the factor control, and the screen's scope. #
+# ===================================================================== #
+def test_tf_table_reports_how_many_other_genes_each_factor_controls():
+    """The collateral question. A drug acting through a factor moves
+    everything that factor regulates, and the ranking alone never said how
+    much that is."""
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    assert all("n_regulon" in t for t in res["results"][0]["tfs"])
+
+    md = pipeline.markdown_report(res)
+    header = [ln for ln in md.splitlines() if ln.startswith("| Rank | TF |")]
+    assert header and "Other genes it controls" in header[0]
+    i = md.splitlines().index(header[0])
+    assert md.splitlines()[i + 1].count("|") == header[0].count("|")
+
+
+def test_regulon_count_carries_its_provenance():
+    """A curated count and a bundled tier estimate are different claims and
+    must not render as the same number."""
+    from promoter_tf_drugs import regulon as reg
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    rows = res["results"][0]["tfs"]
+    assert all(t.get("regulon_provenance") for t in rows)
+
+    md = pipeline.markdown_report(res)
+    # demo has no regulon file, so every count is a bundled tier and must
+    # be marked approximate
+    assert "~" in md
+    assert "bundled estimate" in md
+
+
+def test_a_factor_with_no_regulon_entry_says_not_counted():
+    """Absence from the table is not a small number. Rendering it as 0 - or
+    omitting it - would read as maximal specificity."""
+    from promoter_tf_drugs import regulon as reg
+    n, prov = reg.regulon_size("TOTALLYFAKETF9", None)
+    assert n is None
+    assert prov == "unknown"
+
+    note = pipeline._regulon_column_note(
+        True, False, [{"n_regulon": None, "regulon_provenance": "unknown"}])
+    assert "not counted" in " ".join(note)
+    assert "It is not a small number" in " ".join(note)
+
+
+def test_small_curated_regulon_is_flagged_as_understudied_not_selective():
+    """The trap on this column. A factor with eight curated targets is far
+    more likely under-studied than specific, and reading a small count as
+    specificity selects for obscurity."""
+    from promoter_tf_drugs import regulon as reg
+    note = " ".join(pipeline._regulon_column_note(
+        True, True, [{"n_regulon": 4, "regulon_provenance": "regulon file"}]))
+    assert "understudied than" in note
+    assert str(reg.MIN_CREDIBLE_REGULON) or "credible floor" in note
+    assert "credible floor" in note
+
+
+def test_regulon_note_says_counts_measure_curation_too():
+    note = " ".join(pipeline._regulon_column_note(True, False, []))
+    assert "literature curation" in note
+    assert "SP1" in note
+
+
+def test_regulon_column_absent_without_a_regulon_source():
+    note = " ".join(pipeline._regulon_column_note(False, False, []))
+    assert "--regulon-file" in note
+    assert "no basis" in note
+
+
+# -------------------------------------------------- the screening scope
+def test_established_ligand_rows_are_ranked_by_measured_potency():
+    """They were ranked by the model's score on molecules the model was
+    TRAINED on, so the top of the list was whichever training point the
+    forest had memorised best - not a property of the drug."""
+    lib = _toy_library()
+    known = {d["chembl_id"] for d in lib[:6]}
+    # deliberately inverted: the LOWEST model score has the HIGHEST potency
+    potency = {cid: 9.0 - i * 0.5 for i, cid in enumerate(sorted(known))}
+    m = agonism.train_model(_toy_ligands())
+    hits = scr.screen(m, lib, goal="up", known_ids=known,
+                      known_potency=potency, top_n=100)
+    est = [h for h in hits if h.quadrant.startswith("ESTABLISHED")]
+    assert len(est) >= 2
+    pch = [h.measured_pchembl for h in est]
+    assert pch == sorted(pch, reverse=True), pch
+
+
+def test_the_model_score_on_a_training_molecule_is_marked_in_sample():
+    """It is kept, because the enrichment check needs it, and labelled, so
+    it is not read as a prediction."""
+    lib = _toy_library()
+    known = {d["chembl_id"] for d in lib[:4]}
+    m = agonism.train_model(_toy_ligands())
+    hits = scr.screen(m, lib, goal="up", known_ids=known, top_n=100)
+    for h in hits:
+        assert h.probability_in_sample is h.known_ligand
+        if h.known_ligand:
+            assert h.probability is not None, "enrichment_check needs it"
+            assert any("in-sample" in n for n in h.notes)
+
+
+def test_novelty_is_withheld_for_a_known_ligand():
+    """A training molecule is its own nearest neighbour, so 1 - tanimoto is
+    structurally 0.0 for every one of them. Printing that as a novelty of
+    zero states an artifact of the lookup as a finding."""
+    lib = _toy_library()
+    known = {d["chembl_id"] for d in lib[:4]}
+    m = agonism.train_model(_toy_ligands())
+    hits = scr.screen(m, lib, goal="up", known_ids=known, top_n=100)
+    for h in hits:
+        if h.known_ligand:
+            assert h.novelty is None
+        else:
+            assert h.novelty is not None
+
+
+def test_enrichment_check_still_works_after_the_change():
+    """It compares known actives against novel candidates, so nulling the
+    known probabilities would have silently disabled the one diagnostic
+    that catches an inverted ranking."""
+    lib = _toy_library()
+    known = {d["chembl_id"] for d in lib[:6]}
+    m = agonism.train_model(_toy_ligands())
+    hits = scr.screen(m, lib, goal="up", known_ids=known, top_n=100)
+    enr = scr.enrichment_check(hits)
+    assert enr.get("median_probability_known") is not None
+
+
+def test_report_says_why_the_same_receptors_appear_for_every_gene():
+    """The user-visible symptom: the screen lists retinoids whatever gene
+    is run. It is a property of which receptors have enough medicinal
+    chemistry to train a model, not a result about the gene."""
+    note = " ".join(pipeline._screen_scope_note(["RARA"], ["VDR"]))
+    assert "whatever gene you run" in note
+    assert "retinoid" in note
+    assert "not a result about your gene" in note
+    # the actual gate, with its real numbers
+    assert str(scr.MIN_ACTIVES) in note
+    assert str(scr.MIN_BINDING_AUC) in note
+    # and a skip is never presented as a verdict on the receptor
+    assert "never a judgement about the receptor" in note
+
+
+def test_scope_note_names_what_ran_and_what_did_not():
+    note = " ".join(pipeline._screen_scope_note(["RARA", "RXRA"], ["VDR"]))
+    assert "**Screened:** RARA, RXRA" in note
+    assert "**Not screened:** VDR" in note
+
+
+def test_pchembl_cutoff_is_one_constant_not_two_numbers():
+    """The report cites the floor the fetch applies. If they drifted apart
+    the report would describe a screen that did not happen."""
+    from promoter_tf_drugs import agonism as ag
+    import inspect
+    sig = inspect.signature(ag.fetch_actives)
+    assert sig.parameters["pchembl_cutoff"].default == ag.PCHEMBL_CUTOFF
+    assert f"pChEMBL {ag.PCHEMBL_CUTOFF:.0f}" in \
+        " ".join(pipeline._screen_scope_note(["X"], []))
+
+
+# ===================================================================== #
+# CollecTRI as a regulon source.                                        #
+# ===================================================================== #
+def test_collectri_loads_from_tsv_and_csv(tmp_path):
+    """Both ship in the wild, and the loader hardcoded a tab - so a
+    CollecTRI CSV parsed as zero regulons and reported no error, which is
+    the worst way to fail."""
+    from promoter_tf_drugs import tfactivity as ta
+    body = [("source", "target", "weight"), ("MYC", "TERT", "1"),
+            ("MYC", "CDKN1A", "-1"), ("SP1", "VEGFA", "1")]
+    for name, sep in (("c.tsv", "\t"), ("c.csv", ",")):
+        f = tmp_path / name
+        f.write_text("\n".join(sep.join(r) for r in body) + "\n",
+                     encoding="utf-8")
+        r = ta.load_signed_regulons(f, min_targets=1)
+        assert r == {"MYC": {"TERT": 1, "CDKN1A": -1},
+                     "SP1": {"VEGFA": 1}}, name
+
+
+def test_separator_is_sniffed_not_taken_from_the_extension():
+    """Both formats are routinely saved under the wrong suffix."""
+    from promoter_tf_drugs import tfactivity as ta
+    import inspect
+    src = inspect.getsource(ta.load_signed_regulons)
+    assert "suffix" not in src
+    assert "head.count" in src
+
+
+def test_autoload_prefers_collectri_over_trrust(tmp_path, monkeypatch):
+    """CollecTRI signs every edge and covers about three times as many
+    factors, which is the binding constraint on how many can be tested."""
+    from promoter_tf_drugs import tfactivity as ta
+    assert ta.DEFAULT_REGULON_PATHS[0].endswith("collectri.tsv")
+    assert any("trrust" in p for p in ta.DEFAULT_REGULON_PATHS)
+    assert (ta.DEFAULT_REGULON_PATHS.index("data/collectri.tsv")
+            < [i for i, p in enumerate(ta.DEFAULT_REGULON_PATHS)
+               if "trrust" in p][0])
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "collectri.tsv").write_text(
+        "source\ttarget\tweight\nMYC\tA\t1\nMYC\tB\t-1\n"
+        "MYC\tC\t1\nMYC\tD\t1\nMYC\tE\t-1\n", encoding="utf-8")
+    regs, src = ta.autoload_regulons(min_targets=1)
+    assert src == "data/collectri.tsv"
+    assert regs["MYC"]["B"] == -1
+
+
+def test_autoload_returns_empty_rather_than_raising(tmp_path, monkeypatch):
+    """A missing regulon file costs the activity section and nothing else."""
+    from promoter_tf_drugs import tfactivity as ta
+    monkeypatch.chdir(tmp_path)
+    assert ta.autoload_regulons() == ({}, None)
+
+
+def test_report_points_at_collectri_when_a_thinner_table_was_used():
+    """Coverage is the live constraint on this section, and it is fixable,
+    so the report should say how rather than only state the limit."""
+    from promoter_tf_drugs import tfactivity as ta
+    sig, regs, _ = _planted_signature()
+    acts = ta.activity(sig, regs, check_confounding=False)
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    res["results"][0]["tf_activity"] = {
+        "tissue": "liver", "n_testable": len(acts), "n_regulons": len(regs),
+        "permutations": 0, "regulon_source": "data/trrust.tsv",
+        "scanned": [a.to_dict() for a in acts[:2]],
+        "top": [a.to_dict() for a in acts[:5]],
+        "summary": "x",
+    }
+    md = pipeline.markdown_report(res)
+    assert "CollecTRI" in md
+    assert "get_collectri" in md
+
+    # and not when CollecTRI was already the source
+    res["results"][0]["tf_activity"]["regulon_source"] = "data/collectri.tsv"
+    assert "get_collectri" not in pipeline.markdown_report(res)
+
+
+# ===================================================================== #
+# Drugs found by inferred activity, with no annotated binding.          #
+# ===================================================================== #
+def _gmt(path, terms):
+    path.write_text(
+        "\n".join(f"{name}\t\t" + "\t".join(genes)
+                   for name, genes in terms.items()) + "\n",
+        encoding="utf-8")
+
+
+def test_a_drug_moving_a_regulon_is_found_without_any_binding_record(tmp_path):
+    """The gap this closes. drugs.py can only return compounds somebody
+    assayed at the target, so a factor with no medicinal chemistry comes
+    back empty however important it is."""
+    from promoter_tf_drugs import tfactivity as ta
+    up_t = [f"UP{i}" for i in range(20)]
+    dn_t = [f"DN{i}" for i in range(20)]
+    regulon = {g: 1 for g in up_t}
+    regulon.update({g: -1 for g in dn_t})
+
+    # one compound, profiled five times, moving the regulon the same way
+    up, down = {}, {}
+    for i in range(5):
+        up[f"EXP00{i} MCF7 6H-realdrug-10.0"] = up_t
+        down[f"EXP00{i} MCF7 6H-realdrug-10.0"] = dn_t
+    # and a compound that does nothing
+    for i in range(5):
+        up[f"EXP00{i} MCF7 6H-nulldrug-10.0"] = up_t[:5] + dn_t[:5]
+        down[f"EXP00{i} MCF7 6H-nulldrug-10.0"] = up_t[5:10] + dn_t[5:10]
+
+    u, d = tmp_path / "up.gmt", tmp_path / "down.gmt"
+    _gmt(u, up)
+    _gmt(d, down)
+
+    hits = ta.drugs_moving_factor("MYTF", regulon, up_path=u, down_path=d)
+    names = [h.drug for h in hits]
+    assert "realdrug" in names
+    assert "nulldrug" not in names
+    h = next(x for x in hits if x.drug == "realdrug")
+    assert h.direction == "activated"
+    assert h.n_signatures == 5 and h.consistency == 1.0
+
+
+def test_a_compound_profiled_once_is_never_reported(tmp_path):
+    """33,000 signatures against one regulon produce striking singletons by
+    the thousand. Repetition is the only cheap defence, and LINCS supplies
+    it because most compounds are profiled several times."""
+    from promoter_tf_drugs import tfactivity as ta
+    up_t = [f"UP{i}" for i in range(20)]
+    regulon = {g: 1 for g in up_t}
+    u, d = tmp_path / "up.gmt", tmp_path / "down.gmt"
+    _gmt(u, {"E1 MCF7 6H-oneshot-10.0": up_t})
+    _gmt(d, {"E1 MCF7 6H-oneshot-10.0": ["Z1"]})
+    assert ta.drugs_moving_factor("MYTF", regulon,
+                                  up_path=u, down_path=d) == []
+    assert ta.MIN_SIGNATURES >= 3
+
+
+def test_significance_is_counted_after_multiplicity_correction():
+    """A nominal p<0.05 over ~33,000 signatures is met about 1,650 times by
+    chance, so counting raw p-values would make every factor look busy."""
+    from promoter_tf_drugs import tfactivity as ta
+    import inspect
+    src = inspect.getsource(ta.drugs_moving_factor)
+    assert "_bh(" in src, "no BH correction across signatures"
+    assert 'rec["q"]' in src, "pooling must use q, not p"
+
+
+def test_consistency_alone_does_not_admit_a_tiny_effect():
+    """SP1 returned mitoxantrone at 72% consistency over 32 profiles with a
+    median z of -0.30: agreement about an effect too small to matter."""
+    from promoter_tf_drugs import tfactivity as ta
+    assert ta.MIN_MEDIAN_Z >= 1.0
+    assert ta.MIN_SIGNIFICANT >= 2
+    import inspect
+    src = inspect.getsource(ta.drugs_moving_factor)
+    assert "abs(med) < min_median_z" in src
+
+
+def test_every_hit_denies_being_a_binding_claim(tmp_path):
+    """The one misreading that would matter: a row here is not evidence the
+    compound touches the factor."""
+    from promoter_tf_drugs import tfactivity as ta
+    up_t = [f"UP{i}" for i in range(20)]
+    regulon = {g: 1 for g in up_t}
+    u, d = tmp_path / "up.gmt", tmp_path / "down.gmt"
+    _gmt(u, {f"E{i} MCF7 6H-drugx-10.0": up_t for i in range(5)})
+    _gmt(d, {f"E{i} MCF7 6H-drugx-10.0": ["Z1"] for i in range(5)})
+    hits = ta.drugs_moving_factor("MYTF", regulon, up_path=u, down_path=d)
+    assert hits
+    joined = " ".join(hits[0].caveats)
+    assert "does NOT say the compound binds" in joined
+    assert "proliferation" in joined
+
+
+def test_single_cell_line_is_flagged_as_repetition_not_replication(tmp_path):
+    from promoter_tf_drugs import tfactivity as ta
+    up_t = [f"UP{i}" for i in range(20)]
+    regulon = {g: 1 for g in up_t}
+    u, d = tmp_path / "up.gmt", tmp_path / "down.gmt"
+    _gmt(u, {f"E{i} MCF7 6H-drugx-10.0": up_t for i in range(5)})
+    _gmt(d, {f"E{i} MCF7 6H-drugx-10.0": ["Z1"] for i in range(5)})
+    h = ta.drugs_moving_factor("MYTF", regulon, up_path=u, down_path=d)[0]
+    assert h.cell_lines == ["MCF7"]
+    assert any("one cell line" in c for c in h.caveats)
+
+
+def test_missing_gmt_returns_nothing_rather_than_raising(tmp_path):
+    from promoter_tf_drugs import tfactivity as ta
+    regulon = {f"UP{i}": 1 for i in range(20)}
+    assert ta.drugs_moving_factor(
+        "MYTF", regulon, up_path=tmp_path / "nope.gmt",
+        down_path=tmp_path / "nope2.gmt") == []
+
+
+def test_activity_drugs_enter_the_routes_as_tier_three():
+    """Tier 2 is 'target engagement is observed'. Nothing about engagement
+    is observed here - the TARGETS moved - so the observation is real and
+    the attribution is an inference, which is tier 3."""
+    from promoter_tf_drugs import catalogue as cat
+    block = {"activity_drugs": {"TP53": [{
+        "drug": "mitoxantrone", "tf": "TP53", "direction": "activated",
+        "median_z": 2.53, "n_signatures": 11, "n_significant": 7,
+        "n_agreeing": 11, "consistency": 1.0,
+        "cell_lines": ["MCF7", "PC3"], "caveats": ["a", "b"]}]}}
+    routes = cat.build(block, goal="up")["routes"]
+    rows = [r for r in routes
+            if r["category"] == "TF: inferred activity change"]
+    assert len(rows) == 1
+    assert rows[0]["tier"] == 3
+    assert rows[0]["acts_on"] == "TP53"
+    assert "11 LINCS profiles" in rows[0]["mechanism"]
+
+
+def test_the_new_category_is_explained_in_the_glossary():
+    """It is the only category that can reach a factor with no chemistry,
+    and the only one whose evidence is about the factor's targets rather
+    than the factor, so it needs its own entry."""
+    from promoter_tf_drugs import catalogue as cat
+    g = cat.CATEGORY_GUIDE["TF: inferred activity change"]
+    assert "no medicinal chemistry" in g["why"]
+    assert "arrests the cell cycle" in g["cost"]
+    assert "empirical signature" in g["differs"]
+
+
+def test_an_empty_drug_scan_is_a_negative_not_a_failure():
+    """The scan RAN and found nothing. Recording that as a failed source
+    is the exact conflation provenance.py exists to prevent - and it is
+    what the first version did."""
+    import inspect
+    src = inspect.getsource(pipeline.run)
+    i = src.index('"activity_drugs", requested=True')
+    assert "ok=True" in src[i:i + 120], \
+        "an empty scan must not be recorded as a failed lookup"
+
+
+def test_report_section_states_the_proliferation_confound():
+    from promoter_tf_drugs import tfactivity as ta
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    res["results"][0]["activity_drugs"] = {"TP53": [{
+        "drug": "mitoxantrone", "tf": "TP53", "direction": "activated",
+        "median_z": 2.53, "n_signatures": 11, "n_significant": 7,
+        "n_agreeing": 11, "consistency": 1.0,
+        "cell_lines": ["MCF7"], "caveats": []}]}
+    md = pipeline.markdown_report(res)
+    assert "found without any record that they bind it" in md
+    assert "not a binding claim" in md
+    assert "Proliferation is the confound" in md
+    assert "LINCS cell lines are not your tissue" in md
+    assert "mitoxantrone" in md
+
+
+# ===================================================================== #
+# What each drug is, and what it is approved to treat.                  #
+# ===================================================================== #
+def test_curated_description_beats_the_class_fallback():
+    """A specific entry says 'plaque psoriasis and acne, topical only'.
+    The class fallback would say 'retinoid'. Both are true and only one is
+    useful for deciding whether a row is applicable."""
+    from promoter_tf_drugs import indications as ind
+    d = ind.describe("Tazarotene")
+    assert d["source"] == "curated"
+    assert "topical" in d["treats"]
+    assert "RAR" in d["what_it_is"]
+
+
+def test_salt_forms_share_one_description():
+    """Otherwise the glossary carries the same sentence under sodium,
+    hydrochloride and the parent."""
+    from promoter_tf_drugs import indications as ind
+    assert (ind.describe("Levothyroxine Sodium")["treats"]
+            == ind.describe("levothyroxine")["treats"])
+
+    out = ind.describe_all(["Tretinoin", "Tretinoin Sodium", "tretinoin"])
+    assert len(out) == 1
+
+
+def test_class_fallback_covers_a_drug_with_no_curated_entry():
+    """The curated list is short by construction, so an uncurated
+    glucocorticoid must still say what kind of thing it is."""
+    from promoter_tf_drugs import indications as ind
+    assert "amcinonide" not in ind.CURATED,         "pick another uncurated example; this test is about the fallback"
+    d = ind.describe("Amcinonide")
+    assert d["source"] == "class"
+    assert "glucocorticoid" in d["what_it_is"]
+    assert d["treats"]
+
+
+def test_an_unknown_compound_says_so_rather_than_inventing_a_use():
+    from promoter_tf_drugs import indications as ind
+    d = ind.describe("Totallyfakedrug9")
+    assert d["treats"] is None
+    assert d["source"] == "unknown"
+
+
+def test_chembl_indications_prefer_approved_over_merely_studied():
+    """ChEMBL's drug_indication includes uses that were trialled and
+    abandoned. Presenting those as approved would be the single most
+    misleading thing this column could do."""
+    from promoter_tf_drugs import indications as ind
+
+    class FakeClient:
+        def get(self, url, params=None):
+            return {"drug_indications": [
+                {"mesh_heading": "Trialled Condition", "max_phase_for_ind": 2},
+                {"mesh_heading": "Approved Condition", "max_phase_for_ind": 4},
+            ]}
+
+    d = ind.describe("Noveldrug", client=FakeClient(), chembl_id="CHEMBL1")
+    assert d["source"] == "ChEMBL"
+    assert "approved condition" in d["treats"]
+    assert "trialled condition" not in d["treats"]
+
+
+def test_studied_only_indications_are_labelled_as_such():
+    from promoter_tf_drugs import indications as ind
+
+    class FakeClient:
+        def get(self, url, params=None):
+            return {"drug_indications": [
+                {"mesh_heading": "Only Studied", "max_phase_for_ind": 2}]}
+
+    d = ind.describe("Noveldrug", client=FakeClient(), chembl_id="CHEMBL1")
+    assert "not confirmed approved" in d["treats"]
+
+
+def test_indication_lookup_survives_a_dead_api():
+    from promoter_tf_drugs import indications as ind
+
+    class Boom:
+        def get(self, url, params=None):
+            raise RuntimeError("502")
+
+    assert ind.fetch_indications(Boom(), "CHEMBL1") == []
+    d = ind.describe("Tazarotene", client=Boom(), chembl_id="CHEMBL1")
+    assert d["source"] == "curated", "the curated entry must still win"
+
+
+def test_no_network_call_without_a_chembl_id():
+    from promoter_tf_drugs import indications as ind
+
+    class Tripwire:
+        def get(self, *a, **k):
+            raise AssertionError("must not be called")
+
+    assert ind.fetch_indications(Tripwire(), None) == []
+    assert ind.fetch_indications(Tripwire(), "not-a-chembl-id") == []
+
+
+def test_predicted_medications_table_says_what_each_drug_treats():
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    md = pipeline.markdown_report(res)
+    header = [ln for ln in md.splitlines()
+              if ln.startswith("| # | Medication |")]
+    assert header
+    assert "What it is" in header[0]
+    assert "Approved to treat" in header[0]
+    i = md.splitlines().index(header[0])
+    assert md.splitlines()[i + 1].count("|") == header[0].count("|")
+    assert "Every row is off-label" in md
+
+
+def test_the_glossary_lists_each_drug_once():
+    """A sentence repeated under five tables is what made these reports
+    long. The glossary is one entry per drug, salts collapsed."""
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    md = pipeline.markdown_report(res)
+    i = md.find("### What these drugs are")
+    assert i >= 0
+    block = md[i:md.find("### ", i + 10)]
+    rows = [ln for ln in block.splitlines()
+            if ln.startswith("| ") and not ln.startswith("| Drug |")
+            and "---" not in ln]
+    names = [ln.split("|")[1].strip() for ln in rows]
+    assert names == sorted(names), "glossary should read alphabetically"
+    assert len(names) == len(set(names)), "a drug is listed twice"
+
+
+def test_glossary_does_not_present_itself_as_a_label():
+    from promoter_tf_drugs import indications as ind
+    msg = ind.summarise({"a": {"source": "curated"},
+                         "b": {"source": "class"}})
+    assert "None of these is a label" in msg
+    assert "prescribing information" in msg
+
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    assert "None of these is a label" in pipeline.markdown_report(res)
+
+
+def test_compounds_with_no_indication_are_named_not_dropped():
+    """CTD contributes environmental agents and research chemicals, which
+    have no indication because they are not drugs. Silently omitting them
+    would make the glossary look complete when it is not."""
+    from promoter_tf_drugs import indications as ind
+    out = ind.describe_all(["Tazarotene", "Totallyfakedrug9"])
+    assert out["Totallyfakedrug9"]["treats"] is None
+
+    note = " ".join(pipeline._drug_glossary(
+        [{"drug": "Totallyfakedrug9", "mechanism": ""}], {}))
+    assert "No description established" in note
+    assert "not that the compound has no approved use" in note
+
+
+def test_retinoid_rows_now_distinguish_topical_from_systemic():
+    """The user's actual complaint was a block of retinoids that looked
+    interchangeable. Four of them are topical-only and three are oncology
+    agents, and nothing in the table said which was which."""
+    from promoter_tf_drugs import indications as ind
+    topical = ["Adapalene", "Trifarotene", "Tazarotene"]
+    for name in topical:
+        assert "topical" in ind.describe(name)["treats"], name
+    assert "leukaemia" in ind.describe("Tretinoin")["treats"]
+    assert "lymphoma" in ind.describe("Bexarotene")["treats"]
+
+
+def test_us_and_inn_spellings_resolve_to_one_entry():
+    """Calcipotriene and calcipotriol are the same molecule under two
+    naming conventions. salt_free_name cannot bridge them - they are
+    different words, not different salts - so a synonym table does."""
+    from promoter_tf_drugs import indications as ind
+    assert (ind.describe("Calcipotriene")["treats"]
+            == ind.describe("calcipotriol")["treats"])
+    assert ind.describe("Calcipotriene")["source"] == "curated"
+    assert "topical" in ind.describe("Calcipotriene")["treats"]
+
+
+def test_every_synonym_points_at_a_real_curated_entry():
+    """A synonym mapping to a missing key would silently fall through to
+    the class fallback, which is the failure it exists to prevent."""
+    from promoter_tf_drugs import indications as ind
+    missing = [k for k, v in ind.SYNONYMS.items() if v not in ind.CURATED]
+    assert not missing, f"synonyms with no curated target: {missing}"
+
+
+def test_screen_hits_carry_what_the_drug_is():
+    """indication_hint was declared on ScreenHit and never populated. This
+    table is where a reader first meets a drug name, and the receptors that
+    qualify for a screen have heterogeneous ligand series - a topical gel
+    and an infused cytotoxic on adjacent rows."""
+    lib = _toy_library()
+    m = agonism.train_model(_toy_ligands())
+    hits = scr.screen(m, lib, goal="up", known_ids=set(), top_n=10)
+    assert hits
+    assert all(hasattr(h, "treats") for h in hits)
+    assert all("treats" in h.to_dict() for h in hits)
+
+
+def test_quadrant_table_shows_the_indication():
+    from promoter_tf_drugs import indications as ind
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    d = ind.describe("Tazarotene")
+    res["results"][0]["screens"] = {"RARA": {
+        "model_auc": 0.95, "n_actives": 120, "n_decoys": 360,
+        "library_size": 2400, "enrichment": {"usable": True},
+        "hits": [{"quadrant": "ESTABLISHED LIGAND, untested on this gene",
+                  "drug": "Tazarotene", "measured_pchembl": 7.5,
+                  "probability": 0.9, "probability_in_sample": True,
+                  "novelty": None, "indication_hint": d["what_it_is"],
+                  "treats": d["treats"], "notes": ["x"]}]}}
+    md = pipeline.markdown_report(res)
+    header = [ln for ln in md.splitlines() if ln.startswith("| Quadrant |")]
+    assert header and "Approved to treat" in header[0]
+    i = md.splitlines().index(header[0])
+    assert md.splitlines()[i + 1].count("|") == header[0].count("|")
+    assert "topical only" in md
+    assert "Read the indication column before the scores" in md

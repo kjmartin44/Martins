@@ -113,12 +113,54 @@ class TFActivity:
 
 
 # --------------------------------------------------------------- regulons
+# Where a regulon file is looked for when none is given. CollecTRI first:
+# it is fully signed and covers far more factors than TRRUST, which is the
+# single biggest limit on how many factors can be tested at all.
+DEFAULT_REGULON_PATHS = (
+    "data/collectri.tsv", "data/collectri.csv",
+    "data/trrust.tsv",
+)
+
+COLLECTRI_SOURCE = (
+    "CollecTRI: https://github.com/saezlab/CollecTRI, or in Python "
+    "`import decoupler as dc; dc.get_collectri(organism='human')` then "
+    "`.to_csv('data/collectri.tsv', sep='\\t', index=False)`"
+)
+
+
+def autoload_regulons(*, min_targets: int = 5) -> tuple:
+    """(regulons, path) from the first default location that exists.
+
+    Returns ({}, None) when none do, rather than raising: a missing
+    regulon file costs you the activity section and nothing else.
+    """
+    from pathlib import Path as _P
+    for cand in DEFAULT_REGULON_PATHS:
+        if _P(cand).exists():
+            return load_signed_regulons(cand, min_targets=min_targets), cand
+    return {}, None
+
+
 def load_signed_regulons(path, *, min_targets: int = 5) -> dict:
-    """Signed regulons from a TRRUST-style or DoRothEA/CollecTRI TSV.
+    """Signed regulons from a TRRUST, DoRothEA or CollecTRI table.
 
     Returns `{TF: {target: sign}}` with sign in {+1, -1, 0}; 0 is an edge
     that exists but whose mode was not recorded, which is 46% of TRRUST and
     is kept deliberately - see the module docstring.
+
+    Accepts the two layouts these tables actually ship in:
+
+      TRRUST     TF <tab> target <tab> Activation|Repression|Unknown <tab> pmid
+      CollecTRI  source, target, weight, ...   with weight +1 or -1
+
+    and either tab or comma separated, sniffed from the first line rather
+    than from the file extension, because both are routinely saved under
+    the wrong one.
+
+    CollecTRI is the better input and worth fetching. It is fully signed
+    where TRRUST leaves 46% of edges unlabelled, and it covers roughly
+    three times as many factors, which is the single biggest limit on how
+    many can be tested at all. See COLLECTRI_SOURCE.
 
     `regulon.load_regulons` already parses the same file but returns bare
     sets, discarding the mode column. That is the right shape for counting
@@ -132,9 +174,15 @@ def load_signed_regulons(path, *, min_targets: int = 5) -> dict:
     if not path.exists():
         raise FileNotFoundError(f"{path} not found")
 
+    # Sniff the separator. Hardcoding a tab made a CollecTRI CSV load as
+    # zero regulons and report no error, which is the worst way to fail.
+    with open(path, "r", encoding="utf-8", errors="replace") as probe:
+        head = probe.readline()
+    delim = "," if head.count(",") > head.count("\t") else "\t"
+
     raw: dict = {}
     with open(path, newline="", encoding="utf-8", errors="replace") as fh:
-        for row in csv.reader(fh, delimiter="\t"):
+        for row in csv.reader(fh, delimiter=delim):
             if len(row) < 2:
                 continue
             tf, target = row[0].strip().upper(), row[1].strip().upper()
@@ -611,3 +659,229 @@ def summarise(activities: list, *, scanned: list | None = None) -> str:
             f"overlaps another factor's too heavily to attribute - the "
             f"signal is real and which factor produced it is not decided.")
     return " ".join(lines)
+
+
+# ============================================================= drug source
+# Which approved drugs move a factor, with no annotated binding required.
+#
+# `drugs.py` can only find compounds somebody assayed at the target, so a
+# factor with no medicinal chemistry behind it returns nothing however
+# important it is - the attrition that leaves every drug table full of
+# nuclear receptors. This asks a different question of the LINCS data the
+# package already has on disk: run the same regulon statistic on each
+# compound's own perturbation signature, and a compound whose signature
+# implies the factor's activity changed is a candidate, whether or not it
+# has ever been recorded as a ligand.
+#
+# It is a weaker claim than a binding assay and a different kind of claim.
+# A drug can move a factor's regulon by acting three steps upstream, or by
+# killing the cell. What it establishes is that the factor's targets move
+# when you give the drug, which is the thing a promoter analysis is trying
+# to predict and never observes.
+
+
+@dataclass
+class DrugActivityHit:
+    """One drug's effect on one factor, pooled over LINCS signatures."""
+    drug: str
+    tf: str
+    direction: str                  # activated | repressed
+    median_z: float
+    n_signatures: int               # how many times this drug was profiled
+    n_significant: int              # of those, how many reached q<0.05
+    n_agreeing: int                 # how many moved it the same way
+    consistency: float              # n_agreeing / n_signatures
+    cell_lines: list = field(default_factory=list)
+    caveats: list = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return dict(self.__dict__)
+
+
+# A drug profiled once that looks significant is the weakest evidence LINCS
+# can give: 33,000 signatures against one regulon will produce significant
+# single hits by the thousand. Requiring repetition is the cheap defence,
+# and LINCS supplies it for free because most compounds are profiled in
+# several cell lines and doses.
+MIN_SIGNATURES = 3
+MIN_CONSISTENCY = 0.6
+
+# Two more gates, both earned by looking at what got through without them.
+#
+# The scan tests every one of ~33,000 signatures against one regulon, so a
+# nominal p<0.05 is met about 1,650 times by chance alone. Significance is
+# counted after Benjamini-Hochberg across the signatures for that factor,
+# not before.
+#
+# And consistency on its own is not enough. SP1 returned mitoxantrone at
+# 72% consistency over 32 profiles with a median z of -0.30: agreement
+# about an effect too small to matter. A floor on the median effect is what
+# separates "moves the regulon" from "leans one way".
+MIN_MEDIAN_Z = 1.0
+MIN_SIGNIFICANT = 2
+
+
+def _read_gmt_restricted(path, keep: set) -> dict:
+    """{signature name: set of genes}, keeping only genes in `keep`.
+
+    The .gmt files are 16 MB and 33,000 lines, and all that is ever needed
+    from a line is its overlap with one regulon. Intersecting during the
+    read keeps the whole thing small and makes a scan over every compound
+    affordable.
+    """
+    from pathlib import Path as _P
+    out: dict = {}
+    with open(_P(path), "r", encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            fields = line.rstrip("\n").split("\t")
+            if len(fields) < 3:
+                continue
+            genes = {g.strip().upper() for g in fields[2:] if g.strip()}
+            hit = genes & keep
+            if hit:
+                out[fields[0]] = hit
+    return out
+
+
+def drugs_moving_factor(tf: str, regulon: dict, *, up_path=None,
+                        down_path=None, min_targets: int = MIN_TARGETS,
+                        min_signatures: int = MIN_SIGNATURES,
+                        min_consistency: float = MIN_CONSISTENCY,
+                        min_median_z: float = MIN_MEDIAN_Z,
+                        min_significant: int = MIN_SIGNIFICANT,
+                        top_n: int = 25) -> list:
+    """Approved compounds whose LINCS signature moves this factor's regulon.
+
+    Returns `DrugActivityHit`s pooled per drug. A drug appears in LINCS many
+    times over, at different cell lines, doses and durations, and that
+    repetition is the whole value: a compound that moves the factor the same
+    way in seven profiles out of eight is saying something, and one that
+    does it in one profile out of nine is noise that a single-signature
+    scan would have reported identically.
+    """
+    from . import signatures as _sig
+
+    signed = {g: s for g, s in (regulon or {}).items() if s}
+    if len(signed) < min_targets:
+        log.info("%s has only %d signed targets; too few to read a drug "
+                 "signature against", tf, len(signed))
+        return []
+    keep = set(signed)
+
+    ups = _resolve_gmt(up_path, "up")
+    downs = _resolve_gmt(down_path, "down")
+    if not ups or not downs:
+        return []
+
+    up_sets = _read_gmt_restricted(ups, keep)
+    down_sets = _read_gmt_restricted(downs, keep)
+
+    # One pass over every signature, then a single multiplicity correction
+    # across all of them - this factor was tested ~33,000 times and the
+    # per-signature p-value does not know that.
+    rows: list = []
+    for name in set(up_sets) | set(down_sets):
+        hits = activity_from_sets(up_sets.get(name, set()),
+                                  down_sets.get(name, set()),
+                                  {tf: signed}, min_targets=min_targets)
+        if hits:
+            rows.append((name, hits[0]))
+    if not rows:
+        return []
+
+    qs = _bh([a.p_value for _, a in rows])
+
+    per_drug: dict = {}
+    for (name, a), q in zip(rows, qs):
+        meta = _sig._parse_sig_name(name)
+        rec = per_drug.setdefault(meta["drug"], {"z": [], "q": [],
+                                                 "cells": set()})
+        rec["z"].append(a.nes)
+        rec["q"].append(q)
+        if meta.get("cell_line"):
+            rec["cells"].add(meta["cell_line"])
+
+    out: list = []
+    for drug, rec in per_drug.items():
+        zs = rec["z"]
+        n = len(zs)
+        if n < min_signatures:
+            continue
+        med = float(_statistics.median(zs))
+        if med == 0:
+            continue
+        if abs(med) < min_median_z:
+            continue
+        agreeing = sum(1 for z in zs if (z > 0) == (med > 0))
+        consistency = agreeing / float(n)
+        if consistency < min_consistency:
+            continue
+        n_sig = sum(1 for q in rec["q"] if q is not None and q < 0.05)
+        if n_sig < min_significant:
+            continue
+
+        h = DrugActivityHit(
+            drug=drug, tf=tf,
+            direction="activated" if med > 0 else "repressed",
+            median_z=round(med, 2), n_signatures=n, n_significant=n_sig,
+            n_agreeing=agreeing, consistency=round(consistency, 2),
+            cell_lines=sorted(rec["cells"])[:6],
+        )
+        h.caveats.append(
+            "the signature says this factor's targets moved when the "
+            "compound was given. It does NOT say the compound binds the "
+            "factor - the effect can run through anything upstream, or "
+            "through general toxicity")
+        h.caveats.append(
+            "the commonest confound in this scan is proliferation. A "
+            "compound that arrests the cell cycle moves every regulon "
+            "enriched for cell-cycle genes, so a growth inhibitor can look "
+            "like a specific effect on any such factor. Check whether the "
+            "agreeing compounds share an antiproliferative mechanism before "
+            "reading the factor as the target.")
+        if abs(med) < 2.0:
+            h.caveats.append(
+                f"the effect is modest (median z {med:+.2f}); it survived "
+                f"because it repeated, not because any one profile was "
+                f"striking")
+        if len(rec["cells"]) < 2:
+            h.caveats.append(
+                f"all {n} profiles come from one cell line, so this is "
+                f"repetition rather than replication across contexts")
+        out.append(h)
+
+    out.sort(key=lambda h: (-h.n_significant, -abs(h.median_z)))
+    log.info("LINCS drug scan for %s: %d compound(s) move the regulon "
+             "consistently", tf, len(out))
+    return out[:top_n]
+
+
+def _resolve_gmt(explicit, direction: str):
+    """The .gmt path to use, or None, without raising."""
+    from pathlib import Path as _P
+    from . import signatures as _sig
+    cands = [explicit] if explicit else list(
+        _sig.DEFAULT_GMT_PATHS.get(direction, ()))
+    for c in cands:
+        if c and _P(c).exists():
+            return c
+    log.info("no local LINCS .gmt for direction %r; the drug scan needs "
+             "both files", direction)
+    return None
+
+
+def summarise_drug_scan(results: dict, *, want: str = "up") -> str:
+    """Prose for the report."""
+    if not results:
+        return ("No compound moved any testable factor's regulon "
+                "consistently enough to report. That is the common outcome: "
+                "the scan asks 33,000 signatures to agree with each other "
+                "as well as with the regulon, and most compounds were "
+                "profiled too few times to clear the repetition bar.")
+    n = sum(len(v) for v in results.values())
+    return (f"{n} compound-factor pair(s) across {len(results)} factor(s). "
+            f"Each one is a compound whose own perturbation signature moves "
+            f"that factor's targets, found without any record of the "
+            f"compound binding the factor - which is what makes this "
+            f"different from the drug tables above, and why it can reach "
+            f"factors that have no medicinal chemistry at all.")

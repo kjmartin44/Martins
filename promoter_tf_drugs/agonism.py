@@ -97,8 +97,15 @@ class AgonismPrediction:
 
 
 # --------------------------------------------- bioactivity (binding) data
+# The potency floor for calling a molecule a measured binder. pChEMBL 6 is
+# 1 uM, the conventional line between a real ligand and an assay artefact.
+# Named so the report can cite the same number the fetch applies.
+PCHEMBL_CUTOFF = 6.0
+
+
 def fetch_actives(client: Client, target_chembl_id: str, *,
-                  pchembl_cutoff: float = 6.0, limit: int = 2000) -> list[dict]:
+                  pchembl_cutoff: float = PCHEMBL_CUTOFF,
+                  limit: int = 2000) -> list[dict]:
     """Molecules with measured binding at this target, from /activity.
 
     This is a different and far larger table than /mechanism. Mechanism
