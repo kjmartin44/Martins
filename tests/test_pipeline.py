@@ -5831,3 +5831,345 @@ def test_geneinfo_load_is_idempotent():
     first = sg.load_geneinfo()
     assert sg.load_geneinfo() == first
     assert sg.load_geneinfo() == first
+
+
+# ===================================================================== #
+# TF activity inference: measuring a factor instead of predicting it.   #
+# ===================================================================== #
+def _planted_signature(n_genes=3000, seed=0):
+    """A signature where ONE factor's regulon genuinely moved."""
+    import numpy as np
+    rng = np.random.default_rng(seed)
+    genes = [f"G{i}" for i in range(n_genes)]
+    sig = {g: float(rng.normal()) for g in genes}
+    regulon = {g: 1 for g in genes[:30]}
+    regulon.update({g: -1 for g in genes[30:60]})
+    for g in genes[:30]:
+        sig[g] += 2.0           # activated targets up
+    for g in genes[30:60]:
+        sig[g] -= 2.0           # repressed targets down
+    decoys = {}
+    for k in range(40):
+        tg = rng.choice(genes, size=40, replace=False)
+        decoys[f"DECOY{k}"] = {g: int(s) for g, s in
+                               zip(tg, rng.choice([1, -1], size=40))}
+    return sig, dict(decoys, REAL=regulon), genes
+
+
+def test_rank_normalise_is_invariant_to_monotone_rescaling():
+    """The statistic assumes standard normal scores under the null. A raw
+    logFC distribution is heavy-tailed with an arbitrary scale, so ranking
+    first is what makes the null exact - and makes the answer independent
+    of whether the signature arrived as logFC, a t statistic or a z."""
+    from promoter_tf_drugs import tfactivity as ta
+    import numpy as np
+    rng = np.random.default_rng(3)
+    sig = {f"G{i}": float(rng.normal()) for i in range(2000)}
+    a = ta.rank_normalise(sig)
+    b = ta.rank_normalise({g: v * 11.0 + 5.0 for g, v in sig.items()})
+    assert max(abs(a[g] - b[g]) for g in sig) < 1e-9
+
+    vals = np.array(list(a.values()))
+    assert abs(vals.mean()) < 0.02
+    assert abs(vals.std() - 1.0) < 0.05
+
+
+def test_erfinv_is_accurate_enough_to_trust_the_tails():
+    """A distorted tail would inflate the variance of every NES, which is
+    the kind of error that makes a p-value wrong without making it look
+    wrong."""
+    from promoter_tf_drugs import tfactivity as ta
+    import numpy as np
+    x = np.linspace(-0.9999, 0.9999, 4001)
+    # erf(erfinv(x)) must return x
+    from math import erf
+    back = np.array([erf(v) for v in ta._erfinv(x)])
+    assert np.abs(back - x).max() < 1e-6
+
+
+def test_null_is_calibrated():
+    """If the statistic is right, random regulons on a random signature
+    produce NES with unit variance. A systematically wide null would make
+    every factor look significant."""
+    from promoter_tf_drugs import tfactivity as ta
+    import numpy as np
+    rng = np.random.default_rng(11)
+    genes = [f"G{i}" for i in range(4000)]
+    variances = []
+    for rep in range(4):
+        sig = {g: float(rng.normal()) for g in genes}
+        regs = {}
+        for k in range(150):
+            tg = rng.choice(genes, size=40, replace=False)
+            regs[f"TF{k}"] = {g: int(s) for g, s in
+                              zip(tg, rng.choice([1, -1], size=40))}
+        acts = ta.activity(sig, regs, check_confounding=False)
+        nes = np.array([a.nes for a in acts if a.nes is not None])
+        variances.append(nes.var())
+    # generous band: this is a 150-sample variance estimate per rep
+    assert 0.7 < float(np.mean(variances)) < 1.4, variances
+
+
+def test_a_planted_active_factor_is_recovered_and_ranked_first():
+    from promoter_tf_drugs import tfactivity as ta
+    sig, regs, _ = _planted_signature()
+    acts = ta.activity(sig, regs, check_confounding=False)
+    assert acts[0].tf == "REAL"
+    real = [a for a in acts if a.tf == "REAL"][0]
+    assert real.direction == "activated"
+    assert real.nes > 5
+    assert real.q_value < 0.01
+
+
+def test_the_direction_flips_with_the_signature():
+    """If it did not, the sign would be decoration."""
+    from promoter_tf_drugs import tfactivity as ta
+    sig, regs, _ = _planted_signature()
+    flipped = {g: -v for g, v in sig.items()}
+    real = [a for a in ta.activity(flipped, regs, check_confounding=False)
+            if a.tf == "REAL"][0]
+    assert real.nes < 0
+    assert real.direction == "repressed"
+
+
+def test_unsigned_edges_support_magnitude_but_refuse_a_direction():
+    """TRRUST records no mode for 46% of its human edges. Those cannot say
+    which way the factor went, and claiming otherwise would put activators
+    and repressors in the same bucket."""
+    from promoter_tf_drugs import tfactivity as ta
+    import numpy as np
+    rng = np.random.default_rng(5)
+    genes = [f"G{i}" for i in range(2000)]
+    sig = {g: float(rng.normal()) for g in genes}
+    for g in genes[:40]:
+        sig[g] += 2.5                      # moved, mode unrecorded
+    a = ta.activity(sig, {"UNSIGNED": {g: 0 for g in genes[:40]}},
+                    check_confounding=False)[0]
+    assert a.nes is None
+    assert a.p_value is None
+    assert a.direction == "unknown"
+    assert a.magnitude > 5 and a.magnitude_p < 0.001
+    assert any("direction cannot be called" in c for c in a.caveats)
+
+
+def test_too_few_targets_is_skipped_not_scored():
+    """A 3-target regulon reaches |NES| 2 by chance often enough to be
+    worthless, and reporting it would fill the table with noise."""
+    from promoter_tf_drugs import tfactivity as ta
+    sig = {f"G{i}": float(i) for i in range(500)}
+    out = ta.activity(sig, {"TINY": {"G1": 1, "G2": -1, "G3": 1}},
+                      check_confounding=False)
+    assert out == []
+
+
+def test_regulon_overlap_is_reported_so_a_stolen_signal_is_visible():
+    """Co-regulated targets cannot distinguish a factor from its
+    neighbour. VIPER corrects for this; here it is measured and named,
+    which is the honest minimum."""
+    from promoter_tf_drugs import tfactivity as ta
+    import numpy as np
+    rng = np.random.default_rng(9)
+    genes = [f"G{i}" for i in range(2000)]
+    sig = {g: float(rng.normal()) for g in genes}
+    shared = {g: 1 for g in genes[:40]}
+    acts = ta.activity(sig, {"TWINA": dict(shared), "TWINB": dict(shared)},
+                       check_confounding=True)
+    for a in acts:
+        assert a.confounded_jaccard == 1.0
+        assert a.confounded_with in ("TWINA", "TWINB") and a.confounded_with != a.tf
+        assert any("cannot attribute" in c for c in a.caveats)
+
+
+def test_contradictory_edges_are_demoted_to_unsigned(tmp_path):
+    """TRRUST really does record activation in one paper and repression in
+    another for the same pair. Picking a winner would be inventing a
+    consensus that the literature does not have."""
+    from promoter_tf_drugs import tfactivity as ta
+    f = tmp_path / "r.tsv"
+    f.write_text("TFX\tTARGET1\tActivation\t1\n"
+                 "TFX\tTARGET1\tRepression\t2\n"
+                 "TFX\tTARGET2\tActivation\t3\n", encoding="utf-8")
+    r = ta.load_signed_regulons(f, min_targets=1)
+    assert r["TFX"]["TARGET1"] == 0, "conflict must not pick a side"
+    assert r["TFX"]["TARGET2"] == 1
+
+
+def test_dorothea_numeric_weights_are_read_as_signs():
+    """CollecTRI/DoRothEA ship a numeric weight rather than a word, and
+    these tables are the reason to support a second format at all: they
+    are fully signed where TRRUST is half-signed."""
+    from promoter_tf_drugs import tfactivity as ta
+    import pathlib
+    f = pathlib.Path(str(ta.__file__)).parent  # any writable tmp is fine
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        p = pathlib.Path(d) / "collectri.tsv"
+        p.write_text("source\ttarget\tweight\n"
+                     "TFY\tA\t1\nTFY\tB\t-1\nTFY\tC\t1\n",
+                     encoding="utf-8")
+        r = ta.load_signed_regulons(p, min_targets=1)
+    assert r["TFY"] == {"A": 1, "B": -1, "C": 1}
+    assert "SOURCE" not in r, "the header row must not become a factor"
+
+
+def test_set_based_test_is_used_for_lincs_shaped_data():
+    """Enrichr's LINCS .gmt gives top-N up and down gene lists and no
+    scores. Rank-transforming a ternary vector would invent precision, so
+    the statistic changes to a binomial sign test to match the data."""
+    from promoter_tf_drugs import tfactivity as ta
+    genes = [f"G{i}" for i in range(400)]
+    regulon = {g: 1 for g in genes[:100]}
+    regulon.update({g: -1 for g in genes[100:200]})
+    # a perturbation that activates it
+    acts = ta.activity_from_sets(set(genes[:60]), set(genes[100:160]),
+                                 {"REAL": regulon})
+    assert acts and acts[0].tf == "REAL"
+    assert acts[0].direction == "activated"
+    assert "binomial sign test" in acts[0].method
+    # and the reverse perturbation flips it
+    rev = ta.activity_from_sets(set(genes[100:160]), set(genes[:60]),
+                                {"REAL": regulon})
+    assert rev[0].nes < 0 and rev[0].direction == "repressed"
+
+
+def test_set_based_test_is_calibrated_under_the_null():
+    """Random up/down sets against random regulons must reject at about the
+    nominal rate. Demanding ZERO rejections would be wrong - at q<0.05 the
+    occasional one IS the error rate - so this checks the rate over several
+    replicates instead."""
+    from promoter_tf_drugs import tfactivity as ta
+    import numpy as np
+    rng = np.random.default_rng(13)
+    N = 8000
+    genes = [f"G{i}" for i in range(N)]
+    regs = {}
+    for k in range(120):
+        size = int(rng.integers(200, 500))
+        tg = rng.choice(N, size=size, replace=False)
+        regs[f"TF{k}"] = {genes[i]: int(s) for i, s in
+                          zip(tg, rng.choice([1, -1], size=size))}
+
+    rates, n_testable = [], 0
+    for rep in range(10):
+        pick = rng.choice(N, size=400, replace=False)
+        acts = ta.activity_from_sets({genes[i] for i in pick[:200]},
+                                     {genes[i] for i in pick[200:]}, regs)
+        if not acts:
+            continue
+        n_testable = len(acts)
+        ps = np.array([a.p_value for a in acts])
+        rates.append(float((ps < 0.05).mean()))
+
+    assert n_testable, "nothing was testable - the check would be vacuous"
+    assert rates
+    assert 0.01 < float(np.mean(rates)) < 0.12, rates
+
+
+def test_tissue_signature_treats_a_missing_tissue_as_low_not_unmeasured():
+    """The expression table is loaded with a min_value floor, so a gene
+    carries only the tissues where it cleared it. Dropping the absent ones
+    would bias every regulon toward broadly expressed genes."""
+    from promoter_tf_drugs import tfactivity as ta
+    table = {
+        "HIGH": {"liver": 100.0, "brain": 1.0},
+        "ABSENT": {"brain": 50.0},            # not expressed in liver at all
+    }
+    sig = ta.tissue_signature("liver", table=table)
+    assert sig["HIGH"] > 0
+    assert "ABSENT" in sig, "a floored-out gene must not vanish"
+    assert sig["ABSENT"] < 0
+
+
+def test_tissue_signature_without_a_table_refuses_rather_than_guessing():
+    from promoter_tf_drugs import tfactivity as ta
+    assert ta.tissue_signature("liver", table={}) == {}
+    assert ta.tissue_activity("liver", {"TF": {"A": 1}}, table={}) == []
+
+
+def test_analytic_pvalue_says_it_is_anticonservative():
+    """The null assumes targets are independent and co-expression is
+    exactly the structure being measured, so the caveat is not optional."""
+    from promoter_tf_drugs import tfactivity as ta
+    sig, regs, _ = _planted_signature()
+    a = ta.activity(sig, regs, check_confounding=False)[0]
+    assert any("anticonservative" in c for c in a.caveats)
+    assert "analytic" in a.method
+
+    perm = ta.activity(sig, {"REAL": regs["REAL"]}, permutations=500,
+                       check_confounding=False)[0]
+    assert "permutations" in perm.method
+    assert not any("anticonservative" in c for c in perm.caveats)
+
+
+def test_summarise_does_not_claim_a_starting_point_when_there_is_none():
+    """The real CCR5 run produced zero factors with both a site and a
+    perturbed regulon, and the first draft still said 'that is where to
+    start'."""
+    from promoter_tf_drugs import tfactivity as ta
+    sig, regs, _ = _planted_signature()
+    acts = ta.activity(sig, regs, check_confounding=False)
+
+    none = ta.summarise(acts, scanned=["NOTHING_SCANNED"])
+    assert "no factor has both" in none
+    assert "where to start" not in none
+
+    some = ta.summarise(acts, scanned=["REAL"])
+    assert "start there" in some
+    assert "REAL" in some
+
+
+def test_summarise_explains_an_empty_result_as_a_table_limit():
+    """With TRRUST most of the ~1,600 human TFs have too few curated
+    targets to test, so an empty result says something about the regulon
+    table and nothing about the factors."""
+    from promoter_tf_drugs import tfactivity as ta
+    msg = ta.summarise([])
+    assert "regulon table" in msg
+    assert "not about the factors" in msg
+
+
+def test_activity_section_renders_and_states_its_limits():
+    """Injected into a real demo result rather than a hand-built dict, so
+    the section is exercised against the shape the pipeline actually
+    produces."""
+    from promoter_tf_drugs import tfactivity as ta
+    sig, regs, _ = _planted_signature()
+    acts = ta.activity(sig, regs, check_confounding=False)
+
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    block = res["results"][0]
+    block["tf_activity"] = {
+        "tissue": "liver", "n_testable": len(acts), "n_regulons": len(regs),
+        "permutations": 0,
+        "scanned": [a.to_dict() for a in acts[:3]],
+        "top": [a.to_dict() for a in acts[:8]],
+        "summary": ta.summarise(acts, scanned=[a.tf for a in acts[:3]]),
+    }
+    md = pipeline.markdown_report(res)
+
+    assert "Is the factor actually active" in md
+    # the three limits that make the section honest rather than impressive
+    assert "reference tissue average" in md
+    assert "not attributable to one factor" in md
+    assert "anticonservative" in md
+    assert "Nuclear receptors are the hardest case" in md
+    # and the numbers reached the table
+    assert acts[0].tf in md
+
+
+def test_activity_section_is_absent_when_it_did_not_run():
+    """It must not render an empty shell that looks like a negative
+    result."""
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    assert res["results"][0]["tf_activity"] == {}
+    assert "Is the factor actually active" not in pipeline.markdown_report(res)
+
+
+def test_activity_is_recorded_in_the_ledger_when_it_cannot_run():
+    """A missing --regulon-file must leave a trace saying the motif scores
+    went unchecked, not silently omit the section."""
+    import inspect
+    src = inspect.getsource(pipeline.run)
+    assert 'ledger.record(\n                "tf_activity"' in src or \
+        '"tf_activity", requested=True, ok=False' in src
+    assert "motif scores are unchecked" in src

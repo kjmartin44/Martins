@@ -10,6 +10,7 @@ from pathlib import Path
 
 from . import (annotate, catalogue as cat_mod, cellcycle, congeners as cong_mod,
                delivery as dlv_mod,
+               tfactivity as tfa_mod,
                demo_data, direct, discovery, drug_scoring, eqtl as eqtl_mod,
                modalities as modal_mod,
                drugs as drugs_mod, evidence, genes, motifs as motifs_mod,
@@ -139,7 +140,9 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         design_screen: bool = False, design_modality: bool = False,
         use_lincs: bool = False, signature_file: str | None = None,
         lincs_file: str | None = None,
-        lincs_geneinfo=None, lincs_gmt: tuple | None = None, expression_file: str | None = None,
+        lincs_geneinfo=None, tf_activity: bool = False,
+        activity_tissue: str | None = None,
+        activity_permutations: int = 0, lincs_gmt: tuple | None = None, expression_file: str | None = None,
         promoter_fasta: str | None = None,
         has_ptc: bool | None = None,
         gtf: str | None = None,
@@ -202,6 +205,18 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                           "no regulon file; coarse bundled tiers in use"))
     if expression_file:
         dlv_mod.load_expression_file(expression_file)
+
+    # Signed regulons are a different parse of the same file regulon_mod
+    # reads: it returns bare sets and discards the Activation/Repression
+    # column, which is exactly what a direction needs.
+    signed_regulons = None
+    if tf_activity:
+        if not regulon_file:
+            log.warning("--tf-activity needs --regulon-file; skipping")
+        else:
+            signed_regulons = _optional(
+                "signed regulon parse",
+                lambda: tfa_mod.load_signed_regulons(regulon_file), None)
     if lincs_geneinfo:
         # Explicit path wins over the data/ autoload. Loaded before
         # any signature lookup, because the feature space decides the
@@ -605,6 +620,65 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                 if a.multiplier != 1.0 or a.notes:
                     celltype["delivery"].append(a.to_dict())
 
+        # ---- 8c-bis. is the factor actually ACTIVE, not merely motif-matched?
+        # The independent check on everything above. A PWM scan of a 6 kb
+        # window returns mostly noise at p=1e-4, so a site is evidence that
+        # a factor COULD bind. This asks whether its known targets actually
+        # moved - a different question, from different data, and the two
+        # agreeing is worth far more than either alone.
+        activity: dict = {}
+        if signed_regulons and activity_tissue:
+            acts = _optional(
+                "TF activity inference",
+                lambda: tfa_mod.tissue_activity(
+                    activity_tissue, signed_regulons,
+                    permutations=activity_permutations), [])
+            scanned = [r.symbol for r in ranked]
+            scanned_up = {s.upper() for s in scanned}
+            by_tf = {a.tf.upper(): a for a in acts}
+
+            activity = {
+                "tissue": activity_tissue,
+                "n_testable": len(acts),
+                "n_regulons": len(signed_regulons),
+                "permutations": activity_permutations,
+                # Only the factors this run actually found sites for, plus
+                # the overall top calls for context.
+                "scanned": [a.to_dict() for a in acts
+                            if a.tf.upper() in scanned_up],
+                "top": [a.to_dict() for a in acts[:15]],
+                "summary": tfa_mod.summarise(acts, scanned=scanned),
+            }
+
+            # Annotate every scanned factor, and say so rather than silently
+            # moving the score: the activity call is a reference-tissue
+            # average and should inform a reader, not overrule a scan.
+            for r in ranked:
+                a = by_tf.get(r.symbol.upper())
+                if a is None:
+                    r.annotation.setdefault(
+                        "activity", "not testable - too few curated targets "
+                                    "in the regulon table to infer activity")
+                    continue
+                r.annotation["activity"] = a.direction
+                r.annotation["activity_nes"] = a.nes
+                r.annotation["activity_q"] = a.q_value
+
+            ledger.record("tf_activity", requested=True, ok=bool(acts),
+                          yielded=len(acts),
+                          detail=(f"{len(acts)} factor(s) testable in "
+                                  f"{activity_tissue}; "
+                                  f"{len(activity['scanned'])} of them have a "
+                                  f"site in this promoter"
+                                  if acts else
+                                  f"no factor had enough curated targets "
+                                  f"measured in {activity_tissue}"))
+        elif tf_activity:
+            ledger.record(
+                "tf_activity", requested=True, ok=False, yielded=0,
+                detail=("--tf-activity needs --regulon-file and "
+                        "--activity-tissue; motif scores are unchecked"))
+
         # ------------------ 8d. empirical: did any drug actually move this gene?
         lincs = {}
         if (use_lincs or lincs_file) and not demo:
@@ -834,6 +908,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             "stabilisation": stabilisation,
             "ligand_axes": ligand_axes,
             "cell_type": celltype,
+            "tf_activity": activity,
             "modality_design": modality,
             "screen_plan": screen_plan,
             "lincs": lincs,
@@ -1184,6 +1259,121 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                      f"{t['best_rel_score']} | {_fmt_offset(t['best_site_tss_offset'])} | "
                      f"{t['chip_peaks']} | {len(t['drugs'])} | {t['score']} |")
         L.append("")
+
+        act = res.get("tf_activity") or {}
+        if act.get("n_testable"):
+            L.append("### Is the factor actually active? (inferred from its "
+                     "targets)")
+            L.append("")
+            L.append("Everything above this point is a *sequence* argument: a "
+                     "PWM says a factor could bind. This is a different "
+                     "question asked of different data - do the genes that "
+                     "factor is known to regulate actually move, in the "
+                     "direction its mode of regulation predicts? That is the "
+                     "VIPER idea (Alvarez et al. 2016), and it is the closest "
+                     "this package gets to measuring a factor rather than "
+                     "predicting one.")
+            L.append("")
+            L.append("**Why it belongs next to the table above.** At p=1e-4 "
+                     "over a 6 kb window most motif calls are noise. The two "
+                     "lines of evidence are independent, so a factor with "
+                     "both a site and a coherently perturbed regulon is "
+                     "supported in a way that neither alone can match - and "
+                     "a strong site with a flat regulon is the expected "
+                     "failure mode of the scan, not a surprise.")
+            L.append("")
+            L.append(act.get("summary", ""))
+            L.append("")
+
+            scanned = act.get("scanned") or []
+            if scanned:
+                L.append(f"#### Factors with a site here that could be "
+                         f"tested")
+                L.append("")
+                L.append(f"{len(scanned)} of the "
+                         f"{len(res.get('tfs') or [])} factors with a motif "
+                         f"hit in this window have enough curated targets to "
+                         f"test. The rest are not absent from the result - "
+                         f"they were never testable, which is a gap in the "
+                         f"regulon table and not evidence about the factor.")
+                L.append("")
+                L.append("| TF | Activity | NES | q | Targets measured | "
+                         "Coverage | Signed | Confounded with |")
+                L.append("|---|---|---|---|---|---|---|---|")
+                for a in scanned[:top_n]:
+                    conf = a.get("confounded_with")
+                    j = a.get("confounded_jaccard")
+                    cstr = (f"{conf} (J={j})" if conf and (j or 0) >= 0.3
+                            else "—")
+                    L.append(
+                        f"| {a['tf']} | {a['direction']} | "
+                        f"{a['nes'] if a['nes'] is not None else '—'} | "
+                        f"{a['q_value'] if a['q_value'] is not None else '—'} | "
+                        f"{a['n_measured']}/{a['n_regulon']} | "
+                        f"{a['coverage']:.0%} | "
+                        f"{a['n_signed']} | {cstr} |")
+                L.append("")
+            else:
+                L.append("*No factor with a site in this promoter had enough "
+                         "curated targets to test. With TRRUST that is the "
+                         "common case rather than a failure: most of the "
+                         "~1,600 human transcription factors have too few "
+                         "curated targets to support any activity estimate.*")
+                L.append("")
+
+            top = [a for a in (act.get("top") or [])
+                   if a["tf"] not in {s["tf"] for s in scanned}]
+            if top:
+                L.append(f"#### The strongest calls overall, site or not")
+                L.append("")
+                L.append("These have no motif hit in your promoter window, so "
+                         "they are not routes to your gene. They are here "
+                         "because they say what this tissue's regulatory state "
+                         "looks like, which is the context any route has to "
+                         "work inside.")
+                L.append("")
+                L.append("| TF | Activity | NES | q | Targets measured |")
+                L.append("|---|---|---|---|---|")
+                for a in top[:10]:
+                    L.append(
+                        f"| {a['tf']} | {a['direction']} | "
+                        f"{a['nes'] if a['nes'] is not None else '—'} | "
+                        f"{a['q_value'] if a['q_value'] is not None else '—'} | "
+                        f"{a['n_measured']}/{a['n_regulon']} |")
+                L.append("")
+
+            L.append("#### What this cannot tell you")
+            L.append("")
+            L.append(f"- **It is a reference tissue average, not your "
+                     f"sample.** The signature is {act['tissue']} from a "
+                     f"healthy-tissue expression table, so it says nothing "
+                     f"about a patient, a cell line, or a disease state.")
+            L.append("- **Activity is not attributable to one factor.** "
+                     "Regulons overlap, and co-regulated targets cannot "
+                     "distinguish a factor from its neighbour. Where the "
+                     "overlap is large the table names the other factor; the "
+                     "signal is real and which of the two produced it is "
+                     "not decided.")
+            L.append("- **Nuclear receptors are the hardest case here.** A "
+                     "ligand-activated receptor can be transcribed "
+                     "everywhere while being active only where its ligand "
+                     "reaches, so a quiet regulon does not mean the receptor "
+                     "is absent - it means nothing is switching it on in "
+                     "healthy tissue. For those factors, read a flat result "
+                     "as uninformative rather than negative.")
+            L.append("- **Direction needs a signed edge, and half of them are "
+                     "not.** TRRUST records no mode for 46% of its human "
+                     "edges, so those support a two-tailed test (did the "
+                     "regulon move) and no directional one. A row with a "
+                     "dash under NES is that case.")
+            if not act.get("permutations"):
+                L.append("- **The p-values are analytic and "
+                         "anticonservative.** They assume targets are "
+                         "independent, and co-expression is exactly the "
+                         "structure being measured. Re-run with "
+                         "`--activity-permutations 2000` before relying on "
+                         "one.")
+            L.append("")
 
         ar = res.get("all_routes") or {}
         if ar.get("routes"):

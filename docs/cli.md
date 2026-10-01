@@ -27,7 +27,9 @@ usage: promoter-tf-drugs [-h] --gene GENE [--out OUT] [--top TOP]
                          [--upstream-depth UPSTREAM_DEPTH]
                          [--include-unknown-direction] [--no-mechanisms]
                          [--no-improvements] [--no-outcome] [--screen]
-                         [--tissue {cns}] [--tf-weight TF_WEIGHT]
+                         [--tissue {cns}] [--tf-activity]
+                         [--activity-tissue TISSUE]
+                         [--activity-permutations N] [--tf-weight TF_WEIGHT]
                          [--chip-bed CHIP_BED] [--chip-api]
                          [--include-investigational] [--no-dgidb]
                          [--find-analogs] [--no-opentargets] [--demo]
@@ -186,6 +188,23 @@ options:
                         (default: False)
   --tissue {cns}        down-weight drugs unlikely to reach this compartment
                         (default: None)
+  --tf-activity         infer which factors are actually ACTIVE from their
+                        targets' expression (VIPER-style), instead of only
+                        guessing from motifs. Needs --regulon-file for the
+                        regulons and --expression-file plus --activity-tissue
+                        for the signature. This is the independent check on
+                        the motif scan: a site with a flat regulon is probably
+                        scan noise (default: False)
+  --activity-tissue TISSUE
+                        tissue name as spelled in the expression table (e.g.
+                        liver, brain, kidney) to infer TF activity in.
+                        Required by --tf-activity (default: None)
+  --activity-permutations N
+                        build an empirical null from N resampled target sets
+                        instead of the analytic one. The analytic p-value
+                        assumes targets are independent, which co-expression
+                        makes false, so use this (2000+) before relying on a
+                        number (default: 0)
   --tf-weight TF_WEIGHT
                         0..1. Share of the combined grade carried by TF
                         confidence rather than drug quality. 0.5 weights them
@@ -256,11 +275,14 @@ usage: promoter-tf-drugs.panel [-h] [--genes GENES] [--gene-file GENE_FILE]
                                [--upstream-depth UPSTREAM_DEPTH]
                                [--include-unknown-direction] [--no-mechanisms]
                                [--no-improvements] [--no-outcome] [--screen]
-                               [--tissue {cns}] [--tf-weight TF_WEIGHT]
-                               [--chip-bed CHIP_BED] [--chip-api]
-                               [--include-investigational] [--no-dgidb]
-                               [--find-analogs] [--no-opentargets] [--demo]
-                               [--offline] [--cache-dir CACHE_DIR] [-v]
+                               [--tissue {cns}] [--tf-activity]
+                               [--activity-tissue TISSUE]
+                               [--activity-permutations N]
+                               [--tf-weight TF_WEIGHT] [--chip-bed CHIP_BED]
+                               [--chip-api] [--include-investigational]
+                               [--no-dgidb] [--find-analogs]
+                               [--no-opentargets] [--demo] [--offline]
+                               [--cache-dir CACHE_DIR] [-v]
 
 Compare several CANDIDATE genes and narrow to the route with the least
 collateral effect. The genes are treated as alternatives, so a drug recurring
@@ -439,6 +461,23 @@ options:
                         receptors to find untested repurposing pairs. Slow
                         (downloads ~4000 structures once) and needs rdkit
   --tissue {cns}        down-weight drugs unlikely to reach this compartment
+  --tf-activity         infer which factors are actually ACTIVE from their
+                        targets' expression (VIPER-style), instead of only
+                        guessing from motifs. Needs --regulon-file for the
+                        regulons and --expression-file plus --activity-tissue
+                        for the signature. This is the independent check on
+                        the motif scan: a site with a flat regulon is probably
+                        scan noise
+  --activity-tissue TISSUE
+                        tissue name as spelled in the expression table (e.g.
+                        liver, brain, kidney) to infer TF activity in.
+                        Required by --tf-activity
+  --activity-permutations N
+                        build an empirical null from N resampled target sets
+                        instead of the analytic one. The analytic p-value
+                        assumes targets are independent, which co-expression
+                        makes false, so use this (2000+) before relying on a
+                        number
   --tf-weight TF_WEIGHT
                         0..1. Share of the combined grade carried by TF
                         confidence rather than drug quality. 0.5 weights them

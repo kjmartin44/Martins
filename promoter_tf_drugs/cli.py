@@ -188,6 +188,25 @@ def add_analysis_args(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
                         "(downloads ~4000 structures once) and needs rdkit")
     p.add_argument("--tissue", choices=["cns"],
                    help="down-weight drugs unlikely to reach this compartment")
+    p.add_argument("--tf-activity", action="store_true",
+                   help="infer which factors are actually ACTIVE from their "
+                        "targets' expression (VIPER-style), instead of only "
+                        "guessing from motifs. Needs --regulon-file for the "
+                        "regulons and --expression-file plus "
+                        "--activity-tissue for the signature. This is the "
+                        "independent check on the motif scan: a site with a "
+                        "flat regulon is probably scan noise")
+    p.add_argument("--activity-tissue", metavar="TISSUE",
+                   help="tissue name as spelled in the expression table "
+                        "(e.g. liver, brain, kidney) to infer TF activity "
+                        "in. Required by --tf-activity")
+    p.add_argument("--activity-permutations", type=int, default=0,
+                   metavar="N",
+                   help="build an empirical null from N resampled target "
+                        "sets instead of the analytic one. The analytic "
+                        "p-value assumes targets are independent, which "
+                        "co-expression makes false, so use this (2000+) "
+                        "before relying on a number")
     p.add_argument("--tf-weight", type=float, default=0.5,
                    help="0..1. Share of the combined grade carried by TF confidence "
                         "rather than drug quality. 0.5 weights them equally; raise it "
@@ -274,6 +293,9 @@ def _execute(args) -> int:
         design_modality=args.design_modality,
         use_lincs=args.lincs,
         signature_file=args.signature_file, lincs_file=args.lincs_file,
+        tf_activity=args.tf_activity,
+        activity_tissue=args.activity_tissue,
+        activity_permutations=args.activity_permutations,
         lincs_geneinfo=args.lincs_geneinfo,
         lincs_gmt=args.lincs_gmt,
         expression_file=args.expression_file,
