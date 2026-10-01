@@ -29,7 +29,8 @@ usage: promoter-tf-drugs [-h] --gene GENE [--out OUT] [--top TOP]
                          [--no-improvements] [--no-outcome] [--screen]
                          [--tissue {cns}] [--tf-weight TF_WEIGHT]
                          [--chip-bed CHIP_BED] [--chip-api]
-                         [--include-investigational] [--no-dgidb] [--demo]
+                         [--include-investigational] [--no-dgidb]
+                         [--find-analogs] [--no-opentargets] [--demo]
                          [--offline] [--cache-dir CACHE_DIR] [-v]
 
 Find a gene's promoter, the TFs predicted to bind it, and approved drugs that
@@ -193,6 +194,15 @@ options:
                         do not restrict to approved (max_phase 4) drugs
                         (default: False)
   --no-dgidb            ChEMBL only (default: False)
+  --find-analogs        search ChEMBL for approved drugs chemically similar to
+                        this report's own best candidates, subtracting
+                        everything already annotated at the factor. Yields one
+                        or two untested pairs per factor; costs a few requests
+                        (default: False)
+  --no-opentargets      skip the Open Targets drug lookup. It is a third
+                        independent curation and typically adds one or two
+                        approved drugs per target that ChEMBL and DGIdb miss,
+                        at the cost of one request per factor (default: False)
   --demo                run entirely offline on bundled fixtures (default:
                         False)
   --offline             fail rather than hit the network; use cached responses
@@ -241,8 +251,8 @@ usage: promoter-tf-drugs.panel [-h] [--genes GENES] [--gene-file GENE_FILE]
                                [--tissue {cns}] [--tf-weight TF_WEIGHT]
                                [--chip-bed CHIP_BED] [--chip-api]
                                [--include-investigational] [--no-dgidb]
-                               [--demo] [--offline] [--cache-dir CACHE_DIR]
-                               [-v]
+                               [--find-analogs] [--no-opentargets] [--demo]
+                               [--offline] [--cache-dir CACHE_DIR] [-v]
 
 Compare several CANDIDATE genes and narrow to the route with the least
 collateral effect. The genes are treated as alternatives, so a drug recurring
@@ -429,6 +439,14 @@ options:
   --include-investigational
                         do not restrict to approved (max_phase 4) drugs
   --no-dgidb            ChEMBL only
+  --find-analogs        search ChEMBL for approved drugs chemically similar to
+                        this report's own best candidates, subtracting
+                        everything already annotated at the factor. Yields one
+                        or two untested pairs per factor; costs a few requests
+  --no-opentargets      skip the Open Targets drug lookup. It is a third
+                        independent curation and typically adds one or two
+                        approved drugs per target that ChEMBL and DGIdb miss,
+                        at the cost of one request per factor
   --demo                run entirely offline on bundled fixtures
   --offline             fail rather than hit the network; use cached responses
                         only

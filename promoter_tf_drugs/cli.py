@@ -194,6 +194,17 @@ def add_analysis_args(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
     p.add_argument("--include-investigational", action="store_true",
                    help="do not restrict to approved (max_phase 4) drugs")
     p.add_argument("--no-dgidb", action="store_true", help="ChEMBL only")
+    p.add_argument("--find-analogs", action="store_true",
+                   help="search ChEMBL for approved drugs chemically similar "
+                        "to this report's own best candidates, subtracting "
+                        "everything already annotated at the factor. Yields "
+                        "one or two untested pairs per factor; costs a few "
+                        "requests")
+    p.add_argument("--no-opentargets", action="store_true",
+                   help="skip the Open Targets drug lookup. It is a third "
+                        "independent curation and typically adds one or two "
+                        "approved drugs per target that ChEMBL and DGIdb "
+                        "miss, at the cost of one request per factor")
 
     p.add_argument("--demo", action="store_true",
                    help="run entirely offline on bundled fixtures")
@@ -265,6 +276,8 @@ def _execute(args) -> int:
         upstream_depth=args.upstream_depth,
         approved_only=not args.include_investigational,
         use_dgidb=not args.no_dgidb,
+        use_opentargets=not args.no_opentargets,
+        find_analogs=args.find_analogs,
         demo=args.demo, offline=args.offline,
         cache_dir=args.cache_dir, min_ic=args.min_ic,
     )

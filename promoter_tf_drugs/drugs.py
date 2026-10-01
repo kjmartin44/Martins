@@ -57,7 +57,8 @@ class Drug:
     first_approval: int | None
     withdrawn: bool
     oral: bool | None
-    direction: str          # "increases TF activity" / "decreases TF activity"
+    direction: str          # "up" | "down" | "unclear" - compared
+                            # directly against desired_direction()
     source: str
     target_chembl_id: str | None = None   # needed to look up potency vs THIS target
     properties: dict | None = None        # molecule_properties, for tissue scoring
@@ -306,7 +307,8 @@ def dgidb_drugs(client: Client, symbols: list[str],
 # ------------------------------------------------------------------ combine
 def drugs_for_tfs(client: Client, annotations: dict, *, approved_only: bool = True,
                   use_dgidb: bool = True, goal: str = "up",
-                  allow_unknown_direction: bool = False):
+                  allow_unknown_direction: bool = False,
+                  use_opentargets: bool = True):
     """Return {tf_symbol: [Drug]} keeping only pharmacologically useful direction."""
     collected: dict[str, list[Drug]] = {}
 
@@ -318,6 +320,16 @@ def drugs_for_tfs(client: Client, annotations: dict, *, approved_only: bool = Tr
     for symbol, ann in annotations.items():
         found = chembl_drugs(client, symbol, ann.get("uniprot"), approved_only)
         found += dgidb_by_gene.get(symbol.upper(), [])
+        # A third, independent curation. It finds compounds the other two
+        # miss, and unlike DGIdb it carries an action type and a clinical
+        # stage, which is what the direction filter and grading need.
+        if use_opentargets:
+            try:
+                found += opentargets_drugs(client, symbol,
+                                           approved_only=approved_only)
+            except Exception as exc:                        # noqa: BLE001
+                log.warning("Open Targets drugs unavailable for %s: %s",
+                            symbol, str(exc)[:100])
 
         seen: dict[tuple, Drug] = {}
         for d in found:
@@ -341,3 +353,140 @@ def drugs_for_tfs(client: Client, annotations: dict, *, approved_only: bool = Tr
 
     return filter_drugs_by_goal(collected, annotations, goal,
                                 allow_unknown_direction=allow_unknown_direction)
+
+# ====================================================================== #
+# Open Targets as a third drug source.                                   #
+#                                                                        #
+# This API was already being called for genetics and tissue expression   #
+# and never asked for drugs, which was a free source left on the table.  #
+# It is a separate curation from ChEMBL and DGIdb, so it finds different #
+# compounds: for VDR it returns seocalcitol, becocalcidiol and           #
+# eldecalcitol, none of which appeared in a real CCR5 run's VDR list.    #
+#                                                                        #
+# It also carries the two things the grading needs and DGIdb lacks - an  #
+# action type (AGONIST / ANTAGONIST / INHIBITOR) and a clinical stage -  #
+# plus drug warnings, which feed the same withdrawn/black-box logic the  #
+# rest of the package reads.                                             #
+# ====================================================================== #
+OPENTARGETS = "https://api.platform.opentargets.org/api/v4/graphql"
+
+# The schema moves. `knownDrugs` was removed before API v26.9 and this is
+# its replacement; if it disappears too, the lookup degrades to returning
+# nothing rather than taking the run down.
+_OT_DRUG_QUERY = """query($id: String!) {
+  target(ensemblId: $id) {
+    approvedSymbol
+    drugAndClinicalCandidates {
+      count
+      rows {
+        maxClinicalStage
+        drug {
+          id name drugType maximumClinicalStage
+          drugWarnings { warningType }
+          mechanismsOfAction { rows { actionType mechanismOfAction } }
+        }
+      }
+    }
+  }
+}"""
+
+# Open Targets stages, mapped onto the max_phase the rest of the package uses.
+_STAGE_PHASE = {
+    "APPROVAL": 4.0, "PHASE_4": 4.0, "PHASE_3": 3.0,
+    "PHASE_2": 2.0, "PHASE_1": 1.0, "PRECLINICAL": 0.0,
+}
+
+
+def opentargets_drugs(client: Client, symbol: str, *,
+                      approved_only: bool = True) -> list[Drug]:
+    """Drugs and clinical candidates for one target, from Open Targets."""
+    from .genetics import _resolve_ensembl
+
+    try:
+        ensembl = _resolve_ensembl(client, symbol)
+    except Exception:                                       # noqa: BLE001
+        ensembl = None
+    if not ensembl:
+        return []
+
+    try:
+        res = client.post(OPENTARGETS, {"query": _OT_DRUG_QUERY,
+                                        "variables": {"id": ensembl}})
+    except Exception as exc:                                # noqa: BLE001
+        log.warning("Open Targets drug lookup failed for %s: %s",
+                    symbol, str(exc)[:120])
+        return []
+    if res.get("errors"):
+        log.warning("Open Targets drug schema rejected the query for %s (%s) "
+                    "- this source is skipped, the rest of the run is "
+                    "unaffected", symbol, str(res["errors"])[:120])
+        return []
+
+    target = (res.get("data") or {}).get("target") or {}
+    rows = ((target.get("drugAndClinicalCandidates") or {}).get("rows") or [])
+
+    out: list[Drug] = []
+    for row in rows:
+        d = row.get("drug") or {}
+        name = (d.get("name") or "").strip()
+        if not name:
+            continue
+        stage = d.get("maximumClinicalStage") or row.get("maxClinicalStage")
+        phase = _STAGE_PHASE.get(str(stage).upper())
+        approved = phase == 4.0
+        if approved_only and not approved:
+            continue
+
+        moa_rows = ((d.get("mechanismsOfAction") or {}).get("rows") or [])
+        moa = moa_rows[0] if moa_rows else {}
+        action = (moa.get("actionType") or "").strip().lower()
+
+        # Open Targets records a withdrawal as a drug warning; the rest of
+        # the package reads that flag, so it has to arrive the same way.
+        warnings = d.get("drugWarnings") or []
+        withdrawn = any("withdraw" in str(w.get("warningType", "")).lower()
+                        for w in warnings)
+
+        out.append(Drug(
+            name=name.title() if name.isupper() else name,
+            chembl_id=d.get("id"),
+            target_symbol=symbol.upper(),
+            action_type=action,
+            mechanism=moa.get("mechanismOfAction"),
+            approved=bool(approved),
+            max_phase=phase,
+            first_approval=None,
+            withdrawn=withdrawn,
+            oral=None,
+            direction=_direction_for_action(action),
+            source="OpenTargets",
+        ))
+
+    log.info("Open Targets: %d drug(s) for %s", len(out), symbol)
+    return out
+
+
+def _direction_for_action(action: str) -> str:
+    """Map an Open Targets action type onto the direction the FILTER reads.
+
+    The vocabulary matters more than it looks. `drugs_for_tfs` compares
+    `d.direction == want` where want is "up", "down" or "either", and routes
+    "unclear" to the unknown-direction bucket. The Drug dataclass comment
+    says "increases TF activity", which is stale - following it meant every
+    Open Targets drug failed the comparison and was dropped without even
+    landing in the unknown bucket, for any factor with a role annotation.
+    """
+    a = (action or "").lower()
+    # The DECREASE patterns are tested first, and that order is load-bearing:
+    # "antagonist" contains "agonist" as a substring, so checking the
+    # increase patterns first mapped every antagonist to "increases TF
+    # activity" - the exact opposite of the truth, which would have put
+    # blockers in the raise-the-gene list.
+    if any(k in a for k in ("antagonist", "inverse agonist", "inhibitor",
+                            "blocker", "degrader", "negative", "suppressor",
+                            "antisense", "disrupt")):
+        return "down"
+    if any(k in a for k in ("agonist", "activator", "opener", "inducer",
+                            "positive", "stabiliser", "stabilizer")):
+        return "up"
+    return "unclear"

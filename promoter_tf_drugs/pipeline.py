@@ -16,6 +16,7 @@ from . import (annotate, catalogue as cat_mod, cellcycle, congeners as cong_mod,
                genetics as gen_mod, ligands as lig_mod, modulators as mod_mod,
                neighbours as nbr_mod, network as net_mod,
                predictions as pred_mod, systemic as sys_mod,
+               analogs as analog_mod,
                compensation as comp_mod,
                posttranscriptional as ptx_mod,
                reactivation as react_mod,
@@ -147,6 +148,8 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         upstream_network: bool = False,
         upstream_depth: int = 3,
         approved_only: bool = True, use_dgidb: bool = True,
+        use_opentargets: bool = True,
+        find_analogs: bool = False,
         demo: bool = False, offline: bool = False,
         cache_dir: str | None = None, min_ic: float = 6.0) -> dict:
     """Run the full pipeline and return a JSON-serialisable result dict."""
@@ -312,7 +315,8 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         else:
             drug_map, unknown_direction = drugs_mod.drugs_for_tfs(
                 client, actionable, approved_only=approved_only,
-                use_dgidb=use_dgidb, goal=goal,
+                use_dgidb=use_dgidb, use_opentargets=use_opentargets,
+                goal=goal,
                 allow_unknown_direction=allow_unknown_direction)
         for s, ds in drug_map.items():
             if s in by_tf:
@@ -687,6 +691,17 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                             f"support" if any(s.checked for s in supports)
                             else "eQTLGen file not retrieved"))
 
+        # ------- 8e0. approved drugs resembling our own best candidates
+        # Asked of the report's strongest rows, and with everything already
+        # annotated at the factor subtracted - otherwise a similarity search
+        # rediscovers the table it was given and looks productive.
+        analog_hits = {}
+        if find_analogs and not demo and grades:
+            analog_hits = _optional(
+                "chemical-analog search",
+                lambda: analog_mod.search(client, [g.to_dict() for g in grades]),
+                {})
+
         # ------- 8e1. the routes a promoter-level analysis cannot see
         # Everything above acts on transcription. These act after it, around
         # it, or on a different gene entirely - and for some genes that is
@@ -793,6 +808,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             "salt_forms_collapsed": collapsed if grade_drugs else {},
             "attrition": attrition,
             "beyond_transcription": beyond,
+            "analogs": analog_hits,
             "evidence_verdict": prov_mod.verdict(ledger, quality),
             "neighbours": neighbours,
             "n_tfs": len(by_tf),
@@ -1690,6 +1706,33 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                         L.append(f"- **{t['tf_symbol']} → {t['gene']}**: "
                                  f"{t['notes'][0]}")
                 L.append("")
+
+        an = res.get("analogs") or {}
+        if an:
+            L.append("### Approved drugs that resemble these candidates")
+            L.append("")
+            L.append(analog_mod.summarise(an))
+            L.append("")
+            L.append("Everything already annotated at the factor has been "
+                     "subtracted. That matters: if a compound looks like a "
+                     "known ligand and anyone assayed it there, it is "
+                     "already in the tables above — so a raw similarity "
+                     "search rediscovers its own input and looks productive.")
+            L.append("")
+            L.append("| Factor | Candidate | Resembles | Similarity |")
+            L.append("|---|---|---|---|")
+            for target, blk in an.items():
+                for a2 in blk["analogs"][:6]:
+                    L.append(f"| {target} | **{a2['drug']}** | "
+                             f"{a2['similar_to']} | {a2['similarity']}% |")
+            L.append("")
+            L.append("*Similarity is not activity. Two molecules at this "
+                     "Tanimoto can differ in the one substituent the pocket "
+                     "cares about, and for a nuclear receptor a small change "
+                     "can flip agonist to antagonist — so even if binding "
+                     "holds, the direction is unknown. Each row is a binding "
+                     "assay, not a finding.*")
+            L.append("")
 
         bt = res.get("beyond_transcription") or {}
         if bt:

@@ -5319,3 +5319,234 @@ def test_report_renders_the_beyond_transcription_section():
     # the PTC ordering reached the report
     i = md.index("After transcription")
     assert "readthrough" in md[i:i + 1200].lower()
+
+
+# ===================================================================== #
+# Finding FDA-approved drugs: two more independent sources.             #
+# ===================================================================== #
+def test_opentargets_is_a_third_drug_source():
+    """The API was already being called for genetics and expression and
+    never asked for drugs. It is a separate curation, so it finds compounds
+    ChEMBL and DGIdb miss - eldecalcitol at VDR, tiratricol at THRB."""
+    from promoter_tf_drugs import drugs as dr
+
+    class C:
+        def post(self, url, payload):
+            return {"data": {"target": {
+                "approvedSymbol": "VDR",
+                "drugAndClinicalCandidates": {"count": 2, "rows": [
+                    {"maxClinicalStage": "APPROVAL", "drug": {
+                        "id": "CHEMBL1", "name": "ELDECALCITOL",
+                        "drugType": "Small molecule",
+                        "maximumClinicalStage": "APPROVAL",
+                        "drugWarnings": [],
+                        "mechanismsOfAction": {"rows": [
+                            {"actionType": "AGONIST",
+                             "mechanismOfAction": "VDR agonist"}]}}},
+                    {"maxClinicalStage": "PHASE_2", "drug": {
+                        "id": "CHEMBL2", "name": "SEOCALCITOL",
+                        "drugType": "Small molecule",
+                        "maximumClinicalStage": "PHASE_2",
+                        "drugWarnings": [],
+                        "mechanismsOfAction": {"rows": []}}},
+                ]}}}}
+
+    import promoter_tf_drugs.genetics as gen
+    old = gen._resolve_ensembl
+    gen._resolve_ensembl = lambda c, s: "ENSG0"
+    try:
+        got = dr.opentargets_drugs(C(), "VDR", approved_only=True)
+    finally:
+        gen._resolve_ensembl = old
+
+    names = {d.name for d in got}
+    assert "Eldecalcitol" in names
+    assert "Seocalcitol" not in names          # phase 2, not approved
+    d = next(x for x in got if x.name == "Eldecalcitol")
+    assert d.direction == "up"
+    assert d.source == "OpenTargets"
+    assert d.max_phase == 4.0
+
+
+def test_opentargets_action_type_maps_to_a_direction():
+    """DGIdb gives no action type, so direction has to be inferred or the
+    row cannot be filtered by goal. Open Targets does give one."""
+    from promoter_tf_drugs.drugs import _direction_for_action
+    # The vocabulary must be the one the FILTER compares against - "up",
+    # "down", "unclear" - not the dataclass comment's stale "increases TF
+    # activity". Following the comment meant every Open Targets drug failed
+    # `d.direction == want` and was dropped for any annotated factor,
+    # without even reaching the unknown-direction bucket.
+    assert _direction_for_action("AGONIST") == "up"
+    assert _direction_for_action("INHIBITOR") == "down"
+    assert _direction_for_action("") == "unclear"
+    assert _direction_for_action("MODULATOR") == "unclear"
+
+    # The substring trap, which this test caught in the first version:
+    # "antagonist" CONTAINS "agonist", so testing the increase patterns
+    # first mapped every antagonist to "increases TF activity" - putting
+    # blockers in the raise-the-gene list.
+    assert _direction_for_action("ANTAGONIST") == "down"
+    assert _direction_for_action("INVERSE AGONIST") == "down"
+    assert _direction_for_action("NEGATIVE ALLOSTERIC MODULATOR") == "down"
+    # and the genuine agonist cases still read correctly
+    assert _direction_for_action("PARTIAL AGONIST") == "up"
+    assert _direction_for_action("POSITIVE ALLOSTERIC MODULATOR") == "up"
+
+
+def test_opentargets_schema_change_degrades_rather_than_raising():
+    """knownDrugs was removed before API v26.9 and this field may go too."""
+    from promoter_tf_drugs import drugs as dr
+
+    class C:
+        def post(self, url, payload):
+            return {"errors": [{"message": "Cannot query field"}]}
+
+    import promoter_tf_drugs.genetics as gen
+    old = gen._resolve_ensembl
+    gen._resolve_ensembl = lambda c, s: "ENSG0"
+    try:
+        assert dr.opentargets_drugs(C(), "VDR") == []
+    finally:
+        gen._resolve_ensembl = old
+
+
+# ------------------------------------------------- chemical analog search
+def test_analog_search_subtracts_what_is_already_annotated():
+    """The naive version rediscovers its own input: a compound similar to a
+    known ligand that anyone assayed at the target is already annotated
+    there. Only the leftover is a new pair."""
+    from promoter_tf_drugs import analogs
+
+    class C:
+        def get(self, url, params=None):
+            if "molecule/search" in url:
+                return {"molecules": [{
+                    "pref_name": "CALCITRIOL", "max_phase": 4,
+                    "molecule_chembl_id": "CHEMBL1",
+                    "molecule_structures": {"canonical_smiles": "CCO"}}]}
+            return {"molecules": [
+                {"pref_name": "CALCITRIOL", "similarity": "100",
+                 "molecule_chembl_id": "CHEMBL1"},
+                {"pref_name": "ALFACALCIDOL", "similarity": "82",
+                 "molecule_chembl_id": "CHEMBL2"},
+                {"pref_name": "TACALCITOL", "similarity": "76",
+                 "molecule_chembl_id": "CHEMBL3"},
+            ]}
+
+    got = analogs.find_analogs(C(), "calcitriol", "VDR",
+                               already_known={"Calcitriol", "Alfacalcidol"})
+    names = [a.drug for a in got]
+    assert names == ["Tacalcitol"]             # the only untested pair
+    assert "not itself recorded at VDR" in got[0].note
+
+
+def test_analog_search_picks_the_parent_not_an_ester():
+    """A plain search for tretinoin returns TRETINOIN TOCOFERIL first, whose
+    similarity neighbourhood is the ester's and therefore the wrong one."""
+    from promoter_tf_drugs import analogs
+
+    class C:
+        def get(self, url, params=None):
+            return {"molecules": [
+                {"pref_name": "TRETINOIN TOCOFERIL", "max_phase": 4,
+                 "molecule_chembl_id": "CHEMBL9",
+                 "molecule_structures": {"canonical_smiles": "CCCC"}},
+                {"pref_name": "TRETINOIN", "max_phase": 4,
+                 "molecule_chembl_id": "CHEMBL8",
+                 "molecule_structures": {"canonical_smiles": "CC"}},
+            ]}
+
+    m = analogs._parent_molecule(C(), "tretinoin")
+    assert m["pref_name"] == "TRETINOIN"
+
+
+def test_analog_search_collapses_salt_forms_of_the_query():
+    from promoter_tf_drugs import analogs
+
+    class C:
+        def get(self, url, params=None):
+            if "molecule/search" in url:
+                return {"molecules": [{
+                    "pref_name": "LIOTHYRONINE", "max_phase": 4,
+                    "molecule_chembl_id": "CHEMBL1",
+                    "molecule_structures": {"canonical_smiles": "CCO"}}]}
+            return {"molecules": [
+                {"pref_name": "LIOTHYRONINE SODIUM", "similarity": "100",
+                 "molecule_chembl_id": "CHEMBL2"},
+                {"pref_name": "LEVOTHYROXINE", "similarity": "74",
+                 "molecule_chembl_id": "CHEMBL3"},
+            ]}
+
+    got = analogs.find_analogs(C(), "liothyronine", "THRB")
+    assert [a.drug for a in got] == ["Levothyroxine"]
+
+
+def test_analog_rows_state_that_similarity_is_not_activity():
+    """Beta carotene came back 80% similar to tretinoin and is a retinoid
+    PRECURSOR, not an RAR ligand. The caveat has to be on every row."""
+    from promoter_tf_drugs import analogs
+    a = analogs.Analog(drug="X", chembl_id="C1", similarity=80.0,
+                       similar_to="tretinoin", target="RARA")
+    a.caveats = ["Similarity is not activity.", "flip agonist to antagonist"]
+    assert any("not activity" in c for c in a.caveats)
+
+
+def test_empty_analog_result_is_explained():
+    from promoter_tf_drugs import analogs
+    s = analogs.summarise({})
+    assert "common outcome" in s and "already in the tables above" in s
+
+
+def test_opentargets_drugs_actually_survive_the_direction_filter():
+    """They were silently dropped: the filter compares against "up"/"down"
+    and these arrived saying "increases TF activity", so for any factor with
+    a role annotation every Open Targets row vanished - and not even into
+    the unknown-direction bucket. An earlier test missed it because the mock
+    had no role, which makes `want` "either" and keeps everything."""
+    from promoter_tf_drugs import drugs as dr
+
+    class C:
+        def post(self, url, payload):
+            return {"data": {"target": {"approvedSymbol": "VDR",
+                "drugAndClinicalCandidates": {"count": 2, "rows": [
+                    {"maxClinicalStage": "APPROVAL", "drug": {
+                        "id": "C1", "name": "AN_AGONIST",
+                        "maximumClinicalStage": "APPROVAL", "drugWarnings": [],
+                        "mechanismsOfAction": {"rows": [
+                            {"actionType": "AGONIST",
+                             "mechanismOfAction": "agonist"}]}}},
+                    {"maxClinicalStage": "APPROVAL", "drug": {
+                        "id": "C2", "name": "AN_ANTAGONIST",
+                        "maximumClinicalStage": "APPROVAL", "drugWarnings": [],
+                        "mechanismsOfAction": {"rows": [
+                            {"actionType": "ANTAGONIST",
+                             "mechanismOfAction": "antagonist"}]}}},
+                ]}}}}
+
+        def get(self, url, params=None):
+            return {}
+
+    import promoter_tf_drugs.genetics as gen
+    old = gen._resolve_ensembl
+    gen._resolve_ensembl = lambda c, s: "ENSG0"
+    try:
+        # an ANNOTATED factor, so `want` is "up"/"down" rather than "either"
+        up, _ = dr.drugs_for_tfs(C(), {"VDR": {"role": "activator"}},
+                                 goal="up", use_dgidb=False)
+        dn, _ = dr.drugs_for_tfs(C(), {"VDR": {"role": "activator"}},
+                                 goal="down", use_dgidb=False)
+    finally:
+        gen._resolve_ensembl = old
+
+    assert [d.name for v in up.values() for d in v] == ["An_Agonist"]
+    assert [d.name for v in dn.values() for d in v] == ["An_Antagonist"]
+
+
+def test_the_drug_direction_vocabulary_is_consistent_across_sources():
+    """ChEMBL writes "up"/"down"; anything else silently fails the filter."""
+    from promoter_tf_drugs import drugs as dr
+    assert dr.desired_direction("activator", "up") == "up"
+    assert dr.desired_direction("activator", "down") == "down"
+    for action in ("AGONIST", "ANTAGONIST", "INHIBITOR", "MODULATOR"):
+        assert dr._direction_for_action(action) in ("up", "down", "unclear")
