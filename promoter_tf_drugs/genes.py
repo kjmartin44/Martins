@@ -190,8 +190,13 @@ def get_promoters(client: Client, symbol: str, *, species: str = "homo_sapiens",
                   all_tss: bool = False, mask: str | None = None,
                   tss_cluster_bp: int = TSS_CLUSTER_BP) -> list[Promoter]:
     """Fetch promoter window(s) for a gene symbol or Ensembl gene ID."""
-    gene = (_lookup_id(client, symbol) if symbol.upper().startswith("ENS")
-            else _lookup_symbol(client, symbol, species))
+    # A local GTF answers this with no network. Ensembl's REST API returns
+    # HTTP 500 under load, and this is the call that cannot degrade - without
+    # a gene model there is no promoter to analyse.
+    gene = local_gene(symbol) if _TX_BY_GENE else None
+    if gene is None:
+        gene = (_lookup_id(client, symbol) if symbol.upper().startswith("ENS")
+                else _lookup_symbol(client, symbol, species))
 
     chrom = gene["seq_region_name"]
     strand = int(gene["strand"])
@@ -218,6 +223,11 @@ def get_promoters(client: Client, symbol: str, *, species: str = "homo_sapiens",
             # A local FASTA wins outright: faster, reproducible, and immune
             # to the endpoint being down.
             seq = local_sequence(chrom, start, end)
+            if seq is None:
+                seq = local_sequence_from_genome(chrom, start, end)
+                if seq is not None:
+                    log.info("using the local genome for %s:%d-%d (no "
+                             "Ensembl request)", chrom, start, end)
             if seq is None:
                 seq = fetch_sequence(client, species, chrom, start, end,
                                      strand, mask=mask)
@@ -336,3 +346,219 @@ def fetch_cdna(client: Client, transcript_id: str) -> str | None:
         log.warning("cDNA fetch failed for %s: %s", transcript_id, exc)
         return None
     return (data.get("seq") or "").upper() or None
+
+# ====================================================================== #
+# Fully offline: gene models from a GTF, sequence from a genome FASTA.    #
+#                                                                         #
+# Ensembl was the last hard network dependency, and its REST API returns   #
+# HTTP 500 under load like every other public service. `--promoter-fasta`  #
+# only helps for windows already fetched; a new gene still needed the      #
+# network. These two routes remove that entirely.                          #
+# ====================================================================== #
+_TX_BY_GENE: dict = {}
+_TX_SOURCE: dict = {"path": None}
+_GENOME: dict = {"path": None, "index": {}}
+
+DEFAULT_GENOME_PATHS = ("data/hg38.fa", "data/genome.fa")
+
+
+def load_transcripts_gtf(path, *, force: bool = False) -> int:
+    """Gene models from a GENCODE/Ensembl GTF, replacing the Ensembl lookup.
+
+    Idempotent: a 34 MB parse takes seconds, and doing it once per
+    `pipeline.run()` call took the test suite from 32s to 7 minutes.
+
+    Reads `transcript` rows and keeps the tags transcript selection depends
+    on, so `--all-tss` and MANE-Select behaviour are unchanged offline.
+    """
+    import gzip
+    import re
+
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(f"{path} not found")
+    if _TX_BY_GENE and not force and _TX_SOURCE.get("path") == str(path):
+        return len(_TX_BY_GENE)
+
+    opener = gzip.open if path.suffix == ".gz" else open
+    gene_re = re.compile(r'gene_name "([^"]+)"')
+    tx_re = re.compile(r'transcript_id "([^"]+)"')
+    bt_re = re.compile(r'transcript_type "([^"]+)"')
+    TAB = chr(9)
+
+    by_gene: dict = {}
+    with opener(path, "rt", encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            if line.startswith("#"):
+                continue
+            f = line.split(TAB)
+            if len(f) < 9 or f[2] != "transcript":
+                continue
+            g = gene_re.search(f[8])
+            t = tx_re.search(f[8])
+            if not (g and t):
+                continue
+            bt = bt_re.search(f[8])
+            by_gene.setdefault(g.group(1).upper(), []).append({
+                "id": t.group(1).split(".")[0],
+                "start": int(f[3]), "end": int(f[4]),
+                "strand": 1 if f[6] == "+" else -1,
+                "biotype": bt.group(1) if bt else "unknown",
+                "chrom": f[0].replace("chr", ""),
+                # the flags select_transcripts relies on
+                "is_canonical": 1 if 'tag "Ensembl_canonical"' in f[8] else 0,
+                "is_mane_select": 'tag "MANE_Select"' in f[8],
+            })
+
+    _TX_BY_GENE.clear()
+    _TX_BY_GENE.update(by_gene)
+    _TX_SOURCE["path"] = str(path)
+    log.info("indexed transcripts for %d genes from %s - gene lookup now "
+             "runs with no network", len(by_gene), path.name)
+    return len(by_gene)
+
+
+def local_gene(symbol: str) -> dict | None:
+    """An Ensembl-shaped gene record, built from the local GTF."""
+    tx = _TX_BY_GENE.get((symbol or "").strip().upper())
+    if not tx:
+        return None
+    return {
+        "display_name": symbol.upper(),
+        "id": "LOCAL:" + symbol.upper(),
+        "seq_region_name": tx[0]["chrom"],
+        "strand": tx[0]["strand"],
+        "assembly_name": "from GTF",
+        "Transcript": tx,
+    }
+
+
+# ------------------------------------------------------------- genome FASTA
+def index_genome(fasta) -> dict:
+    """Build (or read) a .fai index so sequence can be fetched by seek.
+
+    The .fai format is five columns - name, length, byte offset of the first
+    base, bases per line, bytes per line - and generating it here avoids
+    requiring samtools just to read a FASTA.
+    """
+    fasta = Path(fasta)
+    fai = fasta.with_suffix(fasta.suffix + ".fai")
+    TAB = chr(9)
+
+    if fai.exists():
+        index = {}
+        for line in fai.read_text(encoding="utf-8").splitlines():
+            f = line.split(TAB)
+            if len(f) >= 5:
+                index[f[0].replace("chr", "")] = (int(f[1]), int(f[2]),
+                                                  int(f[3]), int(f[4]))
+        return index
+
+    log.info("building a FASTA index for %s (one time, a few minutes for a "
+             "whole genome)", fasta.name)
+    index, rows = {}, []
+    with open(fasta, "rb") as fh:
+        name, offset, length, linebases, linewidth = None, 0, 0, 0, 0
+        while True:
+            line = fh.readline()
+            if not line:
+                break
+            if line.startswith(b">"):
+                if name is not None:
+                    index[name.replace("chr", "")] = (length, offset,
+                                                      linebases, linewidth)
+                    rows.append(TAB.join([name, str(length), str(offset),
+                                          str(linebases), str(linewidth)]))
+                name = line[1:].split()[0].decode()
+                offset, length, linebases, linewidth = fh.tell(), 0, 0, 0
+            else:
+                if linebases == 0:
+                    linebases = len(line.rstrip(b"\r\n"))
+                    linewidth = len(line)
+                length += len(line.rstrip(b"\r\n"))
+        if name is not None:
+            index[name.replace("chr", "")] = (length, offset, linebases,
+                                              linewidth)
+            rows.append(TAB.join([name, str(length), str(offset),
+                                  str(linebases), str(linewidth)]))
+    try:
+        fai.write_text(chr(10).join(rows) + chr(10), encoding="utf-8")
+    except OSError:
+        pass
+    return index
+
+
+def load_genome(fasta) -> int:
+    """Make a local genome the sequence source. Idempotent."""
+    fasta = Path(fasta)
+    if not fasta.exists():
+        raise FileNotFoundError(str(fasta) + " not found")
+    if _GENOME["path"] == str(fasta) and _GENOME["index"]:
+        return len(_GENOME["index"])
+    _GENOME["index"] = index_genome(fasta)
+    _GENOME["path"] = str(fasta)
+    log.info("genome loaded: %d sequence(s) from %s", len(_GENOME["index"]),
+             fasta.name)
+    return len(_GENOME["index"])
+
+
+_COMPLEMENT = str.maketrans("ACGTacgtNn", "TGCAtgcaNn")
+
+
+def local_sequence_from_genome(chrom, start: int, end: int,
+                               strand: int = 1) -> str | None:
+    """One window, by seek. Coordinates are 1-based inclusive, as Ensembl's.
+
+    Soft-masking is whatever the FASTA carries: a UCSC hg38.fa is already
+    soft-masked, so repeat masking keeps working exactly as it did against
+    `mask=soft`.
+    """
+    idx = _GENOME["index"]
+    if not idx or not _GENOME["path"]:
+        return None
+    key = str(chrom).replace("chr", "")
+    meta = idx.get(key)
+    if meta is None:
+        return None
+    length, offset, linebases, linewidth = meta
+    if start < 1 or end > length or end < start:
+        return None
+
+    begin = offset + (start - 1) // linebases * linewidth \
+        + (start - 1) % linebases
+    stop = offset + (end - 1) // linebases * linewidth + (end - 1) % linebases
+
+    with open(_GENOME["path"], "rb") as fh:
+        fh.seek(begin)
+        raw = fh.read(stop - begin + 1)
+    seq = raw.decode("ascii", "replace")
+    for ch in (chr(10), chr(13)):
+        seq = seq.replace(ch, "")
+
+    if strand == -1:
+        seq = seq.translate(_COMPLEMENT)[::-1]
+    return seq
+
+
+def autoload_offline(gtf=None, genome=None) -> dict:
+    """Pick up a GTF and genome sitting at conventional paths."""
+    from . import neighbours as _nbr
+
+    out = {"gtf": False, "genome": False}
+    for cand in ([gtf] if gtf else list(_nbr.DEFAULT_GTF_PATHS)):
+        if cand and Path(cand).exists():
+            try:
+                load_transcripts_gtf(cand)
+                out["gtf"] = True
+                break
+            except Exception as exc:                        # noqa: BLE001
+                log.warning("could not read %s: %s", cand, exc)
+    for cand in ([genome] if genome else list(DEFAULT_GENOME_PATHS)):
+        if cand and Path(cand).exists():
+            try:
+                load_genome(cand)
+                out["genome"] = True
+                break
+            except Exception as exc:                        # noqa: BLE001
+                log.warning("could not read %s: %s", cand, exc)
+    return out

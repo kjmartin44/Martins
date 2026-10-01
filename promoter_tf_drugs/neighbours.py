@@ -206,9 +206,13 @@ def load_gtf(path) -> int:
     import re
     from pathlib import Path as _P
 
+    global _GTF_SOURCE
     path = _P(path)
     if not path.exists():
         raise FileNotFoundError(f"{path} not found")
+
+    if _GTF_GENES and _GTF_SOURCE == str(path):
+        return len(_GTF_GENES)
 
     opener = (gzip.open if path.suffix == ".gz" else open)
     name_re = re.compile(r'gene_name "([^"]+)"')
@@ -233,7 +237,6 @@ def load_gtf(path) -> int:
     genes.sort(key=lambda g: (g[0], g[1]))
     _GTF_GENES.clear()
     _GTF_GENES.extend(genes)
-    global _GTF_SOURCE
     _GTF_SOURCE = str(path)
     log.info("indexed %d gene coordinates from %s - the neighbour check now "
              "runs with no network", len(genes), path.name)

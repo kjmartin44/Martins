@@ -16,7 +16,8 @@ usage: promoter-tf-drugs [-h] --gene GENE [--out OUT] [--top TOP]
                          [--predict-direction] [--regulon-file REGULON_FILE]
                          [--no-direct] [--design-modality] [--design-screen]
                          [--no-stabilizers] [--cell-type-check] [--lincs]
-                         [--gtf GTF] [--promoter-fasta PROMOTER_FASTA]
+                         [--gtf GTF] [--genome GENOME]
+                         [--promoter-fasta PROMOTER_FASTA]
                          [--expression-file EXPRESSION_FILE]
                          [--lincs-gmt UP_GMT DOWN_GMT]
                          [--lincs-file LINCS_FILE]
@@ -103,6 +104,12 @@ options:
                         load. data/gencode.basic.gtf.gz is picked up
                         automatically if present (34 MB, from
                         ftp.ebi.ac.uk/pub/databases/gencode) (default: None)
+  --genome GENOME       soft-masked genome FASTA, for fully offline runs. With
+                        --gtf this removes the last Ensembl dependency: gene
+                        models come from the GTF and sequence from here. A
+                        UCSC hg38.fa is already soft-masked, so repeat masking
+                        is unchanged. data/hg38.fa is found automatically; a
+                        .fai index is built on first use (default: None)
   --promoter-fasta PROMOTER_FASTA
                         read promoter sequences from a local FASTA instead of
                         Ensembl, matched on exact coordinates. This package's
@@ -213,7 +220,7 @@ usage: promoter-tf-drugs.panel [-h] [--genes GENES] [--gene-file GENE_FILE]
                                [--regulon-file REGULON_FILE] [--no-direct]
                                [--design-modality] [--design-screen]
                                [--no-stabilizers] [--cell-type-check]
-                               [--lincs] [--gtf GTF]
+                               [--lincs] [--gtf GTF] [--genome GENOME]
                                [--promoter-fasta PROMOTER_FASTA]
                                [--expression-file EXPRESSION_FILE]
                                [--lincs-gmt UP_GMT DOWN_GMT]
@@ -336,6 +343,12 @@ options:
                         load. data/gencode.basic.gtf.gz is picked up
                         automatically if present (34 MB, from
                         ftp.ebi.ac.uk/pub/databases/gencode)
+  --genome GENOME       soft-masked genome FASTA, for fully offline runs. With
+                        --gtf this removes the last Ensembl dependency: gene
+                        models come from the GTF and sequence from here. A
+                        UCSC hg38.fa is already soft-masked, so repeat masking
+                        is unchanged. data/hg38.fa is found automatically; a
+                        .fai index is built on first use
   --promoter-fasta PROMOTER_FASTA
                         read promoter sequences from a local FASTA instead of
                         Ensembl, matched on exact coordinates. This package's

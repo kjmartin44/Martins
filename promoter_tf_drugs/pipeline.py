@@ -138,6 +138,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         lincs_gmt: tuple | None = None, expression_file: str | None = None,
         promoter_fasta: str | None = None,
         gtf: str | None = None,
+        genome: str | None = None,
         use_genetics: bool = False,
         upstream_network: bool = False,
         upstream_depth: int = 3,
@@ -198,8 +199,18 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         sig_mod.DEFAULT_GMT_PATHS['up'] = (lincs_gmt[0],)
         sig_mod.DEFAULT_GMT_PATHS['down'] = (lincs_gmt[1],)
     if gtf:
-        # Removes the neighbour check's network dependency.
+        # One GTF serves two purposes: the neighbour check, and the gene
+        # models that used to require an Ensembl lookup.
         nbr_mod.load_gtf(gtf)
+        genes.load_transcripts_gtf(gtf)
+    if genome:
+        genes.load_genome(genome)
+    if not (gtf or genome) and not demo:
+        # Pick up conventionally-placed files without being asked, so a
+        # local corpus is used whenever it is present.
+        found = genes.autoload_offline()
+        if found.get("gtf") or found.get("genome"):
+            log.info("offline sources found: %s", found)
     if promoter_fasta:
         # Removes the one stage that had no offline route.
         genes.load_promoter_fasta(promoter_fasta)

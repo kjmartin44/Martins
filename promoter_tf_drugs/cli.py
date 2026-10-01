@@ -106,6 +106,14 @@ def add_analysis_args(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
                         "load. data/gencode.basic.gtf.gz is picked up "
                         "automatically if present (34 MB, from "
                         "ftp.ebi.ac.uk/pub/databases/gencode)")
+    p.add_argument("--genome",
+                   help="soft-masked genome FASTA, for fully offline runs. "
+                        "With --gtf this removes the last Ensembl "
+                        "dependency: gene models come from the GTF and "
+                        "sequence from here. A UCSC hg38.fa is already "
+                        "soft-masked, so repeat masking is unchanged. "
+                        "data/hg38.fa is found automatically; a .fai index "
+                        "is built on first use")
     p.add_argument("--promoter-fasta",
                    help="read promoter sequences from a local FASTA instead "
                         "of Ensembl, matched on exact coordinates. This "
@@ -243,7 +251,8 @@ def _execute(args) -> int:
         lincs_gmt=args.lincs_gmt,
         expression_file=args.expression_file,
         promoter_fasta=args.promoter_fasta,
-        gtf=args.gtf, use_genetics=args.genetics,
+        gtf=args.gtf,
+        genome=args.genome, use_genetics=args.genetics,
         upstream_network=args.upstream_network,
         upstream_depth=args.upstream_depth,
         approved_only=not args.include_investigational,
