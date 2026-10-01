@@ -203,6 +203,12 @@ def add_analysis_args(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
                    help="tissue name as spelled in the expression table "
                         "(e.g. liver, brain, kidney) to infer TF activity "
                         "in. Required by --tf-activity")
+    p.add_argument("--docking-results", metavar="JSON",
+                   help="fold in a docking run performed elsewhere. "
+                        "Written by `python -m promoter_tf_drugs.docking "
+                        "--bundle DIR --out JSON`, which is the step "
+                        "that needs Linux. Prepare and report here, "
+                        "dock there")
     p.add_argument("--depmap-file", metavar="CSV",
                    help="DepMap CRISPRGeneEffect.csv. Measures what happens "
                         "to a cell when each factor is knocked out, which is "
@@ -304,6 +310,7 @@ def _execute(args) -> int:
         use_lincs=args.lincs,
         signature_file=args.signature_file, lincs_file=args.lincs_file,
         depmap_file=args.depmap_file,
+        docking_results=args.docking_results,
         tf_activity=args.tf_activity,
         activity_tissue=args.activity_tissue,
         activity_permutations=args.activity_permutations,

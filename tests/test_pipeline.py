@@ -7601,3 +7601,201 @@ def test_setup_text_covers_windows():
     from promoter_tf_drugs import docking as dk
     assert "Windows" in dk.SETUP
     assert "no Windows build" in dk.SETUP
+
+
+# ===================================================================== #
+# Prepare where the network is, dock where the binary is.               #
+# ===================================================================== #
+class _BundleClient(_FakeRCSB):
+    def get(self, url, params=None):
+        return {}
+
+
+def _patch_chembl(monkeypatch, n_actives=14):
+    from promoter_tf_drugs import agonism as ag, screening as scr, drugs as dr
+    monkeypatch.setattr(ag, "fetch_actives", lambda c, t, **k: [
+        {"chembl_id": f"CHEMBL{i}", "smiles": f"ACT{i}",
+         "pchembl": 7.0 + i / 10} for i in range(n_actives)])
+    monkeypatch.setattr(dr, "_chembl_targets", lambda c, s, u: ["CHEMBL100"])
+    monkeypatch.setattr(scr, "approved_library", lambda c, **k: (
+        [{"chembl_id": f"L{i}", "name": f"approved{i}", "smiles": f"LIB{i}"}
+         for i in range(120)]
+        + [{"chembl_id": f"CHEMBL{i}", "name": f"known{i}",
+            "smiles": f"ACT{i}"} for i in range(n_actives)]))
+
+
+def test_bundle_captures_everything_the_dock_needs(tmp_path, monkeypatch):
+    """The networked half and the docking half are rarely on one machine:
+    on Windows the network is here and smina is not, in WSL the reverse."""
+    from promoter_tf_drugs import docking as dk
+    _patch_chembl(monkeypatch)
+    man = dk.write_bundle(_BundleClient(), "VDR", "P11473", tmp_path,
+                          library_limit=200)
+    assert man["ready"] is True
+    assert man["pdb_id"] == "2HOL"
+    assert man["state"] == "active"
+    assert (tmp_path / "bundle.json").exists()
+    assert (tmp_path / "receptor.pdb").exists()
+    assert (tmp_path / "ligand.pdb").exists()
+    # the receptor in the bundle must already be stripped
+    assert "HETATM" not in (tmp_path / "receptor.pdb").read_text()
+    # paths stored relative, so the folder can be moved or mounted
+    assert man["receptor"] == "receptor.pdb"
+
+
+def test_docking_from_a_bundle_touches_no_network(tmp_path, monkeypatch):
+    """The whole point. If anything reaches for the network here, an
+    offline WSL cannot run the dock."""
+    import random
+    from promoter_tf_drugs import docking as dk
+    from promoter_tf_drugs import agonism as ag, screening as scr
+    _patch_chembl(monkeypatch)
+    dk.write_bundle(_BundleClient(), "VDR", "P11473", tmp_path,
+                    library_limit=200)
+
+    def boom(*a, **k):
+        raise AssertionError("network used during the offline step")
+
+    monkeypatch.setattr(ag, "fetch_actives", boom)
+    monkeypatch.setattr(scr, "approved_library", boom)
+    monkeypatch.setattr(dk, "find_structures", boom)
+    monkeypatch.setattr(dk, "fetch_pdb", boom)
+
+    rng = random.Random(0)
+
+    def score(smi):
+        base = rng.gauss(-7.0, 1.1)
+        return base - 2.5 if smi.startswith("ACT") else base
+
+    res = dk.dock_from_bundle(tmp_path, top_n=6, score_fn=score)
+    assert res["usable"] is True
+    assert res["pocket"]["pdb_id"] == "2HOL"
+    scores = [h["score"] for h in res["hits"]]
+    assert scores == sorted(scores)
+
+
+def test_a_bundle_with_too_few_ligands_warns_at_prepare_time(tmp_path,
+                                                             monkeypatch):
+    """Better to learn the dock will refuse before carrying the folder to
+    another machine than after."""
+    from promoter_tf_drugs import docking as dk
+    _patch_chembl(monkeypatch, n_actives=2)
+    man = dk.write_bundle(_BundleClient(), "VDR", "P11473", tmp_path)
+    assert man["ready"] is False
+    assert "below the" in man["warning"]
+
+
+def test_a_supplied_structure_without_a_ligand_is_refused(tmp_path,
+                                                          monkeypatch):
+    from promoter_tf_drugs import docking as dk
+    _patch_chembl(monkeypatch)
+    apo = tmp_path / "apo.pdb"
+    apo.write_text(_fake_pdb(with_ligand=False))
+    man = dk.write_bundle(_BundleClient(), "VDR", "P11473",
+                          tmp_path / "out", pdb_file=apo)
+    assert "error" in man
+    assert "no co-crystallised ligand" in man["error"]
+
+
+def test_missing_bundle_says_to_run_prepare_first(tmp_path):
+    from promoter_tf_drugs import docking as dk
+    import pytest
+    with pytest.raises(FileNotFoundError, match="prepare step"):
+        dk.load_bundle(tmp_path)
+
+
+def test_every_computed_source_reaches_the_catalogue():
+    """The bug this pins: activity_drugs and docking were computed, their
+    report sections rendered, and both were missing from the dict
+    catalogue.build actually reads - so their routes silently never
+    entered any table. A source that is computed and then dropped is worse
+    than one that was never added, because the section says it ran."""
+    import inspect
+    from promoter_tf_drugs import catalogue as cat
+    src = inspect.getsource(pipeline.run)
+    start = src.index("block_for_catalogue = {")
+    block = src[start:src.index("}", start)]
+
+    build_src = inspect.getsource(cat.build)
+    import re
+    reads = set(re.findall(r'result_block\.get\("(\w+)"', build_src))
+    missing = [k for k in reads if f'"{k}"' not in block]
+    assert not missing, (
+        f"catalogue.build reads {missing} and block_for_catalogue does not "
+        f"supply them, so those routes are dropped")
+
+
+def test_docking_results_from_another_machine_reach_the_report(tmp_path):
+    """Step three of the split: prepare where the network is, dock where
+    the binary is, fold the JSON back in here."""
+    import json
+    from promoter_tf_drugs import docking as dk
+
+    results = {
+        "target": "VDR", "usable": True, "auc": 0.95, "ef1": 11.0,
+        "n_docked": 120, "n_failed": 0, "caveats": [],
+        "pocket": {"pdb_id": "1DB1", "ligand_resname": "VDX",
+                   "state": "active", "note": "x"},
+        "hits": [{"drug": "Calcipotriol", "smiles": "C", "score": -11.2},
+                 {"drug": "Tacalcitol", "smiles": "C", "score": -10.4}],
+    }
+    f = tmp_path / "dock.json"
+    f.write_text(json.dumps(results), encoding="utf-8")
+
+    assert dk.load_results(f)["target"] == "VDR"
+
+    res = pipeline.run("DEMOGENE", demo=True, offline=True,
+                       docking_results=str(f))
+    routes = [r for r in res["results"][0]["all_routes"]["routes"]
+              if r["category"] == "TF: predicted pocket binder"]
+    assert len(routes) == 2
+    assert {r["drug"] for r in routes} == {"Calcipotriol", "Tacalcitol"}
+    assert all(r["tier"] == 4 for r in routes)
+    assert all(r["acts_on"] == "VDR" for r in routes)
+
+    src = (res.get("evidence_sources") or {}).get("sources", {}).get("docking")
+    assert src and src["ok"] is True and src["yielded"] == 2
+
+
+def test_an_unvalidated_docking_run_contributes_nothing(tmp_path):
+    """Its scores carry no information, so they must not become routes."""
+    import json
+    from promoter_tf_drugs import catalogue as cat
+    bad = {"target": "VDR", "usable": False, "auc": 0.51,
+           "error": "pocket did not validate",
+           "hits": [{"drug": "Anything", "score": -12.0}]}
+    assert cat.from_docking(bad) == []
+
+    f = tmp_path / "bad.json"
+    f.write_text(json.dumps(bad), encoding="utf-8")
+    res = pipeline.run("DEMOGENE", demo=True, offline=True,
+                       docking_results=str(f))
+    assert not [r for r in res["results"][0]["all_routes"]["routes"]
+                if r["category"] == "TF: predicted pocket binder"]
+
+
+def test_docking_routes_carry_the_pocket_validation_not_the_score():
+    """A docking score separates binders from non-binders and ranks them
+    badly, so per-compound strength would overstate what was measured.
+    The axis carries the pocket's validated enrichment instead."""
+    from promoter_tf_drugs import catalogue as cat
+    run = {"target": "VDR", "usable": True, "auc": 0.88, "ef1": 6.0,
+           "pocket": {"pdb_id": "1DB1", "state": "active"},
+           "hits": [{"drug": "A", "score": -11.0},
+                    {"drug": "B", "score": -7.0}]}
+    routes = cat.from_docking(run)
+    assert len({r.axes.strength for r in routes}) == 1, \
+        "strength must come from the pocket, not the per-compound score"
+    assert routes[0].axes.strength == 0.88
+    assert "AUC 0.88" in routes[0].axes.evidence
+    assert any("does not say whether it activates or inhibits" in n
+               for n in routes[0].notes)
+
+
+def test_a_malformed_results_file_says_how_to_make_a_real_one(tmp_path):
+    from promoter_tf_drugs import docking as dk
+    import pytest
+    f = tmp_path / "junk.json"
+    f.write_text('{"something": "else"}', encoding="utf-8")
+    with pytest.raises(ValueError, match="--bundle"):
+        dk.load_results(f)

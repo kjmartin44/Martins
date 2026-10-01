@@ -165,6 +165,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         lincs_file: str | None = None,
         lincs_geneinfo=None, tf_activity: bool = False,
         depmap_file: str | None = None,
+        docking_results: str | None = None,
         activity_tissue: str | None = None,
         activity_permutations: int = 0, lincs_gmt: tuple | None = None, expression_file: str | None = None,
         promoter_fasta: str | None = None,
@@ -233,6 +234,26 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
     # Signed regulons are a different parse of the same file regulon_mod
     # reads: it returns bare sets and discards the Activation/Repression
     # column, which is exactly what a direction needs.
+    # Docking happens on another machine when the binary lives
+    # there; this is where its output comes back in.
+    docking_runs: dict = {}
+    if docking_results:
+        from . import docking as dock_mod
+        loaded = _optional(
+            "docking results",
+            lambda: dock_mod.load_results(docking_results), None)
+        if loaded is not None:
+            runs = loaded if isinstance(loaded, list) else [loaded]
+            docking_runs = {r.get("target") or "?": r for r in runs}
+            ok = [r for r in runs if r.get("usable")]
+            ledger.record(
+                "docking", requested=True, ok=True,
+                yielded=sum(len(r.get("hits") or []) for r in ok),
+                detail=(f"{len(ok)} of {len(runs)} pocket(s) validated"
+                        if ok else
+                        "no pocket validated, so no docking hit is "
+                        "reported"))
+
     signed_regulons = None
     regulon_source = None
     if tf_activity:
@@ -997,6 +1018,11 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             "upstream": upstream_hits,
             "lincs": lincs,
             "screens": screens,
+            # Both of these were computed above and left out of the dict
+            # the catalogue actually reads, so their routes never reached
+            # the tables even though their report sections rendered.
+            "activity_drugs": activity_drugs,
+            "docking": list(docking_runs.values()),
         }
         all_routes = cat_mod.build(block_for_catalogue, goal=goal)
 
@@ -1036,6 +1062,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             "cell_type": celltype,
             "tf_activity": activity,
             "activity_drugs": activity_drugs,
+            "docking": list(docking_runs.values()),
             "dependencies": dependencies,
             "modality_design": modality,
             "screen_plan": screen_plan,

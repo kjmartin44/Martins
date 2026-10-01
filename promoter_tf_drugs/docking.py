@@ -1059,6 +1059,151 @@ def dock_screen_for_target(client, symbol: str, uniprot: str, library: list,
 
 
 # ===================================================================== #
+# Prepare here, dock there: a portable bundle.                          #
+# ===================================================================== #
+# Everything above needs the network - RCSB for the structure, ChEMBL for
+# the receptor's known ligands and the approved library. The docking
+# itself needs a Linux binary. Those two requirements often do not live on
+# the same machine: on Windows the network is here and smina is not, and
+# in WSL smina is there and the network may not be.
+#
+# So the two halves are separable. `write_bundle` does every networked
+# step and leaves a folder of plain files. `dock_from_bundle` reads that
+# folder and runs with no network at all. Copy the folder, or just point
+# WSL at it - Windows drives appear under /mnt/c.
+
+BUNDLE_FILE = "bundle.json"
+
+
+def write_bundle(client, symbol: str, uniprot: str, out_dir, *,
+                 library_limit: int = 600, want_state: str | None = None,
+                 pdb_file=None) -> dict:
+    """Fetch everything docking needs into one folder. Needs the network.
+
+    Returns the manifest. After this the folder is self-contained and the
+    dock can run somewhere else, offline.
+    """
+    import json as _json
+
+    from . import agonism
+    from .drugs import _chembl_targets
+    from .screening import approved_library
+
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # --- the structure
+    if pdb_file:
+        text = Path(pdb_file).read_text(errors="replace")
+        lig = best_ligand(text)
+        if lig is None:
+            return {"error": (f"{pdb_file} has no co-crystallised ligand big "
+                              f"enough to place a box on. Supply a holo "
+                              f"structure, or let --prepare search RCSB.")}
+        lig_path = write_ligand_pdb(text, lig, out_dir / "ligand.pdb")
+        rec_path = prepare_receptor(text, out_dir / "receptor.pdb",
+                                    keep_chain=lig["chain"])
+        pocket = PocketChoice(
+            pdb_id=Path(pdb_file).stem, path=str(rec_path),
+            ligand_path=str(lig_path), ligand_resname=lig["resname"],
+            box=box_from_ligand(lig_path.read_text()),
+            state=classify_conformation(text, Path(pdb_file).stem).state,
+            note=f"supplied structure {pdb_file}")
+    else:
+        pocket = choose_pocket(client, uniprot, out_dir,
+                               want_state=want_state)
+        if pocket is None:
+            return {"error": (f"no usable structure for {symbol} "
+                              f"({uniprot}): none carries a "
+                              f"co-crystallised ligand to place a box on.")}
+        # Normalise the paths into the bundle so it stays portable.
+        for src, name in ((pocket.path, "receptor.pdb"),
+                          (pocket.ligand_path, "ligand.pdb")):
+            dst = out_dir / name
+            if Path(src) != dst:
+                dst.write_text(Path(src).read_text(errors="replace"))
+        pocket.path = str(out_dir / "receptor.pdb")
+        pocket.ligand_path = str(out_dir / "ligand.pdb")
+
+    # --- the validation set and the library
+    tids = _chembl_targets(client, symbol, uniprot)
+    actives: list = []
+    for tid in tids[:2]:
+        actives.extend(agonism.fetch_actives(client, tid))
+    actives = [{"chembl_id": a.get("chembl_id"), "smiles": a["smiles"],
+                "pchembl": a.get("pchembl")}
+               for a in actives if a.get("smiles")]
+
+    library = [{"name": d.get("name"), "smiles": d["smiles"]}
+               for d in approved_library(client)[:library_limit]
+               if d.get("smiles")]
+
+    manifest = {
+        "symbol": symbol, "uniprot": uniprot,
+        "pdb_id": pocket.pdb_id, "ligand_resname": pocket.ligand_resname,
+        "state": pocket.state, "note": pocket.note,
+        "box": list(pocket.box),
+        "receptor": "receptor.pdb", "ligand": "ligand.pdb",
+        "n_actives": len(actives), "n_library": len(library),
+        "actives": actives, "library": library,
+    }
+    (out_dir / BUNDLE_FILE).write_text(
+        _json.dumps(manifest, indent=2), encoding="utf-8")
+
+    manifest["ready"] = len(actives) >= MIN_VALIDATION_ACTIVES
+    if not manifest["ready"]:
+        manifest["warning"] = (
+            f"only {len(actives)} known ligand(s) for {symbol}, below the "
+            f"{MIN_VALIDATION_ACTIVES} needed to check that docking into "
+            f"this pocket works. The bundle is written, but the dock will "
+            f"refuse to report.")
+    return manifest
+
+
+def load_bundle(bundle_dir) -> dict:
+    """Read a bundle written by `write_bundle`. No network."""
+    import json as _json
+
+    d = Path(bundle_dir)
+    f = d / BUNDLE_FILE
+    if not f.exists():
+        raise FileNotFoundError(
+            f"{f} not found. Run the prepare step on a machine with network "
+            f"access first.")
+    m = _json.loads(f.read_text(encoding="utf-8"))
+    m["_dir"] = str(d)
+    m["_receptor"] = str(d / m["receptor"])
+    m["_box"] = tuple(m["box"])
+    return m
+
+
+def dock_from_bundle(bundle_dir, *, top_n: int = 25,
+                     exhaustiveness: int = 8, seed: int = 0,
+                     score_fn=None) -> dict:
+    """Run the validated screen from a bundle, with no network at all."""
+    import random
+
+    m = load_bundle(bundle_dir)
+    actives = m["actives"]
+    library = m["library"]
+
+    rng = random.Random(seed)
+    active_smiles = {a["smiles"] for a in actives}
+    pool = [d for d in library if d["smiles"] not in active_smiles]
+    decoys = rng.sample(pool, min(len(pool), max(50, len(actives) * 10)))
+
+    run = screen_by_docking(
+        Path(m["_receptor"]), library, target=m.get("symbol", "?"),
+        actives=actives, decoys=decoys, top_n=top_n,
+        exhaustiveness=exhaustiveness, seed=seed, score_fn=score_fn,
+        box=m["_box"])
+    out = run.to_dict()
+    out["pocket"] = {k: m.get(k) for k in
+                     ("pdb_id", "ligand_resname", "state", "note")}
+    return out
+
+
+# ===================================================================== #
 # Entry point.  python -m promoter_tf_drugs.docking --check             #
 # ===================================================================== #
 def check_setup() -> dict:
@@ -1115,6 +1260,47 @@ def _print_check() -> int:
     return 1
 
 
+def load_results(path) -> dict:
+    """A docking result written on another machine, ready to fold back in.
+
+    This is the third step of the split: prepare where the network is,
+    dock where the binary is, and bring the JSON back here.
+    """
+    import json as _json
+
+    p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(f"{p} not found")
+    data = _json.loads(p.read_text(encoding="utf-8"))
+    runs = data if isinstance(data, list) else [data]
+    for r in runs:
+        if not isinstance(r, dict) or "usable" not in r:
+            raise ValueError(
+                f"{p} does not look like a docking result. Write one with "
+                f"`--bundle DIR --out results.json`.")
+    return data
+
+
+def _report(res: dict, top: int = 25) -> None:
+    """Print a screen result, from either the one-shot or bundle path."""
+    if res.get("error"):
+        print(f"Not reported: {res['error']}")
+        return
+    pk = res.get("pocket") or {}
+    print(f"Structure : {pk.get('pdb_id')} "
+          f"(ligand {pk.get('ligand_resname')}, "
+          f"conformation {pk.get('state')})")
+    print(f"Validation: AUC {res.get('auc')}, "
+          f"top-1% enrichment {res.get('ef1')}")
+    print()
+    print(f"{'drug':34s} {'kcal/mol':>9s}")
+    for h in res.get("hits", [])[:top]:
+        print(f"{h['drug'][:34]:34s} {h['score']:9.2f}")
+    print()
+    for c in res.get("caveats", []):
+        print(f"  - {c}")
+
+
 def main(argv=None) -> int:
     import argparse
     import json as _json
@@ -1130,6 +1316,20 @@ def main(argv=None) -> int:
     p.add_argument("--check", action="store_true",
                    help="report what is installed and what is missing, then "
                         "exit")
+    p.add_argument("--prepare", metavar="DIR",
+                   help="fetch the structure, the receptor's known ligands "
+                        "and the approved library into DIR, then stop. This "
+                        "is the only step that needs the network, so run it "
+                        "where you have one. No docking binary required")
+    p.add_argument("--bundle", metavar="DIR",
+                   help="dock from a folder written by --prepare, with no "
+                        "network at all. This is the step that needs smina, "
+                        "so run it wherever smina is - WSL sees your "
+                        "Windows drives under /mnt/c")
+    p.add_argument("--pdb", metavar="FILE",
+                   help="use this structure instead of searching RCSB. It "
+                        "must carry a co-crystallised ligand, which is what "
+                        "places the box")
     p.add_argument("--gene", help="receptor gene symbol, e.g. VDR or RARA")
     p.add_argument("--uniprot",
                    help="UniProt accession, if the symbol does not resolve")
@@ -1160,8 +1360,63 @@ def main(argv=None) -> int:
 
     if args.check:
         return _print_check()
+
+    # Offline half: dock from a prepared folder. Needs smina, not network.
+    if args.bundle:
+        chk = check_setup()
+        if not chk["ok"] and args.out is None:
+            print("Cannot dock yet:")
+            for m in chk["missing"]:
+                print(f"  - {m}")
+            print()
+            print(SETUP)
+            return 1
+        res = dock_from_bundle(args.bundle, top_n=args.top,
+                               exhaustiveness=args.exhaustiveness)
+        _report(res, args.top)
+        if args.out:
+            Path(args.out).write_text(_json.dumps(res, indent=2),
+                                      encoding="utf-8")
+            print(f"\nWrote {args.out}")
+        return 0 if not res.get("error") else 1
+
     if not args.gene and not args.uniprot:
-        p.error("--gene or --uniprot is required (or use --check)")
+        p.error("--gene, --uniprot, --bundle or --check is required")
+
+    # Networked half: fetch everything, write a portable folder, stop.
+    if args.prepare:
+        from .http import Client as _C
+        from . import annotate as _ann
+        client = _C(cache_dir=args.cache_dir) if args.cache_dir else _C()
+        uniprot = args.uniprot
+        symbol = args.gene or args.uniprot
+        if not uniprot:
+            info = (_ann.annotate_tfs(client, [args.gene]) or {}).get(
+                args.gene.upper())
+            uniprot = getattr(info, "uniprot", None) if info else None
+            if not uniprot:
+                print(f"Could not resolve {args.gene} to a UniProt "
+                      f"accession. Pass --uniprot.")
+                return 1
+        print(f"Preparing {symbol} ({uniprot}) into {args.prepare} ...")
+        man = write_bundle(client, symbol, uniprot, args.prepare,
+                           library_limit=args.library_limit,
+                           want_state=args.state, pdb_file=args.pdb)
+        if man.get("error"):
+            print(f"Refused: {man['error']}")
+            return 1
+        print(f"  structure      : {man['pdb_id']} "
+              f"(ligand {man['ligand_resname']}, "
+              f"conformation {man['state']})")
+        print(f"  known ligands  : {man['n_actives']}")
+        print(f"  library        : {man['n_library']}")
+        if man.get("warning"):
+            print(f"\n  WARNING: {man['warning']}")
+        print(f"\nBundle written. It needs no network from here. Dock it "
+              f"with:\n"
+              f"  python -m promoter_tf_drugs.docking --bundle "
+              f"{args.prepare}")
+        return 0
 
     chk = check_setup()
     if not chk["ok"]:
@@ -1217,22 +1472,7 @@ def main(argv=None) -> int:
         work_dir=args.work_dir, top_n=args.top,
         exhaustiveness=args.exhaustiveness, want_state=args.state)
 
-    if res.get("error"):
-        print(f"Not reported: {res['error']}")
-    else:
-        pk = res.get("pocket") or {}
-        print(f"Structure : {pk.get('pdb_id')} "
-              f"(ligand {pk.get('ligand_resname')}, "
-              f"conformation {pk.get('state')})")
-        print(f"Validation: AUC {res.get('auc')}, "
-              f"top-1% enrichment {res.get('ef1')}")
-        print()
-        print(f"{'drug':34s} {'kcal/mol':>9s}")
-        for h in res.get("hits", [])[:args.top]:
-            print(f"{h['drug'][:34]:34s} {h['score']:9.2f}")
-        print()
-        for c in res.get("caveats", []):
-            print(f"  - {c}")
+    _report(res, args.top)
 
     if args.out:
         Path(args.out).write_text(_json.dumps(res, indent=2),

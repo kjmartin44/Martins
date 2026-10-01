@@ -66,6 +66,7 @@ CATEGORIES = [
     "direct: gene product",
     "TF: orthosteric ligand",
     "TF: inferred activity change",
+    "TF: predicted pocket binder",
     "TF: allosteric modulator",
     "TF: stabiliser or glue",
     "TF: endogenous ligand",
@@ -105,6 +106,25 @@ CATEGORY_GUIDE = {
                 "not solved for immune cells, muscle or most tumours.",
         "differs": "Unlike 'direct: gene product', this changes how much "
                    "protein is made rather than what existing protein does.",
+    },
+    "TF: predicted pocket binder": {
+        "changes": "abundance",
+        "assay": "a binding assay first, then a reporter for the factor, "
+                 "then RT-qPCR for your gene",
+        "what": "A compound predicted by docking to fit the factor's "
+                "ligand pocket, from a structure rather than from any "
+                "measured activity.",
+        "why": "It needs no prior ligands for the receptor, so it can "
+               "propose a scaffold the ligand-based model could not "
+               "recognise. A compound picked by both is supported by two "
+               "arguments sharing no input.",
+        "cost": "Weakest evidence in the report. The pocket was shown to "
+                "rank its known binders above decoys, which is not the "
+                "same as the score being right for any one compound, and "
+                "docking says nothing about agonist versus antagonist.",
+        "differs": "Unlike 'TF: orthosteric ligand', nothing here was "
+                   "measured at the receptor - the argument is entirely "
+                   "from the shape of the pocket.",
     },
     "TF: inferred activity change": {
         "changes": "abundance",
@@ -459,6 +479,61 @@ def from_lincs(lincs: dict) -> list[Route]:
     return out
 
 
+def from_docking(docking: dict) -> list[Route]:
+    """Hits from a docking run performed somewhere else.
+
+    Tier 4. The compound is predicted to fit a pocket, which is two
+    inferences away from your gene: whether it binds, and then whether
+    binding moves the factor the way you need. A docking score is also a
+    poor estimator of affinity even when the pocket validated, so the
+    axes carry the validation rather than the score.
+
+    `docking` is one run's result dict, as written by
+    `docking.dock_from_bundle`. A run that did not validate contributes
+    nothing, because its scores carry no information.
+    """
+    runs = docking if isinstance(docking, list) else [docking]
+    out = []
+    for run in runs:
+        if not run or not run.get("usable"):
+            continue
+        tf = run.get("target") or "?"
+        auc, ef1 = run.get("auc"), run.get("ef1")
+        pocket = run.get("pocket") or {}
+        state = pocket.get("state")
+        for h in run.get("hits", []):
+            score = h.get("score")
+            if score is None:
+                continue
+            out.append(Route(
+                drug=h.get("drug") or "?",
+                category="TF: predicted pocket binder",
+                mechanism=(f"docks into the {tf} pocket at "
+                           f"{score:.1f} kcal/mol"
+                           + (f" ({state} conformation)" if state and
+                              state != "unknown" else "")),
+                acts_on=tf, tier=4, directness=1,
+                # Strength is the POCKET's validated enrichment, not this
+                # compound's score: the score separates binders from
+                # non-binders and ranks binders badly, so reading it as a
+                # per-compound strength would overstate what was done.
+                axes=Axes(min(1.0, (auc or 0.0)), 0.3, 0.5,
+                          f"pocket validated at AUC {auc}"
+                          + (f", {ef1}-fold top-1% enrichment" if ef1
+                             else "")),
+                approved=True, source="docking",
+                notes=[
+                    f"structure {pocket.get('pdb_id')}"
+                    + (f", ligand {pocket.get('ligand_resname')}"
+                       if pocket.get("ligand_resname") else ""),
+                    "a docking score says the molecule can occupy the "
+                    "pocket. It does not say whether it activates or "
+                    "inhibits, and that decides the direction your gene "
+                    "moves",
+                ]))
+    return out
+
+
 def from_activity_drugs(activity_drugs: dict) -> list[Route]:
     """Compounds whose LINCS signature moves a factor's regulon.
 
@@ -587,6 +662,7 @@ def build(result_block: dict, *, goal: str = "up",
     routes += from_screen(result_block.get("screens") or {})
     routes += from_activity_drugs(
         result_block.get("activity_drugs") or {})
+    routes += from_docking(result_block.get("docking") or {})
     if include_chromatin:
         routes += chromatin_routes(goal)
 

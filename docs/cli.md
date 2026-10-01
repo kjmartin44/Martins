@@ -28,10 +28,10 @@ usage: promoter-tf-drugs [-h] --gene GENE [--out OUT] [--top TOP]
                          [--include-unknown-direction] [--no-mechanisms]
                          [--no-improvements] [--no-outcome] [--screen]
                          [--tissue {cns}] [--tf-activity]
-                         [--activity-tissue TISSUE] [--depmap-file CSV]
-                         [--activity-permutations N] [--tf-weight TF_WEIGHT]
-                         [--chip-bed CHIP_BED] [--chip-api]
-                         [--include-investigational] [--no-dgidb]
+                         [--activity-tissue TISSUE] [--docking-results JSON]
+                         [--depmap-file CSV] [--activity-permutations N]
+                         [--tf-weight TF_WEIGHT] [--chip-bed CHIP_BED]
+                         [--chip-api] [--include-investigational] [--no-dgidb]
                          [--find-analogs] [--no-opentargets] [--demo]
                          [--offline] [--cache-dir CACHE_DIR] [-v]
 
@@ -202,6 +202,11 @@ options:
                         tissue name as spelled in the expression table (e.g.
                         liver, brain, kidney) to infer TF activity in.
                         Required by --tf-activity (default: None)
+  --docking-results JSON
+                        fold in a docking run performed elsewhere. Written by
+                        `python -m promoter_tf_drugs.docking --bundle DIR
+                        --out JSON`, which is the step that needs Linux.
+                        Prepare and report here, dock there (default: None)
   --depmap-file CSV     DepMap CRISPRGeneEffect.csv. Measures what happens to
                         a cell when each factor is knocked out, which is the
                         collateral question the regulon count stands in for.
@@ -285,7 +290,8 @@ usage: promoter-tf-drugs.panel [-h] [--genes GENES] [--gene-file GENE_FILE]
                                [--include-unknown-direction] [--no-mechanisms]
                                [--no-improvements] [--no-outcome] [--screen]
                                [--tissue {cns}] [--tf-activity]
-                               [--activity-tissue TISSUE] [--depmap-file CSV]
+                               [--activity-tissue TISSUE]
+                               [--docking-results JSON] [--depmap-file CSV]
                                [--activity-permutations N]
                                [--tf-weight TF_WEIGHT] [--chip-bed CHIP_BED]
                                [--chip-api] [--include-investigational]
@@ -484,6 +490,11 @@ options:
                         tissue name as spelled in the expression table (e.g.
                         liver, brain, kidney) to infer TF activity in.
                         Required by --tf-activity
+  --docking-results JSON
+                        fold in a docking run performed elsewhere. Written by
+                        `python -m promoter_tf_drugs.docking --bundle DIR
+                        --out JSON`, which is the step that needs Linux.
+                        Prepare and report here, dock there
   --depmap-file CSV     DepMap CRISPRGeneEffect.csv. Measures what happens to
                         a cell when each factor is knocked out, which is the
                         collateral question the regulon count stands in for.

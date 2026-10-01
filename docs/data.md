@@ -153,6 +153,39 @@ Then run a screen:
 python -m promoter_tf_drugs.docking --gene VDR --state active --top 25
 ```
 
+### Running the networked and Linux halves separately
+
+The network and the docking binary are often not on the same machine: on
+Windows the network is there and smina is not, in WSL the reverse. The two
+halves are separable, so nothing has to be online and Linux at once.
+
+Step one, where the network is. Fetches the structure, the receptor's
+known ligands and the approved library into one folder. No docking binary
+needed.
+
+```
+python -m promoter_tf_drugs.docking --gene VDR --state active --prepare dock_vdr
+```
+
+Step two, where smina is, with no network at all. WSL sees Windows drives
+under `/mnt/c`, so the folder does not need copying.
+
+```
+python -m promoter_tf_drugs.docking --bundle /mnt/c/Users/you/dock_vdr --out dock_vdr/results.json
+```
+
+Step three, back where the report is built. The hits join the route tables
+as tier 4, `TF: predicted pocket binder`.
+
+```
+promoter-tf-drugs --gene YOURGENE --direction up --docking-results dock_vdr/results.json
+```
+
+A run whose pocket failed validation contributes nothing, so a failed dock
+cannot quietly add rows. `--pdb FILE` supplies your own structure instead
+of searching RCSB; it must carry a co-crystallised ligand, which is what
+places the box.
+
 What happens, in order. The gene symbol resolves to a UniProt accession,
 RCSB is searched for structures, and one with a co-crystallised ligand is
 chosen; a structure without one gives no reliable box and is skipped, and
