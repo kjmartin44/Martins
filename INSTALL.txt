@@ -1,0 +1,21 @@
+promoter-tf-drugs installation
+=============================
+
+The maintained installation guide is docs/installation.md.
+The documentation index is docs/index.md.
+
+Windows PowerShell, from the folder containing pyproject.toml:
+
+    python -m venv .venv
+    .\.venv\Scripts\python.exe -m pip install -e .
+    .\.venv\Scripts\python.exe -m promoter_tf_drugs --demo --gene DEMOGENE --out results/demo
+
+The demo uses synthetic data and makes no network requests.
+Open results/demo/report.md after it completes.
+
+Optional chemistry tools:
+    .\.venv\Scripts\python.exe -m pip install -e ".[chemistry]"
+
+Tests and development:
+    .\.venv\Scripts\python.exe -m pip install -e ".[dev,chemistry]"
+    .\.venv\Scripts\python.exe -m pytest -q

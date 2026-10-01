@@ -1,2 +1,17 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Windows batch files must keep CRLF - cmd.exe can mis-parse goto and label
+# handling in an LF-only .bat, and scripts/ depends on both.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Never transform these: a line-ending rewrite inside a gzip stream or a
+# compiled file corrupts it.
+*.gz   binary
+*.zip  binary
+*.bed  binary
+*.2bit binary
+*.pyc  binary
+*.png  binary
+*.pdf  binary

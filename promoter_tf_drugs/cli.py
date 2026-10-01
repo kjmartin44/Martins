@@ -2,8 +2,8 @@
 
     python -m promoter_tf_drugs --demo --gene DEMOGENE --out results/
     python -m promoter_tf_drugs --gene SMN2 --upstream 2000 --downstream 500 \
-        --pfm-file JASPAR2024_CORE_vertebrates_non-redundant_pfms_jaspar.txt \
-        --chip-bed remap2022_nr_macs2_hg38_v1_0.bed.gz --out results/SMN2
+        --pfm-file data/jaspar2024.txt \
+        --chip-bed data/remap2022.bed.gz --out results/SMN2
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ import logging
 import sys
 
 from .pipeline import run, write_outputs, markdown_report
+from .http import HttpError
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -97,10 +98,8 @@ def add_analysis_args(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
                         "your gene, and that the drug reaches them. Heavily "
                         "down-weights factors with no tissue overlap")
     p.add_argument("--lincs", action="store_true",
-                   help="query LINCS L1000 for drugs that MEASURABLY moved this "
-                        "gene. The only empirical evidence in the pipeline; "
-                        "flags whether your gene is a measured landmark or an "
-                        "inferred value")
+                   help="query LINCS L1000 drug/gene expression signatures; "
+                        "distinguishes measured landmarks from inferred values")
     p.add_argument("--promoter-fasta",
                    help="read promoter sequences from a local FASTA instead "
                         "of Ensembl, matched on exact coordinates. This "
@@ -117,8 +116,9 @@ def add_analysis_args(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
                         "cell_line,is_landmark]) exported from CLUE or iLINCS. "
                         "Offline replacement for --lincs")
     p.add_argument("--signature-file",
-                   help="a gene,score signature exported from CLUE/iLINCS, for "
-                        "connectivity queries against a known activator")
+                   help="reference gene,score signature; records the gene count "
+                        "when --lincs or --lincs-file is active. Does not run "
+                        "a connectivity search")
     p.add_argument("--genetics", action="store_true",
                    help="human genetic evidence via Open Targets: what "
                         "phenotypes associate with variation in this gene "
@@ -179,7 +179,10 @@ def add_analysis_args(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
 
 
 def main(argv=None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.top < 1:
+        parser.error("--top must be a positive integer")
 
     # Windows consoles default to cp1252, which cannot encode the characters
     # used in the report tables. Print UTF-8 where possible; degrade to "?"
@@ -193,6 +196,18 @@ def main(argv=None) -> int:
         level=[logging.WARNING, logging.INFO, logging.DEBUG][min(args.verbose, 2)],
         format="%(levelname)s %(name)s: %(message)s",
     )
+
+    try:
+        return _execute(args)
+    except (ValueError, OSError, HttpError) as exc:
+        if args.verbose:
+            logging.getLogger(__name__).exception("analysis failed")
+        else:
+            print(f"{parser.prog}: error: {exc}", file=sys.stderr)
+        return 1
+
+
+def _execute(args) -> int:
 
     result = run(
         args.gene,
@@ -224,7 +239,7 @@ def main(argv=None) -> int:
         cache_dir=args.cache_dir, min_ic=args.min_ic,
     )
 
-    written = write_outputs(result, args.out)
+    written = write_outputs(result, args.out, top_n=args.top)
     print(markdown_report(result, top_n=args.top))
     print("\nWrote:", ", ".join(str(p) for p in written), file=sys.stderr)
     return 0

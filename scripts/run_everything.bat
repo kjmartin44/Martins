@@ -1,29 +1,29 @@
 @echo off
 REM Full analysis: every method enabled. Needs internet + rdkit + scikit-learn.
 setlocal enabledelayedexpansion
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
 echo === Checking dependencies ===
 python -c "import numpy" 2>nul || (echo Installing numpy... & pip install numpy)
 python -c "import rdkit, sklearn" 2>nul || (echo Installing rdkit + scikit-learn... & pip install rdkit scikit-learn)
 
 REM --- motif file (required) -------------------------------------------
-if not exist jaspar2024.txt (
+if not exist data\jaspar2024.txt (
     echo === Downloading JASPAR motifs ^(~2 MB^) ===
-    curl.exe -L -o jaspar2024.txt "https://jaspar.elixir.no/download/data/2024/CORE/JASPAR2024_CORE_vertebrates_non-redundant_pfms_jaspar.txt"
+    curl.exe -L -o data\jaspar2024.txt "https://jaspar.elixir.no/download/data/2024/CORE/JASPAR2024_CORE_vertebrates_non-redundant_pfms_jaspar.txt"
 )
-for %%F in (jaspar2024.txt) do if %%~zF LSS 100000 (
-    echo JASPAR download failed - delete jaspar2024.txt and retry.
+for %%F in (data\jaspar2024.txt) do if %%~zF LSS 100000 (
+    echo JASPAR download failed - delete data\jaspar2024.txt and retry.
     pause & exit /b 1
 )
 
 REM --- regulon file (optional, improves specificity scoring) ------------
-if not exist trrust.tsv (
+if not exist data\trrust.tsv (
     echo === Downloading TRRUST regulons ^(optional^) ===
-    curl.exe -L -o trrust.tsv "https://www.grnpedia.org/trrust/data/trrust_rawdata.human.tsv"
+    curl.exe -L -o data\trrust.tsv "https://www.grnpedia.org/trrust/data/trrust_rawdata.human.tsv"
 )
 set REGULON=
-for %%F in (trrust.tsv) do if %%~zF GTR 100000 set REGULON=--regulon-file trrust.tsv
+for %%F in (data\trrust.tsv) do if %%~zF GTR 100000 set REGULON=--regulon-file data\trrust.tsv
 if "%REGULON%"=="" echo   ^(TRRUST unavailable - using bundled tiers^)
 
 REM --- inputs ----------------------------------------------------------
@@ -64,16 +64,16 @@ REM it is worth more than every scoring tweak combined. A local ReMap BED is
 REM parsed directly; the API is used only as a fallback because a changed
 REM response shape silently yields no peaks at all.
 set "CHIP=--chip-api"
-if exist remap2022.bed.gz set "CHIP=--chip-bed remap2022.bed.gz"
-if "%CHIP%"=="--chip-api" echo   ^(no local remap2022.bed.gz - falling back to the ReMap API^)
+if exist data\remap2022.bed.gz set "CHIP=--chip-bed data\remap2022.bed.gz"
+if "%CHIP%"=="--chip-api" echo   ^(no local data\remap2022.bed.gz - falling back to the ReMap API^)
 
 REM --- tissue expression ------------------------------------------------
 REM Open Targets' expression endpoint changes shape periodically; when it
 REM does, every factor reports "unknown" and the co-expression filter
 REM silently does nothing. A local HPA/GTEx table removes the dependency.
 set "EXPR="
-if exist rna_tissue_consensus.tsv set "EXPR=--expression-file rna_tissue_consensus.tsv"
-if "%EXPR%"=="" echo   ^(no local rna_tissue_consensus.tsv - using the Open Targets API^)
+if exist data\rna_tissue_consensus.tsv set "EXPR=--expression-file data\rna_tissue_consensus.tsv"
+if "%EXPR%"=="" echo   ^(no local data\rna_tissue_consensus.tsv - using the Open Targets API^)
 
 REM --tf-weight: 0.7 puts most of each grade on the promoter call, which is
 REM only justified once ChIP evidence is actually present. Without it the
@@ -82,7 +82,7 @@ set "TFW=--tf-weight 0.5"
 if not "%CHIP%"=="--chip-api" set "TFW=--tf-weight 0.7"
 
 python -m promoter_tf_drugs --gene %GENE% --direction %DIR% ^
-    --pfm-file jaspar2024.txt %REGULON% ^
+    --pfm-file data\jaspar2024.txt %REGULON% ^
     %CHIP% %WINDOW% --all-tss ^
     %TFW% --proliferation %PROLIF% --cell-type-check %TISS% %EXPR% ^
     --predict-direction --upstream-network --upstream-depth 3 ^

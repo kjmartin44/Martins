@@ -143,8 +143,37 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         demo: bool = False, offline: bool = False,
         cache_dir: str | None = None, min_ic: float = 6.0) -> dict:
     """Run the full pipeline and return a JSON-serialisable result dict."""
-    client = Client(cache_dir=cache_dir or Client.__init__.__defaults__[0],
-                    offline=offline) if cache_dir else Client(offline=offline)
+    if not isinstance(gene, str) or not gene.strip():
+        raise ValueError("gene must be a non-empty symbol or Ensembl ID")
+    gene = gene.strip()
+    for name, value in (("upstream", upstream), ("downstream", downstream),
+                        ("upstream_depth", upstream_depth)):
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ValueError(f"{name} must be a non-negative integer")
+    if upstream + downstream == 0:
+        raise ValueError("upstream and downstream must define a non-empty window")
+    if upstream_depth < 1:
+        raise ValueError("upstream_depth must be at least 1")
+    if not math.isfinite(pvalue) or not 0 < pvalue < 1:
+        raise ValueError("pvalue must be finite and between 0 and 1 (exclusive)")
+    if not math.isfinite(tf_weight) or not 0 <= tf_weight <= 1:
+        raise ValueError("tf_weight must be finite and between 0 and 1")
+    if not math.isfinite(min_ic) or min_ic < 0:
+        raise ValueError("min_ic must be finite and non-negative")
+    if goal not in ("up", "down"):
+        raise ValueError("goal must be 'up' or 'down'")
+    if tissue not in (None, "cns"):
+        raise ValueError("tissue must be None or 'cns'")
+    if proliferation not in ("cycling", "post-mitotic", "mixed", "unknown"):
+        raise ValueError("invalid proliferation state")
+    for name, value in (("pfm_file", pfm_file), ("chip_bed", chip_bed),
+                        ("regulon_file", regulon_file), ("lincs_file", lincs_file),
+                        ("signature_file", signature_file),
+                        ("expression_file", expression_file)):
+        if value is not None and not Path(value).is_file():
+            raise FileNotFoundError(f"{name}: file not found: {value}")
+    client = (Client(cache_dir=cache_dir, offline=offline or demo)
+              if cache_dir else Client(offline=offline or demo))
 
     _screen_cache: dict = {}   # receptor -> screen, shared across promoters
     _gene_linked: set = set()  # drugs CTD already reports as moving this gene
@@ -2032,13 +2061,16 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
     return "\n".join(L)
 
 
-def write_outputs(result: dict, outdir: str | Path) -> list[Path]:
+def write_outputs(result: dict, outdir: str | Path, *, top_n: int = 25) -> list[Path]:
+    """Write all five outputs; top_n limits report tables, not exported data."""
+    if isinstance(top_n, bool) or not isinstance(top_n, int) or top_n < 1:
+        raise ValueError("top_n must be a positive integer")
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
     written = []
 
     p = outdir / "report.md"
-    p.write_text(markdown_report(result), encoding="utf-8")
+    p.write_text(markdown_report(result, top_n=top_n), encoding="utf-8")
     written.append(p)
 
     p = outdir / "results.json"
@@ -2064,16 +2096,18 @@ def write_outputs(result: dict, outdir: str | Path) -> list[Path]:
     for res in result["results"]:
         prom = res["promoter"]
         for h in res["hits"]:
+            strand = h["strand"]
             if prom["strand"] == 1:
                 gs = prom["start"] - 1 + h["start"]
                 ge = prom["start"] - 1 + h["end"]
             else:
                 gs = prom["end"] - h["end"]
                 ge = prom["end"] - h["start"]
+                strand = {"+": "-", "-": "+"}.get(strand, strand)
             score = max(0, min(1000, int(h["rel_score"] * 1000)))
             lines.append("\t".join([
                 f"chr{prom['chrom']}", str(gs), str(ge),
-                f"{h['motif_name']}|{h['matrix_id']}", str(score), h["strand"],
+                f"{h['motif_name']}|{h['matrix_id']}", str(score), strand,
             ]))
     p.write_text("\n".join(lines) + "\n", encoding="utf-8")
     written.append(p)

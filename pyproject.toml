@@ -1,0 +1,26 @@
+[project]
+name = "promoter-tf-drugs"
+version = "0.1.0"
+description = "Gene promoter -> activating TF -> approved drug repurposing pipeline"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24"]
+
+[project.optional-dependencies]
+chemistry = ["rdkit>=2023.9", "scikit-learn>=1.3"]
+dev = ["pytest>=7", "build>=1"]
+
+[project.scripts]
+promoter-tf-drugs = "promoter_tf_drugs.cli:main"
+promoter-tf-drugs-shortlist = "promoter_tf_drugs.shortlist:main"
+promoter-tf-drugs-explain = "promoter_tf_drugs.explain:main"
+
+[tool.setuptools.packages.find]
+include = ["promoter_tf_drugs*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"

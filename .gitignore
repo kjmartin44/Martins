@@ -1,0 +1,48 @@
+# Python caches and build artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Local environments and editor files
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/
+
+# Generated analyses and downloaded reference files
+/results/
+/shortlist_*.md
+/\.cache/
+/data/remap*.bed.gz
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Downloaded reference data. Re-fetchable (scripts/run_everything.bat pulls
+# them), large, and versioned upstream - so the repo tracks the code that
+# uses them, not the data itself. remap2022.bed.gz alone is ~1.4 GB and
+# GitHub hard-rejects anything over 100 MB.
+/data/jaspar2024.txt
+/data/trrust.tsv
+/data/rna_tissue_consensus.tsv
+/data/*.bed
+/data/*.bed.gz
+/data/*_median_tpm.gct*
+*.bed.gz
+*.bigWig
+*.2bit
+
+# Panel and single-gene run products
+/panel/
+/examples/*/results.json
