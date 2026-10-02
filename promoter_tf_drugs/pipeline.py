@@ -13,6 +13,7 @@ from . import (annotate, catalogue as cat_mod, cellcycle, congeners as cong_mod,
                tfactivity as tfa_mod,
                depmap as depmap_mod,
                corpora as corpora_mod,
+               abundance as abund_mod,
                demo_data, direct, discovery, drug_scoring, eqtl as eqtl_mod,
                modalities as modal_mod,
                drugs as drugs_mod, evidence, genes, motifs as motifs_mod,
@@ -791,6 +792,36 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                 detail=("--tf-activity needs --regulon-file and "
                         "--activity-tissue; motif scores are unchecked"))
 
+        # ---- which drugs change how much of the factor EXISTS?
+        # Everything else here acts on a factor's activity, which needs it
+        # to be druggable. The corpora already record what moves ~20,000
+        # transcripts, and the pipeline only ever asked that about the
+        # target gene. Asking it about the factors reaches the ones with
+        # no ligand at all.
+        factor_abundance: list = []
+        undirected_factors: list = []
+        # `not demo` matters: demo mode must stay self-contained and
+        # reproducible, and without it this silently read whatever real
+        # corpora happened to be sitting in data/.
+        if not demo and sig_mod.autoload_gmt_available("up") \
+                and sig_mod.autoload_gmt_available("down"):
+            rows = [r.to_dict() for r in ranked[:ACTIVITY_DRUG_FACTORS]]
+            found = _optional(
+                "factor abundance scan",
+                lambda: abund_mod.find(rows, goal=goal), [])
+            factor_abundance = [h.to_dict() for h in (found or [])]
+            undirected_factors = abund_mod.undirected_factors(rows, goal=goal)
+            ledger.record(
+                "factor_abundance", requested=True, ok=True,
+                yielded=len(factor_abundance),
+                detail=(f"{len(factor_abundance)} compound(s) move a "
+                        f"factor's own transcript the needed way; "
+                        f"{len(undirected_factors)} factor(s) skipped for "
+                        f"an unrecorded role"
+                        if factor_abundance else
+                        "no compound moved a factor's own transcript the "
+                        "needed way in enough contexts to report"))
+
         # ---- 8c-ter. which approved drugs move those factors?
         # The drug lookup can only return compounds somebody assayed at the
         # target, so a factor with no medicinal chemistry behind it comes
@@ -1046,6 +1077,8 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             # the catalogue actually reads, so their routes never reached
             # the tables even though their report sections rendered.
             "activity_drugs": activity_drugs,
+            "factor_abundance": factor_abundance,
+            "undirected_factors": undirected_factors,
             "docking": list(docking_runs.values()),
         }
         all_routes = cat_mod.build(block_for_catalogue, goal=goal)
@@ -1086,6 +1119,8 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             "cell_type": celltype,
             "tf_activity": activity,
             "activity_drugs": activity_drugs,
+            "factor_abundance": factor_abundance,
+            "undirected_factors": undirected_factors,
             "corpus_scans": corpus_scans,
             "corpus_agreement": corpus_agreement,
             "docking": list(docking_runs.values()),
@@ -3396,6 +3431,236 @@ def _verdict_line(verdict: dict) -> str:
     }.get(level, f"**Evidence: {level}.**")
 
 
+# ===================================================================== #
+# One row per drug: which methods found it, and what it should do.       #
+# ===================================================================== #
+# The route tables are one row per ROUTE, so a drug reached three ways
+# appears three times and a reader cannot see that it was reached three
+# ways. This inverts that: one row per compound, with the methods that
+# found it counted.
+#
+# That count is the most useful number in the report. These methods share
+# very little - a curated ligand annotation, a measured expression
+# signature, a regulon statistic, a pocket shape, a chemical similarity -
+# so they fail for unrelated reasons. A compound found by three is
+# supported in a way no single method's score can express, and the route
+# tables were hiding it.
+#
+# What it is NOT: a vote. Methods differ enormously in strength, so two
+# weak agreements do not equal one measured result. The evidence tier
+# still decides, and the method count breaks ties within a tier.
+
+# Which methods are genuinely independent of each other. Two rows from
+# sources sharing an input are not corroboration, so they collapse to one
+# method here: from_grades and from_ligands both read the same ChEMBL
+# annotation, and the two signature routes both read the same corpora.
+# Keys are the `source` strings catalogue.py actually emits, read from it
+# rather than guessed - the first version invented plausible names and
+# matched none of them, so every row reported zero methods.
+METHOD_OF_SOURCE = {
+    "direct": "direct therapy for the gene",
+    "drug_scoring": "annotated ligand (ChEMBL/DGIdb/Open Targets)",
+    "ligands": "endogenous ligand availability",
+    "signatures": "measured signature on your gene",
+    "tfactivity": "regulon shift in perturbation corpora",
+    "abundance": "measured change in the factor's own transcript",
+    "screening": "ligand-based model (trained on this receptor)",
+    "docking": "structure-based docking",
+    "network": "upstream signalling network",
+    "stabilizers": "protein stability / degradation",
+    "catalogue": "chromatin-level agent",
+}
+
+# How much a method's agreement is worth, for ordering only. A measured
+# result on your own gene is not the same kind of thing as a similarity
+# search, and a flat count would say it was.
+METHOD_WEIGHT = {
+    "direct therapy for the gene": 1.0,
+    "measured signature on your gene": 0.9,
+    "annotated ligand (ChEMBL/DGIdb/Open Targets)": 0.7,
+    "regulon shift in perturbation corpora": 0.6,
+    "upstream signalling network": 0.5,
+    "measured change in the factor's own transcript": 0.5,
+    "endogenous ligand availability": 0.5,
+    "ligand-based model (trained on this receptor)": 0.4,
+    "protein stability / degradation": 0.4,
+    "structure-based docking": 0.3,
+    "chromatin-level agent": 0.1,
+}
+
+
+def unmapped_sources(result: dict) -> set:
+    """Route sources with no method name, so a new source cannot be added
+    without appearing in this table. Pinned by a test."""
+    seen = set()
+    for res in result.get("results", []):
+        for r in (res.get("all_routes") or {}).get("routes") or []:
+            src = r.get("source")
+            if src and src not in METHOD_OF_SOURCE:
+                seen.add(src)
+    return seen
+
+
+def _expected_change(routes: list, goal: str) -> tuple:
+    """(direction, basis) for what should happen to the target gene.
+
+    Deliberately a direction and not a magnitude. Nothing in this package
+    estimates a fold-change, and inventing one is the single most
+    misleading thing this column could do - so it reports which way, how
+    that was arrived at, and nothing more.
+    """
+    measured = [r for r in routes
+                if r.get("source") == "signatures"]
+    if measured:
+        return (("increase" if goal == "up" else "decrease"),
+                "MEASURED: this compound moved your gene in a cell-based "
+                "assay, in the direction you want")
+    direct = [r for r in routes if r.get("source") == "direct"]
+    if direct:
+        return (("increase" if goal == "up" else "decrease"),
+                "established therapy acting on the gene or its product")
+    return (("increase" if goal == "up" else "decrease"),
+            "PREDICTED from the factor's role and the drug's action; "
+            "no measurement of your gene supports it")
+
+
+def corroboration(result: dict, top_n: int = 20) -> list:
+    """One row per drug across the top routes, with the methods that found it."""
+    from .congeners import salt_free_name
+    from . import indications as ind_mod, systemic as sys_mod
+
+    goal = result["query"].get("goal", "up")
+    routes = []
+    for res in result["results"]:
+        routes.extend((res.get("all_routes") or {}).get("routes") or [])
+    if not routes:
+        return []
+
+    # Rank by tier then score, and take the top routes to summarise.
+    routes.sort(key=lambda r: (r.get("tier", 9), -(r.get("score") or 0)))
+
+    grouped: dict = {}
+    order: list = []
+    for r in routes:
+        stem = salt_free_name((r.get("drug") or "").lower())
+        if not stem:
+            continue
+        if stem not in grouped:
+            if len(order) >= top_n:
+                continue          # the table is full; later routes only
+                                  # add methods to drugs already in it
+            order.append(stem)
+            grouped[stem] = {"drug": r.get("drug"), "routes": []}
+        grouped[stem]["routes"].append(r)
+
+    out = []
+    for stem in order:
+        g = grouped[stem]
+        rs = g["routes"]
+        best = min(rs, key=lambda r: r.get("tier", 9))
+
+        methods = []
+        for r in rs:
+            m = METHOD_OF_SOURCE.get(r.get("source"))
+            if m and m not in methods:
+                methods.append(m)
+
+        desc = ind_mod.describe(
+            g["drug"], mechanism=(best.get("mechanism") or "").strip() or None)
+        cls = sys_mod.classify(g["drug"])
+        direction, basis = _expected_change(rs, goal)
+
+        out.append({
+            "drug": g["drug"],
+            "n_methods": len(methods),
+            "methods": methods,
+            "weight": round(sum(METHOD_WEIGHT.get(m, 0.2)
+                                for m in methods), 2),
+            "best_tier": best.get("tier"),
+            "acts_on": sorted({r.get("acts_on") for r in rs
+                               if r.get("acts_on")})[:3],
+            "categories": sorted({r.get("category") for r in rs}),
+            "mechanism": (best.get("mechanism") or "").strip(),
+            "what_it_is": desc["what_it_is"],
+            "treats": desc["treats"],
+            "systems": (cls.name if cls else None),
+            "systems_why": (cls.why if cls else None),
+            "expected_change": direction,
+            "expected_basis": basis,
+            "n_routes": len(rs),
+        })
+
+    out.sort(key=lambda r: (r["best_tier"], -r["weight"], -r["n_methods"]))
+    return out
+
+
+def corroboration_table(result: dict, top_n: int = 20) -> list:
+    """The cross-method table, as markdown lines."""
+    rows = corroboration(result, top_n=top_n)
+    if not rows:
+        return []
+    goal = result["query"].get("goal", "up")
+    gene = result["query"]["gene"]
+
+    L = [f"## All {len(rows)} candidates, and which methods found each", ""]
+    L.append("One row per compound rather than per route, so a drug reached "
+             "several ways is visible as one candidate with several "
+             "supports.")
+    L.append("")
+    L.append(f"| Drug | Methods | Tier | Acts on | What it is | Systems it "
+             f"acts on | Expected {gene} change |")
+    L.append("|---|---|---|---|---|---|---|")
+    for r in rows:
+        sys_cell = r["systems"] or "no systemic class flagged"
+        what = r["what_it_is"] or r["mechanism"] or "\u2014"
+        change = r["expected_change"]
+        tag = ("measured" if "MEASURED" in r["expected_basis"]
+               else "established" if "established" in r["expected_basis"]
+               else "predicted")
+        L.append(f"| **{r['drug']}** | {r['n_methods']} | "
+                 f"{r['best_tier']} | "
+                 f"{', '.join(r['acts_on']) or '\u2014'} | "
+                 f"{_clip(what, 40)} | {_clip(sys_cell, 34)} | "
+                 f"{change} ({tag}) |")
+    L.append("")
+
+    multi = [r for r in rows if r["n_methods"] > 1]
+    if multi:
+        L.append(f"**{len(multi)} of {len(rows)} were found by more than one "
+                 f"method.** These methods share little - a curated ligand "
+                 f"annotation, a measured expression signature, a regulon "
+                 f"statistic, a pocket shape - so they fail for unrelated "
+                 f"reasons, and agreement between them is worth more than a "
+                 f"better score from any one.")
+        L.append("")
+        for r in multi[:8]:
+            L.append(f"- **{r['drug']}**: {'; '.join(r['methods'])}")
+        L.append("")
+    else:
+        L.append(f"**No compound was found by more than one method.** With "
+                 f"{len({m for r in rows for m in r['methods']})} method(s) "
+                 f"contributing, that is expected rather than informative: "
+                 f"corroboration needs two methods to have run and both to "
+                 f"reach the same compound. `report.md` lists the flags that "
+                 f"turn the others on.")
+        L.append("")
+
+    L.append("**The method count is not a vote.** These methods differ "
+             "enormously in strength, so two weak agreements do not equal "
+             "one measured result. Tier still decides the order and the "
+             "count breaks ties within a tier.")
+    L.append("")
+    L.append(f"**Expected {gene} change is a DIRECTION, never a magnitude.** "
+             f"Nothing in this package estimates a fold-change, and a number "
+             f"here would be invented. `measured` means a compound moved "
+             f"{gene} in a cell-based assay; `established` means it is an "
+             f"approved therapy acting on the gene or its product; "
+             f"`predicted` means it follows from the factor's role and the "
+             f"drug's action, with no measurement of {gene} behind it.")
+    L.append("")
+    return L
+
+
 def summary_report(result: dict, top_n: int = SUMMARY_TOP) -> str:
     """A one-page summary. Everything here is also in report.md."""
     q = result["query"]
@@ -3469,6 +3734,8 @@ def summary_report(result: dict, top_n: int = SUMMARY_TOP) -> str:
         L.append("Nothing cleared the thresholds. `report.md` has the "
                  "per-stage accounting for where candidates were lost.")
         L.append("")
+
+    L.extend(corroboration_table(result, top_n=20))
 
     # ---- what ran and what did not: the thing that decides how to read it
     sources = ((result.get("evidence_sources") or {}).get("sources") or {})

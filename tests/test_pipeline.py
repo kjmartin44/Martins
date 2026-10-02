@@ -8110,5 +8110,247 @@ def test_summary_deduplicates_a_drug_reached_by_one_route_twice():
          "category": "c", "mechanism": ""},
     ]}
     md = pipeline.summary_report(res)
-    rows = [l for l in md.splitlines() if "amedrug" in l]
+    # Scoped to the shortlist: the same drug also appears once in the
+    # corroboration table below, which is a different table and correct.
+    shortlist = md[md.index("## Top"):md.index("## All ")]
+    rows = [l for l in shortlist.splitlines() if "amedrug" in l]
     assert len(rows) == 1
+
+
+# ===================================================================== #
+# Drugs that change how much of the FACTOR exists.                      #
+# ===================================================================== #
+def test_the_direction_the_factor_must_move_is_explicit():
+    """Getting this backwards recommends the drug that moves your gene the
+    wrong way, so all four combinations are pinned."""
+    from promoter_tf_drugs import abundance as ab
+    assert ab.wanted_direction("up", "activator") == "up"
+    assert ab.wanted_direction("up", "repressor") == "down"
+    assert ab.wanted_direction("down", "activator") == "down"
+    assert ab.wanted_direction("down", "repressor") == "up"
+
+
+def test_a_factor_with_no_recorded_role_gives_no_direction():
+    """There is no way to say which way would help, so it is skipped and
+    named rather than guessed into one column."""
+    from promoter_tf_drugs import abundance as ab
+    for role in ("unknown", "dual", "", None):
+        assert ab.wanted_direction("up", role) is None
+    skipped = ab.undirected_factors(
+        [{"symbol": "OSR2", "role": "unknown"},
+         {"symbol": "KLF4", "role": "activator"}], goal="up")
+    assert [s["symbol"] for s in skipped] == ["OSR2"]
+    assert "role is not recorded" in ab.summarise([], skipped)
+
+
+def test_abundance_tier_is_one_below_a_measurement_on_your_own_gene():
+    """catalogue.from_lincs calls a landmark measurement of YOUR GENE tier
+    2. Here the compound was measured against the FACTOR, and the
+    factor-to-gene step is an inference."""
+    from promoter_tf_drugs import abundance as ab
+    assert ab._tier_for("landmark") == 3
+    assert ab._tier_for("best inferred") == 3
+    assert ab._tier_for(None) == 4
+
+
+def test_a_ligand_gated_receptor_carries_the_abundance_caveat(tmp_path):
+    """More VDR is not more VDR activity: the receptor is near-ubiquitous
+    and its signalling is not. These are most of the drug tables, so the
+    caveat has to travel with the row."""
+    from promoter_tf_drugs import abundance as ab
+    up = tmp_path / "up.gmt"
+    down = tmp_path / "down.gmt"
+    up.write_text("".join(
+        f"E{i} MCF7 6H-drugx-10.0\t\tVDR\tOTHER{i}\n" for i in range(4)),
+        encoding="utf-8")
+    down.write_text("E0 MCF7 6H-drugx-10.0\t\tZZZ\n", encoding="utf-8")
+    hits = ab.find([{"symbol": "VDR", "role": "activator",
+                     "nuclear_receptor": True}],
+                   goal="up", up_path=up, down_path=down)
+    assert hits
+    joined = " ".join(hits[0].caveats)
+    assert "nearly unrelated" in joined
+    assert "transcript, not protein" in joined
+
+
+def test_one_row_per_compound_not_one_per_signature(tmp_path):
+    """The .gmt holds a consensus per cell line and dose, so a compound
+    recurs. The recurrence is evidence; repeating the row is noise."""
+    from promoter_tf_drugs import abundance as ab
+    up = tmp_path / "up.gmt"
+    down = tmp_path / "down.gmt"
+    up.write_text("".join(
+        f"E{i} CELL{i} 6H-samedrug-10.0\t\tMYTF\tG{i}\n"
+        for i in range(5)), encoding="utf-8")
+    down.write_text("E0 X 6H-other-1\t\tZZZ\n", encoding="utf-8")
+    hits = ab.find([{"symbol": "MYTF", "role": "activator"}],
+                   goal="up", up_path=up, down_path=down)
+    assert len(hits) == 1
+    assert hits[0].n_signatures == 5
+    assert len(hits[0].cell_lines) >= 2
+
+
+def test_a_compound_seen_once_is_not_reported(tmp_path):
+    from promoter_tf_drugs import abundance as ab
+    up = tmp_path / "up.gmt"
+    down = tmp_path / "down.gmt"
+    up.write_text("E0 X 6H-oneshot-10.0\t\tMYTF\n", encoding="utf-8")
+    down.write_text("E0 X 6H-other-1\t\tZZZ\n", encoding="utf-8")
+    assert ab.find([{"symbol": "MYTF", "role": "activator"}],
+                   goal="up", up_path=up, down_path=down) == []
+    assert ab.MIN_SIGNATURES >= 2
+
+
+def test_demo_mode_never_reads_a_real_corpus():
+    """Demo has to stay self-contained and reproducible. Without the guard
+    it silently read whatever corpora were sitting in data/."""
+    import inspect
+    src = inspect.getsource(pipeline.run)
+    i = src.index("factor_abundance: list = []")
+    assert "not demo" in src[i:i + 400]
+
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    assert res["results"][0]["factor_abundance"] == []
+
+
+# ===================================================================== #
+# The cross-method corroboration table.                                 #
+# ===================================================================== #
+def _route(drug, acts_on, tier, score, category, source, mechanism="",
+           directness=1):
+    """A genuine Route, not a hand-written dict.
+
+    Hand-written route dicts kept missing fields the report reads - axes,
+    directness - one at a time. Building the real object means the fixture
+    cannot drift from the dataclass.
+    """
+    from promoter_tf_drugs.catalogue import Route, Axes
+    r = Route(drug=drug, category=category, mechanism=mechanism,
+              acts_on=acts_on, tier=tier, directness=directness,
+              axes=Axes(0.5, 0.5, 0.5, "test"), approved=True,
+              source=source)
+    r.score = score
+    return r.to_dict()
+
+
+def _as_all_routes(routes):
+    """Wrap hand-written routes in the shape catalogue.build produces.
+
+    markdown_report reads n_routes, by_category and by_tier off this dict,
+    so a bare {"routes": [...]} is not a usable stand-in. The key set is
+    asserted against build() so this cannot drift.
+    """
+    by_cat, by_tier = {}, {}
+    for r in routes:
+        by_cat.setdefault(r["category"], []).append(r)
+        by_tier.setdefault(r["tier"], []).append(r)
+    out = {"routes": routes, "n_routes": len(routes),
+           "by_category": by_cat, "by_tier": by_tier,
+           "categories_absent": [],
+           "best_per_category": {k: v[0] for k, v in by_cat.items()}}
+    return out
+
+
+def test_the_all_routes_stand_in_matches_the_real_shape():
+    """So a key added to catalogue.build cannot silently break every test
+    that hand-builds this dict."""
+    from promoter_tf_drugs import catalogue as cat
+    real = cat.build({"direct_therapies": [{
+        "drug": "X", "gene": "G", "modality": "siRNA", "approved": True,
+        "specificity": 0.9, "raises_protein": True, "mechanism": "m",
+        "status": "approved", "notes": []}]}, goal="up")
+    stand_in = _as_all_routes([
+        _route("X", "Y", 3, 1.0, "c", "drug_scoring")])
+    assert set(real) == set(stand_in), (
+        f"missing from the stand-in: {set(real) - set(stand_in)}")
+
+
+def _two_method_result():
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    res["results"][0]["all_routes"] = _as_all_routes([
+        _route("Calcitriol", "VDR", 3, 70.0, "TF: orthosteric ligand",
+               "drug_scoring", "VDR agonist"),
+        _route("Calcitriol", "VDR", 2, 60.0, "empirical signature",
+               "signatures", "moved this gene in an assay", directness=0),
+        _route("Loner", "RARA", 3, 50.0, "TF: orthosteric ligand",
+               "drug_scoring", "RARA agonist"),
+    ])
+    return res
+
+
+def test_one_row_per_drug_with_the_methods_counted():
+    """The route tables are one row per route, so a drug reached three ways
+    appeared three times and the reader could not see it was reached three
+    ways."""
+    rows = pipeline.corroboration(_two_method_result(), top_n=20)
+    by = {r["drug"]: r for r in rows}
+    assert by["Calcitriol"]["n_methods"] == 2
+    assert by["Calcitriol"]["n_routes"] == 2
+    assert by["Loner"]["n_methods"] == 1
+    # best tier across a drug's routes, not the first seen
+    assert by["Calcitriol"]["best_tier"] == 2
+    # and corroboration breaks the tie
+    assert rows[0]["drug"] == "Calcitriol"
+
+
+def test_every_route_source_has_a_method_name():
+    """A new route source must appear in this table rather than silently
+    counting as zero methods, which is what the first version did for
+    every row."""
+    res = _two_method_result()
+    assert pipeline.unmapped_sources(res) == set()
+
+    res["results"][0]["all_routes"]["routes"].append(
+        _route("X", "Y", 4, 1.0, "c", "a_brand_new_source"))
+    assert pipeline.unmapped_sources(res) == {"a_brand_new_source"}
+
+
+def test_expected_change_is_a_direction_never_a_magnitude():
+    """Nothing here estimates a fold-change, so a number would be
+    invented. The basis says which kind of claim it is."""
+    rows = pipeline.corroboration(_two_method_result(), top_n=20)
+    by = {r["drug"]: r for r in rows}
+    assert by["Calcitriol"]["expected_change"] in ("increase", "decrease")
+    assert "MEASURED" in by["Calcitriol"]["expected_basis"]
+    assert "PREDICTED" in by["Loner"]["expected_basis"]
+
+    md = "\n".join(pipeline.corroboration_table(_two_method_result()))
+    assert "DIRECTION, never a magnitude" in md
+    assert "a number here would be invented" in md
+    for bad in ("fold", "%", "1.5x", "2-fold"):
+        assert f"expected {bad}" not in md.lower()
+
+
+def test_the_method_count_is_not_presented_as_a_vote():
+    """Two weak agreements do not equal one measured result, and a bare
+    count would say they did."""
+    md = "\n".join(pipeline.corroboration_table(_two_method_result()))
+    assert "not a vote" in md
+    assert "Tier still decides" in md
+
+
+def test_systems_acted_on_are_named_per_drug():
+    rows = pipeline.corroboration(_two_method_result(), top_n=20)
+    cal = next(r for r in rows if r["drug"] == "Calcitriol")
+    assert cal["systems"] == "vitamin D receptor agonist"
+    assert cal["systems_why"]
+    md = "\n".join(pipeline.corroboration_table(_two_method_result()))
+    assert "Systems it acts on" in md
+
+
+def test_a_single_method_run_says_so_rather_than_implying_breadth():
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    res["results"][0]["all_routes"] = _as_all_routes([
+        _route("Only", "VDR", 3, 9.0, "c", "drug_scoring")])
+    md = "\n".join(pipeline.corroboration_table(res))
+    assert "No compound was found by more than one method" in md
+    assert "expected rather than informative" in md
+
+
+def test_the_table_reaches_summary_md(tmp_path):
+    res = _two_method_result()
+    pipeline.write_outputs(res, tmp_path)
+    body = (tmp_path / "summary.md").read_text(encoding="utf-8")
+    assert "which methods found each" in body
+    assert "Systems it acts on" in body
+    assert "Expected DEMOGENE change" in body

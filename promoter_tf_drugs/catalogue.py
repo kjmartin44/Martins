@@ -66,6 +66,7 @@ CATEGORIES = [
     "direct: gene product",
     "TF: orthosteric ligand",
     "TF: inferred activity change",
+    "TF: abundance change",
     "TF: predicted pocket binder",
     "TF: allosteric modulator",
     "TF: stabiliser or glue",
@@ -125,6 +126,25 @@ CATEGORY_GUIDE = {
         "differs": "Unlike 'TF: orthosteric ligand', nothing here was "
                    "measured at the receptor - the argument is entirely "
                    "from the shape of the pocket.",
+    },
+    "TF: abundance change": {
+        "changes": "abundance",
+        "assay": "RT-qPCR and a western for the FACTOR first, then "
+                 "RT-qPCR for your gene",
+        "what": "A compound measured to change how much of the factor's "
+                "own transcript exists, rather than what the factor does.",
+        "why": "The only route here that needs the factor to be expressed "
+               "rather than druggable, so it reaches factors with no "
+               "ligand, no structure and no curated upstream kinase - "
+               "which is most of them.",
+        "cost": "More factor is not more factor ACTIVITY. For a "
+                "ligand-activated receptor the two are nearly unrelated, "
+                "and transcript is not protein. Broad agents that shut "
+                "down transcription move every factor and are flagged.",
+        "differs": "Unlike 'empirical signature', which is a compound "
+                   "measured against YOUR GENE, this was measured against "
+                   "the FACTOR - one further inferential step from what "
+                   "you care about.",
     },
     "TF: inferred activity change": {
         "changes": "abundance",
@@ -534,6 +554,47 @@ def from_docking(docking: dict) -> list[Route]:
     return out
 
 
+def from_abundance(hits: list) -> list[Route]:
+    """Compounds that change how much of the factor exists.
+
+    Tier 3, the same standing as a curated mechanism and one step below
+    `from_lincs`. There the compound was measured against YOUR GENE; here
+    it was measured against the factor, and that the factor controls your
+    gene is the inference this rests on.
+
+    A promiscuous compound - one moving most of the factors asked about -
+    is kept and demoted rather than dropped, which is how plicamycin and
+    the other broad agents are already handled.
+    """
+    out = []
+    for h in (hits or []):
+        ns = h.get("non_specific")
+        nr = h.get("nuclear_receptor")
+        # Specificity is the axis that carries the two things wrong with
+        # this route: a promiscuous compound, and a receptor whose
+        # abundance says little about its activity.
+        spec = 0.45
+        if ns:
+            spec = 0.1
+        elif nr:
+            spec = 0.25
+        out.append(Route(
+            drug=h.get("drug") or "?",
+            category="TF: abundance change",
+            mechanism=(f"{'raises' if h.get('moved_factor') == 'up' else 'lowers'} "
+                       f"{h.get('tf')} transcript in "
+                       f"{h.get('n_signatures')} profile(s)"),
+            acts_on=h.get("tf"),
+            tier=int(h.get("tier") or 4), directness=1,
+            axes=Axes(min(1.0, (h.get("n_signatures") or 1) / 10.0),
+                      spec, 0.5,
+                      f"measured on {h.get('tf')}'s own transcript, "
+                      f"{h.get('n_signatures')} profile(s)"),
+            approved=True, source="abundance",
+            notes=list(h.get("caveats") or [])[:3]))
+    return out
+
+
 def from_activity_drugs(activity_drugs: dict) -> list[Route]:
     """Compounds whose LINCS signature moves a factor's regulon.
 
@@ -663,6 +724,8 @@ def build(result_block: dict, *, goal: str = "up",
     routes += from_activity_drugs(
         result_block.get("activity_drugs") or {})
     routes += from_docking(result_block.get("docking") or {})
+    routes += from_abundance(
+        result_block.get("factor_abundance") or [])
     if include_chromatin:
         routes += chromatin_routes(goal)
 
