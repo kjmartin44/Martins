@@ -403,6 +403,54 @@ loci; the catalogue reports the gene mapped or nearest to a signal, which is
 not the causal gene at that locus perhaps half the time. It is reported as a
 different kind of evidence rather than the same number.
 
+### How large can the drug library actually get?
+
+The FDA's often-quoted figure of about 20,000 approved drugs counts
+**products**: every strength, every formulation and every manufacturer of
+the same molecule listed separately. Metformin alone accounts for hundreds
+of entries. Distinct active moieties with a defined structure is a much
+smaller number, roughly 1,500 to 2,000 small molecules ever approved in the
+US, and about 4,000 in ChEMBL at `max_phase 4`, which also counts drugs
+approved elsewhere and counts salts separately.
+
+So a library of a few thousand is most of the distinct molecules rather
+than a fraction of them. Making it genuinely larger means widening the
+definition on purpose, not hunting for missing approvals.
+
+```
+python -m promoter_tf_drugs.localdrugs --merge data/repurposing_drugs.txt data/chembl_approved.tsv --out data/library.tsv
+```
+
+The merge reports what each source contributed, how many rows were salt or
+duplicate forms of a molecule already present, and how many fell below the
+requested phase, so widening is a decision with a number attached.
+
+| dial | adds | what a hit then means |
+| --- | --- | --- |
+| `--min-phase 4` | nothing; approved and launched only | an approved drug, repurposed |
+| `--min-phase 3` | phase 3 compounds | a drug that may never be approved |
+| `--min-phase 1` | anything given to a human | human safety data, no efficacy |
+| `--include-withdrawn` | drugs approved then pulled | human data and a documented reason it was removed |
+
+`--include-withdrawn` is separate from the phase dial rather than a lower
+value on it, because a withdrawn drug *reached* approval. An earlier version
+treated it as phase -1, which sorted it below preclinical and meant asking
+for withdrawn drugs pulled in every lab compound.
+
+Deduplication is on the parent structure, not the name or the InChIKey. An
+InChIKey alone does not merge salts, because the counterion is part of the
+molecule: metformin and metformin hydrochloride get entirely different keys.
+So the largest fragment is taken, uncharged and tautomer-canonicalised, and
+the key is the connectivity layer of that. Screening a hydrochloride and its
+free base as two candidates doubles the compute and finds the same thing
+twice.
+
+One residual limitation, measured rather than assumed: a compound drawn in
+an explicit protonation state can still miss. Metformin written with a
+charged guanidinium does not merge with neutral metformin, because a
+delocalised charge cannot be canonically neutralised. Databases normally
+write the neutral parent or a simple salt, so this is rare.
+
 ## Output files
 
 Every completed analysis writes six files:

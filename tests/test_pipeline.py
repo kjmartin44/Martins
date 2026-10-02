@@ -8751,3 +8751,144 @@ def test_the_drug_table_prefers_measured_potency_when_a_file_exists(
     assert with_p and with_p[0]["pchembl"] == 9.0
     without = ld.actives_for("VDR", rows)
     assert without and without[0]["pchembl"] is None
+
+
+# ===================================================================== #
+# Expanding the library: what the 20,000 figure actually counts.        #
+# ===================================================================== #
+def _tbl(tmp_path, name, header, rows, sep="\t"):
+    p = tmp_path / name
+    p.write_text(sep.join(header) + "\n"
+                 + "\n".join(sep.join(r) for r in rows) + "\n",
+                 encoding="utf-8")
+    return p
+
+
+_METFORMIN = "CN(C)C(=N)N=C(N)N"
+_METFORMIN_HCL = "Cl." + _METFORMIN
+_T4 = "N[C@@H](Cc1cc(I)c(Oc2cc(I)c(O)c(I)c2)c(I)c1)C(=O)O"
+_T4_NA = "[Na+].N[C@@H](Cc1cc(I)c(Oc2cc(I)c(O)c(I)c2)c(I)c1)C(=O)[O-]"
+
+
+def test_an_inchikey_alone_does_not_merge_salts():
+    """The counterion is part of the molecule, so metformin and metformin
+    hydrochloride get entirely different InChIKeys. This is why the parent
+    has to be extracted before keying."""
+    from rdkit import Chem, RDLogger
+    RDLogger.DisableLog("rdApp.*")
+    a = Chem.MolToInchiKey(Chem.MolFromSmiles(_METFORMIN))[:14]
+    b = Chem.MolToInchiKey(Chem.MolFromSmiles(_METFORMIN_HCL))[:14]
+    assert a != b
+
+
+def test_the_parent_key_merges_salts_and_separates_real_drugs():
+    from promoter_tf_drugs import localdrugs as ld
+    assert ld.parent_key(_METFORMIN) == ld.parent_key(_METFORMIN_HCL)
+    assert ld.parent_key(_T4) == ld.parent_key(_T4_NA)
+    # and two genuinely different drugs stay apart
+    assert ld.parent_key(_METFORMIN) != ld.parent_key(_T4)
+    assert ld.parent_key("not a smiles at all") is None
+
+
+def test_merging_collapses_salt_forms_across_sources(tmp_path):
+    """Screening the hydrochloride and the free base as two candidates
+    doubles the compute and finds the same thing twice."""
+    from promoter_tf_drugs import localdrugs as ld
+    a = _tbl(tmp_path, "hub.txt",
+             ["pert_iname", "clinical_phase", "target", "smiles"],
+             [["metformin", "launched", "PRKAB1", _METFORMIN],
+              ["metformin hydrochloride", "launched", "PRKAB1",
+               _METFORMIN_HCL],
+              ["levothyroxine", "launched", "THRB", _T4]])
+    b = _tbl(tmp_path, "chembl.csv",
+             ["name", "max_phase", "gene", "smiles"],
+             [["levothyroxine sodium", "4", "THRB", _T4_NA]], sep=",")
+    res = ld.merge([a, b], min_phase=4)
+    assert res["n_distinct"] == 2
+    assert res["n_salt_forms_collapsed"] == 2
+    # the second source contributed no new molecule, and that is reported
+    assert res["per_source"]["chembl.csv"]["new"] == 0
+    assert res["per_source"]["chembl.csv"]["already_present"] == 1
+
+
+def test_min_phase_is_the_dial_that_actually_enlarges_the_library(tmp_path):
+    """There are no missing FDA approvals to find. Widening the definition
+    is what adds molecules, and each step changes what a hit means."""
+    from promoter_tf_drugs import localdrugs as ld
+    t = _tbl(tmp_path, "mixed.txt",
+             ["pert_iname", "clinical_phase", "target", "smiles"],
+             [["approveddrug", "launched", "VDR", _METFORMIN],
+              ["trialdrug", "phase 3", "VDR", "CCCCCCO"],
+              ["earlydrug", "phase 1", "VDR", "CCCCCCCO"],
+              ["pulleddrug", "withdrawn", "VDR", "CCCCCCCCO"],
+              ["labcompound", "preclinical", "VDR", "CCCCCCCCCO"]])
+    sizes = {mp: ld.merge([t], min_phase=mp)["n_distinct"]
+             for mp in (4, 3, 1)}
+    assert sizes[4] == 1
+    assert sizes[3] == 2
+    assert sizes[1] == 3
+    # preclinical is never reached by the dial
+    assert sizes[1] < 4
+
+    # Withdrawn is a separate opt-in, not a lower phase: the drug reached
+    # approval and was pulled. On the phase scale, asking for it dragged
+    # in every preclinical compound.
+    wd = ld.merge([t], min_phase=4, include_withdrawn=True)
+    assert wd["n_distinct"] == 2
+    assert any(r["withdrawn"] for r in wd["library"])
+    assert ld.merge([t], min_phase=4)["n_withdrawn_excluded"] == 1
+
+
+def test_a_row_with_an_unparseable_structure_is_kept_by_name(tmp_path):
+    """Dropping it silently would lose a real drug. It is keyed on the name
+    instead and flagged, so the fallback is visible."""
+    from promoter_tf_drugs import localdrugs as ld
+    t = _tbl(tmp_path, "broken.txt",
+             ["pert_iname", "clinical_phase", "target", "smiles"],
+             [["weirddrug", "launched", "VDR", "C(C(C"]])
+    res = ld.merge([t], min_phase=4)
+    assert res["n_distinct"] == 1
+    assert res["library"][0]["structure_unparsed"] is True
+
+
+def test_the_count_explanation_names_what_20000_counts(tmp_path):
+    """The premise of "I only have 3,000 of 20,000" is a counting
+    difference, and saying so is more useful than adding salt forms to
+    reach the number."""
+    from promoter_tf_drugs import localdrugs as ld
+    t = _tbl(tmp_path, "one.txt",
+             ["pert_iname", "clinical_phase", "target", "smiles"],
+             [["metformin", "launched", "PRKAB1", _METFORMIN]])
+    msg = ld.explain_counts(ld.merge([t], min_phase=4))
+    assert "PRODUCTS" in msg
+    assert "1,500 to 2,000" in msg
+    assert "most of the molecules" in msg
+    assert "widen the definition on purpose" in msg
+
+
+def test_a_merged_library_can_be_written_and_read_back(tmp_path):
+    from promoter_tf_drugs import localdrugs as ld
+    t = _tbl(tmp_path, "src.txt",
+             ["pert_iname", "clinical_phase", "target", "smiles"],
+             [["metformin", "launched", "PRKAB1|AMPK", _METFORMIN],
+              ["levothyroxine", "launched", "THRB", _T4]])
+    res = ld.merge([t], min_phase=4)
+    out = ld.write_table(res["library"], tmp_path / "merged.tsv")
+    back = ld.read_table(out)
+    assert len(back) == 2
+    assert {r["name"] for r in back} == {"metformin", "levothyroxine"}
+    met = next(r for r in back if r["name"] == "metformin")
+    assert set(met["targets"]) == {"PRKAB1", "AMPK"}
+
+
+def test_a_source_that_fails_to_parse_is_reported_not_silent(tmp_path):
+    from promoter_tf_drugs import localdrugs as ld
+    good = _tbl(tmp_path, "good.txt",
+                ["pert_iname", "clinical_phase", "target", "smiles"],
+                [["metformin", "launched", "X", _METFORMIN]])
+    bad = _tbl(tmp_path, "bad.txt", ["name", "phase"],
+               [["drugA", "launched"]])
+    res = ld.merge([good, bad], min_phase=4)
+    assert res["n_distinct"] == 1
+    assert "error" in res["per_source"]["bad.txt"]
+    assert "SMILES" in res["per_source"]["bad.txt"]["error"]

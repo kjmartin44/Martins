@@ -44,6 +44,8 @@ import csv
 import logging
 from pathlib import Path
 
+from .congeners import salt_free_name
+
 log = logging.getLogger(__name__)
 
 DEFAULT_LIBRARY_PATHS = (
@@ -221,3 +223,305 @@ def summarise(rows: list, symbol: str | None = None) -> str:
         "A local table carries no potency, so anything that ranks on it is "
         "unranked rather than scored zero.")
     return " ".join(bits)
+
+
+# ===================================================================== #
+# Merging several sources into one library.                             #
+# ===================================================================== #
+# "There are 20,000 FDA-approved drugs and I only have 3,000" is the usual
+# reaction to a library this size, and the premise is a counting difference
+# rather than a gap.
+#
+# The FDA's often-quoted ~20,000 counts approved PRODUCTS: every strength,
+# every formulation, every manufacturer of the same molecule listed
+# separately. Metformin alone accounts for hundreds of entries. Distinct
+# active moieties with a defined structure is a far smaller number -
+# roughly 1,500 to 2,000 small molecules ever approved in the US, and about
+# 4,000 in ChEMBL at max_phase 4, which also counts drugs approved
+# elsewhere and counts salts separately.
+#
+# So a library of ~3,000 is not a seventh of the drugs. It is most of the
+# distinct molecules, and the way to make it genuinely larger is to WIDEN
+# THE DEFINITION deliberately - approved anywhere rather than in the US,
+# compounds in trials, withdrawn drugs with human safety data - not to hunt
+# for missing FDA approvals.
+#
+# This merges sources and reports what each contributed, so widening is a
+# decision with a number attached.
+
+# A withdrawn drug is not a lower phase: it REACHED approval and was then
+# pulled. Putting it at -1 sorted it below preclinical, so asking for
+# withdrawn drugs dragged in every lab compound. It sits at 4 with a
+# separate flag, and `include_withdrawn` decides it.
+PHASE_ORDER = {"launched": 4, "approved": 4, "4": 4, "4.0": 4,
+               "withdrawn": 4,
+               "phase 3": 3, "3": 3, "3.0": 3,
+               "phase 2": 2, "2": 2, "2.0": 2,
+               "phase 1": 1, "1": 1, "1.0": 1,
+               "preclinical": 0, "": 0}
+WITHDRAWN = {"withdrawn", "withdrawn from market", "suspended"}
+
+
+def parent_key(smiles: str) -> str | None:
+    """A deduplication key that survives salt and charge differences.
+
+    An InChIKey alone does NOT merge salts: the counterion is part of the
+    molecule, so metformin and metformin hydrochloride get entirely
+    different keys. Measured, not assumed. So the parent is extracted
+    first - largest fragment, uncharged, tautomer-canonicalised - and the
+    key is the connectivity layer of that molecule's InChIKey.
+
+    Residual limitation, also measured: a compound drawn in an explicit
+    protonation state can still miss. Metformin written with a charged
+    guanidinium does not merge with neutral metformin, because a
+    delocalised charge cannot be canonically neutralised. Databases
+    normally write the neutral parent or a simple salt, so the common cases
+    are covered and this one is rare.
+    """
+    try:
+        from rdkit import Chem, RDLogger
+        from rdkit.Chem.MolStandardize import rdMolStandardize
+    except ImportError:
+        return None
+    RDLogger.DisableLog("rdApp.*")
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            return None
+        mol = rdMolStandardize.ChargeParent(mol)
+        mol = rdMolStandardize.TautomerEnumerator().Canonicalize(mol)
+        key = Chem.MolToInchiKey(mol)
+        return key[:14] if key else None
+    except Exception:                                       # noqa: BLE001
+        return None
+
+
+def merge(paths, *, min_phase: int = 4, include_withdrawn: bool = False,
+          fallback_name_key: bool = True) -> dict:
+    """Combine several drug tables into one deduplicated library.
+
+    `min_phase` is the widening dial: 4 keeps approved or launched only, 3
+    adds phase 3, 1 adds everything given to a human. `include_withdrawn`
+    is separate, because a withdrawn drug reached approval and was then
+    pulled - it carries human safety data and a documented reason for
+    removal, so it is an opt-in rather than a point on the phase scale.
+
+    Returns the library plus an accounting of what each source contributed
+    and what was collapsed, because more rows is only an improvement when
+    the extra rows are distinct molecules.
+    """
+    merged: dict = {}
+    per_source: dict = {}
+    n_rows = n_no_key = n_below_phase = n_withdrawn = 0
+
+    for path in paths:
+        src = Path(path).name
+        try:
+            rows = read_table(path, approved_only=False)
+        except Exception as exc:                            # noqa: BLE001
+            # Keep the END of the message: it leads with a long path and
+            # a head truncation preserved only that.
+            per_source[src] = {
+                "error": type(exc).__name__ + ": "
+                         + str(exc).replace("\n", " ")[-220:]}
+            continue
+        added = already = 0
+        for r in rows:
+            n_rows += 1
+            raw_phase = (r.get("phase") or "").strip().lower()
+            phase = PHASE_ORDER.get(raw_phase, 0)
+            if raw_phase in WITHDRAWN and not include_withdrawn:
+                n_withdrawn += 1
+                continue
+            if phase < min_phase:
+                n_below_phase += 1
+                continue
+            key = parent_key(r["smiles"])
+            unparsed = False
+            if key is None:
+                if not fallback_name_key:
+                    n_no_key += 1
+                    continue
+                # An unparseable structure still has a name, and dropping it
+                # silently would lose a real drug. Keyed on the salt-free
+                # name instead, and flagged so it is visible.
+                stem = salt_free_name((r.get("name") or "").lower())
+                if not stem:
+                    n_no_key += 1
+                    continue
+                key = "name:" + stem
+                unparsed = True
+            if key in merged:
+                already += 1
+                prev = merged[key]
+                if src not in prev["sources"]:
+                    prev["sources"].append(src)
+                prev["targets"] = sorted(set(prev["targets"])
+                                         | set(r.get("targets") or []))
+                prev["n_forms"] += 1
+                if phase > PHASE_ORDER.get(
+                        (prev.get("phase") or "").strip().lower(), 0):
+                    prev["phase"] = r.get("phase")
+            else:
+                added += 1
+                merged[key] = {
+                    "name": r.get("name"), "smiles": r["smiles"],
+                    "targets": sorted(set(r.get("targets") or [])),
+                    "phase": r.get("phase"), "chembl_id": r.get("chembl_id"),
+                    "sources": [src], "n_forms": 1, "key": key,
+                    "structure_unparsed": unparsed,
+                    "withdrawn": raw_phase in WITHDRAWN,
+                }
+        per_source[src] = {"rows": len(rows), "new": added,
+                           "already_present": already}
+
+    library = sorted(merged.values(), key=lambda r: (r["name"] or ""))
+    collapsed = sum(r["n_forms"] - 1 for r in library)
+    return {
+        "library": library,
+        "n_distinct": len(library),
+        "n_rows_read": n_rows,
+        "n_salt_forms_collapsed": collapsed,
+        "n_below_phase": n_below_phase,
+        "n_unkeyable": n_no_key,
+        "n_withdrawn_excluded": n_withdrawn,
+        "per_source": per_source,
+        "min_phase": min_phase,
+        "include_withdrawn": include_withdrawn,
+    }
+
+
+def explain_counts(result: dict) -> str:
+    """Why the number is what it is."""
+    L = [f"{result['n_distinct']} distinct molecules from "
+         f"{result['n_rows_read']} rows across "
+         f"{len(result['per_source'])} source(s)."]
+    if result["n_salt_forms_collapsed"]:
+        L.append(
+            f"{result['n_salt_forms_collapsed']} row(s) were salt, hydrate "
+            f"or duplicate forms of a molecule already present, collapsed "
+            f"on the parent structure - screening the hydrochloride and the "
+            f"free base as two candidates doubles the compute and finds the "
+            f"same thing twice.")
+    if result["n_below_phase"]:
+        L.append(f"{result['n_below_phase']} row(s) were below the "
+                 f"requested clinical phase.")
+    if result["n_unkeyable"]:
+        L.append(f"{result['n_unkeyable']} row(s) had neither a usable "
+                 f"structure nor a name.")
+    if result.get("n_withdrawn_excluded"):
+        L.append(f"{result['n_withdrawn_excluded']} withdrawn drug(s) were "
+                 f"excluded. They reached approval and were then pulled, so "
+                 f"they carry human safety data and a documented reason for "
+                 f"removal; include_withdrawn keeps them.")
+    L.append(
+        "On the counting: the FDA's often-quoted ~20,000 is approved "
+        "PRODUCTS - every strength, formulation and manufacturer of the "
+        "same molecule counted separately. Distinct active moieties with a "
+        "structure is roughly 1,500 to 2,000 for the US, and about 4,000 in "
+        "ChEMBL at max_phase 4, which also counts drugs approved elsewhere. "
+        "A library of a few thousand is most of the molecules rather than a "
+        "fraction of them.")
+    if result["min_phase"] >= 4:
+        L.append(
+            "To make it genuinely larger, widen the definition on purpose: "
+            "min_phase 3 adds phase 3 and min_phase 1 adds everything "
+            "given to a human, while include_withdrawn keeps drugs that "
+            "were approved and later pulled. Each step changes what a hit "
+            "means, so it is a decision rather than a default.")
+    return " ".join(L)
+
+
+def write_table(library: list, path) -> Path:
+    """Write a merged library back out as a table this package can read."""
+    import csv as _csv
+
+    path = Path(path)
+    with open(path, "w", newline="", encoding="utf-8") as fh:
+        w = _csv.writer(fh, delimiter="\t")
+        w.writerow(["name", "clinical_phase", "target", "smiles",
+                    "sources", "n_forms"])
+        for r in library:
+            w.writerow([r.get("name") or "", r.get("phase") or "",
+                        "|".join(r.get("targets") or []), r["smiles"],
+                        "|".join(r.get("sources") or []), r.get("n_forms", 1)])
+    return path
+
+
+def main(argv=None) -> int:
+    """`python -m promoter_tf_drugs.localdrugs` - inspect or merge tables."""
+    import argparse
+
+    p = argparse.ArgumentParser(
+        prog="python -m promoter_tf_drugs.localdrugs",
+        description="Inspect a local drug table, or merge several into one "
+                    "deduplicated library.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=SOURCE)
+    p.add_argument("--merge", nargs="+", metavar="FILE",
+                   help="tables to combine. Salt, hydrate and duplicate "
+                        "forms collapse onto the parent structure")
+    p.add_argument("--out", metavar="FILE",
+                   help="write the merged library here, in a format this "
+                        "package reads back")
+    p.add_argument("--min-phase", type=int, default=4, metavar="N",
+                   help="4 approved or launched only, 3 adds phase 3, 1 "
+                        "adds anything given to a human. This is the dial "
+                        "that genuinely enlarges the library, because there "
+                        "are no missing FDA approvals to find (default 4)")
+    p.add_argument("--include-withdrawn", action="store_true",
+                   help="keep drugs that were approved and later pulled. "
+                        "They carry human safety data and a documented "
+                        "reason for removal, which is why this is separate "
+                        "from --min-phase")
+    p.add_argument("--target", metavar="SYMBOL",
+                   help="also report how many of the merged compounds are "
+                        "annotated against this target")
+    p.add_argument("-v", "--verbose", action="store_true")
+    args = p.parse_args(argv)
+
+    logging.basicConfig(
+        level=logging.INFO if args.verbose else logging.WARNING,
+        format="%(levelname)s %(name)s: %(message)s")
+
+    if not args.merge:
+        found = resolve()
+        if not found:
+            print("No local drug table found.")
+            print()
+            print(SOURCE)
+            return 1
+        rows = read_table(found)
+        print(f"{found}: {len(rows)} approved compound(s) with structures")
+        print()
+        print(summarise(rows, args.target))
+        return 0
+
+    res = merge(args.merge, min_phase=args.min_phase,
+                include_withdrawn=args.include_withdrawn)
+    print(f"Merged library: {res['n_distinct']} distinct molecules")
+    print()
+    for src, info in res["per_source"].items():
+        if "error" in info:
+            print(f"  {src:34s} FAILED: {info['error']}")
+        else:
+            print(f"  {src:34s} {info['rows']:6d} rows -> "
+                  f"{info['new']:5d} new, "
+                  f"{info['already_present']:5d} already present")
+    print()
+    print(explain_counts(res))
+    if args.target:
+        n = sum(1 for r in res["library"]
+                if args.target.strip().upper() in (r.get("targets") or []))
+        print()
+        print(f"{n} of them are annotated against {args.target.upper()}.")
+    if args.out:
+        write_table(res["library"], args.out)
+        print()
+        print(f"Wrote {args.out}. Use it with --library on the docking and "
+              f"screening paths.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
