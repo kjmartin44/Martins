@@ -8418,3 +8418,113 @@ def test_corroboration_table_carries_the_bbb_verdict():
     assert md.splitlines()[i + 1].count("|") == header.count("|")
     # the same footnote the graded table uses, so the two cannot diverge
     assert "is not a no" in md or "passive diffusion" in md
+
+
+# ===================================================================== #
+# Running with no usable network at all.                                #
+# ===================================================================== #
+def _hub_table(tmp_path, extra=()):
+    """A Repurposing-Hub-shaped table, with its real column names."""
+    rows = [
+        ("calcitriol", "launched", "VDR agonist", "VDR", "CCO"),
+        ("alfacalcidol", "launched", "VDR agonist", "VDR", "CCCO"),
+        ("paricalcitol", "launched", "VDR agonist", "VDR", "CCCCO"),
+        ("metformin", "launched", "Biguanide", "PRKAB1", "CN(C)C(=N)N=C(N)N"),
+        ("aspirin", "launched", "COX inhibitor", "PTGS1|PTGS2",
+         "CC(=O)Oc1ccccc1C(=O)O"),
+        ("toolcpd", "preclinical", "Tool", "VDR", "CCOc1ccccc1"),
+        ("nostructure", "launched", "Unknown", "VDR", ""),
+    ] + list(extra)
+    p = tmp_path / "repurposing_drugs.txt"
+    p.write_text("pert_iname\tclinical_phase\tmoa\ttarget\tsmiles\n"
+                 + "\n".join("\t".join(r) for r in rows) + "\n",
+                 encoding="utf-8")
+    return p
+
+
+def test_one_local_table_replaces_the_whole_chembl_dependency(tmp_path):
+    """Docking needs three things from ChEMBL - the target id, the known
+    ligands for the gate, and the library. A corporate network that blocks
+    or 500s those stops the analysis, and one annotated file removes all
+    three."""
+    from promoter_tf_drugs import localdrugs as ld
+    rows = ld.read_table(_hub_table(tmp_path))
+    names = {r["name"] for r in rows}
+    assert "calcitriol" in names
+    assert "toolcpd" not in names, "preclinical must be filtered"
+    assert "nostructure" not in names, "a name alone cannot be docked"
+
+    acts = ld.actives_for("VDR", rows)
+    assert {a["name"] for a in acts} == {"calcitriol", "alfacalcidol",
+                                         "paricalcitol"}
+
+
+def test_a_local_table_carries_no_potency_and_says_so(tmp_path):
+    """It records that a compound acts on a target, not how hard it binds.
+    A fabricated pChEMBL would feed the potency axis a made-up number."""
+    from promoter_tf_drugs import localdrugs as ld
+    rows = ld.read_table(_hub_table(tmp_path))
+    acts = ld.actives_for("VDR", rows)
+    assert all(a["pchembl"] is None for a in acts)
+    assert "no potency" in ld.summarise(rows, "VDR")
+    assert "unranked rather than scored zero" in ld.summarise(rows, "VDR")
+
+
+def test_the_delimiter_is_sniffed_not_taken_from_the_extension(tmp_path):
+    """The Hub ships .txt that is tab separated, and people save it as
+    .csv. Guessing from the suffix parses the whole file as one column."""
+    from promoter_tf_drugs import localdrugs as ld
+    p = tmp_path / "comma.txt"
+    p.write_text("name,clinical_phase,smiles\n"
+                 "drugA,launched,CCO\ndrugB,launched,CCCO\n",
+                 encoding="utf-8")
+    rows = ld.read_table(p)
+    assert len(rows) == 2 and rows[0]["smiles"] == "CCO"
+
+
+def test_a_table_with_no_structures_is_refused_with_the_reason(tmp_path):
+    from promoter_tf_drugs import localdrugs as ld
+    import pytest
+    p = tmp_path / "nosmiles.tsv"
+    p.write_text("name\tphase\ndrugA\tlaunched\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="no SMILES column"):
+        ld.read_table(p)
+
+
+def test_a_missing_table_returns_empty_and_names_the_source(tmp_path,
+                                                            monkeypatch):
+    """Absent is reported, never treated as an empty library, because an
+    empty library would make every screen silently find nothing."""
+    from promoter_tf_drugs import localdrugs as ld
+    monkeypatch.chdir(tmp_path)
+    assert ld.library() == []
+    assert "repurposing.broadinstitute.org" in ld.SOURCE
+    assert "need the network" in ld.summarise([])
+
+
+def test_docking_prefers_a_local_table_over_the_network(tmp_path,
+                                                        monkeypatch):
+    """On a blocked network the ChEMBL calls are the step that stops
+    everything, so they must be the fallback and not the default."""
+    import inspect
+    from promoter_tf_drugs import docking as dk
+    src = inspect.getsource(dk.write_bundle)
+    i_local = src.index("localdrugs")
+    i_net = src.index("approved_library(client)")
+    assert i_local < i_net, (
+        "the network path must be the fallback, not the first attempt")
+    assert "if not library:" in src
+    assert "if not actives:" in src
+
+
+def test_the_circuit_breaker_also_trips_on_http_500(monkeypatch):
+    """ChEMBL is called hundreds of times a run. If a 500 did not trip the
+    breaker, every call would pay the full retry budget."""
+    import inspect
+    from promoter_tf_drugs import http as ph
+    src = inspect.getsource(ph.Client.request)
+    # the 500 branch must leave the loop so the breaker code below runs
+    i500 = src.index("429, 500, 502, 503, 504")
+    assert "break" in src[i500:i500 + 900]
+    # and the breaker must be consulted before a request is made
+    assert "if host in self._down" in inspect.getsource(ph.Client)

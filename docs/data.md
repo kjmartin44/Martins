@@ -314,6 +314,51 @@ cannot be separated from it, and a compound that arrests the cell cycle
 moves every proliferation-linked regulon. More corpora make the observation
 more robust, not more specific.
 
+## Running without a usable network
+
+Several sources are web APIs, and on a corporate network they are often
+blocked or intermittent. Two things make that survivable.
+
+The HTTP client gives each host one full retry budget and then treats it as
+down for the rest of the run, so a dead endpoint costs one request's worth
+of waiting rather than one per call. ChEMBL is called hundreds of times in a
+run, so without that a 500 would dominate the wall clock. Everything not
+depending on that host is unaffected.
+
+That makes a broken endpoint cheap. It does not make the analysis possible,
+and for that the data has to be on disk. The docking and screening paths
+need three things from ChEMBL - the gene's target id, the measured ligands
+for the validation gate, and the approved-drug library - and one annotated
+file supplies all three.
+
+```
+# Broad Drug Repurposing Hub: https://repurposing.broadinstitute.org/download
+# save the drugs table as data/repurposing_drugs.txt
+python -m promoter_tf_drugs.docking --gene VDR --pdb 1DB1.pdb --library data/repurposing_drugs.txt
+```
+
+Around 6,800 compounds with SMILES, clinical phase, mechanism and target
+gene symbols, in a few megabytes. `data/repurposing_drugs.txt` is picked up
+automatically; any table with a name column and a SMILES column works, and
+the delimiter is read from the header rather than the file name because the
+Hub ships tab-separated `.txt` that people save as `.csv`.
+
+The local path is tried first and the network only as a fallback, because on
+a blocked network the API calls are the step that stops everything.
+`--actives FILE` overrides the validation set separately when you have a
+better one than the table's own annotation.
+
+Verified end to end with every network entry point replaced by a function
+that raises: a local table, a local structure, smina, AUC 1.0 on the
+vitamin D ligands, no network touched.
+
+What a local table cannot supply is potency. The Hub records that a compound
+acts on a target, not how hard it binds, so an `actives` set from it carries
+no pChEMBL and anything ranking on potency degrades to unranked rather than
+scoring zero. The docking gate needs only the identity of the known binders,
+so docking is unaffected. It is also a snapshot: a drug approved after
+publication is absent, and absence is not evidence that nothing exists.
+
 ## Output files
 
 Every completed analysis writes six files:

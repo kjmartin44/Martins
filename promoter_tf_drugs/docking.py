@@ -1325,7 +1325,8 @@ BUNDLE_FILE = "bundle.json"
 
 def write_bundle(client, symbol: str, uniprot: str, out_dir, *,
                  library_limit: int = 600, want_state: str | None = None,
-                 pdb_file=None) -> dict:
+                 pdb_file=None, library_file=None, actives_file=None
+                 ) -> dict:
     """Fetch everything docking needs into one folder. Needs the network.
 
     Returns the manifest. After this the folder is self-contained and the
@@ -1373,18 +1374,37 @@ def write_bundle(client, symbol: str, uniprot: str, out_dir, *,
         pocket.path = str(out_dir / "receptor.pdb")
         pocket.ligand_path = str(out_dir / "ligand.pdb")
 
-    # --- the validation set and the library
-    tids = _chembl_targets(client, symbol, uniprot)
-    actives: list = []
-    for tid in tids[:2]:
-        actives.extend(agonism.fetch_actives(client, tid))
-    actives = [{"chembl_id": a.get("chembl_id"), "smiles": a["smiles"],
-                "pchembl": a.get("pchembl")}
-               for a in actives if a.get("smiles")]
+    # --- the validation set and the library.
+    # A local table is tried first and the network only if there is none,
+    # because on a blocked network the ChEMBL calls are the step that
+    # stops the whole analysis.
+    from . import localdrugs as ld
 
-    library = [{"name": d.get("name"), "smiles": d["smiles"]}
-               for d in approved_library(client)[:library_limit]
-               if d.get("smiles")]
+    local_rows = ld.library(library_file)
+    actives: list = []
+    library: list = []
+    if local_rows:
+        actives = ld.actives_for(symbol, local_rows)
+        library = [{"name": d["name"], "smiles": d["smiles"]}
+                   for d in local_rows[:library_limit]]
+        log.info("using a local drug table: %d library compound(s), "
+                 "%d known ligand(s) for %s", len(library), len(actives),
+                 symbol)
+    if actives_file:
+        actives = [{"chembl_id": None, "name": a["name"],
+                    "smiles": a["smiles"], "pchembl": None}
+                   for a in ld.read_table(actives_file, approved_only=False)]
+    if not library:
+        library = [{"name": d.get("name"), "smiles": d["smiles"]}
+                   for d in approved_library(client)[:library_limit]
+                   if d.get("smiles")]
+    if not actives:
+        tids = _chembl_targets(client, symbol, uniprot)
+        for tid in tids[:2]:
+            actives.extend(agonism.fetch_actives(client, tid))
+        actives = [{"chembl_id": a.get("chembl_id"), "smiles": a["smiles"],
+                    "pchembl": a.get("pchembl")}
+                   for a in actives if a.get("smiles")]
 
     manifest = {
         "symbol": symbol, "uniprot": uniprot,
@@ -1577,6 +1597,17 @@ def main(argv=None) -> int:
                         "network at all. This is the step that needs smina, "
                         "so run it wherever smina is - WSL sees your "
                         "Windows drives under /mnt/c")
+    p.add_argument("--library", metavar="FILE",
+                   help="local drug table with SMILES instead of fetching "
+                        "the library from ChEMBL. The Broad Repurposing Hub "
+                        "export works and also supplies the known ligands "
+                        "per target, so one file removes the whole ChEMBL "
+                        "dependency. data/repurposing_drugs.txt is picked up "
+                        "automatically")
+    p.add_argument("--actives", metavar="FILE",
+                   help="local known ligands for the validation gate, as a "
+                        "name/SMILES table. Defaults to the ones annotated "
+                        "against this target inside --library")
     p.add_argument("--pdb", metavar="FILE",
                    help="use this structure instead of searching RCSB. It "
                         "must carry a co-crystallised ligand, which is what "
@@ -1657,7 +1688,9 @@ def main(argv=None) -> int:
         print(f"Preparing {symbol} ({uniprot}) into {args.prepare} ...")
         man = write_bundle(client, symbol, uniprot, args.prepare,
                            library_limit=args.library_limit,
-                           want_state=args.state, pdb_file=args.pdb)
+                           want_state=args.state, pdb_file=args.pdb,
+                           library_file=args.library,
+                           actives_file=args.actives)
         if man.get("error"):
             print(f"Refused: {man['error']}")
             return 1
@@ -1703,11 +1736,18 @@ def main(argv=None) -> int:
     print(f"Receptor  : {symbol} ({uniprot})")
 
     # The validation set: this receptor's own measured ligands.
-    from .drugs import _chembl_targets
-    tids = _chembl_targets(client, symbol, uniprot)
+    from . import localdrugs as ld
     actives: list = []
-    for tid in tids[:2]:
-        actives.extend(agonism.fetch_actives(client, tid))
+    if args.actives:
+        actives = [{"smiles": a["smiles"], "pchembl": None}
+                   for a in ld.read_table(args.actives, approved_only=False)]
+    elif local_rows:
+        actives = ld.actives_for(symbol, local_rows)
+    if not actives:
+        from .drugs import _chembl_targets
+        tids = _chembl_targets(client, symbol, uniprot)
+        for tid in tids[:2]:
+            actives.extend(agonism.fetch_actives(client, tid))
     print(f"Known ligands for validation: {len(actives)}")
     if len(actives) < MIN_VALIDATION_ACTIVES:
         print(f"\nRefused: {len(actives)} measured ligand(s) is below the "
@@ -1716,8 +1756,15 @@ def main(argv=None) -> int:
               f"confident nonsense, so nothing is reported.")
         return 1
 
-    from .screening import approved_library
-    library = approved_library(client)[:args.library_limit]
+    from . import localdrugs as ld
+    local_rows = ld.library(args.library)
+    if local_rows:
+        library = [{"name": d["name"], "smiles": d["smiles"]}
+                   for d in local_rows[:args.library_limit]]
+        print(f"Library from a local table: {len(library)} compound(s)")
+    else:
+        from .screening import approved_library
+        library = approved_library(client)[:args.library_limit]
     print(f"Approved library: {len(library)} compound(s)")
     print(f"\nThis will run roughly {len(library) + len(actives) * 11} "
           f"docking jobs. At a few seconds each that is "
