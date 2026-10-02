@@ -474,6 +474,130 @@ def parent_key(smiles: str) -> str | None:
         return None
 
 
+# ===================================================================== #
+# Conflicts between sources, and how each is resolved.                  #
+# ===================================================================== #
+# Sources disagree, and the first version of merge() resolved every
+# disagreement silently. One of those silences was dangerous.
+#
+# Rofecoxib: the Repurposing Hub called it launched and ChEMBL called it
+# withdrawn. Because a withdrawn row was FILTERED OUT before anything was
+# recorded from it, the withdrawal information went with it, and the drug
+# survived in the library through a source that did not know it had been
+# pulled - reading `launched`, `withdrawn=False`. That is Vioxx, removed
+# for cardiovascular deaths, presented as an approved option.
+#
+# So withdrawal is now collected from every row before any filtering, and
+# it propagates on contact: if ANY source says a molecule was withdrawn,
+# the merged molecule is withdrawn. That is deliberately not the rule used
+# for clinical phase, where the maximum wins. Phase is a claim about how
+# far something got and the best-informed source is usually right;
+# withdrawal is a safety signal and the cost of ignoring one is not
+# symmetric with the cost of carrying one too many.
+
+# How much a source's name is to be trusted, highest first. An INN is an
+# international non-proprietary name, which is what the report should
+# print; a brand name and a ZINC id are both worse, for different reasons.
+NAME_PREFERENCE = ("inn", "pert_iname", "drugname", "drug_name",
+                   "drug name", "pref_name", "name")
+
+
+def _name_rank(column: str | None) -> int:
+    col = (column or "").strip().lower()
+    return (NAME_PREFERENCE.index(col) if col in NAME_PREFERENCE
+            else len(NAME_PREFERENCE))
+
+
+def _looks_like_an_id(name: str) -> bool:
+    """ZINC ids, ChEMBL ids and the like are identifiers, not names."""
+    n = (name or "").strip()
+    if not n:
+        return True
+    upper = n.upper()
+    if upper.startswith(("ZINC", "CHEMBL", "DB0", "DB1", "CID")):
+        return True
+    # mostly digits is an accession rather than a drug
+    return sum(c.isdigit() for c in n) > len(n) * 0.5
+
+
+def resolve_name(candidates: list) -> tuple:
+    """(chosen name, conflict or None) from [(name, source, column)].
+
+    Prefers a real name over an identifier, then an INN over a brand name,
+    then lowercase over shouted. A disagreement between two genuine names
+    is reported rather than resolved away, because a brand name silently
+    replacing a generic one changes what the reader searches for.
+    """
+    real = [(n, s, c) for n, s, c in candidates if not _looks_like_an_id(n)]
+    pool = real or candidates
+    if not pool:
+        return None, None
+
+    def key(item):
+        n, _src, col = item
+        return (_name_rank(col), n.isupper(), len(n), n.lower())
+
+    pool = sorted(pool, key=key)
+    chosen = pool[0][0]
+
+    distinct = {n.strip().lower() for n, _, _ in real}
+    conflict = None
+    if len(distinct) > 1:
+        conflict = {
+            "kind": "name",
+            "chosen": chosen,
+            "alternatives": sorted(distinct - {chosen.strip().lower()}),
+            "by_source": {s: n for n, s, _ in real},
+            "resolution": ("kept the best-provenance name: an INN over a "
+                           "brand name over an identifier. The others are "
+                           "listed because a brand name replacing a "
+                           "generic one changes what you would search "
+                           "for"),
+        }
+    return chosen, conflict
+
+
+def _phase_conflict(entries: list) -> dict | None:
+    """entries: [(raw_phase, rank, source)]."""
+    ranks = {r for _, r, _ in entries}
+    if len(ranks) <= 1:
+        return None
+    best = max(entries, key=lambda e: e[1])
+    return {
+        "kind": "phase",
+        "chosen": best[0],
+        "by_source": {s: p for p, _, s in entries},
+        "resolution": ("took the highest phase any source claims. A source "
+                       "recording a lower phase is usually an older "
+                       "snapshot, but the one claiming approval is the one "
+                       "to check if this drug matters to you"),
+    }
+
+
+def _target_conflict(by_source: dict) -> dict | None:
+    """Disjoint target sets usually mean the sources are annotating
+    different things about the same molecule, not the same thing twice."""
+    sets = {s: set(t) for s, t in by_source.items() if t}
+    if len(sets) < 2:
+        return None
+    all_t = set().union(*sets.values())
+    common = set.intersection(*sets.values())
+    if common:
+        return None
+    return {
+        "kind": "targets",
+        "chosen": sorted(all_t),
+        "by_source": {s: sorted(t) for s, t in sets.items()},
+        "resolution": ("unioned, and flagged because the sources name NO "
+                       "target in common. That often means they are "
+                       "annotating different relationships - an efficacy "
+                       "target in one and an uptake transporter in the "
+                       "other, as with metformin's PRKAB1 against SLC22A1 "
+                       "- so treat a route through either as unconfirmed "
+                       "by the other source"),
+    }
+
+
 def merge(paths, *, min_phase: int = 4, include_withdrawn: bool = False,
           fallback_name_key: bool = True) -> dict:
     """Combine several drug tables into one deduplicated library.

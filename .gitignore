@@ -79,3 +79,8 @@ Thumbs.db
 /data/superdrug*
 /data/chembl_approved*
 /data/library.tsv
+
+/data/products.txt
+/data/Products.txt
+/data/EOBZIP.zip
+/data/orange_book_products.txt

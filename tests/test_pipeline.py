@@ -9011,3 +9011,146 @@ def test_source_status_reports_presence_without_guessing(tmp_path,
     after = {s["key"]: s["present"] for s in ld.source_status()}
     assert after["repurposing_hub"] is True
     assert after["drugcentral"] is False
+
+
+# ===================================================================== #
+# The FDA's 20,000 products, used for what they add.                    #
+# ===================================================================== #
+_OB_HEADER = ("Ingredient~DF;Route~Trade_Name~Applicant~Strength~Appl_Type~"
+              "Appl_No~Product_No~TE_Code~Approval_Date~RLD~RS~Type~"
+              "Applicant_Full_Name")
+_OB_ROWS = [
+    "METFORMIN HYDROCHLORIDE~TABLET;ORAL~GLUCOPHAGE~BRISTOL~500MG~N~020357"
+    "~001~~Mar 3, 1995~Yes~Yes~RX~BMS",
+    "METFORMIN HYDROCHLORIDE~TABLET;ORAL~GLUCOPHAGE~BRISTOL~850MG~N~020357"
+    "~002~~Mar 3, 1995~No~No~RX~BMS",
+    "METFORMIN HYDROCHLORIDE~TABLET, EXTENDED RELEASE;ORAL~GLUCOPHAGE XR~"
+    "BRISTOL~500MG~N~021202~001~~Oct 13, 2000~Yes~Yes~RX~BMS",
+    "METFORMIN HYDROCHLORIDE~TABLET;ORAL~METFORMIN HCL~TEVA~500MG~A~075300"
+    "~001~AB~Jan 1, 2002~No~No~RX~TEVA",
+    "TAZAROTENE~GEL;TOPICAL~TAZORAC~ALLERGAN~0.05%~N~020600~001~~"
+    "Jun 13, 1997~Yes~Yes~RX~ALLERGAN",
+    "TAZAROTENE~CREAM;TOPICAL~TAZORAC~ALLERGAN~0.1%~N~021184~002~~"
+    "Dec 28, 2000~Yes~Yes~RX~ALLERGAN",
+    "CALCITRIOL~INJECTABLE;INTRAVENOUS~CALCIJEX~ABBVIE~1MCG/ML~N~019846"
+    "~001~~Jul 2, 1987~Yes~Yes~RX~ABBVIE",
+    "CALCITRIOL~CAPSULE;ORAL~ROCALTROL~VALIDUS~0.25MCG~N~018044~001~~"
+    "Jul 29, 1981~Yes~Yes~RX~VALIDUS",
+    "AMLODIPINE BESYLATE; OLMESARTAN MEDOXOMIL~TABLET;ORAL~AZOR~DAIICHI~"
+    "5MG;20MG~N~021990~001~~Sep 25, 2007~Yes~Yes~RX~DAIICHI",
+]
+
+
+def _orange_book(tmp_path):
+    from promoter_tf_drugs import orangebook as ob
+    d = tmp_path / "data"
+    d.mkdir(exist_ok=True)
+    p = d / "products.txt"
+    p.write_text(_OB_HEADER + "\n" + "\n".join(_OB_ROWS) + "\n",
+                 encoding="utf-8")
+    ob._PRODUCTS.clear()
+    return p
+
+
+def test_twenty_thousand_products_are_not_twenty_thousand_molecules(
+        tmp_path, monkeypatch):
+    """The FDA's figure counts products: each strength, dosage form and
+    applicant separately. Metformin is four rows here and one molecule, so
+    the product list cannot enlarge a screening library."""
+    from promoter_tf_drugs import orangebook as ob
+    monkeypatch.chdir(tmp_path)
+    _orange_book(tmp_path)
+    assert ob.load() == 5
+    assert ob.product_count() == 10
+    assert ob.lookup("metformin")["n_products"] == 4
+
+
+def test_the_tilde_delimiter_is_handled(tmp_path, monkeypatch):
+    """The Orange Book is tilde-delimited, not tab. A tab reader returns
+    one enormous column and raises nothing."""
+    from promoter_tf_drugs import orangebook as ob
+    monkeypatch.chdir(tmp_path)
+    _orange_book(tmp_path)
+    assert ob.load() == 5
+
+
+def test_route_decides_whether_a_drug_can_reach_the_target(tmp_path,
+                                                           monkeypatch):
+    """The reason to load this at all. No structure source says a drug is
+    a gel, and a topical-only retinoid is not a route to a gene in the
+    liver however well it binds the receptor."""
+    from promoter_tf_drugs import orangebook as ob
+    monkeypatch.chdir(tmp_path)
+    _orange_book(tmp_path)
+    taz = ob.lookup("tazarotene")
+    assert taz["reach"] == "local only"
+    assert taz["routes"] == ["TOPICAL"]
+    assert "cannot reach a target outside the tissue" in taz["reach_note"]
+    assert ob.lookup("metformin")["reach"] == "systemic"
+    assert set(ob.lookup("calcitriol")["systemic_routes"]) == {
+        "INTRAVENOUS", "ORAL"}
+
+
+def test_the_salt_free_join_reaches_the_parent(tmp_path, monkeypatch):
+    """The Orange Book has no structures, so the only join is on the
+    ingredient name - and that name carries the salt."""
+    from promoter_tf_drugs import orangebook as ob
+    monkeypatch.chdir(tmp_path)
+    _orange_book(tmp_path)
+    assert ob.lookup("Metformin Hydrochloride") == ob.lookup("metformin")
+    assert ob.lookup("METFORMIN") is not None
+
+
+def test_generic_availability_comes_from_the_applicant_count(tmp_path,
+                                                             monkeypatch):
+    from promoter_tf_drugs import orangebook as ob
+    monkeypatch.chdir(tmp_path)
+    _orange_book(tmp_path)
+    assert ob.lookup("metformin")["generic_available"] is True
+    assert ob.lookup("tazarotene")["generic_available"] is False
+
+
+def test_a_combination_only_approval_is_not_evidence_for_one_agent(
+        tmp_path, monkeypatch):
+    """Olmesartan appears only inside a fixed-dose combination here, so
+    its approval says nothing about the agent on its own."""
+    from promoter_tf_drugs import orangebook as ob
+    monkeypatch.chdir(tmp_path)
+    _orange_book(tmp_path)
+    olm = ob.lookup("olmesartan medoxomil")
+    assert olm["combination_only"] is True
+    assert "not evidence about this agent on its own" in olm["notes"][0]
+    assert ob.lookup("metformin")["combination_only"] is False
+
+
+def test_an_unmatched_name_means_unknown_route_not_no_approval(
+        tmp_path, monkeypatch):
+    from promoter_tf_drugs import orangebook as ob
+    monkeypatch.chdir(tmp_path)
+    _orange_book(tmp_path)
+    assert ob.lookup("nosuchdrug") is None
+    acc = ob.enrich([{"name": "metformin"}, {"name": "nosuchdrug"}])
+    assert acc["matched"] == 1 and acc["n_unmatched"] == 1
+    assert "unknown route rather than no approval" in ob.summarise(acc)
+
+
+def test_no_orange_book_is_not_every_drug_being_systemic(tmp_path,
+                                                         monkeypatch):
+    from promoter_tf_drugs import orangebook as ob
+    monkeypatch.chdir(tmp_path)
+    ob._PRODUCTS.clear()
+    acc = ob.enrich([{"name": "metformin"}])
+    assert acc["available"] is False
+    assert "different from every row being systemic" in acc["note"]
+
+
+def test_enrich_attaches_the_reach_to_each_row(tmp_path, monkeypatch):
+    from promoter_tf_drugs import orangebook as ob
+    monkeypatch.chdir(tmp_path)
+    _orange_book(tmp_path)
+    lib = [{"name": "tazarotene"}, {"name": "metformin"}]
+    acc = ob.enrich(lib)
+    assert lib[0]["route_reach"] == "local only"
+    assert lib[1]["route_reach"] == "systemic"
+    assert acc["local_only"] == ["tazarotene"]
+    assert "1 is approved" in ob.summarise(acc)

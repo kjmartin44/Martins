@@ -473,6 +473,49 @@ charged guanidinium does not merge with neutral metformin, because a
 delocalised charge cannot be canonically neutralised. Databases normally
 write the neutral parent or a simple salt, so this is rare.
 
+### The FDA's 20,000 approved products
+
+The FDA states that "there are over 20,000 prescription drug products
+approved for marketing", and that is exact. The word carrying the weight is
+*products*. A product is one strength of one dosage form from one
+applicant, so metformin hydrochloride is several products before you leave
+the first manufacturer and several more for every generic house. Collapsed
+onto distinct active ingredients, about 20,000 becomes roughly 1,500 to
+2,000.
+
+So the product list cannot enlarge a screening library. Docking metformin
+500 mg and metformin 1 g returns the same number twice, and running all
+20,000 would be around thirteen times the compute for the same answers.
+
+It is still worth loading, for one thing no structure source has.
+
+```
+# EOBZIP.zip from fda.gov -> data/ (the zip is read directly, ~4 MB)
+python -m promoter_tf_drugs.localdrugs --merge data/repurposing_drugs.txt --out data/library.tsv
+```
+
+**Route of administration.** Nothing in ChEMBL, DrugCentral, the
+Repurposing Hub or ZINC records whether an approved drug is a tablet or a
+gel, and that decides whether a candidate can physically reach your target.
+A topical-only retinoid is not a route to a gene in the liver however well
+it binds the receptor. The package previously had this by hand for about
+seventy drugs; the Orange Book has it for every approved ingredient, from
+the agency that approved them.
+
+Three more things come with it: dosage form, which tells you whether an
+extended-release or depot formulation exists; the applicant count, which is
+how you know a generic is available and therefore whether a repurposing
+proposal is affordable; and per-product approval dates, which is what
+"FDA-approved" actually refers to and what ChEMBL's `max_phase` cannot
+distinguish from an approval granted elsewhere.
+
+Two limits. The Orange Book contains no structures at all, so it joins to
+the structure sources only on the ingredient name, through
+`congeners.salt_free_name` so that `METFORMIN HYDROCHLORIDE` reaches
+`metformin`; an unmatched name means unknown route, not absence of
+approval. And a drug listed only inside a fixed-dose combination is flagged,
+because that approval is not evidence about the single agent.
+
 ## Output files
 
 Every completed analysis writes six files:
