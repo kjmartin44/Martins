@@ -64,3 +64,11 @@ Thumbs.db
 /data/creeds_*.gmt
 /data/drugmatrix*.gmt
 /data/tggates_*.gmt
+
+/data/hgnc_complete_set.*
+/data/goa_human.*
+/data/gwas_catalog*.tsv
+/data/BindingDB_All.tsv*
+/data/bindingdb*.tsv
+/data/chembl*.db
+/data/repurposing_*.txt

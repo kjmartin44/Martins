@@ -164,7 +164,8 @@ def library(path=None, *, approved_only: bool = True) -> list:
     return read_table(p, approved_only=approved_only)
 
 
-def actives_for(symbol: str, rows: list) -> list:
+def actives_for(symbol: str, rows: list, *, uniprot: str | None = None,
+                with_potency: bool = True) -> list:
     """Known ligands of one target, from the table's own annotation.
 
     This is what replaces `agonism.fetch_actives` offline. It carries no
@@ -175,13 +176,30 @@ def actives_for(symbol: str, rows: list) -> list:
     want = (symbol or "").strip().upper()
     if not want:
         return []
+
+    # A local potency file, when there is one, answers this better: it
+    # carries measured affinity rather than only the fact of an
+    # interaction, so the potency axis has something to read.
+    if with_potency and uniprot:
+        try:
+            from . import localpotency as lpot
+            if any(lpot.available().values()):
+                measured = lpot.actives_for(uniprot)
+                if measured:
+                    log.info("local potency file: %d measured ligand(s) for "
+                             "%s (%s)", len(measured), want, uniprot)
+                    return measured
+        except Exception as exc:                            # noqa: BLE001
+            log.debug("local potency unavailable: %s", str(exc)[:80])
+
     out = []
     for r in rows:
         if want in (r.get("targets") or []):
             out.append({"chembl_id": r.get("chembl_id"),
                         "name": r.get("name"),
                         "smiles": r["smiles"], "pchembl": None})
-    log.info("local table: %d known ligand(s) for %s", len(out), want)
+    log.info("local table: %d known ligand(s) for %s, without potency",
+             len(out), want)
     return out
 
 

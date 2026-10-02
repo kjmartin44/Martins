@@ -8528,3 +8528,226 @@ def test_the_circuit_breaker_also_trips_on_http_500(monkeypatch):
     assert "break" in src[i500:i500 + 900]
     # and the breaker must be consulted before a request is made
     assert "if host in self._down" in inspect.getsource(ph.Client)
+
+
+# ===================================================================== #
+# MyGene, Open Targets and potency, from files.                         #
+# ===================================================================== #
+def _annot_files(tmp_path):
+    d = tmp_path / "data"
+    d.mkdir(exist_ok=True)
+    (d / "hgnc_complete_set.txt").write_text(
+        "symbol\tname\tuniprot_ids\tentrez_id\talias_symbol\tprev_symbol\n"
+        "VDR\tvitamin D receptor\tP11473\t7421\tNR1I1\t\n"
+        "REST\tRE1 silencing TF\tQ13127\t5978\tNRSF\tXBR\n",
+        encoding="utf-8")
+    (d / "goa_human.gaf").write_text(
+        "!gaf-version: 2.2\n"
+        "UniProtKB\tP11473\tVDR\t\tGO:0001228\tR\tIDA\t\tF\t\t\t\t\n"
+        "UniProtKB\tQ13127\tREST\t\tGO:0001227\tR\tIDA\t\tF\t\t\t\t\n"
+        "UniProtKB\tQ13127\tREST\tNOT\tGO:0001228\tR\tIDA\t\tF\t\t\t\t\n",
+        encoding="utf-8")
+    return d
+
+
+def _reset_annot():
+    from promoter_tf_drugs import localannot as la
+    la._HGNC.clear()
+    la._GOA.clear()
+    la._GWAS.clear()
+
+
+def test_role_comes_from_the_same_go_terms_online_and_offline():
+    """Two code paths deciding direction by different rules would be worse
+    than having only one, so the offline path imports the term sets rather
+    than restating them."""
+    import inspect
+    from promoter_tf_drugs import localannot as la, annotate as an
+    assert "from .annotate import" in inspect.getsource(la)
+    assert la.ACTIVATOR_GO is an.ACTIVATOR_GO
+    assert la.REPRESSOR_GO is an.REPRESSOR_GO
+
+
+def test_hgnc_and_goa_give_role_uniprot_and_the_nr_flag(tmp_path,
+                                                        monkeypatch):
+    from promoter_tf_drugs import localannot as la
+    monkeypatch.chdir(tmp_path)
+    _annot_files(tmp_path)
+    _reset_annot()
+    ann = la.annotate_local(["VDR", "REST"])
+    assert ann["VDR"]["role"] == "activator"
+    assert ann["VDR"]["uniprot"] == "P11473"
+    assert ann["VDR"]["nuclear_receptor"] is True
+    assert ann["REST"]["role"] == "repressor"
+
+
+def test_a_not_qualified_go_annotation_is_evidence_against(tmp_path,
+                                                           monkeypatch):
+    """GAF NOT means the term does not apply. Counting it would make REST
+    read as dual, an activator and a repressor, from a row saying the
+    opposite."""
+    from promoter_tf_drugs import localannot as la
+    monkeypatch.chdir(tmp_path)
+    _annot_files(tmp_path)
+    _reset_annot()
+    assert la.annotate_local(["REST"])["REST"]["role"] == "repressor"
+
+
+def test_an_alias_keeps_its_role(tmp_path, monkeypatch):
+    """GOA is keyed on the approved symbol, so an alias has to be followed
+    to it or it loses the role - and abundance.py skips any factor without
+    one."""
+    from promoter_tf_drugs import localannot as la
+    monkeypatch.chdir(tmp_path)
+    _annot_files(tmp_path)
+    _reset_annot()
+    ann = la.annotate_local(["NRSF", "XBR", "NR1I1"])
+    assert ann["NRSF"]["role"] == "repressor"
+    assert ann["XBR"]["role"] == "repressor"
+    assert ann["NR1I1"]["nuclear_receptor"] is True
+
+
+def test_an_unknown_symbol_is_blank_not_guessed(tmp_path, monkeypatch):
+    from promoter_tf_drugs import localannot as la
+    monkeypatch.chdir(tmp_path)
+    _annot_files(tmp_path)
+    _reset_annot()
+    ann = la.annotate_local(["NOSUCHGENE"])["NOSUCHGENE"]
+    assert ann["role"] == "unknown" and ann["uniprot"] is None
+    assert "unresolved rather than absent" in ann["note"]
+
+
+def test_annotate_tfs_tries_local_before_mygene():
+    import inspect
+    from promoter_tf_drugs import annotate as an
+    src = inspect.getsource(an.annotate_tfs)
+    assert src.index("localannot") < src.index("MYGENE"), (
+        "the network must be the fallback, not the first attempt")
+
+
+def test_gwas_is_labelled_as_weaker_than_an_l2g_score(tmp_path,
+                                                      monkeypatch):
+    """The catalogue names the gene mapped to a signal, which is not the
+    causal gene at that locus. Presenting it as Open Targets genetics
+    would overstate it."""
+    from promoter_tf_drugs import localannot as la
+    monkeypatch.chdir(tmp_path)
+    d = tmp_path / "data"
+    d.mkdir(exist_ok=True)
+    (d / "gwas_catalog_associations.tsv").write_text(
+        "MAPPED_GENE\tDISEASE/TRAIT\tP-VALUE\tPUBMEDID\n"
+        "VDR\tBone density\t1e-12\t111\n"
+        "VDR\tWeak signal\t1e-4\t112\n", encoding="utf-8")
+    _reset_annot()
+    g = la.genetic_support("VDR")
+    assert g["assessed"] is True
+    assert g["n"] == 2 and g["n_significant"] == 1
+    assert "Bone density" in g["traits"]
+    joined = " ".join(g["caveats"])
+    assert "not the same as the causal gene" in joined
+    assert "not Open Targets" in joined
+
+
+def test_no_gwas_file_is_not_absence_of_genetic_support(tmp_path,
+                                                        monkeypatch):
+    from promoter_tf_drugs import localannot as la
+    monkeypatch.chdir(tmp_path)
+    _reset_annot()
+    g = la.genetic_support("VDR")
+    assert g["assessed"] is False
+    assert "different from there being none" in g["note"]
+
+
+# ------------------------------------------------------------- potency
+def test_a_censored_potency_is_dropped_not_converted():
+    """A value of more than 10000 nM means the compound did nothing up to
+    10 uM. Recording it as pChEMBL 5 would turn a failed experiment into a
+    weak binding constant, and those rows are common enough to bias every
+    potency downward."""
+    from promoter_tf_drugs import localpotency as lp
+    assert lp.to_pchembl("1") == (9.0, False)
+    assert lp.to_pchembl("1000") == (6.0, False)
+    assert lp.to_pchembl(">10000")[1] is True
+    assert lp.to_pchembl("<0.5")[1] is True
+    assert lp.to_pchembl("") == (None, False)
+    assert lp.to_pchembl("0")[0] is None
+
+
+def _bindingdb(tmp_path, rows):
+    d = tmp_path / "data"
+    d.mkdir(exist_ok=True)
+    hdr = ["Ligand SMILES", "ChEMBL ID of Ligand", "Ki (nM)", "Kd (nM)",
+           "IC50 (nM)", "EC50 (nM)",
+           "UniProt (SwissProt) Primary ID of Target Chain"]
+    p = d / "BindingDB_All.tsv"
+    p.write_text("\t".join(hdr) + "\n"
+                 + "\n".join("\t".join(r) for r in rows) + "\n",
+                 encoding="utf-8")
+    return p
+
+
+def test_potency_comes_from_a_local_file(tmp_path, monkeypatch):
+    from promoter_tf_drugs import localpotency as lp
+    monkeypatch.chdir(tmp_path)
+    _bindingdb(tmp_path, [
+        ["CCO", "CHEMBL1", "1.0", "", "", "", "P11473"],
+        ["CCCO", "CHEMBL2", "", "", "50", "", "P11473"],
+        ["CCCCO", "CHEMBL3", ">10000", "", "", "", "P11473"],
+        ["CCN", "CHEMBL5", "5.0", "", "", "", "P99999"],
+    ])
+    got = lp.load_bindingdb(["P11473"])
+    assert {r["smiles"] for r in got["P11473"]} == {"CCO", "CCCO"}
+    assert "P99999" not in got
+
+
+def test_repeated_measurements_use_the_median_not_the_best(tmp_path,
+                                                           monkeypatch):
+    """Taking the best would favour compounds assayed many times, which is
+    study effort rather than potency - the confound the regulon axis
+    already corrects for."""
+    from promoter_tf_drugs import localpotency as lp
+    monkeypatch.chdir(tmp_path)
+    _bindingdb(tmp_path, [
+        ["CCO", "C1", "1.0", "", "", "", "P1"],
+        ["CCO", "C1", "100.0", "", "", "", "P1"],
+        ["CCO", "C1", "1000.0", "", "", "", "P1"],
+    ])
+    rec = lp.load_bindingdb(["P1"])["P1"][0]
+    assert rec["pchembl"] == 7.0, "median of 9.0, 7.0, 6.0"
+    assert rec["n_measurements"] == 3
+
+
+def test_equilibrium_constants_are_preferred_over_ic50(tmp_path,
+                                                       monkeypatch):
+    """Ki and Kd are equilibrium constants; IC50 depends on how the assay
+    was run."""
+    from promoter_tf_drugs import localpotency as lp
+    monkeypatch.chdir(tmp_path)
+    _bindingdb(tmp_path, [["CCO", "C1", "100.0", "", "1.0", "", "P1"]])
+    rec = lp.load_bindingdb(["P1"])["P1"][0]
+    assert rec["measure"] == "Ki" and rec["pchembl"] == 7.0
+
+
+def test_no_potency_file_leaves_potency_unmeasured(tmp_path, monkeypatch):
+    from promoter_tf_drugs import localpotency as lp
+    monkeypatch.chdir(tmp_path)
+    assert lp.load_bindingdb(["P1"]) == {}
+    assert lp.actives_for("P1") == []
+    msg = lp.summarise([])
+    assert "unranked rather than scored zero" in msg
+    assert "bindingdb.org" in msg
+
+
+def test_the_drug_table_prefers_measured_potency_when_a_file_exists(
+        tmp_path, monkeypatch):
+    """localdrugs said plainly it could not supply potency. With a potency
+    file on disk that should stop being the answer."""
+    from promoter_tf_drugs import localdrugs as ld
+    monkeypatch.chdir(tmp_path)
+    _bindingdb(tmp_path, [["CCO", "CHEMBL1", "1.0", "", "", "", "P11473"]])
+    rows = [{"name": "calcitriol", "smiles": "CCO", "targets": ["VDR"],
+             "chembl_id": None, "phase": "launched"}]
+    with_p = ld.actives_for("VDR", rows, uniprot="P11473")
+    assert with_p and with_p[0]["pchembl"] == 9.0
+    without = ld.actives_for("VDR", rows)
+    assert without and without[0]["pchembl"] is None

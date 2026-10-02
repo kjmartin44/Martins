@@ -143,6 +143,33 @@ def annotate_tfs(client: Client, symbols: list[str]) -> dict[str, TFAnnotation]:
     symbols = sorted({s.upper() for s in symbols if s})
     out = {s: _blank(s) for s in symbols}
 
+    # Local files first. On a network that blocks MyGene the role falls back
+    # to "unknown" for every factor, and the role is what decides which way
+    # a drug has to push - abundance.py skips any factor without one. HGNC
+    # and a GOA file answer the same question from disk, using the same GO
+    # term sets, so the two paths cannot disagree.
+    try:
+        from . import localannot as _la
+        if any(_la.available()[k] for k in ("hgnc", "goa")):
+            local = _la.annotate_local(symbols)
+            resolved = 0
+            for sym, ann in local.items():
+                if ann.get("role") != "unknown" or ann.get("uniprot"):
+                    out[sym] = ann
+                    resolved += 1
+            if resolved == len(symbols):
+                log.info("annotated %d factor(s) from local HGNC/GOA; "
+                         "MyGene not called", resolved)
+                return out
+            if resolved:
+                log.info("annotated %d of %d factor(s) locally; asking "
+                         "MyGene for the rest", resolved, len(symbols))
+                symbols = [s for s in symbols if s not in local
+                           or (local[s].get("role") == "unknown"
+                               and not local[s].get("uniprot"))]
+    except Exception as exc:                                # noqa: BLE001
+        log.debug("local annotation unavailable: %s", str(exc)[:80])
+
     for i in range(0, len(symbols), 100):
         chunk = symbols[i:i + 100]
         try:

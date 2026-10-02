@@ -359,6 +359,50 @@ scoring zero. The docking gate needs only the identity of the known binders,
 so docking is unaffected. It is also a snapshot: a drug approved after
 publication is absent, and absence is not evidence that nothing exists.
 
+### Gene annotation, genetics and potency, from files
+
+Three more web sources have local equivalents. All are optional, and each
+one present replaces a web call.
+
+| file | replaces | gives |
+| --- | --- | --- |
+| `data/hgnc_complete_set.txt` | MyGene | symbol, name, Entrez id, UniProt, aliases (~15 MB) |
+| `data/goa_human.gaf.gz` | MyGene GO | GO terms, and so the activator/repressor role (~10 MB) |
+| `data/gwas_catalog_associations.tsv` | Open Targets genetics | gene-trait associations (~100 MB) |
+| `data/BindingDB_All.tsv` | ChEMBL activities | measured Ki, Kd, IC50 per target (~1 GB) |
+| `data/chembl.db` | ChEMBL activities | the authoritative source, read with stdlib sqlite3 (tens of GB) |
+
+Sources: genenames.org/download/archive, current.geneontology.org/annotations,
+ebi.ac.uk/gwas/docs/file-downloads, bindingdb.org, and the ChEMBL FTP.
+
+The role matters more than it looks. It decides which direction a drug has
+to push, and `abundance.py` skips any factor whose role is unknown. Without
+GO on disk and with MyGene blocked, every factor falls back to unknown and
+that whole route goes quiet. The offline path imports the same GO term sets
+the online path uses, so the two cannot disagree about whether a factor is
+an activator, and a GAF `NOT` qualifier is read as evidence against the term
+rather than for it.
+
+Potency closes the gap `localdrugs` left open. A drug table records that a
+compound acts on a target, not how hard it binds, so without a potency file
+the `drug_scoring` potency axis had nothing to read. Two rules matter in how
+it is parsed. A censored value such as `>10000 nM` is **dropped, not
+converted**: it means the compound did nothing up to 10 micromolar, and
+recording it as pChEMBL 5 would turn a failed experiment into a weak binding
+constant. And where a pair has several measurements the median is taken
+rather than the best, because taking the best favours compounds that have
+been assayed often, which is study effort rather than potency.
+
+Ki and Kd are preferred over IC50 and EC50, being equilibrium constants
+rather than assay-dependent numbers. ChEMBL is preferred over BindingDB when
+both are present, since it is the source the online path uses.
+
+Genetic support from the GWAS Catalog is deliberately labelled as weaker
+than what it replaces. Open Targets reports an L2G score from fine-mapped
+loci; the catalogue reports the gene mapped or nearest to a signal, which is
+not the causal gene at that locus perhaps half the time. It is reported as a
+different kind of evidence rather than the same number.
+
 ## Output files
 
 Every completed analysis writes six files:
