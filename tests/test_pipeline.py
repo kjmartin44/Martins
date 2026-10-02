@@ -7324,15 +7324,19 @@ def test_a_validated_screen_returns_a_sorted_shortlist():
     assert "does not say whether the molecule activates or inhibits" in joined
 
 
-def test_missing_docking_binary_is_reported_not_raised():
+def test_missing_docking_binary_is_reported_not_raised(monkeypatch):
+    """Reported, never raised: a machine without the engine should lose
+    this section and nothing else. Forced, because the engine is now
+    installed here and the branch would not otherwise fire."""
     from promoter_tf_drugs import docking as dk
     import pathlib
+    monkeypatch.setattr(dk, "_docking_binary", lambda: None)
     act, dec = _dock_sets()
     run = dk.screen_by_docking(pathlib.Path("x.pdb"), [], target="T",
                                actives=act, decoys=dec)
-    if run.error:
-        assert "no docking binary" in run.error
-        assert "Nothing else in the run is affected" in run.error
+    assert run.error
+    assert "no docking binary" in run.error
+    assert "Nothing else in the run is affected" in run.error
 
 
 def test_consensus_needs_both_methods_to_agree():
@@ -7575,15 +7579,19 @@ def test_check_setup_names_what_is_missing(monkeypatch):
     assert chk["ok"] is False
     assert any("docking binary" in m for m in chk["missing"])
     assert "smina" in dk.SETUP
-    assert "wsl --install" in dk.SETUP
+    assert "conda install -c conda-forge smina" in dk.SETUP
 
 
 def test_setup_text_covers_windows():
-    """smina has no Windows build, and saying so beats letting someone
-    spend an afternoon looking for one."""
+    """conda-forge ships smina for win-64. An earlier version of this text
+    said there was no Windows build, which sent people to WSL for no
+    reason - so the correction is pinned rather than left to drift back."""
     from promoter_tf_drugs import docking as dk
     assert "Windows" in dk.SETUP
-    assert "no Windows build" in dk.SETUP
+    assert "conda install -c conda-forge smina" in dk.SETUP
+    assert "no Windows build" not in dk.SETUP
+    # and the measured cost of a screen is stated, since --cpu decides it
+    assert "--cpu" in dk.SETUP
 
 
 # ===================================================================== #

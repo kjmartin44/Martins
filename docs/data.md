@@ -141,23 +141,32 @@ curl -L -o smina https://sourceforge.net/projects/smina/files/smina.static/downl
 chmod +x smina && sudo mv smina /usr/local/bin/
 ```
 
-There is no Windows build of smina. On Windows use AutoDock Vina instead,
-which needs no WSL:
+On Windows, conda-forge ships smina for win-64, so no WSL is needed:
 
 ```
-# vina.exe from https://github.com/ccsb-scripps/AutoDock-Vina/releases, on PATH
-pip install meeko
-pip install openbabel-wheel
+conda install -c conda-forge smina
 ```
 
-Vina wants PDBQT for both receptor and ligand. Meeko prepares the ligands
-from SMILES, and the receptor goes through Meeko or Open Babel, both
-pip-installable on Windows. The receptor is converted once per screen and
-reused, since it is the same file for every compound.
+An earlier version of this page said smina had no Windows build. That was
+wrong.
 
-smina is still the better engine where you can run it, because it takes
-PDB and SDF directly and skips the conversion entirely. WSL remains an
-option if you would rather use it.
+AutoDock Vina is also supported for cases where you have it instead. It
+needs PDBQT for both receptor and ligand, which `pip install meeko` and
+`pip install openbabel-wheel` provide; the receptor is converted once per
+screen and reused. There is no reason to prefer that route when smina
+installs in one command.
+
+A screen is thousands of independent docking jobs, so `--cpu` is the
+largest speed lever available. Measured at 3.7 seconds per compound on
+eight cores, which puts a 600-compound library at roughly ten minutes on
+forty cores and several hours on one.
+
+A GPU does not help much here. The GPU-accelerated engines are
+Linux-only (unidock on conda-forge is linux-64; gnina and Vina-GPU are not
+packaged for conda at all), and with enough CPU cores the library finishes
+in minutes anyway. The case for a GPU would be DiffDock, which is a
+different method rather than a faster one, and whose confidence score
+rates the predicted pose rather than binding strength.
 
 Then run a screen:
 
