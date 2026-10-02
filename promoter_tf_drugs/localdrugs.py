@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import csv
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 
 from .congeners import salt_free_name
@@ -60,14 +61,132 @@ SOURCE = (
 )
 
 # Column names these tables actually use, in the order to try them.
-_NAME_COLS = ("pert_iname", "name", "drug", "drug_name", "compound",
-              "preferred_name", "title")
-_SMILES_COLS = ("smiles", "canonical_smiles", "SMILES", "structure")
-_TARGET_COLS = ("target", "targets", "gene", "gene_symbol", "target_symbol")
-_PHASE_COLS = ("clinical_phase", "phase", "max_phase", "max_clinical_phase")
+# Read off the real files rather than guessed. Getting these wrong does
+# not raise: the name silently falls back to the SMILES string, which is
+# what the report then prints and what the dedup fallback keys on.
+_NAME_COLS = (
+    "pert_iname",            # Broad Repurposing Hub
+    "inn",                   # DrugCentral (structures.smiles)
+    "drugname", "drug_name", "drug name",   # TTD, SuperDRUG2
+    "name", "drug", "compound", "preferred_name", "title",
+    "generic_name", "common_name", "ingredient", "active_ingredient",
+    "molecule_name", "pref_name",           # ChEMBL exports
+)
+_SMILES_COLS = (
+    "smiles", "canonical_smiles", "SMILES", "structure",
+    "canonical smiles", "isomeric_smiles", "openbabel_smiles",
+)
+_TARGET_COLS = ("target", "targets", "gene", "gene_symbol", "target_symbol",
+                "gene_name", "uniprot", "accession")
+_PHASE_COLS = ("clinical_phase", "phase", "max_phase", "max_clinical_phase",
+               "highest_clinical_phase", "status", "development_status")
 
 # Values in a clinical-phase column that mean "in people, approved".
 _APPROVED = {"launched", "approved", "4", "4.0", "phase 4", "phase_4"}
+
+
+# ===================================================================== #
+# Where else approved molecules come from.                              #
+# ===================================================================== #
+# No single source has all of them, and they disagree in useful ways: one
+# carries target annotations, another carries approval dates per agency,
+# another is already curated for docking. Merging on the parent structure
+# is what makes using several of them safe.
+#
+# The counts are distinct molecules, not products, and they overlap
+# heavily. Adding a second source typically contributes a few hundred new
+# moieties rather than doubling anything - `merge` reports exactly how
+# many, per source, so the decision is not guesswork.
+
+@dataclass(frozen=True)
+class DrugSource:
+    key: str
+    name: str
+    approx_molecules: int
+    url: str
+    filename: str
+    gives: str
+    caveat: str
+
+
+SOURCES: tuple = (
+    DrugSource(
+        "repurposing_hub", "Broad Drug Repurposing Hub", 6800,
+        "https://repurposing.broadinstitute.org/download",
+        "data/repurposing_drugs.txt",
+        "SMILES, clinical phase, mechanism of action, target gene symbols",
+        "the only one here that gives target symbols AND phase in one "
+        "file, which is why it is the default; about 2,400 of its entries "
+        "are launched and the rest are earlier phases"),
+    DrugSource(
+        "drugcentral", "DrugCentral", 4900,
+        "https://drugcentral.org/download",
+        "data/drugcentral.smiles",
+        "SMILES, INN, targets, indications, and approval dates per agency",
+        "the best metadata of any free source, and the only one that says "
+        "WHICH agency approved a drug - so it can separate FDA-approved "
+        "from approved-elsewhere, which ChEMBL's max_phase cannot"),
+    DrugSource(
+        "chembl_approved", "ChEMBL, max_phase 4", 4000,
+        "https://ftp.ebi.ac.uk/pub/databases/chembl/ChEMBLdb/latest/",
+        "data/chembl_approved.tsv",
+        "SMILES and clinical phase for drugs approved anywhere",
+        "counts salts as separate molecules and includes drugs never "
+        "approved in the US; the merge collapses the salts, and "
+        "DrugCentral is what distinguishes the agencies"),
+    DrugSource(
+        "zinc_fda", "ZINC curated FDA subset", 1600,
+        "https://zinc.docking.org/substances/subsets/fda/",
+        "data/zinc_fda.smi",
+        "SMILES only, already curated to the approved set",
+        "no names, no targets, no phase - just structures, identified by "
+        "ZINC id. Worth having because the subset exists to be docked, so "
+        "its curation is doing the work the metadata would"),
+    DrugSource(
+        "ttd", "Therapeutic Target Database", 2800,
+        "https://db.idrblab.net/ttd/full-data-download",
+        "data/ttd_drugs.txt",
+        "SMILES, drug names, and the targets each drug acts on",
+        "target coverage is good and the clinical status vocabulary is its "
+        "own, so phases may not map onto the standard values"),
+)
+
+BY_KEY = {s.key: s for s in SOURCES}
+
+
+def source_status() -> list:
+    """Which of the known sources are on disk."""
+    return [{"key": s.key, "name": s.name, "file": s.filename,
+             "present": Path(s.filename).exists(),
+             "approx_molecules": s.approx_molecules}
+            for s in SOURCES]
+
+
+def describe_sources() -> str:
+    """What to download, and what each one adds that the others do not."""
+    L = ["Approved-drug sources this package can merge", ""]
+    for s in SOURCES:
+        mark = "PRESENT" if Path(s.filename).exists() else "missing"
+        L.append(f"  [{mark:7s}] {s.name}  (~{s.approx_molecules:,} "
+                 f"molecules)")
+        L.append(f"              {s.url}")
+        L.append(f"              -> {s.filename}")
+        L.append(f"              gives: {s.gives}")
+        L.append(f"              note:  {s.caveat}")
+        L.append("")
+    L.append("They overlap heavily, so a second source usually adds a few "
+             "hundred new moieties rather than doubling the library. Merge "
+             "them and the per-source accounting says how many:")
+    L.append("")
+    L.append("  python -m promoter_tf_drugs.localdrugs --merge "
+             + " ".join(s.filename for s in SOURCES[:3])
+             + " --out data/library.tsv")
+    L.append("")
+    L.append("If you only take two: the Repurposing Hub for target "
+             "annotations and phase, and DrugCentral for per-agency "
+             "approval - which is the only way to say FDA-approved rather "
+             "than approved somewhere.")
+    return "\n".join(L)
 
 
 def _sniff(path: Path) -> str:
@@ -94,6 +213,62 @@ def resolve(explicit=None, candidates=DEFAULT_LIBRARY_PATHS) -> str | None:
     return None
 
 
+# Extensions that mean "no header, SMILES first, optional id second".
+_SMI_SUFFIXES = (".smi", ".ism", ".can")
+
+
+def _looks_headerless(path: Path, delim: str) -> bool:
+    """True when the first line is data rather than column names.
+
+    ZINC's curated subsets, and most .smi files, have no header at all:
+    the first line is already a molecule. Passing that to DictReader
+    consumes a real compound as the header and then fails to find a SMILES
+    column, which is how `zinc_fda.smi` was rejected outright.
+    """
+    if path.suffix.lower() in _SMI_SUFFIXES:
+        return True
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+        first = fh.readline().strip()
+    if not first:
+        return False
+    fields = [f for f in first.replace(delim, " ").split() if f]
+    if not fields:
+        return False
+    known = set(_NAME_COLS) | {c.lower() for c in _SMILES_COLS}
+    if any(f.lower() in known for f in fields):
+        return False
+    # A header field is a word; a SMILES is not. Ring-closure digits and
+    # bond characters are the giveaway.
+    return any(ch in fields[0] for ch in "()=#[]@") or fields[0].isupper()
+
+
+def read_smiles_file(path, *, approved_only: bool = True) -> list:
+    """A headerless SMILES file: structure first, optional identifier next.
+
+    This is what ZINC's `fda` and `world` subsets ship as, and they are
+    worth supporting for a reason beyond format: that subset exists to be
+    docked, so it is already curated to the approved set.
+    """
+    path = Path(path)
+    out: list = []
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            fields = line.split()
+            if not fields:
+                continue
+            smi = fields[0]
+            if smi.lower() in {"smiles", "structure"}:
+                continue            # a one-word header, if there is one
+            name = fields[1] if len(fields) > 1 else smi[:24]
+            out.append({"name": name, "smiles": smi, "targets": [],
+                        # No phase column exists, so the file's own
+                        # curation is the only claim about approval - which
+                        # is why the subset matters more than the format.
+                        "phase": None, "chembl_id": None})
+    log.info("SMILES file %s: %d structure(s)", path.name, len(out))
+    return out
+
+
 def read_table(path, *, approved_only: bool = True) -> list:
     """`[{name, smiles, targets, phase}]` from a local drug table.
 
@@ -106,6 +281,9 @@ def read_table(path, *, approved_only: bool = True) -> list:
         raise FileNotFoundError(f"{path} not found. {SOURCE}")
 
     delim = _sniff(path)
+    if _looks_headerless(path, delim):
+        return read_smiles_file(path, approved_only=approved_only)
+
     out: list = []
     n_rows = n_no_smiles = n_filtered = 0
 
@@ -458,6 +636,10 @@ def main(argv=None) -> int:
                     "deduplicated library.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=SOURCE)
+    p.add_argument("--sources", action="store_true",
+                   help="list the approved-drug sources this can merge, "
+                        "which are present, and what each adds that the "
+                        "others do not")
     p.add_argument("--merge", nargs="+", metavar="FILE",
                    help="tables to combine. Salt, hydrate and duplicate "
                         "forms collapse onto the parent structure")
@@ -483,6 +665,10 @@ def main(argv=None) -> int:
     logging.basicConfig(
         level=logging.INFO if args.verbose else logging.WARNING,
         format="%(levelname)s %(name)s: %(message)s")
+
+    if args.sources:
+        print(describe_sources())
+        return 0
 
     if not args.merge:
         found = resolve()

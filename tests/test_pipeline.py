@@ -8892,3 +8892,122 @@ def test_a_source_that_fails_to_parse_is_reported_not_silent(tmp_path):
     assert res["n_distinct"] == 1
     assert "error" in res["per_source"]["bad.txt"]
     assert "SMILES" in res["per_source"]["bad.txt"]["error"]
+
+
+# ===================================================================== #
+# More approved-drug sources, each shipping a different format.         #
+# ===================================================================== #
+_SOURCE_SAMPLES = {
+    # DrugCentral structures.smiles: SMILES first, name under INN
+    "drugcentral.smiles":
+        "SMILES\tInChIKey\tID\tINN\n"
+        "CN(C)C(=N)N=C(N)N\tXZW\t1\tmetformin\n",
+    # ZINC curated subset: headerless, space separated
+    "zinc_fda.smi":
+        "CN(C)C(=N)N=C(N)N ZINC000000012345\n"
+        "CC(=O)Oc1ccccc1C(=O)O ZINC000000053\n",
+    # TTD
+    "ttd_drugs.txt":
+        "DRUG__ID\tDRUGNAME\tCANONICAL_SMILES\n"
+        "D001\tmetformin\tCN(C)C(=N)N=C(N)N\n",
+    # SuperDRUG2: comma separated, space in the column name
+    "superdrug.csv":
+        "Drug Name,SMILES,ATC\nMetformin,CN(C)C(=N)N=C(N)N,A10BA02\n",
+    # the Hub, which already worked
+    "repurposing_drugs.txt":
+        "pert_iname\tclinical_phase\ttarget\tsmiles\n"
+        "metformin\tlaunched\tPRKAB1\tCN(C)C(=N)N=C(N)N\n",
+}
+
+
+def _write_sources(tmp_path):
+    out = []
+    for name, text in _SOURCE_SAMPLES.items():
+        p = tmp_path / name
+        p.write_text(text, encoding="utf-8")
+        out.append(p)
+    return out
+
+
+def test_every_source_format_parses_with_the_right_name(tmp_path):
+    """Getting a name column wrong does not raise - the name silently
+    falls back to the SMILES string, which is then what the report prints
+    and what the dedup fallback keys on. All four of these did that."""
+    from promoter_tf_drugs import localdrugs as ld
+    for p in _write_sources(tmp_path):
+        rows = ld.read_table(p, approved_only=False)
+        assert rows, p.name
+        name = rows[0]["name"]
+        assert not name.startswith("CN(C)"), (
+            f"{p.name}: the name fell back to the SMILES string")
+        assert name.lower() in ("metformin", "zinc000000012345")
+
+
+def test_a_headerless_smiles_file_is_read_not_rejected(tmp_path):
+    """ZINC's curated subsets have no header: the first line is already a
+    molecule, so DictReader ate a real compound as the header and then
+    reported no SMILES column."""
+    from promoter_tf_drugs import localdrugs as ld
+    p = tmp_path / "zinc_fda.smi"
+    p.write_text(_SOURCE_SAMPLES["zinc_fda.smi"], encoding="utf-8")
+    rows = ld.read_table(p, approved_only=False)
+    assert len(rows) == 2, "no line may be consumed as a header"
+    assert rows[0]["smiles"] == "CN(C)C(=N)N=C(N)N"
+    assert rows[0]["name"] == "ZINC000000012345"
+
+
+def test_a_header_is_still_detected_when_one_exists(tmp_path):
+    """The headerless check must not misfire on a real table, or a column
+    row becomes a compound."""
+    from promoter_tf_drugs import localdrugs as ld
+    p = tmp_path / "withheader.tsv"
+    p.write_text("name\tsmiles\nmetformin\tCN(C)C(=N)N=C(N)N\n",
+                 encoding="utf-8")
+    rows = ld.read_table(p, approved_only=False)
+    assert len(rows) == 1 and rows[0]["name"] == "metformin"
+
+
+def test_one_molecule_merges_across_five_differently_shaped_sources(
+        tmp_path):
+    """The point of keying on structure: the ZINC row identifies metformin
+    only by a ZINC id, so no name-based merge could join it to the rest."""
+    from promoter_tf_drugs import localdrugs as ld
+    res = ld.merge(_write_sources(tmp_path), min_phase=0)
+    by_name = {r["name"]: r for r in res["library"]}
+    met = next(r for r in res["library"]
+               if r["name"].lower() == "metformin")
+    assert len(met["sources"]) == 5
+    assert res["n_salt_forms_collapsed"] == 4
+    # aspirin is only in the ZINC file and stays its own molecule
+    assert res["n_distinct"] == 2
+
+
+def test_the_source_registry_says_what_each_one_adds():
+    """They overlap heavily, so the useful question is not how many
+    molecules a source has but what it has that the others do not."""
+    from promoter_tf_drugs import localdrugs as ld
+    keys = {s.key for s in ld.SOURCES}
+    assert {"repurposing_hub", "drugcentral", "chembl_approved",
+            "zinc_fda"} <= keys
+    text = ld.describe_sources()
+    # the one thing only DrugCentral can do
+    assert "WHICH agency approved" in text
+    # and the honest expectation about adding a second source
+    assert "few hundred new moieties rather than doubling" in text
+    for s in ld.SOURCES:
+        assert s.url.startswith("https://")
+        assert s.caveat and len(s.caveat) > 30
+
+
+def test_source_status_reports_presence_without_guessing(tmp_path,
+                                                         monkeypatch):
+    from promoter_tf_drugs import localdrugs as ld
+    monkeypatch.chdir(tmp_path)
+    before = {s["key"]: s["present"] for s in ld.source_status()}
+    assert not any(before.values())
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "repurposing_drugs.txt").write_text(
+        _SOURCE_SAMPLES["repurposing_drugs.txt"], encoding="utf-8")
+    after = {s["key"]: s["present"] for s in ld.source_status()}
+    assert after["repurposing_hub"] is True
+    assert after["drugcentral"] is False

@@ -418,8 +418,30 @@ than a fraction of them. Making it genuinely larger means widening the
 definition on purpose, not hunting for missing approvals.
 
 ```
-python -m promoter_tf_drugs.localdrugs --merge data/repurposing_drugs.txt data/chembl_approved.tsv --out data/library.tsv
+python -m promoter_tf_drugs.localdrugs --sources          # what to download
+python -m promoter_tf_drugs.localdrugs --merge data/repurposing_drugs.txt data/drugcentral.smiles data/chembl_approved.tsv --out data/library.tsv
 ```
+
+| source | molecules | gives | what only it gives |
+| --- | --- | --- | --- |
+| Broad Repurposing Hub | ~6,800 | SMILES, phase, mechanism, target symbols | targets and phase in one file |
+| DrugCentral | ~4,900 | SMILES, INN, targets, indications, approval dates | **which agency** approved it |
+| ChEMBL `max_phase 4` | ~4,000 | SMILES, phase | breadth, including non-US approvals |
+| ZINC curated FDA subset | ~1,600 | SMILES only | curation aimed at docking |
+| Therapeutic Target Database | ~2,800 | SMILES, names, targets | a second target annotation |
+
+They overlap heavily, so a second source usually adds a few hundred new
+moieties rather than doubling anything. If you take two, take the
+Repurposing Hub for targets and phase, and DrugCentral for per-agency
+approval - it is the only free source that can say *FDA*-approved rather
+than approved somewhere, which ChEMBL's `max_phase` cannot.
+
+Each ships a different shape and all are read: ZINC's subsets are
+headerless `.smi` files where the first line is already a molecule, and
+DrugCentral, TTD and SuperDRUG2 name their columns `INN`, `DRUGNAME` and
+`Drug Name` respectively. A name column that is not recognised does not
+raise - the name silently becomes the SMILES string - so the aliases are
+taken from the real files and pinned by a test.
 
 The merge reports what each source contributed, how many rows were salt or
 duplicate forms of a molecule already present, and how many fell below the

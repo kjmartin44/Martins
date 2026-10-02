@@ -72,3 +72,10 @@ Thumbs.db
 /data/bindingdb*.tsv
 /data/chembl*.db
 /data/repurposing_*.txt
+
+/data/drugcentral*
+/data/zinc_*.smi
+/data/ttd_*.txt
+/data/superdrug*
+/data/chembl_approved*
+/data/library.tsv
