@@ -3501,28 +3501,106 @@ def unmapped_sources(result: dict) -> set:
     return seen
 
 
-def _expected_change(routes: list, goal: str) -> tuple:
-    """(direction, basis) for what should happen to the target gene.
+def _expected_change(routes: list, goal: str, outcomes: dict,
+                     measured: dict) -> dict:
+    """What should happen to the target gene, with every number it has.
 
-    Deliberately a direction and not a magnitude. Nothing in this package
-    estimates a fold-change, and inventing one is the single most
-    misleading thing this column could do - so it reports which way, how
-    that was arrived at, and nothing more.
+    Three quantities are available and they answer different questions.
+
+    `p_move` is the probability the gene moves at all, from outcome.py's
+    four-step chain, with the interval it carries. It is a real computed
+    number. It is also nearly constant across candidates, because two of
+    the four steps are fixed - direction defaults to 0.75 without
+    --predict-direction and responsiveness is pinned at 0.40 since nothing
+    here can measure it - so it conveys how uncertain this CLASS of route
+    is, not which candidate is better.
+
+    `effect` is a measured signed effect size on your gene, present only
+    where a corpus supplied one. A set-membership hit from a .gmt carries
+    no magnitude at all and is reported as such rather than as its nominal
+    placeholder score.
+
+    What is deliberately absent is a predicted fold-change. Deriving one
+    would need the share of the gene's transcription driven by that factor,
+    the factor's occupancy change at the achieved dose, and the dose
+    reached in your tissue. None of the three is available, so a number
+    would be fabricated.
     """
-    measured = [r for r in routes
-                if r.get("source") == "signatures"]
-    if measured:
-        return (("increase" if goal == "up" else "decrease"),
-                "MEASURED: this compound moved your gene in a cell-based "
-                "assay, in the direction you want")
-    direct = [r for r in routes if r.get("source") == "direct"]
-    if direct:
-        return (("increase" if goal == "up" else "decrease"),
-                "established therapy acting on the gene or its product")
-    return (("increase" if goal == "up" else "decrease"),
-            "PREDICTED from the factor's role and the drug's action; "
-            "no measurement of your gene supports it")
+    want = "increase" if goal == "up" else "decrease"
+    drug = (routes[0].get("drug") or "").strip().lower()
 
+    out = {"direction": want, "p_move": None, "p_low": None, "p_high": None,
+           "effect": None, "effect_basis": None, "chain": None}
+
+    o = outcomes.get(drug)
+    if o:
+        out["p_move"] = o.get("p_point")
+        out["p_low"] = o.get("p_low")
+        out["p_high"] = o.get("p_high")
+        out["limiting_step"] = o.get("limiting_step")
+        out["chain"] = {
+            "engages the target": o.get("p_engages"),
+            "right direction": o.get("p_direction"),
+            "acts on the promoter": o.get("p_activates"),
+            "gene is responsive": o.get("p_responsive"),
+        }
+
+    m = measured.get(drug)
+    if m is not None:
+        out["effect"] = m["score"]
+        out["effect_basis"] = m["basis"]
+
+    if m is not None:
+        out["basis"] = ("MEASURED: this compound moved your gene in a "
+                        "cell-based assay, in the direction you want")
+    elif any(r.get("source") == "signatures" for r in routes):
+        out["basis"] = ("MEASURED: this compound moved your gene in a "
+                        "cell-based assay, in the direction you want")
+    elif any(r.get("source") == "direct" for r in routes):
+        out["basis"] = ("established therapy acting on the gene or its "
+                        "product")
+    else:
+        out["basis"] = ("PREDICTED from the factor's role and the drug's "
+                        "action; no measurement of your gene supports it")
+    return out
+
+
+def _measured_effects(result: dict) -> dict:
+    """{drug: signed effect on the gene} from whatever corpus supplied one.
+
+    A `.gmt` hit is set membership and carries no magnitude - its score is
+    a nominal placeholder - so it is reported as a direction without a
+    number rather than as that placeholder.
+    """
+    from . import signatures as sig
+    from .congeners import salt_free_name
+
+    out: dict = {}
+    for res in result.get("results", []):
+        for h in ((res.get("lincs") or {}).get("hits") or []):
+            name = salt_free_name((h.get("drug") or "").strip().lower())
+            if not name:
+                continue
+            score = h.get("score")
+            if score is None:
+                continue
+            nominal = abs(float(score)) == sig.GMT_SET_SCORE
+            if nominal:
+                out.setdefault(name, {
+                    "score": None,
+                    "basis": ("set membership in a consensus signature: the "
+                              "compound moved this gene, with no magnitude "
+                              "attached")})
+            else:
+                prev = out.get(name)
+                if prev is None or prev["score"] is None or \
+                        abs(score) > abs(prev["score"]):
+                    out[name] = {
+                        "score": round(float(score), 2),
+                        "basis": ("measured signed effect on this gene in a "
+                                  "perturbation corpus (z-like, not a "
+                                  "fold-change)")}
+    return out
 
 def corroboration(result: dict, top_n: int = 20) -> list:
     """One row per drug across the top routes, with the methods that found it."""
@@ -3531,10 +3609,30 @@ def corroboration(result: dict, top_n: int = 20) -> list:
 
     goal = result["query"].get("goal", "up")
     routes = []
+    outcomes: dict = {}
     for res in result["results"]:
         routes.extend((res.get("all_routes") or {}).get("routes") or [])
+        for o in (res.get("outcome_estimates") or []):
+            key = (o.get("drug") or "").strip().lower()
+            # Keep the most favourable route's estimate for a drug reached
+            # more than one way; the row reports the best available path.
+            if key and (key not in outcomes
+                        or (o.get("p_point") or 0)
+                        > (outcomes[key].get("p_point") or 0)):
+                outcomes[key] = o
     if not routes:
         return []
+    measured = _measured_effects(result)
+
+    # Properties for the BBB call, keyed salt-free so a salt form in the
+    # route table finds the parent's structure.
+    props: dict = {}
+    for res in result["results"]:
+        for gr in (res.get("drug_grades") or []):
+            key = salt_free_name((gr.get("drug_name") or "").lower())
+            pr = (gr.get("evidence") or {}).get("properties")
+            if key and pr and key not in props:
+                props[key] = pr
 
     # Rank by tier then score, and take the top routes to summarise.
     routes.sort(key=lambda r: (r.get("tier", 9), -(r.get("score") or 0)))
@@ -3568,7 +3666,9 @@ def corroboration(result: dict, top_n: int = 20) -> list:
         desc = ind_mod.describe(
             g["drug"], mechanism=(best.get("mechanism") or "").strip() or None)
         cls = sys_mod.classify(g["drug"])
-        direction, basis = _expected_change(rs, goal)
+        bbb = dlv_mod.bbb_verdict(g["drug"], props.get(
+            salt_free_name((g["drug"] or "").lower())))
+        exp = _expected_change(rs, goal, outcomes, measured)
 
         out.append({
             "drug": g["drug"],
@@ -3585,8 +3685,17 @@ def corroboration(result: dict, top_n: int = 20) -> list:
             "treats": desc["treats"],
             "systems": (cls.name if cls else None),
             "systems_why": (cls.why if cls else None),
-            "expected_change": direction,
-            "expected_basis": basis,
+            "bbb": bbb["cell"],
+            "bbb_why": bbb["why"],
+            "expected_change": exp["direction"],
+            "expected_basis": exp["basis"],
+            "p_move": exp["p_move"],
+            "p_low": exp["p_low"],
+            "p_high": exp["p_high"],
+            "effect_size": exp["effect"],
+            "effect_basis": exp["effect_basis"],
+            "chain": exp.get("chain"),
+            "limiting_step": exp.get("limiting_step"),
             "n_routes": len(rs),
         })
 
@@ -3608,21 +3717,91 @@ def corroboration_table(result: dict, top_n: int = 20) -> list:
              "supports.")
     L.append("")
     L.append(f"| Drug | Methods | Tier | Acts on | What it is | Systems it "
-             f"acts on | Expected {gene} change |")
-    L.append("|---|---|---|---|---|---|---|")
+             f"acts on | BBB? | {gene} change | P(moves) | "
+             f"Measured effect |")
+    L.append("|---|---|---|---|---|---|---|---|---|---|")
+    any_p, any_effect = False, False
     for r in rows:
         sys_cell = r["systems"] or "no systemic class flagged"
         what = r["what_it_is"] or r["mechanism"] or "\u2014"
-        change = r["expected_change"]
         tag = ("measured" if "MEASURED" in r["expected_basis"]
                else "established" if "established" in r["expected_basis"]
                else "predicted")
+
+        p = r.get("p_move")
+        if p is None:
+            p_cell = "not estimated"
+        else:
+            any_p = True
+            lo, hi = r.get("p_low"), r.get("p_high")
+            p_cell = (f"{p:.2f} [{lo:.2f}\u2013{hi:.2f}]"
+                      if lo is not None and hi is not None else f"{p:.2f}")
+
+        eff = r.get("effect_size")
+        if eff is not None:
+            any_effect = True
+            eff_cell = f"{eff:+.2f}"
+        elif r.get("effect_basis"):
+            eff_cell = "direction only"
+        else:
+            eff_cell = "\u2014"
+
         L.append(f"| **{r['drug']}** | {r['n_methods']} | "
                  f"{r['best_tier']} | "
                  f"{', '.join(r['acts_on']) or '\u2014'} | "
-                 f"{_clip(what, 40)} | {_clip(sys_cell, 34)} | "
-                 f"{change} ({tag}) |")
+                 f"{_clip(what, 34)} | {_clip(sys_cell, 28)} | "
+                 f"{r.get('bbb') or '—'} | "
+                 f"{r['expected_change']} ({tag}) | {p_cell} | "
+                 f"{eff_cell} |")
     L.append("")
+
+    # What the two numeric columns are, and what neither of them is.
+    L.append(f"**There is no predicted fold-change here, and that is not an "
+             f"omission.** Deriving one would need the share of {gene}'s "
+             f"transcription driven by that factor, the factor's occupancy "
+             f"change at the dose achieved, and the dose reached in your "
+             f"tissue. None of the three is available to this package, so "
+             f"any number in a fold-change column would be fabricated. The "
+             f"two numbers below are the ones it can actually compute.")
+    L.append("")
+    if any_p:
+        lo_p = min(r["p_move"] for r in rows if r.get("p_move") is not None)
+        hi_p = max(r["p_move"] for r in rows if r.get("p_move") is not None)
+        L.append(f"**P(moves)** is the probability {gene} moves at all, "
+                 f"with its interval - the product of four steps: the drug "
+                 f"engaging the target, acting in the right direction, "
+                 f"acting through the promoter, and the gene being "
+                 f"responsive in your cells.")
+        L.append("")
+        L.append(f"Read it as a magnitude of uncertainty, **not as a "
+                 f"ranking**. Every value here sits between {lo_p:.2f} and "
+                 f"{hi_p:.2f}, and that narrow band is not a coincidence: "
+                 f"two of the four steps are the same constant for every "
+                 f"row. Direction defaults to 0.75 without "
+                 f"`--predict-direction`, and responsiveness is pinned at "
+                 f"0.40 because nothing in this package can measure it. So "
+                 f"the number tells you how uncertain this CLASS of route "
+                 f"is; order on tier and method count instead.")
+        L.append("")
+        limits = {}
+        for r in rows:
+            st = r.get("limiting_step")
+            if st:
+                limits[st] = limits.get(st, 0) + 1
+        if limits:
+            top = max(limits.items(), key=lambda kv: kv[1])
+            L.append(f"For {top[1]} of {len(rows)} rows the limiting step is "
+                     f"the same: **{top[0]}**. That is where the probability "
+                     f"is lost, and the experiment that raises it is the one "
+                     f"worth doing first.")
+            L.append("")
+    if any_effect:
+        L.append("**Measured effect** is a signed effect size on your gene "
+                 "from a perturbation corpus, z-like rather than a "
+                 "fold-change. `direction only` means the corpus recorded "
+                 "that the compound moved the gene without a magnitude, "
+                 "which is what a consensus gene-set membership carries.")
+        L.append("")
 
     multi = [r for r in rows if r["n_methods"] > 1]
     if multi:
@@ -3650,13 +3829,18 @@ def corroboration_table(result: dict, top_n: int = 20) -> list:
              "one measured result. Tier still decides the order and the "
              "count breaks ties within a tier.")
     L.append("")
-    L.append(f"**Expected {gene} change is a DIRECTION, never a magnitude.** "
-             f"Nothing in this package estimates a fold-change, and a number "
-             f"here would be invented. `measured` means a compound moved "
-             f"{gene} in a cell-based assay; `established` means it is an "
-             f"approved therapy acting on the gene or its product; "
-             f"`predicted` means it follows from the factor's role and the "
-             f"drug's action, with no measurement of {gene} behind it.")
+    bbb_counts: dict = {}
+    for r in rows:
+        c = r.get("bbb") or "—"
+        bbb_counts[c] = bbb_counts.get(c, 0) + 1
+    L.extend(_bbb_footnote(bbb_counts))
+
+    L.append(f"**The {gene} change column is a direction.** `measured` "
+             f"means a compound moved {gene} in a cell-based assay; "
+             f"`established` means it is an approved therapy acting on the "
+             f"gene or its product; `predicted` means it follows from the "
+             f"factor's role and the drug's action, with no measurement of "
+             f"{gene} behind it.")
     L.append("")
     return L
 

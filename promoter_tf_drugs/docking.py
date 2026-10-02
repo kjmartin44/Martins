@@ -518,6 +518,11 @@ def enrichment_factor(scores: list, labels: list, *, fraction: float = 0.01,
     return round((hits / float(k)) / (n_act / float(n)), 2)
 
 
+# The receptor PDBQT is the same file for every compound in a
+# screen, so it is converted once and reused.
+_REC_CACHE: dict = {}
+
+
 def _dock_smiles(smiles_list: list, receptor: Path, autobox: Path | None,
                  *, exhaustiveness: int, seed: int, score_fn=None,
                  box: tuple | None = None) -> list:
@@ -543,7 +548,12 @@ def _dock_smiles(smiles_list: list, receptor: Path, autobox: Path | None,
                 out.append(None)
                 continue
             try:
-                if box is not None:
+                if box is not None and engine_name() == "vina":
+                    out.append(dock_one_vina(
+                        receptor, smi, box,
+                        exhaustiveness=exhaustiveness, seed=seed,
+                        receptor_pdbqt_cache=_REC_CACHE))
+                elif box is not None:
                     out.append(dock_one_boxed(
                         receptor, sdf, box,
                         exhaustiveness=exhaustiveness, seed=seed))
@@ -851,6 +861,10 @@ def box_from_ligand(ligand_pdb_text: str, padding: float = 4.0) -> tuple:
     return tuple(centre) + tuple(size)
 
 
+class _NeedsVinaPath(RuntimeError):
+    """Raised when the binary is Vina, so the caller uses the Vina path."""
+
+
 def engine_name(binary: str | None = None) -> str:
     """Which docking program the binary on PATH is."""
     b = (binary or _docking_binary() or "").lower()
@@ -876,11 +890,12 @@ def dock_one_boxed(receptor_pdb: Path, ligand_sdf: Path, box: tuple, *,
             "install.")
     eng = engine_name(binary)
     if eng == "vina":
-        raise RuntimeError(
-            "AutoDock Vina needs PDBQT input for both receptor and ligand, "
-            "which this path does not prepare. Install smina instead - it "
-            "takes PDB and SDF directly and is one static binary. See "
-            "docking.SETUP.")
+        # Vina wants PDBQT for both files. That conversion is available on
+        # Windows without WSL, so this is no longer a refusal: the ligand
+        # goes through Meeko and the receptor through Meeko or Open Babel.
+        raise _NeedsVinaPath(
+            "AutoDock Vina needs PDBQT input; use dock_one_vina, which "
+            "prepares it.")
 
     cx, cy, cz, sx, sy, sz = box
     with tempfile.TemporaryDirectory() as tmp:
@@ -915,6 +930,225 @@ def dock_one_boxed(receptor_pdb: Path, ligand_sdf: Path, box: tuple, *,
 
 
 # ===================================================================== #
+# Docking on Windows without WSL.                                       #
+# ===================================================================== #
+# smina has no Windows build, which is why WSL was the recommendation.
+# AutoDock Vina does ship a Windows executable, and the only thing that
+# stopped it being usable here was file preparation: smina takes a PDB
+# receptor and an SDF ligand and types the atoms itself, while Vina wants
+# PDBQT for both.
+#
+# Both conversions are available on Windows without WSL:
+#
+#   ligand    Meeko. Pure Python on top of RDKit, pip-installable, and the
+#             tool the AutoDock developers point at for this.
+#   receptor  Meeko's receptor preparation where the installed version has
+#             it, otherwise Open Babel, which has Windows wheels and does
+#             rigid-receptor PDBQT with `-xr`.
+#
+# So the Windows path is: vina.exe on PATH, plus `pip install meeko` and
+# optionally `pip install openbabel-wheel`. Nothing else changes - the
+# same box, the same validation gate, the same output.
+
+VINA_SETUP_WINDOWS = """\
+Docking on Windows, no WSL needed.
+
+1. AutoDock Vina. Download the Windows executable from
+   https://github.com/ccsb-scripps/AutoDock-Vina/releases
+   and put vina.exe somewhere on your PATH.
+
+2. File preparation, both pip-installable:
+
+     pip install meeko              (ligands, and receptors on newer meeko)
+     pip install openbabel-wheel    (receptor fallback)
+
+Check it with:  python -m promoter_tf_drugs.docking --check
+
+smina is still the better engine where you can run it - it takes PDB and
+SDF directly and needs no conversion step - but it has no Windows build.
+Vina with Meeko gets the same job done natively.
+"""
+
+
+def _meeko_ligand_pdbqt(smiles: str, seed: int = 0) -> str | None:
+    """SMILES to a ligand PDBQT string via Meeko, or None."""
+    try:
+        from meeko import MoleculePreparation
+        from rdkit import Chem, RDLogger
+        from rdkit.Chem import AllChem
+    except ImportError:
+        return None
+    try:
+        from meeko import PDBQTWriterLegacy as _W
+    except ImportError:
+        _W = None
+
+    RDLogger.DisableLog("rdApp.*")
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        return None
+    mol = Chem.AddHs(mol)
+    params = AllChem.ETKDGv3()
+    params.randomSeed = seed
+    if AllChem.EmbedMolecule(mol, params) != 0:
+        return None
+    AllChem.MMFFOptimizeMolecule(mol, maxIters=500)
+
+    prep = MoleculePreparation()
+    setups = prep.prepare(mol)
+    if not setups:
+        return None
+    if _W is not None:
+        text, ok, err = _W.write_string(setups[0])
+        if not ok:
+            log.debug("meeko ligand write failed: %s", str(err)[:80])
+            return None
+        return text
+    # Older meeko exposed the writer on the preparation object.
+    try:
+        return setups[0].write_pdbqt_string()
+    except Exception:                                       # noqa: BLE001
+        return None
+
+
+def _receptor_pdbqt(receptor_pdb: Path, out: Path) -> Path | None:
+    """Rigid-receptor PDBQT, by whichever converter is installed."""
+    # Meeko first: it is already a dependency of the ligand path.
+    try:
+        import subprocess as _sp
+        import sys as _sys
+        for mod in ("meeko.cli.mk_prepare_receptor", "mk_prepare_receptor"):
+            try:
+                proc = _sp.run(
+                    [_sys.executable, "-m", mod, "--read_pdb",
+                     str(receptor_pdb), "-o", str(out.with_suffix("")),
+                     "--skip_gpf"],
+                    capture_output=True, text=True, timeout=300)
+            except FileNotFoundError:
+                continue
+            if proc.returncode == 0 and out.exists():
+                return out
+    except Exception:                                       # noqa: BLE001
+        pass
+
+    # Open Babel: -xr writes a rigid receptor.
+    obabel = shutil.which("obabel")
+    if obabel is None:
+        try:
+            from openbabel import pybel          # noqa: F401
+            obabel = "python-openbabel"
+        except ImportError:
+            obabel = None
+    if obabel == "python-openbabel":
+        try:
+            from openbabel import pybel
+            m = next(pybel.readfile("pdb", str(receptor_pdb)))
+            m.OBMol.AddPolarHydrogens()
+            m.write("pdbqt", str(out), overwrite=True)
+            return out if out.exists() else None
+        except Exception as exc:                            # noqa: BLE001
+            log.debug("pybel receptor prep failed: %s", str(exc)[:80])
+            return None
+    if obabel:
+        try:
+            proc = subprocess.run(
+                [obabel, "-ipdb", str(receptor_pdb), "-opdbqt",
+                 "-O", str(out), "-xr"],
+                capture_output=True, text=True, timeout=300)
+            if proc.returncode == 0 and out.exists():
+                return out
+        except Exception as exc:                            # noqa: BLE001
+            log.debug("obabel receptor prep failed: %s", str(exc)[:80])
+    return None
+
+
+def vina_prep_available() -> tuple:
+    """(ok, why_not) for the Windows Vina preparation chain."""
+    try:
+        import meeko                                        # noqa: F401
+    except ImportError:
+        return False, ("meeko is needed to turn SMILES into Vina ligand "
+                       "files: pip install meeko")
+    have_receptor = bool(shutil.which("obabel"))
+    if not have_receptor:
+        try:
+            from openbabel import pybel                     # noqa: F401
+            have_receptor = True
+        except ImportError:
+            pass
+    if not have_receptor:
+        # Newer meeko can do the receptor too; assume it can and let the
+        # run report a failure rather than refusing up front.
+        return True, ("no Open Babel found; relying on meeko for the "
+                      "receptor. If that fails, pip install openbabel-wheel")
+    return True, None
+
+
+def dock_one_vina(receptor_pdb: Path, smiles: str, box: tuple, *,
+                  exhaustiveness: int = 8, seed: int = 0,
+                  receptor_pdbqt_cache: dict | None = None) -> float | None:
+    """One Vina dock from a PDB receptor and a SMILES, on any platform.
+
+    The receptor conversion is cached across calls: it is the same file for
+    every compound in a screen, and converting it several thousand times
+    would dominate the run.
+    """
+    binary = shutil.which("vina") or shutil.which("vina.exe")
+    if binary is None:
+        raise RuntimeError("vina not found on PATH. "
+                           + VINA_SETUP_WINDOWS)
+
+    cache = receptor_pdbqt_cache if receptor_pdbqt_cache is not None else {}
+    key = str(receptor_pdb)
+    rec_pdbqt = cache.get(key)
+    if rec_pdbqt is None or not Path(rec_pdbqt).exists():
+        out = Path(receptor_pdb).with_suffix(".pdbqt")
+        got = _receptor_pdbqt(Path(receptor_pdb), out)
+        if got is None:
+            raise RuntimeError(
+                "could not convert the receptor to PDBQT. "
+                + VINA_SETUP_WINDOWS)
+        cache[key] = str(got)
+        rec_pdbqt = str(got)
+
+    lig = _meeko_ligand_pdbqt(smiles, seed=seed)
+    if lig is None:
+        return None
+
+    cx, cy, cz, sx, sy, sz = box
+    with tempfile.TemporaryDirectory() as tmp:
+        lp = Path(tmp) / "lig.pdbqt"
+        lp.write_text(lig, encoding="utf-8")
+        op = Path(tmp) / "out.pdbqt"
+        cmd = [binary, "--receptor", rec_pdbqt, "--ligand", str(lp),
+               "--out", str(op),
+               "--center_x", f"{cx:.3f}", "--center_y", f"{cy:.3f}",
+               "--center_z", f"{cz:.3f}",
+               "--size_x", f"{sx:.3f}", "--size_y", f"{sy:.3f}",
+               "--size_z", f"{sz:.3f}",
+               "--exhaustiveness", str(exhaustiveness),
+               "--seed", str(seed), "--cpu", "1"]
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True,
+                                  timeout=1800)
+        except subprocess.TimeoutExpired:
+            log.warning("vina timed out")
+            return None
+        if proc.returncode != 0:
+            log.warning("vina failed: %s", proc.stderr.strip()[:200])
+            return None
+
+        text = op.read_text() if op.exists() else ""
+        scores = [float(m.group(1)) for m in
+                  re.finditer(r"REMARK VINA RESULT:\s+(-?\d+\.\d+)", text)]
+        if not scores:
+            scores = [float(m.group(1)) for m in
+                      re.finditer(r"^\s+1\s+(-?\d+\.\d+)", proc.stdout,
+                                  re.M)]
+        return min(scores) if scores else None
+
+
+# ===================================================================== #
 # The orchestrator: a gene symbol to a ranked shortlist.                #
 # ===================================================================== #
 SETUP = """\
@@ -927,12 +1161,23 @@ To run docking you need two things.
        curl -L -o smina https://sourceforge.net/projects/smina/files/smina.static/download
        chmod +x smina && sudo mv smina /usr/local/bin/
 
-     Windows
-       smina has no Windows build. Use WSL:
-         wsl --install            (once, then reopen the shell)
-         then run the Linux lines above inside WSL and run this tool there.
-       AutoDock Vina does ship a Windows .exe, but it needs PDBQT input
-       that this path does not prepare, so it is refused rather than run.
+     Windows - no WSL needed
+       smina has no Windows build, so use AutoDock Vina instead. It wants
+       PDBQT files, and both conversions are pip-installable:
+
+         1. vina.exe from
+            https://github.com/ccsb-scripps/AutoDock-Vina/releases
+            on your PATH
+         2. pip install meeko              (ligands)
+         3. pip install openbabel-wheel    (receptor; newer meeko can also
+                                            do this on its own)
+
+       smina remains the better engine where you can run it, because it
+       takes PDB and SDF directly and skips the conversion. Vina with
+       Meeko gets the same job done natively on Windows.
+
+       WSL is still an option if you prefer smina:
+         wsl --install, then the Linux lines above inside it.
 
 2. RDKit, for turning SMILES into 3D ligands.
 
@@ -1220,10 +1465,13 @@ def check_setup() -> dict:
         out["missing"].append(
             "a docking binary (smina preferred) - nothing can be docked")
     elif engine_name(binary) == "vina":
-        out["ok"] = False
-        out["missing"].append(
-            "smina or gnina. AutoDock Vina was found, but it needs PDBQT "
-            "input that this path does not prepare")
+        ok_prep, why = vina_prep_available()
+        out["found"]["vina_prep"] = ok_prep
+        if not ok_prep:
+            out["ok"] = False
+            out["missing"].append(str(why))
+        elif why:
+            out["found"]["vina_prep_note"] = why
 
     try:
         import rdkit                                        # noqa: F401

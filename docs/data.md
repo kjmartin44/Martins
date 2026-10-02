@@ -141,11 +141,23 @@ curl -L -o smina https://sourceforge.net/projects/smina/files/smina.static/downl
 chmod +x smina && sudo mv smina /usr/local/bin/
 ```
 
-There is no Windows build of smina, so on Windows run this inside WSL
-(`wsl --install`, then the lines above). AutoDock Vina does ship a Windows
-executable, but it requires PDBQT input for both receptor and ligand that
-this path does not prepare, so it is detected and refused with an
-explanation rather than failing inside the binary.
+There is no Windows build of smina. On Windows use AutoDock Vina instead,
+which needs no WSL:
+
+```
+# vina.exe from https://github.com/ccsb-scripps/AutoDock-Vina/releases, on PATH
+pip install meeko
+pip install openbabel-wheel
+```
+
+Vina wants PDBQT for both receptor and ligand. Meeko prepares the ligands
+from SMILES, and the receptor goes through Meeko or Open Babel, both
+pip-installable on Windows. The receptor is converted once per screen and
+reused, since it is the same file for every compound.
+
+smina is still the better engine where you can run it, because it takes
+PDB and SDF directly and skips the conversion entirely. WSL remains an
+option if you would rather use it.
 
 Then run a screen:
 

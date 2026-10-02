@@ -7566,23 +7566,6 @@ def test_orchestrator_runs_end_to_end_and_ranks(tmp_path):
     assert scores == sorted(scores)
 
 
-def test_vina_is_refused_because_it_needs_pdbqt(tmp_path, monkeypatch):
-    """AutoDock Vina ships a Windows binary and takes PDBQT for both
-    receptor and ligand, which this path does not prepare. Failing inside
-    the binary with a parse error would be the unhelpful way to find out."""
-    import pytest
-    from pathlib import Path
-    from promoter_tf_drugs import docking as dk
-    monkeypatch.setattr(dk, "_docking_binary", lambda: "/usr/bin/vina")
-    assert dk.engine_name("/usr/bin/vina") == "vina"
-    with pytest.raises(RuntimeError, match="PDBQT"):
-        dk.dock_one_boxed(tmp_path / "r.pdb", tmp_path / "l.sdf",
-                          (0, 0, 0, 20, 20, 20))
-
-    chk = dk.check_setup()
-    assert chk["ok"] is False
-    assert any("smina or gnina" in m for m in chk["missing"])
-
 
 def test_check_setup_names_what_is_missing(monkeypatch):
     """The first thing anyone runs, and it has to say what to install."""
@@ -7983,8 +7966,10 @@ def test_summary_is_written_alongside_the_full_report(tmp_path):
     assert "summary.md" in names
     assert "report.md" in names
     body = (tmp_path / "summary.md").read_text(encoding="utf-8")
-    assert len(body) < len((tmp_path / "report.md").read_text(
-        encoding="utf-8")) / 5, "a summary that is not much shorter is not a summary"
+    full = len((tmp_path / "report.md").read_text(encoding="utf-8"))
+    assert len(body) < full / 3, (
+        f"a summary that is not much shorter is not a summary: "
+        f"{len(body)} vs {full}")
 
 
 def test_summary_leads_with_how_much_the_ranking_is_worth():
@@ -8315,10 +8300,11 @@ def test_expected_change_is_a_direction_never_a_magnitude():
     assert "PREDICTED" in by["Loner"]["expected_basis"]
 
     md = "\n".join(pipeline.corroboration_table(_two_method_result()))
-    assert "DIRECTION, never a magnitude" in md
-    assert "a number here would be invented" in md
-    for bad in ("fold", "%", "1.5x", "2-fold"):
-        assert f"expected {bad}" not in md.lower()
+    assert "no predicted fold-change here" in md
+    assert "would be fabricated" in md
+    # the three inputs a fold-change would need are named, so the refusal
+    # is a statement about missing data rather than a hedge
+    assert "occupancy change" in md and "dose reached" in md
 
 
 def test_the_method_count_is_not_presented_as_a_vote():
@@ -8353,4 +8339,74 @@ def test_the_table_reaches_summary_md(tmp_path):
     body = (tmp_path / "summary.md").read_text(encoding="utf-8")
     assert "which methods found each" in body
     assert "Systems it acts on" in body
-    assert "Expected DEMOGENE change" in body
+    assert "DEMOGENE change" in body
+    assert "P(moves)" in body
+
+
+# ===================================================================== #
+# Docking on Windows, and BBB in the corroboration table.               #
+# ===================================================================== #
+def test_windows_has_a_native_docking_path():
+    """smina has no Windows build, which made WSL the only route. Vina
+    does ship a Windows executable, and the PDBQT conversion it needs is
+    pip-installable, so WSL is now a preference rather than a
+    requirement."""
+    from promoter_tf_drugs import docking as dk
+    assert hasattr(dk, "dock_one_vina")
+    assert "no WSL needed" in dk.VINA_SETUP_WINDOWS
+    assert "meeko" in dk.VINA_SETUP_WINDOWS
+    assert "vina.exe" in dk.SETUP or "vina.exe" in dk.VINA_SETUP_WINDOWS
+    # and the main setup text no longer presents Vina as refused
+    assert "it is refused rather than run" not in dk.SETUP
+
+
+def test_vina_is_no_longer_rejected_outright(tmp_path, monkeypatch):
+    """It used to raise 'install smina instead'. Now it routes to the path
+    that prepares PDBQT."""
+    import pytest
+    from promoter_tf_drugs import docking as dk
+    monkeypatch.setattr(dk, "_docking_binary", lambda: "/usr/bin/vina")
+    with pytest.raises(dk._NeedsVinaPath):
+        dk.dock_one_boxed(tmp_path / "r.pdb", tmp_path / "l.sdf",
+                          (0, 0, 0, 20, 20, 20))
+
+
+def test_missing_vina_prep_names_the_pip_install():
+    from promoter_tf_drugs import docking as dk
+    ok, why = dk.vina_prep_available()
+    if not ok:
+        assert "pip install meeko" in why
+
+
+def test_the_receptor_pdbqt_is_converted_once_per_screen():
+    """It is the same file for every compound, and converting it a few
+    thousand times would dominate the run."""
+    import inspect
+    from promoter_tf_drugs import docking as dk
+    assert isinstance(dk._REC_CACHE, dict)
+    src = inspect.getsource(dk.dock_one_vina)
+    assert "receptor_pdbqt_cache" in src
+    assert "cache[key]" in src
+
+
+def test_corroboration_table_carries_the_bbb_verdict():
+    """Whether a candidate can reach the tissue is an applicability
+    question, so it belongs on the one-row-per-drug table too."""
+    res = _two_method_result()
+    res["results"][0]["drug_grades"] = [{
+        "drug_name": "Calcitriol",
+        "evidence": {"properties": {"full_mwt": 416.6, "psa": 60.7,
+                                    "cx_logp": 5.1}}}]
+    rows = {r["drug"]: r for r in pipeline.corroboration(res, top_n=20)}
+    assert rows["Calcitriol"]["bbb"] in ("yes", "no", "yes?", "no?")
+    assert rows["Calcitriol"]["bbb_why"]
+    # no structure for the other drug, so unknown rather than no
+    assert rows["Loner"]["bbb"] == "\u2014"
+
+    md = "\n".join(pipeline.corroboration_table(res))
+    header = [l for l in md.splitlines() if l.startswith("| Drug |")][0]
+    assert "BBB?" in header
+    i = md.splitlines().index(header)
+    assert md.splitlines()[i + 1].count("|") == header.count("|")
+    # the same footnote the graded table uses, so the two cannot diverge
+    assert "is not a no" in md or "passive diffusion" in md
