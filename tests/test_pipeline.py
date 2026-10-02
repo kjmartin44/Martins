@@ -7799,3 +7799,175 @@ def test_a_malformed_results_file_says_how_to_make_a_real_one(tmp_path):
     f.write_text('{"something": "else"}', encoding="utf-8")
     with pytest.raises(ValueError, match="--bundle"):
         dk.load_results(f)
+
+
+# ===================================================================== #
+# More perturbation corpora, and what agreement between them is worth.  #
+# ===================================================================== #
+def _corpus_gmt(path, terms):
+    path.write_text("\n".join(f"{n}\t\t" + "\t".join(g)
+                               for n, g in terms.items()) + "\n",
+                    encoding="utf-8")
+
+
+def _corpus_fixture(tmp_path, monkeypatch):
+    """Three corpora on disk: a shared hit, a corpus-specific hit, and a
+    compound that moves the regulon opposite ways in two of them."""
+    from pathlib import Path as _P
+    from promoter_tf_drugs import corpora as cp
+    up = [f"UP{i}" for i in range(25)]
+    dn = [f"DN{i}" for i in range(25)]
+    regulon = {g: 1 for g in up}
+    regulon.update({g: -1 for g in dn})
+
+    def sigs(entries):
+        u, d = {}, {}
+        for drug, flip in entries:
+            for i in range(5):
+                u[f"E{i} SYS 6H-{drug}-10.0"] = dn if flip else up
+                d[f"E{i} SYS 6H-{drug}-10.0"] = up if flip else dn
+        return u, d
+
+    files = {
+        "lincs": sigs([("sharedrug", False), ("onlyadrug", False)]),
+        "drugmatrix": sigs([("sharedrug", False), ("flipdrug", True)]),
+        "creeds": sigs([("sharedrug", False), ("flipdrug", False)]),
+    }
+    names = {"lincs": ("lincs_chem_pert_up.gmt", "lincs_chem_pert_down.gmt"),
+             "drugmatrix": ("drugmatrix_up.gmt", "drugmatrix_down.gmt"),
+             "creeds": ("creeds_drug_up.gmt", "creeds_drug_down.gmt")}
+    for key, (u, d) in files.items():
+        _corpus_gmt(tmp_path / names[key][0], u)
+        _corpus_gmt(tmp_path / names[key][1], d)
+
+    patched = []
+    for c in cp.CORPORA:
+        paths = tuple(tuple(str(tmp_path / _P(x).name) for x in group)
+                      for group in c.paths)
+        patched.append(cp.Corpus(
+            key=c.key, name=c.name, species=c.species, system=c.system,
+            paths=paths, enrichr=c.enrichr, split=c.split,
+            caveats=c.caveats))
+    monkeypatch.setattr(cp, "CORPORA", tuple(patched))
+    monkeypatch.setattr(cp, "BY_KEY", {c.key: c for c in patched})
+    return regulon
+
+
+def test_a_corpus_that_is_absent_is_not_one_that_found_nothing(
+        tmp_path, monkeypatch):
+    """The distinction the whole package turns on. TG-GATEs has no files
+    here, and reporting it as no hits would claim a negative it never
+    measured."""
+    from promoter_tf_drugs import corpora as cp
+    regulon = _corpus_fixture(tmp_path, monkeypatch)
+    res = cp.scan("MYTF", regulon)
+    assert res["lincs"].available is True
+    assert res["tggates"].available is False
+    assert res["tggates"].hits == []
+    assert "not the same as finding nothing" in res["tggates"].error
+    assert "absent is not the same as finding nothing" in \
+        cp.summarise(res).lower()
+
+
+def test_agreement_across_corpora_is_the_headline(tmp_path, monkeypatch):
+    """These differ in species, tissue, platform and dose, so they share
+    few systematic errors. No amount of replication inside one corpus can
+    substitute for a second corpus."""
+    from promoter_tf_drugs import corpora as cp
+    regulon = _corpus_fixture(tmp_path, monkeypatch)
+    agreed = cp.agreement(cp.scan("MYTF", regulon))
+    by = {a["drug"]: a for a in agreed}
+    assert by["sharedrug"]["n_corpora"] == 3
+    assert by["sharedrug"]["consistent"] is True
+    assert agreed[0]["drug"] == "sharedrug"
+    assert "onlyadrug" not in by
+
+
+def test_conflicting_directions_are_shown_not_hidden(tmp_path, monkeypatch):
+    """Rat liver in vivo and a human cell line can disagree without either
+    being wrong. Hiding it would make the agreeing rows look more uniform
+    than the data is."""
+    from promoter_tf_drugs import corpora as cp
+    regulon = _corpus_fixture(tmp_path, monkeypatch)
+    agreed = cp.agreement(cp.scan("MYTF", regulon))
+    flip = next(a for a in agreed if a["drug"] == "flipdrug")
+    assert flip["consistent"] is False
+    assert flip["direction"] == "conflicting"
+    assert "not comparable" in flip["note"]
+    assert agreed.index(flip) > 0
+
+
+def test_one_corpus_can_never_produce_agreement(tmp_path, monkeypatch):
+    from promoter_tf_drugs import corpora as cp
+    regulon = _corpus_fixture(tmp_path, monkeypatch)
+    assert cp.agreement(cp.scan("MYTF", regulon, keys=["lincs"])) == []
+
+
+def test_splitting_a_signed_gmt_drops_unlabelled_terms(tmp_path):
+    """DrugMatrix ships as one library with the direction in the term
+    name. A term carrying neither marker cannot be assigned, so it is
+    dropped rather than guessed onto one side."""
+    from pathlib import Path as _P
+    from promoter_tf_drugs import corpora as cp
+    src = tmp_path / "signed.gmt"
+    src.write_text("DrugA-rat-liver-up\t\tG1\tG2\n"
+                   "DrugA-rat-liver-dn\t\tG3\tG4\n"
+                   "DrugB-kidney-up\t\tG5\n"
+                   "MysteryTerm\t\tG9\n", encoding="utf-8")
+    out = cp.split_signed_gmt(src, str(tmp_path / "dm"))
+    assert out["n_up"] == 2 and out["n_down"] == 1
+    assert out["n_unlabelled"] == 1
+    assert "MysteryTerm" not in _P(out["up"]).read_text()
+
+
+def test_non_human_corpora_carry_a_species_caveat():
+    """DrugMatrix is rat. A symbol crossing a species boundary is a real
+    limit and has to travel with the result."""
+    from promoter_tf_drugs import corpora as cp
+    dm = cp.BY_KEY["drugmatrix"]
+    assert dm.species == "rat"
+    assert any("species boundary" in c for c in dm.caveats)
+    assert "hepatocytes" in " ".join(cp.BY_KEY["tggates"].caveats)
+
+
+def test_archs4_is_not_offered_as_a_drug_corpus():
+    """It is uniformly reprocessed RNA-seq, not perturbation data.
+    Listing it beside LINCS would invite reading co-expression as a drug
+    effect."""
+    from promoter_tf_drugs import corpora as cp
+    assert "archs4" not in cp.BY_KEY
+    assert "ARCHS4" in cp.__doc__
+    assert "not a perturbation corpus" in cp.__doc__
+
+
+def test_report_says_when_only_one_corpus_was_available():
+    """With one corpus, internal replication cannot detect an error common
+    to all of its signatures."""
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    res["results"][0]["corpus_scans"] = {
+        "TP53": {"lincs": {"available": True},
+                 "drugmatrix": {"available": False}}}
+    note = " ".join(pipeline._corpus_note(res["results"][0]))
+    assert "Only one corpus was available" in note
+    assert "A second corpus is what would" in note
+    assert "drugmatrix" in note
+
+
+def test_each_hit_records_which_corpus_it_came_from():
+    """A rat liver result must not read as a human cell-line one."""
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    res["results"][0]["activity_drugs"] = {"TP53": [{
+        "drug": "mitoxantrone", "corpus": "drugmatrix",
+        "direction": "activated", "median_z": 1.9, "n_agreeing": 4,
+        "n_signatures": 4, "consistency": 1.0, "n_significant": 3,
+        "cell_lines": ["liver"], "caveats": []}]}
+    res["results"][0]["corpus_scans"] = {
+        "TP53": {"drugmatrix": {"available": True}}}
+    md = pipeline.markdown_report(res)
+    header = [ln for ln in md.splitlines()
+              if ln.startswith("| Factor | Drug |")]
+    assert header and "Corpus" in header[0]
+    i = md.splitlines().index(header[0])
+    assert md.splitlines()[i + 1].count("|") == header[0].count("|")
+    assert "drugmatrix" in md
+    assert "is rat" in md and "species boundary" in md

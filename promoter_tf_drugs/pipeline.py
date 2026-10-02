@@ -12,6 +12,7 @@ from . import (annotate, catalogue as cat_mod, cellcycle, congeners as cong_mod,
                delivery as dlv_mod,
                tfactivity as tfa_mod,
                depmap as depmap_mod,
+               corpora as corpora_mod,
                demo_data, direct, discovery, drug_scoring, eqtl as eqtl_mod,
                modalities as modal_mod,
                drugs as drugs_mod, evidence, genes, motifs as motifs_mod,
@@ -798,21 +799,40 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         # this factor's regulon? It needs no annotated binding, so it can
         # reach factors the other sources cannot.
         activity_drugs: dict = {}
-        if signed_regulons and sig_mod.autoload_gmt_available("up") \
-                and sig_mod.autoload_gmt_available("down"):
-            # Capped: each factor is a full pass over ~33,000 signatures,
-            # about a second, and the ranking below the top few is not
-            # worth the wall clock.
+        corpus_scans: dict = {}
+        corpus_agreement: dict = {}
+        if signed_regulons and any(c.available()
+                                   for c in corpora_mod.CORPORA):
+            # Capped: each factor is a full pass over every signature in
+            # every corpus present, and the ranking below the top few is
+            # not worth the wall clock.
             for r in ranked[:ACTIVITY_DRUG_FACTORS]:
                 reg = signed_regulons.get(r.symbol.upper())
                 if not reg:
                     continue
-                found = _optional(
-                    f"LINCS drug scan for {r.symbol}",
-                    lambda g=reg, s=r.symbol: tfa_mod.drugs_moving_factor(
-                        s, g), [])
+                scans = _optional(
+                    f"perturbation corpora scan for {r.symbol}",
+                    lambda g=reg, s=r.symbol: corpora_mod.scan(s, g), {})
+                if not scans:
+                    continue
+                corpus_scans[r.symbol] = {k: v.to_dict()
+                                          for k, v in scans.items()}
+                agreed = corpora_mod.agreement(scans)
+                if agreed:
+                    corpus_agreement[r.symbol] = agreed
+                # Pooled for the route tables, with the corpus stamped on
+                # each hit so a rat liver result cannot be mistaken for a
+                # human cell-line one.
+                found = []
+                for key, res in scans.items():
+                    for h in res.hits:
+                        h = dict(h)
+                        h["corpus"] = key
+                        found.append(h)
                 if found:
-                    activity_drugs[r.symbol] = [h.to_dict() for h in found]
+                    found.sort(key=lambda h: (-h["n_significant"],
+                                              -abs(h["median_z"])))
+                    activity_drugs[r.symbol] = found
             # ok=True even when nothing was found. The scan RAN; finding
             # no compound is a negative result, not a failed lookup, and
             # conflating the two is the thing provenance.py exists to stop.
@@ -821,10 +841,14 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                 yielded=sum(len(v) for v in activity_drugs.values()),
                 detail=(f"{sum(len(v) for v in activity_drugs.values())} "
                         f"compound(s) across {len(activity_drugs)} factor(s) "
-                        f"move a regulon consistently"
+                        f"from "
+                        f"{', '.join(c.key for c in corpora_mod.CORPORA if c.available())}"
+                        f"; {sum(len(v) for v in corpus_agreement.values())} "
+                        f"agree across more than one corpus"
                         if activity_drugs else
-                        "no compound moved any testable factor's regulon "
-                        "consistently enough to report"))
+                        "the available corpora were scanned; no compound "
+                        "moved any testable factor's regulon consistently "
+                        "enough to report"))
 
         # ------------------ 8d. empirical: did any drug actually move this gene?
         lincs = {}
@@ -1062,6 +1086,8 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             "cell_type": celltype,
             "tf_activity": activity,
             "activity_drugs": activity_drugs,
+            "corpus_scans": corpus_scans,
+            "corpus_agreement": corpus_agreement,
             "docking": list(docking_runs.values()),
             "dependencies": dependencies,
             "modality_design": modality,
@@ -1125,6 +1151,89 @@ def _dep_label(tf: dict) -> str:
         "essential in a handful of lines": "a few lines",
         "dispensable across the panel": "no",
     }.get(v, v)
+
+
+def _corpus_note(res: dict) -> list:
+    """Which corpora ran, which did not, and what agreed across them."""
+    from . import corpora as cp
+
+    scans = res.get("corpus_scans") or {}
+    agree = res.get("corpus_agreement") or {}
+    if not scans:
+        return []
+
+    present, absent = set(), set()
+    for per_tf in scans.values():
+        for key, r in per_tf.items():
+            (present if r.get("available") else absent).add(key)
+
+    L = []
+    if len(present) > 1:
+        L.append(f"**Scanned across {len(present)} independent corpora** "
+                 f"({', '.join(sorted(present))}). They differ in species, "
+                 f"tissue, platform and dose, so they share few systematic "
+                 f"errors - which is the point of running more than one. "
+                 f"Every signature in a single corpus shares that corpus's "
+                 f"biases, so no amount of internal replication detects "
+                 f"them.")
+    else:
+        only = ", ".join(sorted(present)) or "none"
+        L.append(f"**Only one corpus was available ({only}).** Every "
+                 f"signature in it shares its platform, species and dose "
+                 f"regime, so internal replication cannot detect a "
+                 f"systematic error common to all of them. A second corpus "
+                 f"is what would.")
+    if absent:
+        L.append("")
+        L.append(f"Not on disk, and therefore skipped rather than searched: "
+                 f"{', '.join(sorted(absent))}. Absent is not the same as "
+                 f"finding nothing. Run "
+                 f"`python -m promoter_tf_drugs.corpora` for the downloads.")
+    L.append("")
+
+    flat = [a for per_tf in agree.values() for a in per_tf]
+    if flat:
+        consistent = [a for a in flat if a["consistent"]]
+        conflicting = [a for a in flat if not a["consistent"]]
+        if consistent:
+            L.append("#### Agreeing across corpora")
+            L.append("")
+            L.append("The strongest empirical result this package can "
+                     "produce. These compounds move the factor the same "
+                     "way in systems that share almost no methodology.")
+            L.append("")
+            L.append("| Drug | Corpora | Direction |")
+            L.append("|---|---|---|")
+            for a in consistent[:15]:
+                L.append(f"| {a['drug']} | "
+                         f"{', '.join(sorted(a['corpora']))} | "
+                         f"{a['direction']} |")
+            L.append("")
+        if conflicting:
+            L.append(f"**{len(conflicting)} compound(s) appear in more than "
+                     f"one corpus with opposite directions** "
+                     f"({', '.join(a['drug'] for a in conflicting[:6])}). "
+                     f"That usually means the systems are not comparable - "
+                     f"rat liver in vivo against a human cell line, at "
+                     f"different doses - rather than that either reading is "
+                     f"wrong. It is shown because hiding it would make the "
+                     f"agreeing rows look more uniform than the data is.")
+            L.append("")
+    elif len(present) > 1:
+        L.append("No compound moved a regulon consistently in more than one "
+                 "corpus. With this little overlap between their compound "
+                 "sets that is the expected outcome, not a negative result.")
+        L.append("")
+
+    for key in sorted(present):
+        c = cp.BY_KEY.get(key)
+        if c and c.species != "human":
+            L.append(f"*{c.name} is {c.species} ({c.system}). Gene symbols "
+                     f"cross a species boundary and the regulon is not "
+                     f"guaranteed to be conserved, so treat a hit found "
+                     f"only there as a lead to check in a human system.*")
+            L.append("")
+    return L
 
 
 def _depmap_section(deps: dict, res: dict) -> list:
@@ -1848,19 +1957,20 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
             L.append(f"**{n_pairs} compound-factor pair(s) across "
                      f"{len(ad)} factor(s).**")
             L.append("")
-            L.append("| Factor | Drug | Effect on factor | Median z | "
-                     "Profiles agreeing | Significant | Cell lines |")
+            L.append("| Factor | Drug | Corpus | Effect on factor | "
+                     "Median z | Profiles agreeing | Significant |")
             L.append("|---|---|---|---|---|---|---|")
             for tf, hits in ad.items():
                 for h in hits[:10]:
                     L.append(
-                        f"| {tf} | {h['drug']} | {h['direction']} | "
+                        f"| {tf} | {h['drug']} | "
+                        f"{h.get('corpus', 'lincs')} | {h['direction']} | "
                         f"{h['median_z']:+.2f} | "
                         f"{h['n_agreeing']}/{h['n_signatures']} "
                         f"({h['consistency']:.0%}) | "
-                        f"{h['n_significant']} at q<0.05 | "
-                        f"{len(h['cell_lines'])} |")
+                        f"{h['n_significant']} at q<0.05 |")
             L.append("")
+            L.extend(_corpus_note(res))
             L.append("**Repetition is the evidence here, not any single "
                      "profile.** The scan tests one regulon against roughly "
                      "33,000 signatures, so nominal significance is reached "

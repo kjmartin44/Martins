@@ -217,6 +217,82 @@ And a docking score is not an affinity: these functions enrich for binders
 and rank them poorly, so the output is a shortlist to assay rather than a
 predicted order.
 
+## Perturbation corpora
+
+The drug scan asks whether a compound's own expression signature moves a
+factor's regulon. Run against LINCS alone that is one platform, one set of
+mostly cancer cell lines, one dose regime and one pipeline. Every
+systematic error of that kind is shared by all 33,000 LINCS signatures, so
+no amount of internal replication detects it. A second corpus built
+differently is what does.
+
+Check what is on disk:
+
+```
+python -m promoter_tf_drugs.corpora
+```
+
+| corpus | species | system | the main limit |
+| --- | --- | --- | --- |
+| LINCS L1000 | human | cancer cell lines, hours at micromolar | 978 genes measured, the rest inferred |
+| CREEDS | human and mouse | published GEO experiments | heterogeneous quality, few replicates per signature |
+| DrugMatrix | rat | tissue dosed in vivo, mostly liver | rat symbols, liver-dominated, toxicology doses |
+| Open TG-GATEs | rat and human | rat in vivo, rat and human hepatocytes | liver only, about 170 compounds |
+
+Each is a pair of Enrichr gene-set libraries in the same `.gmt` format the
+LINCS files already use, so nothing new has to be parsed. Fetch what you
+want into `data/`:
+
+```
+curl -L -o data/creeds_drug_up.gmt "https://maayanlab.cloud/Enrichr/geneSetLibrary?mode=text&libraryName=Drug_Perturbations_from_GEO_up"
+curl -L -o data/creeds_drug_down.gmt "https://maayanlab.cloud/Enrichr/geneSetLibrary?mode=text&libraryName=Drug_Perturbations_from_GEO_down"
+```
+
+DrugMatrix ships as a single library with the direction in the term name,
+so it needs splitting first:
+
+```
+curl -L -o data/drugmatrix_raw.gmt "https://maayanlab.cloud/Enrichr/geneSetLibrary?mode=text&libraryName=DrugMatrix"
+python -m promoter_tf_drugs.corpora --split data/drugmatrix_raw.gmt --as drugmatrix
+```
+
+A term carrying no direction marker cannot be assigned and is dropped
+rather than guessed onto one side; the count of dropped terms is reported.
+
+TG-GATEs is not on Enrichr. Open TG-GATEs publishes the raw arrays at
+https://dbarchive.biosciencedbc.jp/en/open-tggates/ and a derived up/down
+pair placed at `data/tggates_{up,down}.gmt` is picked up automatically.
+
+Nothing is required. A corpus that is absent is skipped and reported as
+absent, which is a different statement from a corpus that ran and found
+nothing.
+
+### What agreement across corpora is worth
+
+A compound that shifts a factor's regulon in LINCS and in DrugMatrix has
+done so in a human cell line and in rat liver, on different platforms, in
+different laboratories. They share few systematic errors, so agreement is
+worth more than a stronger result in either alone. That is the headline
+the report leads with.
+
+Disagreement usually means nothing. These corpora differ in species,
+tissue, dose, duration and platform all at once, so a compound active in
+one and not another may simply not have been tested comparably. Conflicting
+directions are shown rather than hidden, because suppressing them would
+make the agreeing rows look more uniform than the data is.
+
+ARCHS4 is deliberately not offered here. It is uniformly reprocessed
+RNA-seq rather than perturbation data, and its useful output is
+co-expression — the genes that move with a factor across thousands of
+samples. That is a regulon, not a drug effect, so listing it beside LINCS
+would invite reading one as the other.
+
+None of this fixes attribution. Every corpus measures the regulon, so all
+of them share the same confound: a factor that shares targets with another
+cannot be separated from it, and a compound that arrests the cell cycle
+moves every proliferation-linked regulon. More corpora make the observation
+more robust, not more specific.
+
 ## Output files
 
 Every completed analysis writes five files:
