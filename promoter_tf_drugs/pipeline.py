@@ -537,6 +537,23 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                                 client, t, goal=goal,
                                 library=_library or None,
                                 gene_linked=_gene_linked), None)
+
+                        # A receptor with too few ligands of its own cannot
+                        # train a model, which is a data gap rather than a
+                        # fact about the receptor. `screen_family` borrows
+                        # its relatives' chemistry and MEASURES whether that
+                        # chemistry transfers before reporting anything. It
+                        # existed for this and was called from nowhere.
+                        if sc and sc.get("error") and not sc.get("hits"):
+                            fam = _optional(
+                                f"family screen for {r.symbol}",
+                                lambda sym=r.symbol: screening.screen_family(
+                                    client, sym, goal=goal,
+                                    library=_library or None,
+                                    gene_linked=_gene_linked), None)
+                            if fam and fam.get("hits"):
+                                fam["replaces"] = sc.get("error")
+                                sc = fam
                         if sc:
                             _screen_cache[tid] = sc
                             screens[r.symbol] = sc

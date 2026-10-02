@@ -258,9 +258,41 @@ def smiles_to_sdf(smiles: str, path: Path, n_confs: int = 1, seed: int = 0) -> P
     mol = Chem.AddHs(mol)
     params = AllChem.ETKDGv3()
     params.randomSeed = seed
-    if AllChem.EmbedMolecule(mol, params) != 0:
-        raise ValueError("3D embedding failed")
-    AllChem.MMFFOptimizeMolecule(mol, maxIters=500)
+
+    # `n_confs` was accepted and then ignored: EmbedMolecule embeds exactly
+    # one whatever was asked for. For a flexible ligand the starting
+    # conformer matters, so generate the requested number, minimise them
+    # all and write the lowest-energy one. The default stays 1, so no
+    # existing result changes unless a caller asks for more.
+    if n_confs > 1:
+        ids = list(AllChem.EmbedMultipleConfs(mol, numConfs=n_confs,
+                                              params=params))
+        if not ids:
+            raise ValueError("3D embedding failed")
+        # MMFFOptimizeMoleculeConfs minimises every conformer in one call
+        # and returns (converged, energy) per conformer, in order.
+        try:
+            ff_res = AllChem.MMFFOptimizeMoleculeConfs(mol, maxIters=500,
+                                                       numThreads=1)
+        except Exception:                                   # noqa: BLE001
+            ff_res = None
+        energies = ([(e, cid) for (_conv, e), cid in zip(ff_res, ids)]
+                    if ff_res and len(ff_res) == len(ids) else [])
+        if energies:
+            best = min(energies)[1]
+            keep = [c for c in ids if c != best]
+            for cid in keep:
+                mol.RemoveConformer(cid)
+        else:
+            # No force field for this molecule: keep the first embedding
+            # rather than picking arbitrarily on an unscored set.
+            for cid in ids[1:]:
+                mol.RemoveConformer(cid)
+    else:
+        if AllChem.EmbedMolecule(mol, params) != 0:
+            raise ValueError("3D embedding failed")
+        AllChem.MMFFOptimizeMolecule(mol, maxIters=500)
+
     with Chem.SDWriter(str(path)) as w:
         w.write(mol)
     return path
@@ -637,6 +669,27 @@ class DockingScreen:
         return dict(self.__dict__)
 
 
+def _model_assessment(receptor) -> "PocketAssessment | None":
+    """Assess `receptor` when it is a predicted model, else None.
+
+    An experimental structure's B-factor column holds crystallographic B
+    factors, not pLDDT, so it must not be read as confidence. AlphaFold
+    files are recognised by their own markers rather than by filename:
+    every pLDDT sits in 0-100 and the header names the predictor.
+    """
+    try:
+        text = Path(receptor).read_text(errors="replace")
+    except OSError:
+        return None
+    head = text[:4000].upper()
+    predicted = ("ALPHAFOLD" in head or "DEEPMIND" in head
+                 or "PREDICTED" in head or "ESMFOLD" in head
+                 or "ROSETTAFOLD" in head)
+    if not predicted:
+        return None
+    return assess_model(text, uniprot=Path(receptor).stem)
+
+
 def screen_by_docking(receptor: Path, library: list, *, target: str = "?",
                       actives: list | None = None, decoys: list | None = None,
                       autobox: Path | None = None, top_n: int = 25,
@@ -658,6 +711,28 @@ def screen_by_docking(receptor: Path, library: list, *, target: str = "?",
             "it callable as 'smina' or 'vina'. Nothing else in the run is "
             "affected.")
         return run
+
+    # A predicted model is checked before anything is docked into it.
+    # `assess_model` was written to make this call - "low-pLDDT regions
+    # look like open greasy cavities to a scoring function" - and nothing
+    # called it, so an AlphaFold model of a transcription factor could be
+    # docked into its disordered activation domain and score beautifully.
+    model = _model_assessment(receptor)
+    if model is not None:
+        run.caveats.append(
+            f"predicted structure: mean pLDDT {model.mean_plddt}, "
+            f"{model.ordered_fraction:.0%} of residues confidently folded")
+        run.caveats.extend(model.notes)
+        if not model.dockable:
+            run.error = (
+                f"{receptor.name} is a predicted model with only "
+                f"{model.ordered_fraction:.0%} of residues above pLDDT "
+                f"{PLDDT_ORDERED:.0f}. That is a disorder prediction, not a "
+                f"structure with pockets, and docking into it returns "
+                f"confident numbers that mean nothing. Refused. Use an "
+                f"experimental structure, or restrict the receptor to its "
+                f"folded domain first.")
+            return run
 
     val = validate_pocket(receptor, actives or [], decoys or [],
                           autobox=autobox, exhaustiveness=exhaustiveness,
@@ -1691,7 +1766,7 @@ def main(argv=None) -> int:
         if not uniprot:
             info = (_ann.annotate_tfs(client, [args.gene]) or {}).get(
                 args.gene.upper())
-            uniprot = getattr(info, "uniprot", None) if info else None
+            uniprot = (info or {}).get("uniprot")   # a dict KEY, not an attribute
             if not uniprot:
                 print(f"Could not resolve {args.gene} to a UniProt "
                       f"accession. Pass --uniprot.")
@@ -1738,7 +1813,7 @@ def main(argv=None) -> int:
         info = (ann_mod.annotate_tfs(client, [args.gene]) or {}).get(
             args.gene.upper()) or (
             ann_mod.annotate_tfs(client, [args.gene]) or {}).get(args.gene)
-        uniprot = getattr(info, "uniprot", None) if info else None
+        uniprot = (info or {}).get("uniprot")   # a dict KEY, not an attribute
         if not uniprot:
             print(f"Could not resolve {args.gene} to a UniProt accession. "
                   f"Pass --uniprot explicitly.")

@@ -117,8 +117,19 @@ def fetch_evidence(client: Client, drug) -> DrugEvidence:
     # call is what leaves this axis empty, and an offline run then scored
     # every drug as potency-unknown - which the axis treats as neutral, so
     # a nanomolar ligand and an untested one ranked the same.
-    uni = getattr(drug, "uniprot", None) or getattr(
-        drug, "target_uniprot", None)
+    # `Drug` carries target_symbol and target_chembl_id and has never had
+    # a `uniprot` field, so the previous getattr was None for every drug
+    # and this whole branch was dead. The accession comes from the local
+    # HGNC table, the same way every other offline path resolves one.
+    uni = getattr(drug, "target_uniprot", None)
+    if not uni:
+        sym = getattr(drug, "target_symbol", None)
+        if sym:
+            try:
+                from . import localannot as _la
+                uni = _la.uniprot_for(sym)
+            except Exception:                               # noqa: BLE001
+                uni = None
     if uni:
         try:
             from . import localpotency as _lp

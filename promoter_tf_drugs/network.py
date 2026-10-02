@@ -113,6 +113,11 @@ class UpstreamHit:
     score: float
     rwr_score: float
     net_sign: int
+    # Which way the TF itself must move. Derived from the run's goal and
+    # the factor's role, and recorded here because `attach_drugs` cannot
+    # recover it: `upstream_paths` keeps only paths whose net sign equals
+    # this, so net_sign alone carries no information about the goal.
+    want_tf_sign: int = 1
     drugs: list = field(default_factory=list)
     warnings: list = field(default_factory=list)
 
@@ -318,7 +323,8 @@ def find_upstream_targets(client: Client, tf: str, *, goal: str = "up",
         hits.append(UpstreamHit(
             node=node, tf_symbol=tf.upper(), best_path=best.to_dict(),
             n_paths=len(node_paths), score=round(score, 1),
-            rwr_score=round(r, 6), net_sign=best.net_sign, warnings=warnings))
+            rwr_score=round(r, 6), net_sign=best.net_sign,
+            want_tf_sign=want_tf_direction, warnings=warnings))
 
     hits.sort(key=lambda h: -h.score)
     return hits[:top_n]
@@ -330,9 +336,27 @@ def attach_drugs(client: Client, hits: list[UpstreamHit], *, goal_on_node: str =
     from .drugs import chembl_drugs
 
     for h in hits:
-        # A net-inhibitory path means you must INHIBIT the upstream node to
-        # activate the TF. The sign has already been propagated; honour it.
-        want = "up" if h.net_sign == 1 else "down"
+        # Two signs decide this, and only one of them was being read.
+        #
+        #   n * net_sign = want_tf_sign,  so  n = want_tf_sign * net_sign
+        #
+        # where n is the direction the DRUG must move the upstream node.
+        # The previous version used `want = "up" if net_sign == 1`, which
+        # silently assumes want_tf_sign is always +1. It is not:
+        # `find_upstream_targets` flips it for a repressor, and again for
+        # a downregulation goal. Worse, `upstream_paths` keeps only paths
+        # whose net sign EQUALS want_tf_sign, so the two were always equal
+        # and the old expression reduced to "follow want_tf_sign" - giving
+        # the opposite of the right answer whenever it was -1.
+        #
+        # Concretely, for KINASE -| REPRESSOR with the gene to be raised:
+        # you lower the repressor, which means RAISING the kinase. The old
+        # code asked for a kinase inhibitor, which raises the repressor and
+        # lowers the gene.
+        want_tf = getattr(h, "want_tf_sign", None)
+        if want_tf is None:
+            want_tf = 1 if goal_on_node == "up" else -1
+        want = "up" if want_tf * h.net_sign == 1 else "down"
         try:
             found = chembl_drugs(client, h.node, None, approved_only)
         except Exception as exc:                             # noqa: BLE001

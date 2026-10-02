@@ -9193,12 +9193,21 @@ def test_drug_scoring_reads_a_local_potency_file_before_chembl(monkeypatch):
     axis, and potency-unknown is treated as neutral - so a nanomolar
     ligand and an untested one ranked identically."""
     from promoter_tf_drugs import drug_scoring as ds, localpotency as lp
+    from promoter_tf_drugs import localannot as la
 
-    class _Drug:
-        chembl_id = "CHEMBL25"
-        uniprot = "P10275"
-        withdrawn = False
-        properties = {}
+    # The real Drug dataclass has target_symbol and target_chembl_id and
+    # NO uniprot field. An earlier version of this test invented one, so it
+    # passed while the product never took the branch at all.
+    from promoter_tf_drugs.drugs import Drug
+    import dataclasses
+    assert not any(f.name == "uniprot" for f in dataclasses.fields(Drug)),         "Drug grew a uniprot field; this test is now testing the wrong thing"
+
+    drug = Drug(name="androgen-x", chembl_id="CHEMBL25",
+                target_symbol="AR", action_type="AGONIST",
+                mechanism=None, approved=True, max_phase=4.0,
+                first_approval=1990, withdrawn=False, oral=True,
+                direction="up", source="test")
+    monkeypatch.setattr(la, "uniprot_for", lambda sym: "P10275")
 
     class _NoNetwork:
         def get(self, *a, **k):
@@ -9209,7 +9218,7 @@ def test_drug_scoring_reads_a_local_potency_file_before_chembl(monkeypatch):
     monkeypatch.setattr(lp, "actives_for", lambda u: [
         {"pchembl": 8.5, "smiles": "CCO", "target": u},
         {"pchembl": 9.5, "smiles": "CCN", "target": u}])
-    ev = ds.fetch_evidence(_NoNetwork(), _Drug())
+    ev = ds.fetch_evidence(_NoNetwork(), drug)
     assert ev.pchembl_median == 9.0
     assert ev.pchembl_n == 2
     assert "local" in ev.source
@@ -9436,3 +9445,457 @@ def test_the_consensus_table_names_both_methods_that_found_each_drug():
 def test_no_docking_means_no_section_rather_than_an_empty_one():
     from promoter_tf_drugs import pipeline as pl
     assert pl._docking_section([], {}) == []
+
+
+# ===================================================================== #
+# The upstream drug direction. Inverted for every repressor factor and   #
+# every downregulation goal, which is half of all runs.                  #
+# ===================================================================== #
+def _signed_pair():
+    """KINASE activates TFACT and inhibits TFREP. Two edges, so the right
+    answer is arguable on paper."""
+    return [net.Edge(source="KINASE", target="TFACT", sign=1,
+                     n_references=3),
+            net.Edge(source="KINASE", target="TFREP", sign=-1,
+                     n_references=3)]
+
+
+class _DirDrug:
+    def __init__(self, direction):
+        self.name = "drug-" + direction
+        self.direction = direction
+
+    def to_dict(self):
+        return {"name": self.name, "direction": self.direction}
+
+
+def _both_directions(client, symbol, uniprot, approved_only):
+    return [_DirDrug("up"), _DirDrug("down")]
+
+
+def test_inhibiting_a_repressor_needs_an_activator_of_its_upstream_node(
+        monkeypatch):
+    """KINASE -| TFREP, and TFREP represses the gene. To raise the gene you
+    lower TFREP, which means RAISING the kinase. The old expression read
+    net_sign alone and asked for a kinase INHIBITOR, which raises the
+    repressor and lowers the gene - the opposite of the request."""
+    from promoter_tf_drugs import drugs as drugs_mod
+    monkeypatch.setattr(drugs_mod, "chembl_drugs", _both_directions)
+
+    hits = net.find_upstream_targets(None, "TFREP", goal="up",
+                                     tf_role="repressor",
+                                     edges=_signed_pair())
+    assert hits, "no path found; the fixture is wrong, not the code"
+    assert hits[0].net_sign == -1
+    assert hits[0].want_tf_sign == -1
+    net.attach_drugs(None, hits, approved_only=True)
+    kept = {d["direction"] for d in hits[0].drugs}
+    assert kept == {"up"}, f"asked for {kept}, which would move the gene down"
+
+
+def test_the_activator_case_still_asks_for_an_activator(monkeypatch):
+    from promoter_tf_drugs import drugs as drugs_mod
+    monkeypatch.setattr(drugs_mod, "chembl_drugs", _both_directions)
+    hits = net.find_upstream_targets(None, "TFACT", goal="up",
+                                     tf_role="activator",
+                                     edges=_signed_pair())
+    net.attach_drugs(None, hits, approved_only=True)
+    assert {d["direction"] for d in hits[0].drugs} == {"up"}
+
+
+def test_the_hit_carries_the_wanted_tf_direction():
+    """Recorded on the hit because attach_drugs cannot recover it:
+    upstream_paths keeps only paths whose net sign equals it, so net_sign
+    alone says nothing about the goal."""
+    for goal, role, want in (("up", "activator", 1), ("up", "repressor", -1),
+                             ("down", "activator", -1),
+                             ("down", "repressor", 1)):
+        tf = "TFACT" if role == "activator" else "TFREP"
+        hits = net.find_upstream_targets(None, tf, goal=goal, tf_role=role,
+                                         edges=_signed_pair())
+        for h in hits:
+            assert h.want_tf_sign == want, (goal, role)
+
+
+def test_attach_drugs_falls_back_to_its_argument_for_a_bare_hit(monkeypatch):
+    """A hit built by hand has no want_tf_sign, so goal_on_node is used -
+    which is what that parameter was always for and never did."""
+    from promoter_tf_drugs import drugs as drugs_mod
+    monkeypatch.setattr(drugs_mod, "chembl_drugs", _both_directions)
+    h = net.UpstreamHit(node="KINASE", tf_symbol="TF", best_path={},
+                        n_paths=1, score=1.0, rwr_score=0.0, net_sign=1)
+    object.__setattr__(h, "want_tf_sign", None)
+    net.attach_drugs(None, [h], goal_on_node="down")
+    assert {d["direction"] for d in h.drugs} == {"down"}
+
+
+# ===================================================================== #
+# TFAnnotation subclasses dict, so `uniprot` is a key. Three callers read #
+# it with getattr and got None for every gene, silently.                 #
+# ===================================================================== #
+def test_the_accession_is_a_dict_key_not_an_attribute():
+    """The shape that caused three silent failures, pinned directly."""
+    from promoter_tf_drugs.annotate import TFAnnotation
+    a = TFAnnotation(symbol="VDR", uniprot="P11473")
+    assert isinstance(a, dict)
+    assert a.get("uniprot") == "P11473"
+    assert getattr(a, "uniprot", None) is None, (
+        "if TFAnnotation grows a uniprot property, the getattr callers "
+        "that this test exists to prevent would start working by accident")
+
+
+def _hgnc(tmp_path, rows=(("VDR", "P11473"),)):
+    from promoter_tf_drugs import localannot as la
+
+    d = tmp_path / "data"
+    d.mkdir(exist_ok=True)
+    with open(d / "hgnc_complete_set.txt", "w", encoding="utf-8") as fh:
+        fh.write("symbol\tname\tuniprot_ids\tentrez_id\talias_symbol\n")
+        for sym, uni in rows:
+            fh.write(f"{sym}\t{sym} protein\t{uni}\t111\tOLD{sym}\n")
+    la._HGNC.clear()
+    return d
+
+
+def test_uniprot_for_resolves_a_symbol_and_an_alias(tmp_path, monkeypatch):
+    from promoter_tf_drugs import localannot as la
+    monkeypatch.chdir(tmp_path)
+    _hgnc(tmp_path)
+    assert la.uniprot_for("VDR") == "P11473"
+    assert la.uniprot_for("vdr") == "P11473"
+    assert la.uniprot_for("OLDVDR") == "P11473"
+    assert la.uniprot_for("NOSUCHGENE") is None
+
+
+def test_no_hgnc_table_means_unknown_not_a_gene_without_a_protein(
+        tmp_path, monkeypatch):
+    from promoter_tf_drugs import localannot as la
+    monkeypatch.chdir(tmp_path)
+    la._HGNC.clear()
+    assert la.uniprot_for("VDR") is None
+
+
+def test_the_docking_cli_can_resolve_a_gene_symbol():
+    """It could not: both sites read the accession with getattr, so every
+    `--gene` run printed "Pass --uniprot" even when the lookup worked."""
+    import inspect
+    from promoter_tf_drugs import docking as dk
+    src = inspect.getsource(dk)
+    assert 'getattr(info, "uniprot"' not in src
+    assert src.count('(info or {}).get("uniprot")') == 2
+
+
+# ===================================================================== #
+# Three wirings, offline.                                                #
+# ===================================================================== #
+def test_screen_family_resolves_ligands_from_files_with_no_client(
+        tmp_path, monkeypatch):
+    from promoter_tf_drugs import screening as scr, localpotency as lp
+    monkeypatch.chdir(tmp_path)
+    _hgnc(tmp_path, [("RARA", "P10826"), ("RARB", "P10826")])
+    monkeypatch.setattr(lp, "available", lambda: {"bindingdb": "x"})
+    monkeypatch.setattr(lp, "actives_for", lambda u: [
+        {"chembl_id": "C1", "smiles": "CCO", "pchembl": 8.0}])
+    assert scr.uniprot_for("RARA") == "P10826"
+    assert len(scr.local_actives_for("RARA")) == 1
+
+
+def test_screen_family_with_no_source_says_so_rather_than_blaming_the_family(
+        tmp_path, monkeypatch):
+    """"The family is as under-studied as the receptor" is a claim about
+    biology. With no readable source it is a claim about the filesystem."""
+    from promoter_tf_drugs import screening as scr
+    monkeypatch.chdir(tmp_path)
+    res = scr.screen_family(None, "RARA", goal="up")
+    assert res["source"] is None
+    assert "missing source, not a receptor without ligands" in res["error"]
+
+
+def test_screen_family_honours_the_goal_it_accepts():
+    """It took `goal` and then passed goal="up" to screen(), so a run
+    asking to LOWER a gene was screened for compounds that raise it."""
+    import inspect
+    from promoter_tf_drugs import screening as scr
+    src = inspect.getsource(scr.screen_family)
+    assert 'goal="up"' not in src.split('"""', 2)[-1], (
+        "screen_family hardcodes a goal again")
+    assert "screen(model, lib, goal=goal" in src
+
+
+def test_the_library_guard_in_screen_receptor_has_the_names_it_uses():
+    """The guard was first written into screen_receptor, where `fam` does
+    not exist - a NameError on the first run with no library at all."""
+    import inspect
+    from promoter_tf_drugs import screening as scr
+    src = inspect.getsource(scr.screen_receptor)
+    assert "fam.name" not in src
+    assert "no screening library" in src
+
+
+def test_orange_book_annotates_a_merged_library_offline(tmp_path, monkeypatch):
+    from promoter_tf_drugs import orangebook as ob
+    monkeypatch.chdir(tmp_path)
+    _orange_book(tmp_path)
+    lib = [{"name": "tazarotene"}, {"name": "metformin"},
+           {"name": "nosuchdrug"}]
+    acc = ob.enrich(lib)
+    assert acc["matched"] == 2 and acc["n_unmatched"] == 1
+    assert lib[0]["route_reach"] == "local only"
+    assert lib[1]["generic_available"] is True
+    assert "nosuchdrug" in acc["unmatched"]
+
+
+def test_the_merge_cli_exposes_the_orange_book(tmp_path, monkeypatch):
+    from promoter_tf_drugs import localdrugs as ld
+    monkeypatch.chdir(tmp_path)
+    _orange_book(tmp_path)
+    (tmp_path / "a.tsv").write_text(
+        "name\tsmiles\tmax_phase\n"
+        "tazarotene\tCCOC(=O)c1ccc(cn1)C#Cc1ccc2c(c1)C(C)(C)CCS2\t4\n"
+        "metformin\tCN(C)C(=N)NC(N)=N\t4\n", encoding="utf-8")
+    assert ld.main(["--merge", "a.tsv", "--orange-book"]) == 0
+
+
+def test_depmap_reads_its_own_common_essential_list(tmp_path, monkeypatch):
+    from promoter_tf_drugs import depmap as dm
+    monkeypatch.chdir(tmp_path)
+    d = tmp_path / "data"
+    d.mkdir(exist_ok=True)
+    (d / "CRISPRInferredCommonEssentials.csv").write_text(
+        "Essentials\nPOLR2A (5430)\n", encoding="utf-8")
+    ess = dm.load_common_essentials()
+    assert ess == {"POLR2A"}
+    d1 = dm.assess("POLR2A", [-1.4] * 14, common_essentials=ess)
+    assert d1.depmap_common_essential is True
+    d2 = dm.assess("VDR", [-0.05] * 14, common_essentials=ess)
+    assert d2.depmap_common_essential is False
+
+
+def test_a_list_nobody_loaded_is_not_a_gene_being_cleared():
+    """None, never False. A gene absent from a list that was never read
+    has not been shown to be dispensable."""
+    from promoter_tf_drugs import depmap as dm
+    d = dm.assess("VDR", [-0.05] * 14)
+    assert d.depmap_common_essential is None
+
+
+def test_depmap_reports_a_disagreement_rather_than_choosing(tmp_path):
+    """DepMap's call is over the whole release; the fraction here is over
+    whatever lines were handed in. Where they differ, both are shown."""
+    from promoter_tf_drugs import depmap as dm
+    d = dm.assess("POLR2A", [-0.1] * 14, common_essentials={"POLR2A"})
+    assert d.depmap_common_essential is True
+    assert any("common-essential" in c and "better-powered" in c
+               for c in d.caveats)
+    d2 = dm.assess("MYC", [-1.4] * 14, common_essentials={"POLR2A"})
+    assert any("not representative" in c for c in d2.caveats)
+
+
+# ===================================================================== #
+# Parameters that were accepted and ignored.                             #
+# ===================================================================== #
+def test_no_public_function_accepts_a_parameter_it_never_reads():
+    """The class of bug this round was found by. `goal` deciding whether
+    you want a gene up or down was one of them."""
+    import ast
+    import pathlib
+    from promoter_tf_drugs import __file__ as pkg
+
+    skip = {"self", "cls", "client", "kwargs", "args"}
+    # Reporting helpers whose signature is kept uniform on purpose.
+    allowed = {("pipeline.py", "_drug_glossary", "res"),
+               ("screens.py", "crispra_plan", "promoter"),
+               ("discovery.py", "axes_from_grade", "tf_result"),
+               ("congeners.py", "collapse_grades", "set_name"),
+               ("depmap.py", "_verdict", "mean"),
+               ("evidence.py", "annotate_hits_with_chip", "hits")}
+    bad = []
+    for f in sorted(pathlib.Path(pkg).parent.glob("*.py")):
+        tree = ast.parse(f.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef):
+                continue
+            a = node.args
+            params = [p.arg for p in a.posonlyargs + a.args + a.kwonlyargs
+                      if p.arg not in skip and not p.arg.startswith("_")]
+            used = {n.id for n in ast.walk(node)
+                    if isinstance(n, ast.Name) and isinstance(n.ctx,
+                                                              ast.Load)}
+            for p in params:
+                if p not in used and (f.name, node.name, p) not in allowed:
+                    bad.append(f"{f.name}:{node.lineno} {node.name}({p})")
+    assert not bad, "accepted and never read: " + ", ".join(bad)
+
+
+def test_smiles_to_sdf_embeds_the_number_of_conformers_asked_for():
+    import pytest
+    from pathlib import Path
+    pytest.importorskip("rdkit")
+    from rdkit import Chem
+    from promoter_tf_drugs import docking as dk
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        one = dk.smiles_to_sdf("CCCCCCCC(=O)O", Path(td) / "a.sdf")
+        many = dk.smiles_to_sdf("CCCCCCCC(=O)O", Path(td) / "b.sdf",
+                                n_confs=8)
+        # One conformer is written either way; with n_confs it is the
+        # lowest-energy of eight rather than the first embedding.
+        a = Chem.SDMolSupplier(str(one), removeHs=False)[0]
+        b = Chem.SDMolSupplier(str(many), removeHs=False)[0]
+        assert a is not None and b is not None
+        assert a.GetNumConformers() == 1 and b.GetNumConformers() == 1
+
+
+def test_a_plain_smiles_file_says_it_cannot_filter_on_approval(
+        tmp_path, caplog):
+    """ZINC's `world` subset is not approved. Accepting approved_only and
+    ignoring it let that file read as an approved library."""
+    import logging
+    from promoter_tf_drugs import localdrugs as ld
+    f = tmp_path / "world.smi"
+    f.write_text("CCO zinc1\nCCN zinc2\n", encoding="utf-8")
+    with caplog.at_level(logging.WARNING):
+        rows = ld.read_smiles_file(f, approved_only=True)
+    assert len(rows) == 2
+    assert "could not be applied" in caplog.text
+
+
+def test_the_drug_scan_summary_states_which_way_the_factor_moves():
+    from promoter_tf_drugs import tfactivity as tfa
+    res = {"VDR": [{"drug": "x"}]}
+    assert "raise" in tfa.summarise_drug_scan(res, want="up")
+    assert "lower" in tfa.summarise_drug_scan(res, want="down")
+
+
+def test_annotate_hits_with_chip_actually_annotates_the_hits(tmp_path):
+    """It computed the counts, returned them, and never touched a hit -
+    while its docstring said otherwise."""
+    from promoter_tf_drugs import evidence as ev
+    bed = tmp_path / "peaks.bed"
+    bed.write_text("chr1\t1000\t1100\tVDR\n" * 3, encoding="utf-8")
+
+    class _P:
+        chrom, start, end, region = "chr1", 900, 1200, "chr1:900-1200"
+
+    hits = [{"tf_symbols": ["VDR"]}, {"tf_symbols": ["NOBODY"]}]
+    counts = ev.annotate_hits_with_chip(hits, _P(), bed)
+    assert counts.get("VDR") == 3
+    assert hits[0]["chip_peaks"] == 3 and hits[0]["chip_checked"] is True
+    assert hits[1]["chip_peaks"] == 0 and hits[1]["chip_checked"] is True
+
+
+def test_no_chip_bed_marks_the_hits_unchecked_rather_than_zero(tmp_path):
+    from promoter_tf_drugs import evidence as ev
+    hits = [{"tf_symbols": ["VDR"]}]
+    assert ev.annotate_hits_with_chip(hits, None, None) == {}
+    assert hits[0]["chip_checked"] is False
+    assert "chip_peaks" not in hits[0], (
+        "absent is not zero: a factor nobody assayed is unexamined")
+
+
+# ===================================================================== #
+# Docking into a predicted model. assess_model says "Do not dock this    #
+# model" in its own text and was called by nothing.                      #
+# ===================================================================== #
+def _plddt_pdb(header, values):
+    lines = [header]
+    for i, b in enumerate(values, start=1):
+        lines.append(
+            f"ATOM  {i:5d}  CA  ALA A{i:4d}    "
+            f"{i * 3.8:8.3f}{0.0:8.3f}{0.0:8.3f}  1.00{b:6.2f}           C")
+    lines.append("END")
+    return "\n".join(lines) + "\n"
+
+
+_AF_HEADER = ("HEADER    PREDICTED STRUCTURE FROM ALPHAFOLD DB "
+              "(DEEPMIND / EMBL-EBI)")
+_XRAY_HEADER = "HEADER    TRANSCRIPTION FACTOR                 01-JAN-00   1ABC"
+
+
+def _flat_score(smiles, receptor, *a, **k):
+    return -9.0
+
+
+def test_a_mostly_disordered_predicted_model_is_refused(tmp_path):
+    """Transcription factors are the worst case: a small folded DNA-binding
+    domain and a long disordered activation domain. Low-pLDDT regions look
+    like open greasy cavities to a scoring function, so the numbers come
+    back confident and mean nothing."""
+    f = tmp_path / "AF-P00001.pdb"
+    f.write_text(_plddt_pdb(_AF_HEADER, [30.0] * 80 + [95.0] * 20),
+                 encoding="utf-8")
+    run = docking.screen_by_docking(
+        f, [{"name": "x", "smiles": "CCO"}], target="TF",
+        actives=[{"name": "a", "smiles": "CCN"}],
+        decoys=[{"name": "d", "smiles": "CCC"}],
+        score_fn=_flat_score, box=(0.0, 0.0, 0.0, 20.0, 20.0, 20.0))
+    assert run.usable is False
+    assert "disorder prediction" in run.error
+    assert any("mean pLDDT" in c for c in run.caveats)
+
+
+def test_a_folded_predicted_model_proceeds_but_is_labelled(tmp_path):
+    f = tmp_path / "AF-P00002.pdb"
+    f.write_text(_plddt_pdb(_AF_HEADER, [95.0] * 90 + [40.0] * 10),
+                 encoding="utf-8")
+    run = docking.screen_by_docking(
+        f, [{"name": "x", "smiles": "CCO"}], target="TF",
+        actives=[{"name": "a", "smiles": "CCN"}],
+        decoys=[{"name": "d", "smiles": "CCC"}],
+        score_fn=_flat_score, box=(0.0, 0.0, 0.0, 20.0, 20.0, 20.0))
+    assert "disorder prediction" not in (run.error or "")
+    assert any("89.5" in c or "90%" in c for c in run.caveats)
+
+
+def test_a_crystal_b_factor_is_never_read_as_confidence(tmp_path):
+    """The negative control. An experimental structure's B-factor column
+    holds crystallographic B factors: 28 is a well-ordered atom, not 28%
+    confidence. Reading it as pLDDT would refuse every real structure."""
+    f = tmp_path / "1abc.pdb"
+    f.write_text(_plddt_pdb(_XRAY_HEADER, [28.0] * 100), encoding="utf-8")
+    assert docking._model_assessment(f) is None
+    run = docking.screen_by_docking(
+        f, [{"name": "x", "smiles": "CCO"}], target="TF",
+        actives=[{"name": "a", "smiles": "CCN"}],
+        decoys=[{"name": "d", "smiles": "CCC"}],
+        score_fn=_flat_score, box=(0.0, 0.0, 0.0, 20.0, 20.0, 20.0))
+    assert "disorder prediction" not in (run.error or "")
+    assert not any("pLDDT" in c for c in run.caveats)
+
+
+def test_an_unreadable_receptor_is_not_treated_as_a_predicted_model(tmp_path):
+    assert docking._model_assessment(tmp_path / "nothing-here.pdb") is None
+
+
+# ===================================================================== #
+# The family screen is reached by the product, not only by its tests.    #
+# ===================================================================== #
+def test_the_pipeline_falls_back_to_a_family_screen():
+    """screen_receptor refuses when a receptor has too few ligands of its
+    own, which is a data gap rather than a fact about the receptor.
+    screen_family was written for exactly that and called from nowhere."""
+    import inspect
+    src = inspect.getsource(pipeline.run)
+    assert "screening.screen_family" in src
+    i = src.index("screening.screen_family")
+    window = src[max(0, i - 1500):i]
+    assert "screen_receptor" in window, (
+        "the family screen must sit after the receptor screen refuses, "
+        "not replace it")
+
+
+def test_the_family_fallback_only_fires_on_a_refusal_with_no_hits():
+    """A receptor screen that produced hits must not be discarded for a
+    family model, which is strictly weaker evidence."""
+    import inspect
+    src = inspect.getsource(pipeline.run)
+    assert 'sc.get("error") and not sc.get("hits")' in src
+    assert 'fam.get("hits")' in src, (
+        "a family screen that refused must not overwrite the receptor "
+        "result with its own error")
+
+
+def test_a_family_result_records_what_it_replaced():
+    import inspect
+    src = inspect.getsource(pipeline.run)
+    assert 'fam["replaces"] = sc.get("error")' in src

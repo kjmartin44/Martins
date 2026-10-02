@@ -102,6 +102,10 @@ class Dependency:
     selective: bool = False
     top_lineages: list = field(default_factory=list)
     burden: float | None = None             # 0..1, HIGHER = more collateral
+    # DepMap's own common-essential call, when that file is on disk. None
+    # means it was not consulted, which is not the same as False: a gene
+    # absent from a list nobody loaded has not been cleared.
+    depmap_common_essential: bool | None = None
     caveats: list = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -231,31 +235,55 @@ def load_common_essentials(path=None) -> set:
     p = resolve(path, DEFAULT_ESSENTIAL_PATHS)
     if not p:
         return set()
+    # The header is a row like any other to csv.reader, and the release
+    # has used "Essentials", "Gene" and "gene" across versions - so
+    # discarding one literal let the others through as a gene called
+    # ESSENTIALS. Skip the first row when it is not a gene entry.
+    _HEADERS = {"GENE", "GENES", "ESSENTIALS", "ESSENTIAL",
+                "COMMON_ESSENTIALS", "SYMBOL"}
     out: set = set()
     with open(p, newline="", encoding="utf-8", errors="replace") as fh:
-        for row in csv.reader(fh):
-            if row and row[0].strip():
-                out.add(_symbol(row[0]))
-    out.discard("GENE")
+        for i, row in enumerate(csv.reader(fh)):
+            if not row or not row[0].strip():
+                continue
+            sym = _symbol(row[0])
+            if i == 0 and sym in _HEADERS:
+                continue
+            out.add(sym)
+    out -= _HEADERS
     log.info("DepMap common essentials: %d gene(s)", len(out))
     return out
 
 
 # -------------------------------------------------------------- assessment
-def assess(gene: str, effects: list, *, lineages: list | None = None
-           ) -> Dependency:
+def assess(gene: str, effects: list, *, lineages: list | None = None,
+           common_essentials: set | None = None) -> Dependency:
     """Summarise one gene's knockout phenotype.
 
     `effects` is the per-cell-line Chronos score, with None for lines where
     the gene was not scored. `lineages` is the matching lineage per line
     when Model.csv was available.
+
+    `common_essentials` is DepMap's own inferred list. It is a second
+    opinion rather than a duplicate: that call is made over the whole
+    release, while the fraction computed here sees only the lines in the
+    matrix handed to this function, which may be a subset. Where the two
+    disagree, both are reported - a disagreement is information about how
+    much the local panel can support, not a number to pick between.
     """
     d = Dependency(gene=gene.upper())
     vals = [v for v in (effects or []) if v is not None]
+    if common_essentials is not None:
+        d.depmap_common_essential = gene.upper() in common_essentials
     if len(vals) < 10:
         d.caveats.append(
             f"only {len(vals)} cell line(s) carry a score for this gene, "
             f"which is too few to summarise - treat this as not measured")
+        if d.depmap_common_essential:
+            d.caveats.append(
+                "DepMap's own common-essential list does include this gene. "
+                "Too few lines here to confirm it, and that list is the "
+                "better-powered call, so treat the factor as essential")
         return d
 
     d.n_lines = len(vals)
@@ -306,6 +334,23 @@ def assess(gene: str, effects: list, *, lineages: list | None = None
             "the proliferative cost and says nothing about a differentiated "
             "tissue, where the factor's actual job may lie")
 
+    if d.depmap_common_essential is True and \
+            d.fraction_dependent < PAN_ESSENTIAL_FRACTION:
+        d.caveats.append(
+            f"DepMap calls this gene common-essential, while only "
+            f"{d.fraction_dependent:.0%} of the {d.n_lines} line(s) read here "
+            f"fall below the dependency threshold. That list is inferred "
+            f"over the whole release, so where the two differ it is the "
+            f"better-powered call - the local fraction is reported, not "
+            f"preferred")
+    elif d.depmap_common_essential is False and \
+            d.fraction_dependent >= PAN_ESSENTIAL_FRACTION:
+        d.caveats.append(
+            f"{d.fraction_dependent:.0%} of lines here depend on this gene, "
+            f"yet DepMap does not list it as common-essential. Its method "
+            f"requires consistency across the full panel, so this pattern "
+            f"usually means the lines read here are not representative")
+
     d.caveats.append(
         "DepMap is cancer cell lines dividing in vitro. A factor whose role "
         "is in a post-mitotic or differentiated cell looks dispensable here "
@@ -314,7 +359,7 @@ def assess(gene: str, effects: list, *, lineages: list | None = None
 
 
 def assess_many(genes, *, effect_path=None, model_path=None,
-                lineages: dict | None = None) -> dict:
+                lineages: dict | None = None, essential_path=None) -> dict:
     """`{SYMBOL: Dependency}` for every gene DepMap scored.
 
     Genes absent from the file are omitted rather than returned as
@@ -336,9 +381,15 @@ def assess_many(genes, *, effect_path=None, model_path=None,
                else load_lineages(model_path, beside=p))
     per_line = [lin_map.get(m) for m in models] if lin_map else None
 
+    # Loaded once for the whole batch rather than per gene: it is a file
+    # read, and `load_common_essentials` returns an empty set when there is
+    # none. Empty must stay None here, because an empty set would make
+    # every gene read as "DepMap says not essential".
+    ess = load_common_essentials(essential_path) or None
+
     out = {}
     for sym, effects in data.items():
-        d = assess(sym, effects, lineages=per_line)
+        d = assess(sym, effects, lineages=per_line, common_essentials=ess)
         if d.n_lines:
             out[sym] = d
     return out

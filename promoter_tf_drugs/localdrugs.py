@@ -248,8 +248,21 @@ def read_smiles_file(path, *, approved_only: bool = True) -> list:
     This is what ZINC's `fda` and `world` subsets ship as, and they are
     worth supporting for a reason beyond format: that subset exists to be
     docked, so it is already curated to the approved set.
+
+    `approved_only` cannot be applied here and is not silently accepted.
+    The format carries no phase column, so there is nothing to filter on:
+    approval is whatever the file's own curation asserts. A caller asking
+    for it gets a warning rather than the quiet impression that a filter
+    ran, which is how a `world` subset could be read as approved-only.
     """
     path = Path(path)
+    if approved_only:
+        log.warning(
+            "%s is a plain SMILES file with no phase column, so "
+            "approved_only could not be applied. Every structure in the "
+            "file is returned and approval rests on the file's own "
+            "curation - ZINC's `fda` subset is approved, `world` is not.",
+            path.name)
     out: list = []
     with open(path, "r", encoding="utf-8", errors="replace") as fh:
         for line in fh:
@@ -872,6 +885,13 @@ def main(argv=None) -> int:
                         "They carry human safety data and a documented "
                         "reason for removal, which is why this is separate "
                         "from --min-phase")
+    p.add_argument("--orange-book", nargs="?", const=True, metavar="FILE",
+                   help="annotate each molecule with its FDA route of "
+                        "administration from the Orange Book, and report how "
+                        "many of the library are approved only by a local "
+                        "route. Reads products.txt or EOBZIP.zip from disk; "
+                        "no network. Pass a path, or the flag alone to look "
+                        "in data/")
     p.add_argument("--target", metavar="SYMBOL",
                    help="also report how many of the merged compounds are "
                         "annotated against this target")
@@ -912,6 +932,17 @@ def main(argv=None) -> int:
                   f"{info['already_present']:5d} already present")
     print()
     print(explain_counts(res))
+    if args.orange_book:
+        # Route of administration is the one thing the FDA's 20,000-product
+        # file has that no structure source does, and the reason to read it
+        # at all: a topical-only approval is not a route to an internal
+        # gene however well the molecule binds.
+        from . import orangebook as ob
+        acc = ob.enrich(res["library"],
+                        None if args.orange_book is True else args.orange_book)
+        print()
+        print(ob.summarise(acc))
+
     if args.target:
         n = sum(1 for r in res["library"]
                 if args.target.strip().upper() in (r.get("targets") or []))

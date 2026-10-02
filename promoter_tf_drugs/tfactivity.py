@@ -471,8 +471,7 @@ def activity(signature: dict, regulons: dict, *,
 
 
 def activity_from_sets(up: set, down: set, regulons: dict, *,
-                       min_targets: int = MIN_TARGETS,
-                       background: int = 12_000) -> list:
+                       min_targets: int = MIN_TARGETS) -> list:
     """Activity from up/down gene SETS rather than a continuous signature.
 
     This is the shape LINCS data arrives in: Enrichr's
@@ -486,6 +485,12 @@ def activity_from_sets(up: set, down: set, regulons: dict, *,
     That is a binomial sign test. It is weaker than the continuous version
     - it uses only the targets that made the top-N cut - and it is the
     honest test for set data.
+
+    There is deliberately no `background` size here. A sign test asks
+    whether the agreeing targets outnumber a coin flip, so the number of
+    measured genes does not enter it. The parameter existed, defaulted to
+    12,000 and was read by nothing, which invited a caller to think the
+    test was a hypergeometric over a gene universe. It is not.
     """
     up = {g.strip().upper() for g in (up or set())}
     down = {g.strip().upper() for g in (down or set())}
@@ -879,7 +884,12 @@ def summarise_drug_scan(results: dict, *, want: str = "up") -> str:
                 "as well as with the regulon, and most compounds were "
                 "profiled too few times to clear the repetition bar.")
     n = sum(len(v) for v in results.values())
-    return (f"{n} compound-factor pair(s) across {len(results)} factor(s). "
+    # `want` was accepted and never used, so the prose described compounds
+    # moving a factor's regulon without saying WHICH WAY - the one fact a
+    # reader needs to know whether the compound helps or hurts.
+    which = ("raise" if want == "up" else "lower")
+    return (f"{n} compound-factor pair(s) across {len(results)} factor(s), "
+            f"each predicted to {which} the factor's activity. "
             f"Each one is a compound whose own perturbation signature moves "
             f"that factor's targets, found without any record of the "
             f"compound binding the factor - which is what makes this "

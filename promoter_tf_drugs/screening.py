@@ -318,8 +318,7 @@ def build_binding_model(actives: list[dict], decoys: list[dict], *,
     return model, auc
 
 
-def enrichment_check(hits: list[ScreenHit],
-                     threshold: float = PROMISCUITY_FLAG) -> dict:
+def enrichment_check(hits: list[ScreenHit]) -> dict:
     """Do known actives outrank the novel candidates?
 
     Important correction. This must judge the screen on the task the model was
@@ -331,6 +330,10 @@ def enrichment_check(hits: list[ScreenHit],
     So the test is relative: known actives must rank at or above the novel
     candidates. The absolute quality gate for a binding screen is the
     cross-validated AUC, checked before this function is reached.
+
+    The `threshold` parameter of the superseded absolute test is gone
+    rather than left in place unread: a caller passing it would have
+    changed nothing and had no way to find that out.
     """
     known = [h.probability for h in hits if h.known_ligand]
     novel = [h.probability for h in hits if h.quadrant == "NOVEL HYPOTHESIS"]
@@ -379,7 +382,19 @@ def screen_receptor(client: Client, target_chembl_id: str, *, goal: str = "up",
 
     from . import agonism
 
-    lib = library if library is not None else approved_library(client)
+    if library is not None:
+        lib = library
+    else:
+        lib = local_library()
+        if not lib and client is not None:
+            lib = approved_library(client)
+    if not lib:
+        # `fam` does not exist in this function. An earlier edit put this
+        # guard here instead of in screen_family, where it was meant to
+        # go, and it would have raised NameError the first time a run had
+        # no library at all.
+        return {"target": target_chembl_id, "hits": [],
+                "error": "no screening library: no local drug table on disk and no client to fetch one. Merge one with `python -m promoter_tf_drugs.localdrugs --merge FILE...`."}
     actives = agonism.fetch_actives(client, target_chembl_id)
     active_ids = {a["chembl_id"] for a in actives}
 
@@ -517,7 +532,51 @@ def transfer_auc(model, own_actives: list, decoys: list) -> float | None:
         return None
 
 
-def screen_family(client: Client, symbol: str, *, goal: str = "up",
+def uniprot_for(symbol: str) -> str | None:
+    """Gene symbol to UniProt accession, from the local HGNC table.
+
+    Delegates to `localannot.uniprot_for`, which is the single place that
+    knows the accession is a dict KEY on TFAnnotation rather than an
+    attribute. Returns None when no HGNC table is on disk: unknown, not a
+    gene without a protein.
+    """
+    try:
+        from . import localannot as la
+        return la.uniprot_for(symbol)
+    except Exception:                                       # noqa: BLE001
+        return None
+
+
+def local_actives_for(symbol: str, *, uniprot: str | None = None) -> list:
+    """Measured ligands of one protein, from a local potency file.
+
+    The same records the online path builds from `/activity`, in the same
+    shape - name, smiles, chembl_id, pchembl - so a family screen reads
+    identically offline. Returns [] when no potency file is on disk, which
+    is not the same as a protein with no known ligands.
+    """
+    uni = uniprot or uniprot_for(symbol)
+    if not uni:
+        return []
+    try:
+        from . import localpotency as lp
+        if not any(lp.available().values()):
+            return []
+        return lp.actives_for(uni)
+    except Exception:                                       # noqa: BLE001
+        return []
+
+
+def local_library(path=None) -> list:
+    """The approved screening library from a local table, or [] if none."""
+    try:
+        from . import localdrugs as ld
+        return ld.library(path) if path else ld.library()
+    except Exception:                                       # noqa: BLE001
+        return []
+
+
+def screen_family(client, symbol: str, *, goal: str = "up",
                   library: list[dict] | None = None, top_n: int = 25,
                   decoy_ratio: int = 3, seed: int = 0,
                   gene_linked: set | None = None) -> dict:
@@ -526,11 +585,17 @@ def screen_family(client: Client, symbol: str, *, goal: str = "up",
     For a receptor with too few of its own ligands to train on. Returns the
     same shape as `screen_receptor`, with `family_model: True` and the
     measured transfer AUC, or an `error` saying which step refused.
+
+    Runs offline. `client` may be None, and local potency files are read
+    first in any case: on a blocked network the ChEMBL activity calls are
+    what left this path with nothing to train on, and a family screen that
+    cannot read ligands reports "the family is as under-studied as the
+    receptor" when the truth is that nothing could be fetched. Which
+    source answered is recorded in `source`.
     """
     import random
 
     from . import agonism, paralogs
-    from .drugs import _chembl_targets
 
     fam = paralogs.family_of(symbol)
     if fam is None:
@@ -545,20 +610,33 @@ def screen_family(client: Client, symbol: str, *, goal: str = "up",
 
     # The target's own ligands, which are the validation set and are never
     # trained on.
-    own_ids = _chembl_targets(client, symbol, None)
-    own: list = []
-    for tid in own_ids[:2]:
-        own.extend(agonism.fetch_actives(client, tid))
+    sources: list = []
+    own = local_actives_for(symbol)
+    if own:
+        sources.append("local potency file")
+    elif client is not None:
+        from .drugs import _chembl_targets
+        own_ids = _chembl_targets(client, symbol, None)
+        for tid in own_ids[:2]:
+            own.extend(agonism.fetch_actives(client, tid))
+        if own:
+            sources.append("ChEMBL")
+
     if len(own) < MIN_VALIDATION_ACTIVES:
         return {
             "target": symbol, "hits": [], "family": fam.name,
             "n_own_actives": len(own),
+            "source": sources[0] if sources else None,
             "error": (f"{symbol} has {len(own)} measured ligand(s) of its "
                       f"own, below the {MIN_VALIDATION_ACTIVES} needed to "
                       f"test whether {fam.name} chemistry transfers to it. A "
                       f"family model could be built and not checked, which "
                       f"would report the family's pharmacology as this "
-                      f"receptor's. Not reported."),
+                      f"receptor's. Not reported."
+                      + ("" if sources else
+                         " No ligand source was readable at all - no local "
+                         "potency file and no client - so this is a missing "
+                         "source, not a receptor without ligands.")),
         }
 
     # Siblings' ligands, which are the training set.
@@ -566,10 +644,12 @@ def screen_family(client: Client, symbol: str, *, goal: str = "up",
     contributing: list = []
     own_smiles = {a["smiles"] for a in own}
     for sib in siblings:
-        tids = _chembl_targets(client, sib, None)
-        got: list = []
-        for tid in tids[:1]:
-            got.extend(agonism.fetch_actives(client, tid))
+        got = local_actives_for(sib)
+        if not got and client is not None:
+            from .drugs import _chembl_targets
+            tids = _chembl_targets(client, sib, None)
+            for tid in tids[:1]:
+                got.extend(agonism.fetch_actives(client, tid))
         # A ligand shared with the target would leak the answer.
         got = [g for g in got if g["smiles"] not in own_smiles]
         if got:
@@ -586,7 +666,15 @@ def screen_family(client: Client, symbol: str, *, goal: str = "up",
                       f"under-studied as the receptor."),
         }
 
-    lib = library if library is not None else approved_library(client)
+    if library is not None:
+        lib = library
+    else:
+        lib = local_library()
+        if not lib and client is not None:
+            lib = approved_library(client)
+    if not lib:
+        return {"target": symbol, "hits": [], "family": fam.name,
+                "error": "no screening library: no local drug table on disk and no client to fetch one. Merge one with `python -m promoter_tf_drugs.localdrugs --merge FILE...`."}
     pooled_smiles = {a["smiles"] for a in pooled}
     pool = [d for d in lib if d["smiles"] not in pooled_smiles
             and d["smiles"] not in own_smiles]
@@ -618,7 +706,9 @@ def screen_family(client: Client, symbol: str, *, goal: str = "up",
                       f"reported."),
         }
 
-    hits = screen(model, lib, goal="up",
+    # `goal` was accepted and then overridden with "up" here, so a run
+    # asking to LOWER a gene was screened for compounds that raise it.
+    hits = screen(model, lib, goal=goal,
                   known_ids={a["chembl_id"] for a in own},
                   top_n=top_n, gene_linked=gene_linked,
                   known_potency={a["chembl_id"]: a["pchembl"]
@@ -641,4 +731,6 @@ def screen_family(client: Client, symbol: str, *, goal: str = "up",
         "transfer_auc": round(t_auc, 3),
         "enrichment": enrichment_check(hits),
         "family_note": fam.note,
+        "source": sources[0] if sources else None,
+        "offline": "local potency file" in sources,
     }

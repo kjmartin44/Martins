@@ -102,12 +102,54 @@ def region_is_open(bed_path: str | Path, chrom: str, start: int, end: int) -> bo
 
 
 def annotate_hits_with_chip(hits, promoter, chip_bed: str | Path | None):
-    """Attach a `chip_peaks` count to each hit's TF. Returns {tf: count}."""
+    """Attach a `chip_peaks` count to each hit's TF. Returns {tf: count}.
+
+    The counts were computed and returned and the hits were never touched,
+    so the docstring described something that did not happen. A hit now
+    carries `chip_peaks` for the best-supported of its TF symbols, and
+    `chip_checked` saying a BED was actually read - absent is not zero,
+    because a motif whose factor nobody assayed is unexamined rather than
+    unsupported.
+    """
     if not chip_bed:
+        for h in hits or []:
+            _set(h, "chip_checked", False)
         return {}
-    counts = peaks_in_region(chip_bed, promoter.chrom, promoter.start, promoter.end)
+
+    counts = peaks_in_region(chip_bed, promoter.chrom, promoter.start,
+                             promoter.end)
+    for h in hits or []:
+        syms = _get(h, "tf_symbols") or []
+        best = max((counts.get(sym.upper(), 0) for sym in syms), default=0)
+        _set(h, "chip_peaks", best)
+        _set(h, "chip_checked", True)
     log.info("%d TFs with ChIP peaks over %s", len(counts), promoter.region)
     return counts
+
+
+def _get(obj, field: str):
+    """Read a field from a dataclass hit or a plain dict, whichever came.
+
+    `getattr` on a dict returns None for every key, which is how the first
+    version of this read no TF symbols at all from the dict hits the
+    report passes - the same mistake three `uniprot` callers made.
+    """
+    if isinstance(obj, dict):
+        return obj.get(field)
+    return getattr(obj, field, None)
+
+
+def _set(obj, field: str, value) -> None:
+    """Set a field on a dataclass hit or a plain dict, whichever arrived."""
+    if isinstance(obj, dict):
+        obj[field] = value
+        return
+    try:
+        setattr(obj, field, value)
+    except (AttributeError, TypeError):
+        # A frozen or slotted hit cannot carry the annotation. Say so once
+        # rather than failing the run over a report field.
+        log.debug("could not annotate %r with %s", type(obj).__name__, field)
 
 
 # ----------------------------------------------------- ReMap REST API route

@@ -236,6 +236,23 @@ def annotate_local(symbols) -> dict:
     return out
 
 
+def uniprot_for(symbol: str) -> str | None:
+    """Gene symbol to UniProt accession from the local HGNC table.
+
+    One accessor, because `TFAnnotation` subclasses dict and three callers
+    read the accession with `getattr`, which returns None for every gene
+    and fails silently - the docking CLI refused every `--gene` and the
+    offline potency lookup never ran.
+
+    Aliases and retired symbols resolve, since `load_hgnc` indexes them.
+    Returns None when no HGNC table is on disk, which means unknown.
+    """
+    if not load_hgnc():
+        return None
+    s = (symbol or "").strip().upper()
+    return (_HGNC.get(s) or {}).get("uniprot")
+
+
 def available() -> dict:
     """Which local annotation files are present."""
     return {
