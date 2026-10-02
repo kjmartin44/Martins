@@ -9154,3 +9154,285 @@ def test_enrich_attaches_the_reach_to_each_row(tmp_path, monkeypatch):
     assert lib[1]["route_reach"] == "systemic"
     assert acc["local_only"] == ["tazarotene"]
     assert "1 is approved" in ob.summarise(acc)
+
+
+# ===================================================================== #
+# Built and connected. Each of these pins a module that existed, was    #
+# described in a report, and reached nothing - the failure mode is not  #
+# a crash, it is a module that quietly does nothing.                    #
+# ===================================================================== #
+def test_the_orange_book_route_reaches_the_drug_description(tmp_path,
+                                                            monkeypatch):
+    """`indications.describe` hand-typed "topical only" for seventy drugs.
+    The FDA publishes the route for every approved ingredient, so the
+    Orange Book is consulted first and the hand list is the fallback."""
+    from promoter_tf_drugs import orangebook as ob, indications as ind
+    monkeypatch.chdir(tmp_path)
+    _orange_book(tmp_path)
+    d = ind.describe("tazarotene")
+    assert d["route"] == "local only"
+    assert d["route_source"] == "FDA Orange Book"
+    assert d["routes"] == ["TOPICAL"]
+    assert ind.describe("metformin")["route"] == "systemic"
+
+
+def test_no_orange_book_leaves_the_route_unknown_not_systemic(tmp_path,
+                                                              monkeypatch):
+    """The failure that matters: a missing file must not read as a drug
+    that reaches everywhere."""
+    from promoter_tf_drugs import orangebook as ob, indications as ind
+    monkeypatch.chdir(tmp_path)
+    ob._PRODUCTS.clear()
+    d = ind.describe("tazarotene")
+    assert d["route"] is None
+    assert d["route_source"] is None
+
+
+def test_drug_scoring_reads_a_local_potency_file_before_chembl(monkeypatch):
+    """On a blocked network the ChEMBL activity call is what emptied this
+    axis, and potency-unknown is treated as neutral - so a nanomolar
+    ligand and an untested one ranked identically."""
+    from promoter_tf_drugs import drug_scoring as ds, localpotency as lp
+
+    class _Drug:
+        chembl_id = "CHEMBL25"
+        uniprot = "P10275"
+        withdrawn = False
+        properties = {}
+
+    class _NoNetwork:
+        def get(self, *a, **k):
+            raise AssertionError("ChEMBL was called although a local "
+                                 "potency file answered")
+
+    monkeypatch.setattr(lp, "available", lambda: {"bindingdb": True})
+    monkeypatch.setattr(lp, "actives_for", lambda u: [
+        {"pchembl": 8.5, "smiles": "CCO", "target": u},
+        {"pchembl": 9.5, "smiles": "CCN", "target": u}])
+    ev = ds.fetch_evidence(_NoNetwork(), _Drug())
+    assert ev.pchembl_median == 9.0
+    assert ev.pchembl_n == 2
+    assert "local" in ev.source
+
+
+def test_pains_discounts_a_predicted_route_in_the_report(monkeypatch):
+    """liabilities.py was written to discount confidence in a predicted
+    route and for a long while was imported by nothing. This pins it to
+    the table."""
+    from promoter_tf_drugs import pipeline as pl
+    import inspect
+    src = inspect.getsource(pl.corroboration)
+    assert "liab_mod.assess" in src, "liabilities is not called"
+    assert '"pains"' in src, "the interference flag never reaches a row"
+    assert '"evidence_multiplier"' in src
+
+
+def test_the_reach_column_is_rendered_and_its_absence_is_explained():
+    """A blank Reach column has to say it means unknown route. Silently
+    blank reads as "fine"."""
+    from promoter_tf_drugs import pipeline as pl
+    import inspect
+    src = inspect.getsource(pl.corroboration_table)
+    assert "Reach" in src
+    assert "_route_cell" in src
+    # The header, the separator and the cells must all be eleven wide, or
+    # markdown drops the trailing columns without complaining.
+    sep = [ln for ln in src.splitlines() if "|---|" in ln][0]
+    assert sep.count("---") == 11
+
+
+def test_the_reach_and_pains_footnotes_fire_on_the_right_rows():
+    from promoter_tf_drugs import pipeline as pl
+    import inspect
+    src = inspect.getsource(pl.corroboration_table)
+    assert "approved only by local routes" in src
+    assert "pan-assay" in src
+    assert "unknown route, not systemic" in src
+
+
+def test_route_cell_marks_local_only_and_leaves_unknown_blank():
+    from promoter_tf_drugs import pipeline as pl
+    assert pl._route_cell({"route": "local only"}) == "**local only**"
+    assert pl._route_cell({"route": "systemic"}) == "systemic"
+    assert pl._route_cell({"route": "unclear"}) == "unclear"
+    assert pl._route_cell({}) == "\u2014"
+    assert pl._route_cell({"route": None}) == "\u2014"
+
+
+def test_local_gwas_is_offered_as_the_weaker_evidence_it_is(tmp_path,
+                                                            monkeypatch):
+    """GWAS was described in a report as "a weaker kind of evidence" and
+    genetics.py did not reference it at all."""
+    from promoter_tf_drugs import genetics as gen, localannot as la
+    monkeypatch.chdir(tmp_path)
+    d = tmp_path / "data"
+    d.mkdir(exist_ok=True)
+    (d / "gwas_catalog.tsv").write_text(
+        "MAPPED_GENE\tDISEASE/TRAIT\tP-VALUE\tSNPS\n"
+        "PCSK9\tLDL cholesterol\t3e-20\trs11591147\n"
+        "PCSK9\tCoronary artery disease\t2e-11\trs11206510\n"
+        "PCSK9\tnoise\t0.4\trs999\n", encoding="utf-8")
+    la._GWAS.clear()
+    got = gen.local_support("PCSK9")
+    assert got is not None
+    assert got["n_significant"] == 2
+    assert got["source"] == "GWAS Catalog (local)"
+    assert any("nearest gene" in c for c in got["caveats"])
+
+
+def test_no_local_gwas_returns_none_rather_than_an_empty_verdict(
+        tmp_path, monkeypatch):
+    from promoter_tf_drugs import genetics as gen, localannot as la
+    monkeypatch.chdir(tmp_path)
+    la._GWAS.clear()
+    assert gen.local_support("PCSK9") is None
+
+
+def test_a_gwas_file_read_with_no_hits_is_not_a_genetics_success(
+        tmp_path, monkeypatch):
+    """Read-and-found-nothing is assessed but not evidence. The ledger
+    says ok only when something arrived."""
+    from promoter_tf_drugs import genetics as gen, localannot as la
+    from promoter_tf_drugs import pipeline as pl
+    monkeypatch.chdir(tmp_path)
+    d = tmp_path / "data"
+    d.mkdir(exist_ok=True)
+    (d / "gwas_catalog.tsv").write_text(
+        "MAPPED_GENE\tDISEASE/TRAIT\tP-VALUE\tSNPS\n"
+        "APOB\tLDL cholesterol\t3e-20\trs1\n", encoding="utf-8")
+    la._GWAS.clear()
+    got = gen.local_support("PCSK9")
+    assert got is not None and got["assessed"] is True
+    assert pl._n_local_gwas(got) == 0
+    detail = pl._genetics_detail([], got)
+    assert "holds no significant association" in detail
+
+
+def test_genetics_detail_names_which_source_found_what():
+    from promoter_tf_drugs import pipeline as pl
+    both = pl._genetics_detail(
+        [{"trait": "x"}], {"n_significant": 3, "assessed": True})
+    assert "Open Targets" in both and "GWAS Catalog" in both
+    assert "weaker" in both
+    assert pl._genetics_detail([], None) == (
+        "no genetic association returned for this gene")
+
+
+def test_no_module_needs_python_3_12_to_import():
+    """pyproject declares >=3.10, and a backslash escape inside an f-string
+    expression is PEP 701 syntax - legal from 3.12, a SyntaxError on 3.10
+    and 3.11. Four such lines were present, so the package could not be
+    imported at all on the floor it advertises.
+
+    This is a text scan, not a parse: only 3.12 is installed here, and
+    ast.parse(feature_version=(3, 10)) does not reject the construct, so
+    there is no authoritative local check. Verifying the floor needs a
+    3.10 interpreter.
+    """
+    import re
+    from pathlib import Path
+    from promoter_tf_drugs import __file__ as pkg
+    bs = chr(92)
+    pat = re.compile(r"\{[^{}]*" + bs + bs + r"[^{}]*\}")
+    offenders = []
+    for f in sorted(Path(pkg).parent.glob("*.py")):
+        for i, ln in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+            if ('f"' in ln or "f'" in ln) and pat.search(ln):
+                offenders.append(f"{f.name}:{i}")
+    assert not offenders, (
+        "backslash inside an f-string expression needs 3.12; move it to a "
+        "named constant: " + ", ".join(offenders))
+
+
+def test_the_version_floor_is_still_what_the_test_above_assumes():
+    """If the floor moves to 3.12 the scan above is obsolete, not failing."""
+    import tomllib
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent
+    cfg = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+    assert cfg["project"]["requires-python"] == ">=3.10"
+
+
+# ===================================================================== #
+# Two independent methods, intersected. Each ran and neither was ever   #
+# compared against the other.                                           #
+# ===================================================================== #
+def _dock_run(target="VDR", usable=True):
+    return {
+        "target": target, "usable": usable, "auc": 0.95, "ef1": 3.4,
+        "n_docked": 10, "n_failed": 1, "caveats": [],
+        "hits": [{"drug": "calcitriol", "score": -11.6},
+                 {"drug": "doxercalciferol", "score": -11.1},
+                 {"drug": "metformin", "score": -5.2}],
+    }
+
+
+def _ligand_hits():
+    return [{"drug": "calcitriol", "quadrant": "ESTABLISHED LIGAND"},
+            {"drug": "atenolol", "quadrant": "LOW"},
+            {"drug": "aspirin", "quadrant": "LOW"}]
+
+
+def test_consensus_accepts_the_json_that_crosses_machines():
+    """Docking runs on the machine with the binary and comes back as JSON.
+    Requiring the dataclass meant this could not be called on a real split
+    run - which is the only kind of run the docking path supports."""
+    from promoter_tf_drugs import docking as dk
+    both = dk.consensus(_dock_run(), _ligand_hits(), top_frac=0.5)
+    assert [h["drug"] for h in both] == ["calcitriol"]
+    assert both[0]["docking_score"] == -11.6
+    assert both[0]["ligand_quadrant"] == "ESTABLISHED LIGAND"
+    assert "share no input" in both[0]["why"]
+
+
+def test_consensus_refuses_an_unvalidated_pocket():
+    """A pocket that could not separate actives from decoys has not been
+    shown to rank anything, so agreement with it is not agreement."""
+    from promoter_tf_drugs import docking as dk
+    assert dk.consensus(_dock_run(usable=False), _ligand_hits(),
+                        top_frac=0.5) == []
+    assert dk.consensus(_dock_run(), [], top_frac=0.5) == []
+    assert dk.consensus(None, _ligand_hits()) == []
+
+
+def test_consensus_survives_a_hit_with_no_score():
+    """A bundle written by an older run may omit `score`. Previously this
+    raised KeyError in the middle of a report."""
+    from promoter_tf_drugs import docking as dk
+    run = _dock_run()
+    del run["hits"][0]["score"]
+    both = dk.consensus(run, _ligand_hits(), top_frac=0.5)
+    assert both and both[0]["docking_score"] is None
+
+
+def test_the_docking_section_reports_validation_and_disagreement():
+    from promoter_tf_drugs import pipeline as pl
+    out = "\n".join(pl._docking_section([_dock_run()], {}))
+    assert "ROC AUC" in out and "0.95" in out and "3.4x" in out
+    assert "Validated" in out
+    # No overlap is a real disagreement, not a missing result.
+    assert "real disagreement between two" in out
+    assert "says nothing about direction" in out
+
+
+def test_an_unvalidated_pocket_is_flagged_not_hidden():
+    from promoter_tf_drugs import pipeline as pl
+    out = "\n".join(pl._docking_section([_dock_run(usable=False)], {}))
+    assert "did not validate" in out
+    assert "**no**" in out
+
+
+def test_the_consensus_table_names_both_methods_that_found_each_drug():
+    from promoter_tf_drugs import pipeline as pl
+    from promoter_tf_drugs import docking as dk
+    both = {"VDR": dk.consensus(_dock_run(), _ligand_hits(), top_frac=0.5)}
+    out = "\n".join(pl._docking_section([_dock_run()], both))
+    assert "picked by both methods" in out
+    assert "calcitriol" in out
+    assert "-11.6" in out
+    assert "Still a binding hypothesis" in out
+
+
+def test_no_docking_means_no_section_rather_than_an_empty_one():
+    from promoter_tf_drugs import pipeline as pl
+    assert pl._docking_section([], {}) == []

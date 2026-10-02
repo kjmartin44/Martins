@@ -710,10 +710,21 @@ def consensus(docking: DockingScreen, ligand_hits: list, *,
     ligand-only hits resemble known actives, dock-only hits are the novel
     scaffolds the trained model could not have recognised.
     """
-    if not docking or not docking.usable or not ligand_hits:
+    # A dict is accepted as well as the dataclass, because the docking
+    # run usually happens on another machine and comes back as JSON. The
+    # typed object never crosses that boundary, so requiring it meant
+    # this function could not be called on a real split run at all.
+    if hasattr(docking, "usable"):
+        usable, d_hits = docking.usable, docking.hits
+    elif isinstance(docking, dict):
+        usable, d_hits = docking.get("usable"), docking.get("hits") or []
+    else:
         return []
-    n_d = max(1, int(len(docking.hits) * top_frac)) or 1
-    dock_top = {h["drug"].strip().lower(): h for h in docking.hits[:n_d]}
+    if not usable or not ligand_hits:
+        return []
+    n_d = max(1, int(len(d_hits) * top_frac)) or 1
+    dock_top = {(h.get("drug") or "").strip().lower(): h
+                for h in d_hits[:n_d] if h.get("drug")}
     n_l = max(1, int(len(ligand_hits) * top_frac)) or 1
 
     out = []
@@ -722,7 +733,7 @@ def consensus(docking: DockingScreen, ligand_hits: list, *,
         if name in dock_top:
             out.append({
                 "drug": h.get("drug"),
-                "docking_score": dock_top[name]["score"],
+                "docking_score": dock_top[name].get("score"),
                 "ligand_quadrant": h.get("quadrant"),
                 "why": ("picked by both a pocket-shape argument and a "
                         "chemistry argument trained on this receptor's "

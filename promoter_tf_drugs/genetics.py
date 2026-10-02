@@ -186,3 +186,27 @@ def summarise(cis: GeneticEvidence) -> str | None:
             "Read this as a preview of what modulating the gene may do, "
             "including the adverse effects — this is the reasoning that "
             "anticipated PCSK9 inhibition years before the trials.")
+
+
+def local_support(symbol: str) -> dict | None:
+    """Genetic support from a local GWAS Catalog, when one is on disk.
+
+    Open Targets reports an L2G score built from fine-mapped loci with a
+    trained model. The catalogue reports the gene mapped or nearest to a
+    signal, which is not the causal gene at that locus roughly half the
+    time. So this is weaker evidence of the same kind, labelled as such
+    and never presented as the same number - and it exists because on a
+    blocked network the Open Targets call is what leaves this section
+    empty.
+    """
+    try:
+        from . import localannot as la
+        if not la.available().get("gwas"):
+            return None
+        got = la.genetic_support(symbol)
+        # `assessed` means the file was read, which is returned even with
+        # zero hits on purpose: read-and-found-nothing is a different
+        # state from never-looked, and the caller needs to tell them apart.
+        return got if got.get("assessed") else None
+    except Exception:                                       # noqa: BLE001
+        return None

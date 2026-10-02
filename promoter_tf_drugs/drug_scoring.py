@@ -113,6 +113,33 @@ def fetch_evidence(client: Client, drug) -> DrugEvidence:
     """Pull potency, promiscuity and safety flags from ChEMBL for one drug."""
     ev = DrugEvidence(withdrawn=bool(drug.withdrawn),
                       properties=dict(getattr(drug, "properties", None) or {}))
+    # A local potency file first. On a blocked network the ChEMBL activity
+    # call is what leaves this axis empty, and an offline run then scored
+    # every drug as potency-unknown - which the axis treats as neutral, so
+    # a nanomolar ligand and an untested one ranked the same.
+    uni = getattr(drug, "uniprot", None) or getattr(
+        drug, "target_uniprot", None)
+    if uni:
+        try:
+            from . import localpotency as _lp
+            if any(_lp.available().values()):
+                local = _lp.actives_for(uni)
+                if local:
+                    smi = (getattr(drug, "properties", None) or {}).get(
+                        "canonical_smiles")
+                    vals = [r["pchembl"] for r in local
+                            if smi is None or r["smiles"] == smi]
+                    if not vals and smi is None:
+                        vals = [r["pchembl"] for r in local]
+                    if vals:
+                        import statistics as _st
+                        ev.pchembl_median = round(_st.median(vals), 2)
+                        ev.pchembl_n = len(vals)
+                        ev.source = "local potency file"
+                        return ev
+        except Exception as exc:                            # noqa: BLE001
+            log.debug("local potency lookup failed: %s", str(exc)[:80])
+
     mol_id = drug.chembl_id
     if not mol_id or not str(mol_id).startswith("CHEMBL"):
         ev.source = "unavailable"

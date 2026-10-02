@@ -287,6 +287,21 @@ def fetch_indications(client, chembl_id: str, *, limit: int = 6) -> list:
     return [{"indication": t, "max_phase": p} for t, p in ranked[:limit]]
 
 
+def route_of(drug_name: str) -> dict | None:
+    """FDA route of administration, from the Orange Book if it is on disk.
+
+    The curated entries below carry "topical only" for about seventy
+    drugs, typed by hand. The Orange Book has the route for every approved
+    ingredient from the agency that approved them, so it is consulted
+    first and the hand list is the fallback.
+    """
+    try:
+        from . import orangebook as ob
+        return ob.lookup(drug_name)
+    except Exception:                                       # noqa: BLE001
+        return None
+
+
 def describe(drug_name: str, *, mechanism: str | None = None,
              client=None, chembl_id: str | None = None) -> dict:
     """What this drug is and what it is approved to treat.
@@ -299,29 +314,47 @@ def describe(drug_name: str, *, mechanism: str | None = None,
 
     stem = SYNONYMS.get(stem, stem)
 
+    fda = route_of(drug_name)
+
+    def _with_route(d: dict) -> dict:
+        if fda:
+            d["route"] = fda["reach"]
+            d["routes"] = fda["routes"]
+            d["route_note"] = fda["reach_note"]
+            d["route_source"] = "FDA Orange Book"
+            d["generic_available"] = fda["generic_available"]
+        else:
+            # Absent is not systemic. A drug whose route is unknown has
+            # not been shown to reach anything.
+            d["route"] = None
+            d["route_source"] = None
+        return d
+
     hit = CURATED.get(stem)
     if hit:
-        return {"what_it_is": hit[0], "treats": hit[1], "source": "curated"}
+        return _with_route({"what_it_is": hit[0], "treats": hit[1],
+                            "source": "curated"})
 
     if client is not None and chembl_id:
         inds = fetch_indications(client, chembl_id)
         approved = [i["indication"] for i in inds if i["max_phase"] >= 4]
         shown = approved or [i["indication"] for i in inds]
         if shown:
-            return {
+            return _with_route({
                 "what_it_is": mechanism or None,
                 "treats": "; ".join(shown[:3]).lower()
                           + ("" if approved else
                              " (studied, not confirmed approved here)"),
                 "source": "ChEMBL",
-            }
+            })
 
     cls = _from_class(drug_name)
     if cls:
-        return {"what_it_is": cls[0], "treats": cls[1], "source": "class"}
+        return _with_route({"what_it_is": cls[0], "treats": cls[1],
+                            "source": "class"})
 
-    return {"what_it_is": mechanism or None, "treats": None,
-            "source": "unknown"}
+    return _with_route({"what_it_is": mechanism or None, "treats": None,
+                        "source": "unknown"})
 
 
 def describe_all(drugs, *, client=None, chembl_ids: dict | None = None,

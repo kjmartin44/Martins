@@ -321,7 +321,10 @@ def read_table(path, *, approved_only: bool = True) -> list:
             name = (row.get(name_c) or "").strip() if name_c else ""
             out.append({"name": name or smi[:24], "smiles": smi,
                         "targets": targets, "phase": phase or None,
-                        "chembl_id": None})
+                        "chembl_id": None,
+                        # Which column the name came from, so resolve_name
+                        # can prefer an INN over a brand name.
+                        "_name_column": name_c})
 
     log.info("local drug table %s: %d usable of %d row(s)"
              "%s%s", path.name, len(out), n_rows,
@@ -533,9 +536,19 @@ def resolve_name(candidates: list) -> tuple:
     if not pool:
         return None, None
 
+    # Agreement between sources beats column provenance. A column named
+    # INN is supposed to hold an international non-proprietary name, but a
+    # curation slip can put a brand name there - and when two of three
+    # sources say "metformin" and one says "Glucophage", the count is the
+    # better signal than the header.
+    agree: dict = {}
+    for n, _s, _c in pool:
+        agree[n.strip().lower()] = agree.get(n.strip().lower(), 0) + 1
+
     def key(item):
         n, _src, col = item
-        return (_name_rank(col), n.isupper(), len(n), n.lower())
+        return (-agree[n.strip().lower()], _name_rank(col),
+                n.isupper(), len(n), n.lower())
 
     pool = sorted(pool, key=key)
     chosen = pool[0][0]
@@ -548,11 +561,13 @@ def resolve_name(candidates: list) -> tuple:
             "chosen": chosen,
             "alternatives": sorted(distinct - {chosen.strip().lower()}),
             "by_source": {s: n for n, s, _ in real},
-            "resolution": ("kept the best-provenance name: an INN over a "
-                           "brand name over an identifier. The others are "
-                           "listed because a brand name replacing a "
-                           "generic one changes what you would search "
-                           "for"),
+            "resolution": ("kept the name most sources agree on, then "
+                           "best column provenance - an INN over a brand "
+                           "name over an identifier. Agreement comes first "
+                           "because a curation slip can put a brand name "
+                           "in an INN column. The alternatives are listed "
+                           "because a brand name replacing a generic one "
+                           "changes what you would search for"),
         }
     return chosen, conflict
 
@@ -614,15 +629,18 @@ def merge(paths, *, min_phase: int = 4, include_withdrawn: bool = False,
     """
     merged: dict = {}
     per_source: dict = {}
-    n_rows = n_no_key = n_below_phase = n_withdrawn = 0
+    n_rows = n_no_key = n_below_phase = 0
 
+    # Pass one: read everything, key it, and record every source's claim.
+    # Nothing is filtered yet. The first version filtered withdrawn rows
+    # here, which threw away the withdrawal along with the row - so
+    # rofecoxib survived through a source that did not know it had been
+    # pulled and read back as `launched`, `withdrawn=False`.
     for path in paths:
         src = Path(path).name
         try:
             rows = read_table(path, approved_only=False)
         except Exception as exc:                            # noqa: BLE001
-            # Keep the END of the message: it leads with a long path and
-            # a head truncation preserved only that.
             per_source[src] = {
                 "error": type(exc).__name__ + ": "
                          + str(exc).replace("\n", " ")[-220:]}
@@ -632,52 +650,107 @@ def merge(paths, *, min_phase: int = 4, include_withdrawn: bool = False,
             n_rows += 1
             raw_phase = (r.get("phase") or "").strip().lower()
             phase = PHASE_ORDER.get(raw_phase, 0)
-            if raw_phase in WITHDRAWN and not include_withdrawn:
-                n_withdrawn += 1
-                continue
-            if phase < min_phase:
-                n_below_phase += 1
-                continue
             key = parent_key(r["smiles"])
             unparsed = False
             if key is None:
                 if not fallback_name_key:
                     n_no_key += 1
                     continue
-                # An unparseable structure still has a name, and dropping it
-                # silently would lose a real drug. Keyed on the salt-free
-                # name instead, and flagged so it is visible.
                 stem = salt_free_name((r.get("name") or "").lower())
                 if not stem:
                     n_no_key += 1
                     continue
                 key = "name:" + stem
                 unparsed = True
+
             if key in merged:
                 already += 1
-                prev = merged[key]
-                if src not in prev["sources"]:
-                    prev["sources"].append(src)
-                prev["targets"] = sorted(set(prev["targets"])
-                                         | set(r.get("targets") or []))
-                prev["n_forms"] += 1
-                if phase > PHASE_ORDER.get(
-                        (prev.get("phase") or "").strip().lower(), 0):
-                    prev["phase"] = r.get("phase")
+                rec = merged[key]
             else:
                 added += 1
-                merged[key] = {
-                    "name": r.get("name"), "smiles": r["smiles"],
-                    "targets": sorted(set(r.get("targets") or [])),
-                    "phase": r.get("phase"), "chembl_id": r.get("chembl_id"),
-                    "sources": [src], "n_forms": 1, "key": key,
+                rec = merged[key] = {
+                    "key": key, "smiles": r["smiles"],
                     "structure_unparsed": unparsed,
-                    "withdrawn": raw_phase in WITHDRAWN,
+                    "sources": [], "n_forms": 0,
+                    "_names": [], "_phases": [], "_targets": {},
                 }
+            if src not in rec["sources"]:
+                rec["sources"].append(src)
+            rec["n_forms"] += 1
+            name = (r.get("name") or "").strip()
+            if name:
+                rec["_names"].append((name, src, r.get("_name_column")))
+            rec["_phases"].append((r.get("phase") or "", phase, src))
+            if r.get("targets"):
+                rec["_targets"].setdefault(src, set()).update(r["targets"])
         per_source[src] = {"rows": len(rows), "new": added,
                            "already_present": already}
 
-    library = sorted(merged.values(), key=lambda r: (r["name"] or ""))
+    # Pass two: resolve each molecule's conflicts, then filter.
+    conflicts: list = []
+    library: list = []
+    n_withdrawn = 0
+    for rec in merged.values():
+        name, name_conflict = resolve_name(rec["_names"])
+        phases = rec["_phases"]
+        best_phase = max(phases, key=lambda e: e[1]) if phases else ("", 0, "")
+        # Withdrawal propagates on contact. Any source saying a molecule
+        # was pulled makes it withdrawn, which is deliberately NOT the
+        # max-phase rule used above: phase is a claim about how far
+        # something got and the best-informed source is usually right,
+        # while withdrawal is a safety signal whose costs are asymmetric.
+        withdrawn_by = sorted({src for raw, _, src in phases
+                               if raw.strip().lower() in WITHDRAWN})
+        is_withdrawn = bool(withdrawn_by)
+
+        if name_conflict:
+            name_conflict["drug"] = name
+            conflicts.append(name_conflict)
+        pc = _phase_conflict(phases)
+        if pc:
+            pc["drug"] = name
+            conflicts.append(pc)
+        tc = _target_conflict(rec["_targets"])
+        if tc:
+            tc["drug"] = name
+            conflicts.append(tc)
+        if is_withdrawn and len(withdrawn_by) < len(rec["sources"]):
+            conflicts.append({
+                "kind": "withdrawn",
+                "drug": name,
+                "chosen": "withdrawn",
+                "by_source": {src: ("withdrawn" if src in withdrawn_by
+                                    else raw or "listed")
+                              for raw, _, src in phases},
+                "resolution": (
+                    f"{', '.join(withdrawn_by)} records this as withdrawn "
+                    f"and the other source(s) do not. Withdrawal wins: a "
+                    f"drug that was pulled must not be presented as an "
+                    f"approved option because one snapshot predates the "
+                    f"withdrawal"),
+                "severity": "safety",
+            })
+
+        if is_withdrawn and not include_withdrawn:
+            n_withdrawn += 1
+            continue
+        if best_phase[1] < min_phase:
+            n_below_phase += 1
+            continue
+
+        targets = sorted(set().union(*rec["_targets"].values())
+                         if rec["_targets"] else set())
+        library.append({
+            "name": name, "smiles": rec["smiles"], "targets": targets,
+            "phase": ("withdrawn" if is_withdrawn else best_phase[0] or None),
+            "withdrawn": is_withdrawn,
+            "withdrawn_by": withdrawn_by,
+            "chembl_id": None, "sources": rec["sources"],
+            "n_forms": rec["n_forms"], "key": rec["key"],
+            "structure_unparsed": rec["structure_unparsed"],
+        })
+
+    library = sorted(library, key=lambda r: (r["name"] or ""))
     collapsed = sum(r["n_forms"] - 1 for r in library)
     return {
         "library": library,
@@ -690,6 +763,10 @@ def merge(paths, *, min_phase: int = 4, include_withdrawn: bool = False,
         "per_source": per_source,
         "min_phase": min_phase,
         "include_withdrawn": include_withdrawn,
+        "conflicts": conflicts,
+        "n_conflicts": len(conflicts),
+        "n_safety_conflicts": sum(1 for c in conflicts
+                                  if c.get("severity") == "safety"),
     }
 
 
@@ -711,6 +788,21 @@ def explain_counts(result: dict) -> str:
     if result["n_unkeyable"]:
         L.append(f"{result['n_unkeyable']} row(s) had neither a usable "
                  f"structure nor a name.")
+    if result.get("n_safety_conflicts"):
+        L.append(
+            f"**{result['n_safety_conflicts']} safety conflict(s):** a "
+            f"source records a drug as withdrawn while another still lists "
+            f"it. Withdrawal wins in every case, because a drug that was "
+            f"pulled must not be offered as approved just because one "
+            f"snapshot predates the withdrawal.")
+    if result.get("n_conflicts"):
+        kinds: dict = {}
+        for c in result["conflicts"]:
+            kinds[c["kind"]] = kinds.get(c["kind"], 0) + 1
+        L.append(f"{result['n_conflicts']} conflict(s) between sources: "
+                 + ", ".join(f"{n} {k}" for k, n in sorted(kinds.items()))
+                 + ". Each is recorded with what every source said and how "
+                   "it was resolved, under `conflicts`.")
     if result.get("n_withdrawn_excluded"):
         L.append(f"{result['n_withdrawn_excluded']} withdrawn drug(s) were "
                  f"excluded. They reached approval and were then pulled, so "

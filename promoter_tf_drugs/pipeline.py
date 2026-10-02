@@ -10,6 +10,7 @@ from pathlib import Path
 
 from . import (annotate, catalogue as cat_mod, cellcycle, congeners as cong_mod,
                delivery as dlv_mod,
+               liabilities as liab_mod,
                tfactivity as tfa_mod,
                depmap as depmap_mod,
                corpora as corpora_mod,
@@ -94,6 +95,13 @@ class TFResult:
 # How many ranked factors the LINCS drug scan covers. Each is a pass over
 # roughly 33,000 signatures, about a second, so this is a wall-clock cap
 # rather than a claim that the rest are uninteresting.
+# A blank table cell. Named rather than inlined because a
+# backslash escape inside an f-string expression is PEP 701
+# syntax: legal from 3.12 and a SyntaxError on 3.10 and 3.11,
+# which pyproject declares support for. The module would not
+# import at all on those versions.
+EMDASH = "\u2014"
+
 ACTIVITY_DRUG_FACTORS = 8
 
 
@@ -917,6 +925,9 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         # ------------------------------- 8e. human genetic evidence
         genetic = {}
         if use_genetics and not demo:
+            # A local GWAS catalogue first: on a blocked network the
+            # Open Targets call is what empties this section.
+            _local_gen = gen_mod.local_support(prom.gene_symbol)
             cis = _optional("Open Targets genetics",
                             lambda: gen_mod.target_consequences(
                                 client, prom.gene_symbol),
@@ -924,12 +935,16 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             genetic["cis"] = cis.to_dict()
             genetic["summary"] = gen_mod.summarise(cis)
             _phen = (genetic["cis"] or {}).get("phenotypes") or []
-            ledger.record("genetics", requested=True, ok=bool(_phen),
-                          yielded=len(_phen),
-                          detail=(f"{len(_phen)} associated phenotype(s)"
-                                  if _phen else
-                                  "no genetic association returned for this "
-                                  "gene"))
+            if _local_gen:
+                genetic["local_gwas"] = _local_gen
+            ledger.record("genetics", requested=True,
+                          # A catalogue that was read and found nothing is
+                          # assessed, not successful. `ok` means evidence
+                          # arrived, so zero hits leaves it False and the
+                          # detail below says which source was consulted.
+                          ok=bool(_phen) or _n_local_gwas(_local_gen) > 0,
+                          yielded=len(_phen) + _n_local_gwas(_local_gen),
+                          detail=_genetics_detail(_phen, _local_gen))
             genetic["trans"] = [
                 gen_mod.tf_link_support(client, r.symbol, prom.gene_symbol).to_dict()
                 for r in ranked[:3]]
@@ -1083,6 +1098,24 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         }
         all_routes = cat_mod.build(block_for_catalogue, goal=goal)
 
+        # Where a factor has both a dock and a ligand screen, intersect
+        # them. The two share no input - one reads pocket shape, the other
+        # reads chemistry measured at the receptor - so agreement is worth
+        # more than a better score from either. Both were computed and
+        # never compared.
+        dock_consensus = {}
+        if docking_runs and screens:
+            from . import docking as _dk
+            for sym, sc in screens.items():
+                run = docking_runs.get(sym)
+                if not run:
+                    continue
+                hits = (sc.get("hits") if isinstance(sc, dict)
+                        else getattr(sc, "hits", None)) or []
+                both = _dk.consensus(run, hits)
+                if both:
+                    dock_consensus[sym] = both
+
         if screen_receptors and not demo:
             ledger.record("screen", requested=True, ok=bool(screens),
                           yielded=len(screens),
@@ -1124,6 +1157,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             "corpus_scans": corpus_scans,
             "corpus_agreement": corpus_agreement,
             "docking": list(docking_runs.values()),
+            "docking_consensus": dock_consensus,
             "dependencies": dependencies,
             "modality_design": modality,
             "screen_plan": screen_plan,
@@ -1268,6 +1302,93 @@ def _corpus_note(res: dict) -> list:
                      f"guaranteed to be conserved, so treat a hit found "
                      f"only there as a lead to check in a human system.*")
             L.append("")
+    return L
+
+
+def _docking_section(runs: list, consensus: dict) -> list:
+    """Docking validation, and the compounds two independent methods both
+    picked.
+
+    The routes from a dock already appear in the tables. What does not
+    appear anywhere is whether the pocket was validated at all, which is
+    the only thing that separates a docking score from a random number.
+    A screen that cannot separate known actives from decoys has not been
+    shown to rank anything, and its hits are reported as unvalidated
+    rather than withheld.
+    """
+    if not runs:
+        return []
+    from .docking import MIN_DOCKING_AUC, MIN_EF1
+
+    L = ["### Structure-based docking", ""]
+    L.append("Docking asks whether a molecule fits the pocket. It says "
+             "nothing about direction: a compound that binds a factor may "
+             "activate it, block it, or do neither to transcription of this "
+             "gene.")
+    L.append("")
+    L.append("| Pocket | Docked | Failed | ROC AUC | EF 1% | Validated? |")
+    L.append("|---|---|---|---|---|---|")
+    for r in runs:
+        auc = r.get("auc")
+        ef1 = r.get("ef1")
+        L.append(f"| {r.get('target') or '?'} | {r.get('n_docked', 0)} | "
+                 f"{r.get('n_failed', 0)} | "
+                 f"{f'{auc:.2f}' if auc is not None else 'not tested'} | "
+                 f"{f'{ef1:.1f}x' if ef1 is not None else 'not tested'} | "
+                 f"{'yes' if r.get('usable') else '**no**'} |")
+    L.append("")
+    L.append(f"Validated means the same scoring function separated known "
+             f"actives from decoys in this pocket, at AUC "
+             f"{MIN_DOCKING_AUC:.2f} or better and {MIN_EF1:.0f}x or better "
+             f"enrichment in the top 1%. Below that the geometry may still "
+             f"be right and the score is not evidence.")
+    L.append("")
+
+    failed = [r for r in runs if not r.get("usable")]
+    if failed:
+        n_f = len(failed)
+        L.append(f"**{n_f} {'pocket' if n_f == 1 else 'pockets'} did not "
+                 f"validate** "
+                 f"({', '.join(str(r.get('target')) for r in failed[:5])}). "
+                 f"Their hits are listed for the record and should not be "
+                 f"ranked against hits from a pocket that did.")
+        L.append("")
+    for r in runs:
+        for c in (r.get("caveats") or [])[:3]:
+            L.append(f"- {r.get('target')}: {c}")
+    if any(r.get("caveats") for r in runs):
+        L.append("")
+
+    if consensus:
+        n = sum(len(v) for v in consensus.values())
+        L.append(f"#### {n} {'compound' if n == 1 else 'compounds'} "
+                 f"picked by both methods")
+        L.append("")
+        L.append("Docking reads pocket shape. The ligand screen reads "
+                 "chemistry measured at this receptor. They share no input, "
+                 "so agreement is worth more than a better score from "
+                 "either - and a compound either method missed is not thereby "
+                 "ruled out.")
+        L.append("")
+        L.append("| Factor | Drug | Dock score | Ligand screen quadrant |")
+        L.append("|---|---|---|---|")
+        for sym, hits in sorted(consensus.items()):
+            for h in hits[:8]:
+                sc = h.get("docking_score")
+                L.append(f"| {sym} | **{h.get('drug')}** | "
+                         f"{f'{sc:.1f}' if isinstance(sc, (int, float)) else EMDASH}"
+                         f" | {h.get('ligand_quadrant') or EMDASH} |")
+        L.append("")
+        L.append("Still a binding hypothesis. Neither method addresses "
+                 "direction, and neither was run in the tissue this gene "
+                 "matters in.")
+        L.append("")
+    elif any(r.get("usable") for r in runs):
+        L.append("No compound reached the top slice of both the dock and the "
+                 "ligand screen. That is a real disagreement between two "
+                 "independent arguments, not a missing result - treat the "
+                 "single-method hits above accordingly.")
+        L.append("")
     return L
 
 
@@ -1508,6 +1629,49 @@ def _regulon_column_note(any_regulon: bool, any_understudied: bool,
                "it.")
     out.append("")
     return out
+
+
+def _genetics_detail(phenotypes: list, local: dict | None) -> str:
+    """What the genetics step actually found, naming which source found it.
+
+    Open Targets and a local GWAS catalogue are not the same evidence: the
+    first fine-maps a locus to a gene with a trained model, the second
+    reports the gene nearest the signal. Reporting one count would hide
+    which of the two the row rests on.
+    """
+    parts = []
+    if phenotypes:
+        parts.append(f"{len(phenotypes)} associated phenotype(s) "
+                     f"(Open Targets)")
+    if local:
+        n = _n_local_gwas(local)
+        if n:
+            parts.append(f"{n} genome-wide significant GWAS Catalog "
+                         f"association(s), mapped or nearest gene, which is "
+                         f"weaker than fine-mapped support")
+        else:
+            parts.append("a local GWAS Catalog was read and holds no "
+                         "significant association for this gene")
+    if not parts:
+        return "no genetic association returned for this gene"
+    return "; ".join(parts)
+
+
+def _n_local_gwas(local: dict | None) -> int:
+    """Significant associations only. `assessed` says the file was read."""
+    if not local:
+        return 0
+    return int(local.get("n_significant") or 0)
+
+
+def _route_cell(row: dict) -> str:
+    """FDA route, compressed. "local only" is the one that rules a drug out."""
+    r = row.get("route")
+    if r == "local only":
+        return "**local only**"
+    if r in ("systemic", "unclear"):
+        return r
+    return "—"
 
 
 def _bbb_footnote(counts: dict) -> list:
@@ -1840,6 +2004,9 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                                       res.get("tfs") or []))
 
         L.extend(_depmap_section(res.get("dependencies") or {}, res))
+
+        L.extend(_docking_section(res.get("docking") or [],
+                                  res.get("docking_consensus") or {}))
 
         act = res.get("tf_activity") or {}
         if act.get("n_testable"):
@@ -3666,8 +3833,14 @@ def corroboration(result: dict, top_n: int = 20) -> list:
         desc = ind_mod.describe(
             g["drug"], mechanism=(best.get("mechanism") or "").strip() or None)
         cls = sys_mod.classify(g["drug"])
-        bbb = dlv_mod.bbb_verdict(g["drug"], props.get(
-            salt_free_name((g["drug"] or "").lower())))
+        _pr = props.get(salt_free_name((g["drug"] or "").lower()))
+        bbb = dlv_mod.bbb_verdict(g["drug"], _pr)
+        # Assay-interference structures undermine the EVIDENCE behind a
+        # predicted route, which is what liabilities.py was written for
+        # and was never connected to anything. It never demotes an
+        # approved drug for being approved - only the confidence in a
+        # prediction about it.
+        liab = liab_mod.assess(g["drug"], (_pr or {}).get("canonical_smiles"))
         exp = _expected_change(rs, goal, outcomes, measured)
 
         out.append({
@@ -3687,6 +3860,11 @@ def corroboration(result: dict, top_n: int = 20) -> list:
             "systems_why": (cls.why if cls else None),
             "bbb": bbb["cell"],
             "bbb_why": bbb["why"],
+            "route": desc.get("route"),
+            "route_note": desc.get("route_note"),
+            "generic_available": desc.get("generic_available"),
+            "pains": bool(liab.pains),
+            "evidence_multiplier": liab.evidence_multiplier,
             "expected_change": exp["direction"],
             "expected_basis": exp["basis"],
             "p_move": exp["p_move"],
@@ -3717,9 +3895,9 @@ def corroboration_table(result: dict, top_n: int = 20) -> list:
              "supports.")
     L.append("")
     L.append(f"| Drug | Methods | Tier | Acts on | What it is | Systems it "
-             f"acts on | BBB? | {gene} change | P(moves) | "
+             f"acts on | Reach | BBB? | {gene} change | P(moves) | "
              f"Measured effect |")
-    L.append("|---|---|---|---|---|---|---|---|---|---|")
+    L.append("|---|---|---|---|---|---|---|---|---|---|---|")
     any_p, any_effect = False, False
     for r in rows:
         sys_cell = r["systems"] or "no systemic class flagged"
@@ -3748,8 +3926,9 @@ def corroboration_table(result: dict, top_n: int = 20) -> list:
 
         L.append(f"| **{r['drug']}** | {r['n_methods']} | "
                  f"{r['best_tier']} | "
-                 f"{', '.join(r['acts_on']) or '\u2014'} | "
+                 f"{', '.join(r['acts_on']) or EMDASH} | "
                  f"{_clip(what, 34)} | {_clip(sys_cell, 28)} | "
+                 f"{_route_cell(r)} | "
                  f"{r.get('bbb') or '—'} | "
                  f"{r['expected_change']} ({tag}) | {p_cell} | "
                  f"{eff_cell} |")
@@ -3835,6 +4014,47 @@ def corroboration_table(result: dict, top_n: int = 20) -> list:
         bbb_counts[c] = bbb_counts.get(c, 0) + 1
     L.extend(_bbb_footnote(bbb_counts))
 
+    local = [r for r in rows if r.get("route") == "local only"]
+    if local:
+        n_l = len(local)
+        L.append(f"**Reach** is the FDA route of administration, from the "
+                 f"Orange Book. **{n_l} "
+                 f"{'candidate here is' if n_l == 1 else 'candidates here are'}"
+                 f" approved only by local routes** "
+                 f"({', '.join(r['drug'] for r in local[:6])}) - topical, "
+                 f"ophthalmic or inhaled. Those cannot reach a target "
+                 f"outside the tissue they are applied to, however they "
+                 f"score above, so for an internal gene they are not "
+                 f"usable without reformulation.")
+        L.append("")
+    elif any(r.get("route") for r in rows):
+        L.append("**Reach** is the FDA route of administration. Every "
+                 "candidate here has a systemic route, so none is ruled "
+                 "out for being topical-only.")
+        L.append("")
+    else:
+        L.append("**Reach** is blank for every row because no Orange Book "
+                 "is on disk. That is unknown route, not systemic - a "
+                 "topical-only drug looks identical. See "
+                 "`orangebook.SOURCE` for the download.")
+        L.append("")
+
+    pains = [r for r in rows if r.get("pains")]
+    if pains:
+        n_p = len(pains)
+        L.append(f"**{n_p} "
+                 f"{'candidate matches' if n_p == 1 else 'candidates match'} "
+                 f"a pan-assay interference pattern** "
+                 f"({', '.join(r['drug'] for r in pains[:5])}). They are "
+                 f"approved drugs and this says nothing about their "
+                 f"safety. What it undermines is the EVIDENCE: these "
+                 f"structures read active across unrelated assays through "
+                 f"aggregation, redox cycling or fluorescence "
+                 f"interference, so a measured or predicted activity for "
+                 f"them is likelier to be an artefact than the tier "
+                 f"suggests.")
+        L.append("")
+
     L.append(f"**The {gene} change column is a direction.** `measured` "
              f"means a compound moved {gene} in a cell-based assay; "
              f"`established` means it is an approved therapy acting on the "
@@ -3904,7 +4124,7 @@ def summary_report(result: dict, top_n: int = SUMMARY_TOP) -> str:
                 mechanism=(r.get("mechanism") or "").strip() or None)
             treats = d["treats"] or "not established here"
             L.append(f"| {i} | **{r.get('drug')}** | {_clip(treats)} | "
-                     f"{r.get('acts_on') or '\u2014'} | {r.get('tier')} | "
+                     f"{r.get('acts_on') or EMDASH} | {r.get('tier')} | "
                      f"{r.get('category')} |")
         L.append("")
         L.append("**Every row is off-label.** The third column is what the "
