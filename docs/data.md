@@ -295,15 +295,25 @@ more robust, not more specific.
 
 ## Output files
 
-Every completed analysis writes five files:
+Every completed analysis writes six files:
 
 | File | Contents |
 | --- | --- |
-| `report.md` | Human-readable rankings, explanations, and caveats. |
+| `summary.md` | One page: the shortlist, what the evidence is worth, and what would change the answer. Start here. |
+| `report.md` | The full analysis. Every number qualified, every stage accounted for. |
 | `results.json` | Query metadata, scoring weights, direct therapies, and per-promoter analysis blocks. |
 | `tf_summary.tsv` | TF rows with motif, role, ChIP, score, and drug fields. |
 | `sites.bed` | Predicted motif sites in genomic coordinates with a UCSC track header. |
 | `promoter.fa` | Promoter sequences oriented 5′ to 3′ along the gene. |
+
+`summary.md` carries nothing that `report.md` does not also say. It exists
+because `report.md` is long on purpose: every number in it is qualified,
+since an unqualified number from this pipeline reads as stronger than it
+is. That makes it the wrong document to open when you want to know what to
+do next. The summary leads with how much the ranking is worth, because in
+a degraded run the order means little and burying that under the table
+would be the one mistake the page could make. It never drops a caveat to
+make a row fit.
 
 `results.json` has top-level `query`, `results`, `direct_therapies`, `weights`,
 and `drug_weights`. Each entry in `results` includes `promoter`, `sequence`,

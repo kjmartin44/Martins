@@ -1624,8 +1624,8 @@ def test_all_output_files_written_for_every_section(tmp_path):
     res = pipeline.run("SMN2", demo=True, offline=True)
     written = pipeline.write_outputs(res, tmp_path)
     names = {p.name for p in written}
-    assert names == {"report.md", "results.json", "tf_summary.tsv",
-                     "sites.bed", "promoter.fa"}
+    assert names == {"report.md", "summary.md", "results.json",
+                     "tf_summary.tsv", "sites.bed", "promoter.fa"}
 
     bed = (tmp_path / "sites.bed").read_text().splitlines()
     assert len(bed) > 1
@@ -7971,3 +7971,144 @@ def test_each_hit_records_which_corpus_it_came_from():
     assert md.splitlines()[i + 1].count("|") == header[0].count("|")
     assert "drugmatrix" in md
     assert "is rat" in md and "species boundary" in md
+
+
+# ===================================================================== #
+# The one-page summary.                                                 #
+# ===================================================================== #
+def test_summary_is_written_alongside_the_full_report(tmp_path):
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    written = pipeline.write_outputs(res, tmp_path)
+    names = {p.name for p in written}
+    assert "summary.md" in names
+    assert "report.md" in names
+    body = (tmp_path / "summary.md").read_text(encoding="utf-8")
+    assert len(body) < len((tmp_path / "report.md").read_text(
+        encoding="utf-8")) / 5, "a summary that is not much shorter is not a summary"
+
+
+def test_summary_leads_with_how_much_the_ranking_is_worth():
+    """The first thing to know is whether the order means anything. In a
+    degraded run it does not, and burying that under the table would be
+    the one mistake this page could make."""
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    md = pipeline.summary_report(res)
+    head = md[:md.index("## Top")] if "## Top" in md else md
+    assert "Evidence:" in head
+    assert "reading order, not as evidence" in head
+
+
+def test_summary_states_the_approved_indication_for_every_row():
+    """Without it the rows read as interchangeable, which is how a topical
+    acne gel ends up next to an infused cytotoxic."""
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    md = pipeline.summary_report(res)
+    assert "Approved to treat" in md
+    assert "Every row is off-label" in md
+
+
+def test_summary_never_truncates_mid_word():
+    """A cut like "renal fai" reads as a rendering bug and costs the
+    reader the one fact the column carries."""
+    assert pipeline._clip("short", 58) == "short"
+    long = ("hypocalcaemia and secondary hyperparathyroidism in renal "
+            "failure")
+    out = pipeline._clip(long, 58)
+    assert out.endswith("…")
+    assert not out[:-1].endswith(" ")
+    # the last kept token is whole
+    assert long.startswith(out[:-1])
+    assert out[:-1].split()[-1] in long.split()
+
+
+def test_summary_omits_an_empty_section_rather_than_printing_a_heading():
+    """A heading with nothing under it reads as a failure of the tool."""
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    md = pipeline.summary_report(res)
+    for heading in ("## What the answer rests on", "## Read these before",
+                    "## Top"):
+        if heading in md:
+            after = md[md.index(heading) + len(heading):]
+            nxt = after.find("\n## ")
+            body = (after[:nxt] if nxt > 0 else after).strip()
+            assert body, f"{heading} rendered with no content"
+
+
+def test_summary_does_not_state_the_same_number_twice():
+    """The first draft printed the false-discovery proportion in the
+    verdict reason and again two lines later."""
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    v = res.get("evidence_verdict") or {}
+    fdp = v.get("false_discovery_proportion")
+    if fdp is None:
+        return
+    md = pipeline.summary_report(res)
+    head = md[:md.index("## Top")]
+    assert head.count(f"{fdp:.0%}") <= 1
+
+
+def test_summary_keeps_the_attrition_caution():
+    """The reason the drug tables are all nuclear receptors is the single
+    most load-bearing caveat in the report, and a summary that dropped it
+    to save a line would mislead more than it helped."""
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    md = pipeline.summary_report(res)
+    assert "attrition, not a ranking" in md
+    assert "no approved ligand" in md
+
+
+def test_summary_names_which_sources_ran():
+    """How to read the rows depends on what the answer rests on."""
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    res["evidence_sources"] = {"sources": {
+        "chip": {"state": "ok", "requested": True},
+        "lincs": {"state": "failed", "requested": True}}}
+    md = pipeline.summary_report(res)
+    assert "**Ran:** chip" in md
+    assert "Did not run:** lincs" in md
+    assert "not a negative result" in md
+
+
+def test_summary_keeps_the_falsifying_experiment():
+    """Every row is a hypothesis, and the summary is the page most likely
+    to be read as a list of answers."""
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    md = pipeline.summary_report(res)
+    assert "site-directed mutant" in md
+    assert "Not medical advice" in md
+
+
+def test_summary_handles_a_run_with_no_routes():
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    for b in res["results"]:
+        b["all_routes"] = {"routes": []}
+    md = pipeline.summary_report(res)
+    assert "No route was found" in md
+    assert "per-stage accounting" in md
+
+
+def test_summary_orders_by_tier_before_score():
+    """A tier-1 route with a mediocre score beats a tier-5 with a great
+    one, and the summary is where that ordering matters most."""
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    res["results"][0]["all_routes"] = {"routes": [
+        {"drug": "LowTierHighScore", "acts_on": "X", "tier": 5,
+         "score": 99.0, "category": "c", "mechanism": ""},
+        {"drug": "TopTierLowScore", "acts_on": "Y", "tier": 1,
+         "score": 1.0, "category": "c", "mechanism": ""},
+    ]}
+    md = pipeline.summary_report(res)
+    assert md.index("TopTierLowScore") < md.index("LowTierHighScore")
+
+
+def test_summary_deduplicates_a_drug_reached_by_one_route_twice():
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    res["results"][0]["all_routes"] = {"routes": [
+        {"drug": "Samedrug", "acts_on": "X", "tier": 3, "score": 9.0,
+         "category": "c", "mechanism": ""},
+        {"drug": "samedrug", "acts_on": "X", "tier": 3, "score": 8.0,
+         "category": "c", "mechanism": ""},
+    ]}
+    md = pipeline.summary_report(res)
+    rows = [l for l in md.splitlines() if "amedrug" in l]
+    assert len(rows) == 1

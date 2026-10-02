@@ -3351,8 +3351,209 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
     return "\n".join(L)
 
 
+# ===================================================================== #
+# The short version.                                                    #
+# ===================================================================== #
+# report.md is long on purpose: every number in it is qualified, because
+# an unqualified number from this pipeline would be read as stronger than
+# it is. That makes it the wrong document to open when you want to know
+# what to do next.
+#
+# This is the other document. It carries the shortlist, how much the
+# evidence is worth, and what would change the answer - and it points at
+# report.md for everything else rather than restating it in shorter and
+# therefore less qualified words. The two rules it follows: say nothing
+# here that report.md does not say, and never drop a caveat to make a row
+# fit on one line.
+
+SUMMARY_TOP = 10
+
+
+def _clip(text: str, limit: int = 58) -> str:
+    """Trim to a word boundary. A mid-word cut ("renal fai") reads as a
+    rendering bug and costs the reader the one fact the column carries."""
+    text = (text or "").strip()
+    if len(text) <= limit:
+        return text
+    cut = text[:limit].rsplit(" ", 1)[0].rstrip(",;:")
+    return (cut or text[:limit]) + "…"
+
+
+def _verdict_line(verdict: dict) -> str:
+    """How much the ranking is worth, in one sentence."""
+    level = (verdict or {}).get("level", "unknown")
+    return {
+        "strong": "**Evidence: strong.** Measured evidence supports this "
+                  "ranking from more than one independent source.",
+        "usable": "**Evidence: usable.** At least one measured source "
+                  "backs the ranking; read the tiers before acting.",
+        "degraded": "**Evidence: degraded.** Read the ranking as a reading "
+                    "order, not as evidence. A pillar of the analysis is "
+                    "missing.",
+        "not interpretable": "**Evidence: NOT INTERPRETABLE.** Too much is "
+                             "missing for the ranking to mean anything. "
+                             "Fix the inputs before reading the rows.",
+    }.get(level, f"**Evidence: {level}.**")
+
+
+def summary_report(result: dict, top_n: int = SUMMARY_TOP) -> str:
+    """A one-page summary. Everything here is also in report.md."""
+    q = result["query"]
+    goal = q.get("goal", "up")
+    verb = "raise" if goal == "up" else "lower"
+    L: list[str] = []
+
+    L.append(f"# {q['gene']}: how to {verb} it - summary")
+    L.append("")
+    L.append(f"Objective: **{verb} {q['gene']}**. "
+             f"{'Demo data - not a real analysis. ' if q.get('demo') else ''}"
+             f"Full detail, with every qualification, in `report.md`.")
+    L.append("")
+
+    verdict = result.get("evidence_verdict") or {}
+    L.append(_verdict_line(verdict))
+    for r in (verdict.get("reasons") or [])[:3]:
+        L.append(f"- {r}")
+    # Only when the verdict's own reasons have not already said it. The
+    # first draft printed the same 78% twice, two lines apart.
+    fdp = verdict.get("false_discovery_proportion")
+    said = any("chance" in r or "expected to be" in r
+               for r in (verdict.get("reasons") or []))
+    if fdp is not None and not said:
+        L.append(f"- Of the motif sites called, about **{fdp:.0%} are "
+                 f"expected to be chance matches**.")
+    L.append("")
+
+    # ---- the shortlist
+    preds = []
+    for res in result["results"]:
+        preds.extend((res.get("all_routes") or {}).get("routes") or [])
+    seen, rows = set(), []
+    for r in sorted(preds, key=lambda x: (x.get("tier", 9),
+                                          -(x.get("score") or 0))):
+        key = (r.get("drug", "").lower(), r.get("acts_on"))
+        if key in seen:
+            continue
+        seen.add(key)
+        rows.append(r)
+        if len(rows) >= top_n:
+            break
+
+    if rows:
+        from . import indications as ind_mod
+        L.append(f"## Top {len(rows)} to look at first")
+        L.append("")
+        L.append("Ordered by evidence tier, then score. A tier-1 route with "
+                 "a mediocre score beats a tier-5 route with a great one.")
+        L.append("")
+        L.append("| # | Drug | Approved to treat | Acts on | Tier | Why it "
+                 "is here |")
+        L.append("|---|---|---|---|---|---|")
+        for i, r in enumerate(rows, 1):
+            d = ind_mod.describe(
+                r.get("drug", ""),
+                mechanism=(r.get("mechanism") or "").strip() or None)
+            treats = d["treats"] or "not established here"
+            L.append(f"| {i} | **{r.get('drug')}** | {_clip(treats)} | "
+                     f"{r.get('acts_on') or '\u2014'} | {r.get('tier')} | "
+                     f"{r.get('category')} |")
+        L.append("")
+        L.append("**Every row is off-label.** The third column is what the "
+                 "drug was approved for; using it to move your gene is a "
+                 "different purpose, and the distance between the two is "
+                 "part of what you are judging.")
+        L.append("")
+    else:
+        L.append("## No route was found")
+        L.append("")
+        L.append("Nothing cleared the thresholds. `report.md` has the "
+                 "per-stage accounting for where candidates were lost.")
+        L.append("")
+
+    # ---- what ran and what did not: the thing that decides how to read it
+    sources = ((result.get("evidence_sources") or {}).get("sources") or {})
+    if sources:
+        ok = [k for k, v in sources.items() if v.get("state") == "ok"]
+        failed = [k for k, v in sources.items()
+                  if v.get("state") not in ("ok", None)
+                  and v.get("requested")]
+        if ok or failed:
+            L.append("## What the answer rests on")
+            L.append("")
+            if ok:
+                L.append(f"- **Ran:** {', '.join(sorted(ok))}")
+            if failed:
+                L.append(f"- **Did not run:** {', '.join(sorted(failed))}. "
+                         f"A source that failed is not a negative result; "
+                         f"`report.md` names the flag that would enable "
+                         f"each.")
+            L.append("")
+        elif not q.get("demo"):
+            L.append("## What the answer rests on")
+            L.append("")
+            L.append("No optional evidence source was requested, so this "
+                     "ranking is motif prediction and drug annotation "
+                     "only. `report.md` lists the flags that add measured "
+                     "evidence.")
+            L.append("")
+
+    # ---- the things most likely to mislead, from the block itself
+    cautions = []
+    for res in result["results"]:
+        at = res.get("attrition") or {}
+        if at.get("n_drugged_nuclear_receptor"):
+            cautions.append(
+                f"The drug tables are dominated by nuclear receptors "
+                f"because {at.get('n_with_drug', 0)} of "
+                f"{at.get('n_tfs_with_sites', 0)} factors with a site here "
+                f"have any ligand at all. That is attrition, not a "
+                f"ranking.")
+        if at.get("n_top25_without_drug"):
+            names = ", ".join((at.get("top25_without_drug") or [])[:4])
+            cautions.append(
+                f"{at['n_top25_without_drug']} of the best-scoring factors "
+                f"have no approved ligand ({names}) and appear in no drug "
+                f"table. The gene-specific signal is partly in them.")
+        act = res.get("tf_activity") or {}
+        if act.get("n_testable") and not [
+                a for a in (act.get("scanned") or [])
+                if (a.get("q_value") or 1) < 0.05]:
+            cautions.append(
+                "No factor with a site in this promoter has a detectably "
+                "perturbed regulon in the tissue checked, so these routes "
+                "rest on sequence alone.")
+        ov = result.get("tss_window_overlap") or []
+        if ov:
+            cautions.append(
+                "The promoter windows overlap each other, so counts across "
+                "them are not independent.")
+        break
+
+    if cautions:
+        L.append("## Read these before the table")
+        L.append("")
+        for c in cautions[:4]:
+            L.append(f"- {c}")
+        L.append("")
+
+    # ---- what to do next
+    L.append("## Next step")
+    L.append("")
+    L.append(f"Every row above is a hypothesis. The experiment that settles "
+             f"one is the same in each case: a promoter-reporter assay for "
+             f"the element, a dose-response with RT-qPCR or protein readout "
+             f"for the drug, and a site-directed mutant of the element to "
+             f"show the drug effect runs through it. Without the third, a "
+             f"change in {q['gene']} does not establish the mechanism this "
+             f"report proposes.")
+    L.append("")
+    L.append("*Not medical advice. Hypotheses for laboratory testing.*")
+    L.append("")
+    return "\n".join(L)
+
+
 def write_outputs(result: dict, outdir: str | Path, *, top_n: int = 25) -> list[Path]:
-    """Write all five outputs; top_n limits report tables, not exported data."""
+    """Write every output; top_n limits report tables, not exported data."""
     if isinstance(top_n, bool) or not isinstance(top_n, int) or top_n < 1:
         raise ValueError("top_n must be a positive integer")
     outdir = Path(outdir)
@@ -3361,6 +3562,12 @@ def write_outputs(result: dict, outdir: str | Path, *, top_n: int = 25) -> list[
 
     p = outdir / "report.md"
     p.write_text(markdown_report(result, top_n=top_n), encoding="utf-8")
+    written.append(p)
+
+    # The short version. report.md is long because every number in it is
+    # qualified; this is the page to open first.
+    p = outdir / "summary.md"
+    p.write_text(summary_report(result), encoding="utf-8")
     written.append(p)
 
     p = outdir / "results.json"
