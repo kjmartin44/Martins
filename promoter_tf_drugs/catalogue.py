@@ -74,6 +74,7 @@ CATEGORIES = [
     "TF: degradation blocker",
     "upstream signalling",
     "off-pathway pocket binder",
+    "measured phenocopy",
     "empirical signature",
     "chromatin-level",
     "virtual screen hypothesis",
@@ -147,6 +148,34 @@ CATEGORY_GUIDE = {
                    "docked is not among this promoter's factors, so even "
                    "a perfect pose leaves the connection to your gene "
                    "unestablished.",
+    },
+    "measured phenocopy": {
+        # Abundance, not activity. This acts on the FACTOR, so your gene's
+        # transcription moves and RT-qPCR sees it. "activity" is reserved
+        # for a drug on your gene's own product, which changes what the
+        # existing protein does without moving how much there is.
+        "changes": "abundance",
+        "assay": "a binding assay against the factor, then a reporter, "
+                 "then RT-qPCR for your gene - the correlation names a "
+                 "candidate and establishes none of those steps",
+        "what": "A compound whose effect on cell viability across the "
+                "DepMap panel tracks what happens when this factor is "
+                "knocked out, so it behaves as though it removes the "
+                "factor.",
+        "why": "It needs no annotation of any kind. Every other route "
+               "here starts from something a curator, a motif or a "
+               "structure already asserted, so none of them can surface a "
+               "drug nobody has connected to the factor. This one can, "
+               "because it reads a measured phenotype.",
+        "cost": "Correlation across cell lines, not target engagement. A "
+                "hit may act on the factor, on anything else the same "
+                "lines need, or on a pathway the factor sits in, and the "
+                "first is the least likely of the three. Both panels "
+                "score proliferation of transformed cells, so a factor "
+                "that matters in a differentiated cell leaves no trace.",
+        "differs": "Unlike 'empirical signature', nothing was measured "
+                   "about your gene or about transcription at all - the "
+                   "readout is whether cells live.",
     },
     "TF: abundance change": {
         "changes": "abundance",
@@ -651,6 +680,83 @@ def from_docking(docking: dict, *, goal: str = "up",
     return out
 
 
+def from_sensitivity(sens: dict, *, goal: str = "up",
+                     tf_roles: dict | None = None) -> list[Route]:
+    """Routes from a drug-sensitivity correlation across cell lines.
+
+    Tier 4. The drug's effect on cells is measured, but the claim that it
+    acts on THIS factor is inferred from a correlation, so it sits with
+    the predicted routes rather than the measured ones - a curated ligand
+    at tier 3 at least asserts a direct interaction, and this asserts
+    none.
+
+    Unlike docking, this readout carries a direction. A compound that
+    phenocopies the knockout behaves as though it REMOVES the factor, so
+    it serves a goal that needs the factor lowered and works against one
+    that needs it raised. Routes pointing the wrong way are dropped here,
+    which is the same treatment annotated ligands already get - the
+    direction is part of what the correlation measured, not a guess about
+    a conformation.
+    """
+    from .drugs import desired_direction
+
+    out = []
+    roles = {k.upper(): v for k, v in (tf_roles or {}).items()}
+    for sym, res in (sens or {}).items():
+        if not res or not res.get("assessed"):
+            continue
+        if res.get("readout") != "phenocopy":
+            continue
+        role = roles.get(sym.upper())
+        want = desired_direction(role or "unknown", goal)
+        n_lines_total = res.get("n_lines") or 0
+
+        for h in res.get("hits", []):
+            moves = h.get("direction")
+            # "phenocopies" lowers the factor; "opposes" raises it.
+            gives = ("down" if moves == "phenocopies" else
+                     "up" if moves == "opposes" else None)
+            if gives is None:
+                continue
+            if want in ("up", "down") and gives != want:
+                continue
+
+            r, raw = h.get("r"), h.get("r_raw")
+            q = h.get("q_value")
+            verb = ("behaves as though it removes" if gives == "down"
+                    else "behaves as though it raises")
+            out.append(Route(
+                drug=h.get("drug") or "?",
+                category="measured phenocopy",
+                mechanism=(f"{verb} {sym}: its effect on cell viability "
+                           f"tracks {sym} knockout across "
+                           f"{h.get('n_lines')} line(s), partial r = {r}"),
+                acts_on=sym, tier=4, directness=1,
+                # Strength is the partial correlation, which is the
+                # measured quantity. The raw value is in the notes and is
+                # deliberately not used: it is mostly cell-line fragility.
+                axes=Axes(min(1.0, abs(float(r or 0.0))), 0.4, 0.5,
+                          f"partial r = {r} at q = {q}"),
+                approved=True, source="sensitivity",
+                notes=[
+                    f"correlation across {h.get('n_lines')} of "
+                    f"{n_lines_total} shared cell line(s), q = {q}",
+                    f"raw correlation was {raw}; the reported {r} controls "
+                    f"for how easily each line dies under the panel as a "
+                    f"whole. That control moves the number either way - it "
+                    f"removes a shared component that can inflate a "
+                    f"correlation or mask one - so a large gap means the "
+                    f"raw value was mostly about the cell lines",
+                    "no record of this compound binding the factor. The "
+                    "argument is that it behaves as though it does, which "
+                    "is a reason to run a binding assay rather than a "
+                    "substitute for one",
+                    "a proliferation readout in cancer lines: it says "
+                    "nothing about a differentiated tissue",
+                ]))
+    return out
+
+
 def from_abundance(hits: list) -> list[Route]:
     """Compounds that change how much of the factor exists.
 
@@ -866,6 +972,9 @@ def build(result_block: dict, *, goal: str = "up",
                            tf_roles=result_block.get("tf_roles"))
     routes += from_abundance(
         result_block.get("factor_abundance") or [])
+    routes += from_sensitivity(result_block.get("sensitivity") or {},
+                               goal=goal,
+                               tf_roles=result_block.get("tf_roles"))
     if include_chromatin:
         routes += chromatin_routes(goal)
 

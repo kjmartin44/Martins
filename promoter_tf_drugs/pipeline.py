@@ -11,6 +11,7 @@ from pathlib import Path
 from . import (annotate, catalogue as cat_mod, cellcycle, congeners as cong_mod,
                delivery as dlv_mod,
                liabilities as liab_mod,
+               sensitivity as sens_mod,
                tfactivity as tfa_mod,
                depmap as depmap_mod,
                corpora as corpora_mod,
@@ -102,6 +103,11 @@ class TFResult:
 # import at all on those versions.
 EMDASH = "\u2014"
 
+# How many ranked factors get a sensitivity scan. Each one is a
+# correlation over the whole PRISM matrix, so this is the expensive
+# step in that section rather than the file read, which happens once.
+SENSITIVITY_FACTORS = 6
+
 ACTIVITY_DRUG_FACTORS = 8
 
 
@@ -175,6 +181,8 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         lincs_file: str | None = None,
         lincs_geneinfo=None, tf_activity: bool = False,
         depmap_file: str | None = None,
+        prism_file: str | None = None,
+        sensitivity_scan: bool = False,
         docking_results: str | None = None,
         activity_tissue: str | None = None,
         activity_permutations: int = 0, lincs_gmt: tuple | None = None, expression_file: str | None = None,
@@ -757,6 +765,45 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             ledger.record("depmap", requested=True, ok=False, yielded=0,
                           detail=f"{depmap_file} not found")
 
+        # ---- 8c-ter. which approved drugs behave like losing the factor
+        # Every other route here begins with something somebody wrote
+        # down, so none of them can surface a drug nobody has connected to
+        # the factor. This one reads a measured phenotype instead: if a
+        # compound hurts the same cell lines that knocking the factor out
+        # hurts, it behaves as though it removes the factor.
+        sensitivity: dict = {}
+        if sensitivity_scan and not demo:
+            _prism = sens_mod.load_prism(prism_file)
+            if not _prism:
+                ledger.record(
+                    "sensitivity", requested=True, ok=False, yielded=0,
+                    detail=("no PRISM matrix on disk, so no drug was "
+                            "correlated. " + sens_mod.SOURCE.splitlines()[0]))
+            else:
+                _names = sens_mod.load_compound_names()
+                for r in ranked[:SENSITIVITY_FACTORS]:
+                    got = _optional(
+                        f"sensitivity scan for {r.symbol}",
+                        lambda sym=r.symbol: sens_mod.phenocopy(
+                            sym, prism=_prism, effect_path=depmap_file,
+                            names=_names),
+                        None)
+                    if got is not None:
+                        sensitivity[r.symbol] = got.to_dict()
+                n_hits = sum(len(v.get("hits") or [])
+                             for v in sensitivity.values())
+                n_ok = sum(1 for v in sensitivity.values()
+                           if v.get("assessed"))
+                ledger.record(
+                    "sensitivity", requested=True, ok=bool(n_hits),
+                    yielded=n_hits,
+                    detail=(f"{n_hits} correlated compound(s) across "
+                            f"{n_ok} of {len(sensitivity)} factor(s) "
+                            f"scanned"
+                            if n_ok else
+                            "no factor could be scanned: none is scored in "
+                            "both the DepMap and PRISM panels"))
+
         # ---- 8c-bis. is the factor actually ACTIVE, not merely motif-matched?
         # The independent check on everything above. A PWM scan of a 6 kb
         # window returns mostly noise at p=1e-4, so a site is evidence that
@@ -1119,6 +1166,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             # `annotation` is a dict subclass, so this is a key read.
             "tf_roles": {r.symbol: (r.annotation or {}).get("role")
                          for r in ranked},
+            "sensitivity": sensitivity,
         }
         all_routes = cat_mod.build(block_for_catalogue, goal=goal)
 
@@ -1183,6 +1231,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             "docking": list(docking_runs.values()),
             "docking_consensus": dock_consensus,
             "dependencies": dependencies,
+            "sensitivity": sensitivity,
             "modality_design": modality,
             "screen_plan": screen_plan,
             "lincs": lincs,
@@ -1413,6 +1462,82 @@ def _docking_section(runs: list, consensus: dict) -> list:
                  "independent arguments, not a missing result - treat the "
                  "single-method hits above accordingly.")
         L.append("")
+    return L
+
+
+def _sensitivity_section(sens: dict) -> list:
+    """Drugs that behave as though they remove a factor.
+
+    The only section here whose candidates needed no annotation of any
+    kind, so it is the only one that can name a compound nobody has
+    connected to the gene.
+    """
+    if not sens:
+        return []
+    from .sensitivity import MIN_ABS_R, MAX_Q, MIN_LINES
+
+    assessed = {k: v for k, v in sens.items() if v.get("assessed")}
+    if not assessed:
+        reasons = {v.get("error") for v in sens.values() if v.get("error")}
+        L = ["### Drugs that behave like losing the factor", ""]
+        L.append("Nothing was scanned. " + (
+            "; ".join(r for r in reasons if r)[:400] or "No reason recorded."))
+        L.append("")
+        return L
+
+    L = ["### Drugs that behave like losing the factor", ""]
+    L.append("Every other route in this report starts from something "
+             "somebody wrote down - a curated ligand, a motif, a "
+             "structure, a signed edge. None of them can surface a drug "
+             "nobody has connected to the factor. This one reads a "
+             "measured phenotype instead: if a compound hurts the same "
+             "cell lines that knocking the factor out hurts, it behaves "
+             "as though it removes the factor.")
+    L.append("")
+
+    rows = [(sym, h) for sym, v in sorted(assessed.items())
+            for h in (v.get("hits") or [])]
+    if not rows:
+        n = sum(v.get("n_drugs_tested", 0) for v in assessed.values())
+        L.append(f"{n} compound(s) were correlated across "
+                 f"{len(assessed)} factor(s) and none cleared "
+                 f"|r| >= {MIN_ABS_R} at q <= {MAX_Q}. That is the common "
+                 f"outcome. It bounds what this method contributes here "
+                 f"rather than saying no such drug exists: the panel is "
+                 f"proliferating cancer lines, and a factor that matters "
+                 f"elsewhere leaves no trace in it.")
+        L.append("")
+        return L
+
+    L.append("| Factor | Drug | Partial r | Raw r | Lines | q | Behaves as |")
+    L.append("|---|---|---|---|---|---|---|")
+    for sym, h in sorted(rows, key=lambda t: -abs(t[1].get("r") or 0))[:20]:
+        L.append(f"| {sym} | **{h.get('drug')}** | {h.get('r')} | "
+                 f"{h.get('r_raw')} | {h.get('n_lines')} | "
+                 f"{h.get('q_value')} | {h.get('direction')} |")
+    L.append("")
+    L.append(f"**Partial r** controls for how easily each cell line dies "
+             f"under the whole panel. Some lines die under almost "
+             f"anything and those same lines suffer most knockouts, which "
+             f"puts a correlation between almost any drug and almost any "
+             f"gene. The control moves a number either way - it removes a "
+             f"shared component that can inflate a correlation or mask "
+             f"one - so where the two columns differ a lot the raw value "
+             f"was mostly about the cell lines. Estimates use at least "
+             f"{MIN_LINES} shared lines.")
+    L.append("")
+    L.append("**This is not a target.** A correlated drug may act on the "
+             "factor, on anything else the same lines need, or on a "
+             "pathway the factor sits in, and the first is the least "
+             "likely of the three for any one hit. Nothing here records "
+             "any of them binding anything: the finding is a reason to "
+             "run a binding assay, not a result from one.")
+    L.append("")
+    L.append("**A proliferation readout.** Both panels score growth of "
+             "transformed cells in a dish, so a factor whose role is in a "
+             "differentiated or post-mitotic cell looks silent here for "
+             "reasons that have nothing to do with its importance.")
+    L.append("")
     return L
 
 
@@ -2040,6 +2165,8 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                                       res.get("tfs") or []))
 
         L.extend(_depmap_section(res.get("dependencies") or {}, res))
+
+        L.extend(_sensitivity_section(res.get("sensitivity") or {}))
 
         L.extend(_docking_section(res.get("docking") or [],
                                   res.get("docking_consensus") or {}))

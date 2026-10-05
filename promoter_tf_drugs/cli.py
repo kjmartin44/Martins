@@ -209,6 +209,20 @@ def add_analysis_args(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
                         "--bundle DIR --out JSON`, which is the step "
                         "that needs Linux. Prepare and report here, "
                         "dock there")
+    p.add_argument("--sensitivity-scan", action="store_true",
+                   help="correlate every approved compound in the PRISM "
+                        "panel against each factor's CRISPR knockout "
+                        "profile. Finds drugs that behave as though they "
+                        "remove the factor, with no annotation of any kind "
+                        "behind them - the one route here that can surface "
+                        "a compound nobody has linked to the gene. Needs "
+                        "both the DepMap and PRISM matrices on disk")
+    p.add_argument("--prism-file", metavar="CSV",
+                   help="PRISM Repurposing LFC matrix. "
+                        "data/Repurposing_Public_24Q2_LFC_COLLAPSED.csv is "
+                        "picked up automatically if present, and the "
+                        "compound list beside it turns BRD ids into drug "
+                        "names")
     p.add_argument("--depmap-file", metavar="CSV",
                    help="DepMap CRISPRGeneEffect.csv. Measures what happens "
                         "to a cell when each factor is knocked out, which is "
@@ -310,6 +324,8 @@ def _execute(args) -> int:
         use_lincs=args.lincs,
         signature_file=args.signature_file, lincs_file=args.lincs_file,
         depmap_file=args.depmap_file,
+        prism_file=args.prism_file,
+        sensitivity_scan=args.sensitivity_scan,
         docking_results=args.docking_results,
         tf_activity=args.tf_activity,
         activity_tissue=args.activity_tissue,

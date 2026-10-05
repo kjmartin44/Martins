@@ -7705,7 +7705,19 @@ def test_every_computed_source_reaches_the_catalogue():
     from promoter_tf_drugs import catalogue as cat
     src = inspect.getsource(pipeline.run)
     start = src.index("block_for_catalogue = {")
-    block = src[start:src.index("}", start)]
+    # Brace-match to the real end. Stopping at the first "}" meant a
+    # nested dict value - tf_roles is one - hid every key after it, so
+    # this test silently stopped checking the thing it exists for.
+    depth, end = 0, start
+    for k in range(src.index("{", start), len(src)):
+        if src[k] == "{":
+            depth += 1
+        elif src[k] == "}":
+            depth -= 1
+            if depth == 0:
+                end = k
+                break
+    block = src[start:end]
 
     build_src = inspect.getsource(cat.build)
     import re
@@ -10179,3 +10191,236 @@ def test_a_zscore_of_zero_is_not_swapped_for_another_column():
     import inspect
     src = inspect.getsource(sig)
     assert 'float(r.get("zscore") or r.get("score") or 0.0)' not in src
+
+
+# ===================================================================== #
+# Drug sensitivity: the one route that needs no annotation at all.      #
+# ===================================================================== #
+def _sens_panel(seed=7, n=120):
+    """A PRISM-shaped panel with a planted phenocopier and opposer, both
+    sitting on top of a shared cell-line fragility component."""
+    import numpy as np
+    rng = np.random.default_rng(seed)
+    models = [f"ACH-{i:06d}" for i in range(n)]
+    gene = rng.normal(-0.2, 0.4, size=n)
+    frag = rng.normal(0, 0.6, size=n)
+    cols, mat = [], []
+    for j in range(40):
+        cols.append(f"BRD-{j:05d}")
+        mat.append(0.9 * frag + rng.normal(0, 0.5, size=n))
+    cols.append("BRD-COPY")
+    mat.append(0.7 * gene + 0.9 * frag + rng.normal(0, 0.25, size=n))
+    cols.append("BRD-OPP")
+    mat.append(-0.7 * gene + 0.9 * frag + rng.normal(0, 0.25, size=n))
+    prism = {"models": models, "columns": cols,
+             "values": np.vstack(mat).T}
+    target = {m: float(v) for m, v in zip(models, gene)}
+    names = {"BRD-COPY": "phenocopier", "BRD-OPP": "opposer"}
+    return prism, target, names
+
+
+def test_the_p_value_matches_a_reference_t_distribution():
+    """The incomplete beta is written out by hand here, because numpy has
+    none and scipy is not a dependency. If it drifts, every q in this
+    section is wrong and nothing else would notice."""
+    import pytest
+    st = pytest.importorskip("scipy.stats")
+    import numpy as np
+    from promoter_tf_drugs import sensitivity as sn
+    for r, n in ((0.5, 30), (0.2, 100), (0.8, 10), (0.05, 500)):
+        df = n - 2
+        t = abs(r) * np.sqrt(df / (1 - r * r))
+        assert abs(sn._p_from_r(r, n) - 2 * st.t.sf(t, df)) < 1e-9
+
+
+def test_the_partial_correlation_equals_a_regression_residual():
+    """The definition, checked against the thing it is defined to be."""
+    import numpy as np
+    from promoter_tf_drugs import sensitivity as sn
+    rng = np.random.default_rng(3)
+    z = rng.normal(size=400)
+    x = 0.8 * z + 0.6 * rng.normal(size=400)
+    y = 0.8 * z + 0.6 * rng.normal(size=400)
+
+    def pr(a, b):
+        return float(((a - a.mean()) * (b - b.mean())).mean()
+                     / (a.std() * b.std()))
+
+    mine = float(sn._partial(np.array([pr(x, y)]), np.array([pr(x, z)]),
+                             pr(y, z))[0])
+    rx = x - np.polyval(np.polyfit(z, x, 1), z)
+    ry = y - np.polyval(np.polyfit(z, y, 1), z)
+    assert abs(mine - pr(rx, ry)) < 1e-9
+    assert abs(mine) < abs(pr(x, y)), (
+        "the control must remove the shared component, not keep it")
+
+
+def test_pure_noise_produces_no_significant_hit():
+    """2,000 tests against a random profile. If BH is wrong this section
+    invents drugs."""
+    import numpy as np
+    from promoter_tf_drugs import sensitivity as sn
+    rng = np.random.default_rng(0)
+    prism = {"models": [f"ACH-{i}" for i in range(200)],
+             "columns": [f"BRD-{j}" for j in range(2000)],
+             "values": rng.normal(size=(200, 2000))}
+    target = {f"ACH-{i}": float(v)
+              for i, v in enumerate(rng.normal(size=200))}
+    res = sn.correlate(prism, target, gene="NULL")
+    assert res.assessed
+    assert res.n_drugs_tested == 2000
+    assert res.hits == [], f"{len(res.hits)} false positive(s) on noise"
+
+
+def test_a_planted_phenocopy_is_recovered_with_the_right_sign():
+    from promoter_tf_drugs import sensitivity as sn
+    prism, target, names = _sens_panel()
+    res = sn.correlate(prism, target, gene="VDR", names=names)
+    by = {h.drug: h for h in res.hits}
+    assert "phenocopier" in by and "opposer" in by
+    assert by["phenocopier"].r > 0
+    assert by["opposer"].r < 0
+    assert by["phenocopier"].direction == "phenocopies"
+    assert by["opposer"].direction == "opposes"
+    assert len(res.hits) == 2, (
+        "the 40 fragility-only fillers should not survive the control")
+
+
+def test_too_few_shared_lines_is_refused_not_scored():
+    from promoter_tf_drugs import sensitivity as sn
+    prism, target, names = _sens_panel()
+    few = dict(list(target.items())[:10])
+    res = sn.correlate(prism, few, gene="VDR", names=names)
+    assert not res.assessed
+    assert "below the" in res.error and "noise with a decimal place" in res.error
+
+
+def test_a_missing_matrix_is_not_an_absence_of_correlated_drugs():
+    from promoter_tf_drugs import sensitivity as sn
+    res = sn.correlate({}, {"ACH-1": 0.5}, gene="VDR")
+    assert not res.assessed
+    assert "missing file, not an absence" in res.error
+
+
+def test_a_gene_absent_from_depmap_says_so(tmp_path, monkeypatch):
+    from promoter_tf_drugs import sensitivity as sn
+    monkeypatch.chdir(tmp_path)
+    d = tmp_path / "data"
+    d.mkdir(exist_ok=True)
+    (d / "CRISPRGeneEffect.csv").write_text(
+        ",MYC (4609)\n" + "".join(f"ACH-{i},{-0.3}\n" for i in range(30)),
+        encoding="utf-8")
+    prism = {"models": [f"ACH-{i}" for i in range(30)],
+             "columns": ["BRD-1"], "values": __import__("numpy").zeros((30, 1))}
+    res = sn.phenocopy("VDR", prism=prism, names={})
+    assert not res.assessed
+    assert "not scored in the DepMap release" in res.error
+    assert "Absent from the file is not the same" in res.error
+
+
+def test_the_two_readouts_have_opposite_expected_signs():
+    """Chronos and PRISM both run negative for harm, so a phenocopy is a
+    POSITIVE correlation. Expression runs the other way, so sensitivity
+    rising with expression is NEGATIVE. Getting this backwards would
+    invert every call in the section."""
+    from promoter_tf_drugs import sensitivity as sn
+    prism, target, names = _sens_panel()
+    ph = sn.correlate(prism, target, readout="phenocopy", gene="VDR",
+                      names=names)
+    ex = sn.correlate(prism, target, readout="expression", gene="VDR",
+                      names=names)
+    by_ph = {h.drug: h.direction for h in ph.hits}
+    by_ex = {h.drug: h.direction for h in ex.hits}
+    assert by_ph["phenocopier"] == "phenocopies"
+    assert by_ex["phenocopier"] == "inverse to expression"
+    assert by_ex["opposer"] == "tracks expression"
+
+
+# ---- the route ------------------------------------------------------
+def _sens_block():
+    from promoter_tf_drugs import sensitivity as sn
+    prism, target, names = _sens_panel()
+    res = sn.correlate(prism, target, gene="VDR", names=names)
+    return {"VDR": res.to_dict()}
+
+
+def test_a_phenocopy_route_is_kept_only_where_it_moves_the_right_way():
+    """A phenocopier removes the factor, so it serves a goal that needs
+    the factor lowered and works against one that needs it raised. Unlike
+    docking, the direction here was measured, so a wrong-way route is
+    dropped rather than flagged."""
+    from promoter_tf_drugs import catalogue as cat
+    block = _sens_block()
+    cases = {
+        ("activator", "up"): "opposer",
+        ("activator", "down"): "phenocopier",
+        ("repressor", "up"): "phenocopier",
+        ("repressor", "down"): "opposer",
+    }
+    for (role, goal), expect in cases.items():
+        kept = sorted(r.drug for r in cat.from_sensitivity(
+            block, goal=goal, tf_roles={"VDR": role}))
+        assert kept == [expect], (role, goal, kept)
+
+
+def test_an_unknown_role_keeps_both_directions():
+    """desired_direction returns "either" for an unresolved role, so
+    nothing is dropped on a guess."""
+    from promoter_tf_drugs import catalogue as cat
+    kept = sorted(r.drug for r in cat.from_sensitivity(
+        _sens_block(), goal="up", tf_roles={"VDR": "unknown"}))
+    assert kept == ["opposer", "phenocopier"]
+
+
+def test_the_route_rests_on_the_partial_not_the_raw_correlation():
+    from promoter_tf_drugs import catalogue as cat
+    block = _sens_block()
+    r = cat.from_sensitivity(block, goal="down",
+                             tf_roles={"VDR": "activator"})[0]
+    hit = [h for h in block["VDR"]["hits"] if h["drug"] == "phenocopier"][0]
+    assert r.axes.strength == min(1.0, abs(hit["r"]))
+    assert r.axes.strength != abs(hit["r_raw"])
+    assert r.tier == 4
+    assert r.category == "measured phenocopy"
+    assert any("behaves as though it does" in n for n in r.notes)
+
+
+def test_an_unassessed_scan_contributes_no_routes():
+    from promoter_tf_drugs import catalogue as cat
+    assert cat.from_sensitivity(
+        {"VDR": {"assessed": False, "error": "no file"}}, goal="up") == []
+
+
+def test_the_section_reports_a_scan_that_found_nothing(tmp_path):
+    from promoter_tf_drugs import pipeline as pl
+    out = "\n".join(pl._sensitivity_section(
+        {"VDR": {"assessed": True, "n_drugs_tested": 4000, "hits": []}}))
+    assert "none cleared" in out
+    assert "bounds what this method contributes" in out
+
+
+def test_the_section_says_when_nothing_could_be_scanned():
+    from promoter_tf_drugs import pipeline as pl
+    out = "\n".join(pl._sensitivity_section(
+        {"VDR": {"assessed": False, "error": "no PRISM matrix loaded"}}))
+    assert "Nothing was scanned" in out
+    assert "no PRISM matrix loaded" in out
+
+
+def test_the_section_warns_that_a_correlation_is_not_a_target():
+    from promoter_tf_drugs import pipeline as pl
+    out = "\n".join(pl._sensitivity_section(_sens_block()))
+    assert "This is not a target" in out
+    assert "Partial r" in out
+    assert "proliferation readout" in out
+
+
+def test_the_cli_flag_reaches_the_pipeline():
+    """A flag that is parsed and never passed does nothing, which is the
+    failure this project keeps finding."""
+    import inspect
+    from promoter_tf_drugs import cli
+    src = inspect.getsource(cli)
+    assert "--sensitivity-scan" in src
+    assert "sensitivity_scan=args.sensitivity_scan" in src
+    assert "prism_file=args.prism_file" in src
