@@ -9944,3 +9944,171 @@ def test_the_hop_count_reads_as_english():
     assert "(1 hop)" in cat.from_upstream({"TF": [h]})[0].mechanism
     h["best_path"]["hops"] = 2
     assert "(2 hops)" in cat.from_upstream({"TF": [h]})[0].mechanism
+
+
+# ===================================================================== #
+# Which conformation to dock into depends on the factor's ROLE as well   #
+# as the goal. --state was manual and its help covered only activators.  #
+# ===================================================================== #
+def test_the_conformation_follows_role_and_goal_together():
+    """To raise a gene you want an activator ON and a repressor OFF, so
+    the same goal needs opposite conformations for the two roles."""
+    from promoter_tf_drugs.docking import state_for
+    assert state_for("activator", "up") == "active"
+    assert state_for("repressor", "up") == "inactive"
+    assert state_for("activator", "down") == "inactive"
+    assert state_for("repressor", "down") == "active"
+
+
+def test_an_unresolved_role_does_not_guess_a_conformation():
+    """This filter DISCARDS structures, so a wrong guess can delete the
+    only pocket with a co-crystallised ligand and refuse the dock. That
+    is stricter than drugs.desired_direction, which folds dual in with
+    activator because there a wrong guess only reorders a table."""
+    from promoter_tf_drugs.docking import state_for
+    from promoter_tf_drugs.drugs import desired_direction
+    assert state_for("dual", "up") is None
+    assert state_for("unknown", "up") is None
+    assert state_for(None, "up") is None
+    assert desired_direction("dual", "up") == "up", (
+        "the drug-side convention is deliberately different; if it "
+        "changes, state_for's reason for diverging should be revisited")
+
+
+def test_the_state_flag_is_derived_not_demanded():
+    import inspect
+    from promoter_tf_drugs import docking as dk
+    src = inspect.getsource(dk.main)
+    assert "want_state = args.state" in src
+    assert "state_for(" in src
+    assert "want_state=args.state" not in src, (
+        "a call site still reads the raw flag and will ignore the "
+        "derived value")
+
+
+def test_a_conformation_filter_is_not_reported_as_a_missing_structure():
+    """choose_pocket skipping every structure for its conformation used to
+    surface as "the PDB has none", sending the user after the wrong
+    problem."""
+    import inspect
+    from promoter_tf_drugs import docking as dk
+    src = inspect.getsource(dk.dock_screen_for_target)
+    assert "excluded_by_conformation" in src
+    assert "choose_pocket(client, uniprot, work_dir)" in src, (
+        "the unfiltered retry that tells the two cases apart is gone")
+
+
+# ===================================================================== #
+# A docking route and the direction you asked for.                       #
+# ===================================================================== #
+def _route_run(target="VDR", state="active"):
+    return {"target": target, "usable": True, "auc": 0.92, "ef1": 3.1,
+            "pocket": {"pdb_id": "1ABC", "ligand_resname": "VDX",
+                       "state": state},
+            "hits": [{"drug": "compound-1", "score": -10.4}]}
+
+
+def test_the_pocket_conformation_is_related_to_the_direction_wanted():
+    from promoter_tf_drugs import catalogue as cat
+    cases = {
+        ("activator", "active"): "supports",
+        ("activator", "inactive"): "opposes",
+        ("repressor", "inactive"): "supports",
+        ("repressor", "active"): "opposes",
+    }
+    for (role, state), expect in cases.items():
+        r = cat.from_docking(_route_run(state=state), goal="up",
+                             tf_roles={"VDR": role})[0]
+        assert expect in r.mechanism, (role, state, r.mechanism)
+
+
+def test_an_opposing_conformation_is_flagged_and_not_dropped():
+    """Docking does not measure whether a compound agonises or
+    antagonises, and an antagonist can bind the active conformation. So
+    an opposing pocket is a warning, never grounds to delete the route."""
+    from promoter_tf_drugs import catalogue as cat
+    routes = cat.from_docking(_route_run(state="active"), goal="up",
+                              tf_roles={"VDR": "repressor"})
+    assert len(routes) == 1
+    note = " ".join(routes[0].notes)
+    assert "conformation to stabilise is inactive" in note
+    assert "antagonist can bind the active conformation" in note
+
+
+def test_an_unknown_conformation_stays_unaddressed():
+    from promoter_tf_drugs import catalogue as cat
+    r = cat.from_docking(_route_run(state="unknown"), goal="up",
+                         tf_roles={"VDR": "activator"})[0]
+    assert "supports" not in r.mechanism and "opposes" not in r.mechanism
+
+
+def test_without_roles_nothing_is_claimed_about_direction():
+    from promoter_tf_drugs import catalogue as cat
+    r = cat.from_docking(_route_run(), goal="up", tf_roles=None)[0]
+    assert "supports" not in r.mechanism and "opposes" not in r.mechanism
+    assert r.category == "TF: predicted pocket binder"
+
+
+# ===================================================================== #
+# Docking a protein that is not one of this promoter's factors.          #
+# ===================================================================== #
+def test_a_dock_against_a_non_factor_is_not_called_a_direct_binder():
+    """It came back as "TF: predicted pocket binder" with directness 1,
+    claiming a direct relationship with a gene it has no path to."""
+    from promoter_tf_drugs import catalogue as cat
+    off = cat.from_docking(_route_run(target="MTOR"), goal="up",
+                           tf_roles={"VDR": "activator"})[0]
+    assert off.category == "off-pathway pocket binder"
+    assert off.directness == 2
+    assert any("not one of the factors" in n for n in off.notes)
+
+
+def test_a_dock_against_a_factor_here_is_unchanged():
+    from promoter_tf_drugs import catalogue as cat
+    on = cat.from_docking(_route_run(target="VDR"), goal="up",
+                          tf_roles={"VDR": "activator"})[0]
+    assert on.category == "TF: predicted pocket binder"
+    assert on.directness == 1
+
+
+def test_the_off_pathway_route_scores_below_the_on_pathway_one():
+    from promoter_tf_drugs import catalogue as cat
+    on = cat.from_docking(_route_run(target="VDR"), goal="up",
+                          tf_roles={"VDR": "activator"})[0]
+    off = cat.from_docking(_route_run(target="MTOR"), goal="up",
+                           tf_roles={"VDR": "activator"})[0]
+    assert cat._score(off) < cat._score(on)
+
+
+def test_the_new_category_is_registered_and_explained():
+    """categories_absent is built from CATEGORIES, and the report prints a
+    guide entry per category - a category in neither is invisible."""
+    from promoter_tf_drugs import catalogue as cat
+    assert "off-pathway pocket binder" in cat.CATEGORIES
+    guide = cat.CATEGORY_GUIDE["off-pathway pocket binder"]
+    assert set(guide) >= {"changes", "assay", "what", "why", "cost",
+                          "differs"}
+
+
+def test_the_pipeline_hands_the_catalogue_the_factor_roles():
+    import inspect
+    src = inspect.getsource(pipeline.run)
+    assert '"tf_roles"' in src
+    assert '(r.annotation or {}).get("role")' in src, (
+        "annotation is a dict subclass; a getattr read returns None for "
+        "every factor")
+
+
+def test_no_test_helper_is_defined_twice_in_this_file():
+    """A second def of the same name silently replaces the first, so tests
+    written earlier start running against a fixture meant for later ones.
+    That happened: a new `_dock_run` shadowed an existing one and broke six
+    passing tests in a way that looked like a product regression."""
+    import ast
+    import collections
+    from pathlib import Path
+    src = Path(__file__).read_text(encoding="utf-8")
+    names = [n.name for n in ast.parse(src).body
+             if isinstance(n, ast.FunctionDef)]
+    dupes = [n for n, c in collections.Counter(names).items() if c > 1]
+    assert not dupes, f"defined more than once: {dupes}"

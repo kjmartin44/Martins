@@ -1112,6 +1112,13 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             "factor_abundance": factor_abundance,
             "undirected_factors": undirected_factors,
             "docking": list(docking_runs.values()),
+            # The factors at this promoter and their roles. The docking
+            # collector needs both: to tell a dock against one of them
+            # from a dock against something else, and to say whether the
+            # conformation docked is the one you want stabilised.
+            # `annotation` is a dict subclass, so this is a key read.
+            "tf_roles": {r.symbol: (r.annotation or {}).get("role")
+                         for r in ranked},
         }
         all_routes = cat_mod.build(block_for_catalogue, goal=goal)
 

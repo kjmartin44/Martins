@@ -73,6 +73,7 @@ CATEGORIES = [
     "TF: endogenous ligand",
     "TF: degradation blocker",
     "upstream signalling",
+    "off-pathway pocket binder",
     "empirical signature",
     "chromatin-level",
     "virtual screen hypothesis",
@@ -126,6 +127,26 @@ CATEGORY_GUIDE = {
         "differs": "Unlike 'TF: orthosteric ligand', nothing here was "
                    "measured at the receptor - the argument is entirely "
                    "from the shape of the pocket.",
+    },
+    "off-pathway pocket binder": {
+        "changes": "abundance",
+        "assay": "establish the link to your gene first; a binding assay "
+                 "for this protein tells you nothing about the promoter "
+                 "until that path exists",
+        "what": "A docking run against a protein that is not one of the "
+                "factors found at this promoter. Usually an upstream node "
+                "someone chose to dock by hand.",
+        "why": "It may still be the right target - an indirect route can "
+               "be more druggable than the factor itself - but this run "
+               "is evidence about a pocket, not about a path.",
+        "cost": "The route to your gene is asserted by whoever launched "
+                "the dock, not demonstrated here. The network section is "
+                "where a path is evidenced, and this compound does not "
+                "appear there.",
+        "differs": "Unlike 'TF: predicted pocket binder', the protein "
+                   "docked is not among this promoter's factors, so even "
+                   "a perfect pose leaves the connection to your gene "
+                   "unestablished.",
     },
     "TF: abundance change": {
         "changes": "abundance",
@@ -515,7 +536,8 @@ def from_lincs(lincs: dict) -> list[Route]:
     return out
 
 
-def from_docking(docking: dict) -> list[Route]:
+def from_docking(docking: dict, *, goal: str = "up",
+                 tf_roles: dict | None = None) -> list[Route]:
     """Hits from a docking run performed somewhere else.
 
     Tier 4. The compound is predicted to fit a pocket, which is two
@@ -527,6 +549,18 @@ def from_docking(docking: dict) -> list[Route]:
     `docking` is one run's result dict, as written by
     `docking.dock_from_bundle`. A run that did not validate contributes
     nothing, because its scores carry no information.
+
+    `tf_roles` maps this promoter's factors to their roles. It decides two
+    things that were previously not asked:
+
+    * whether the protein docked is one of this promoter's factors at all.
+      A dock against an upstream node used to come back labelled "TF:
+      predicted pocket binder" with directness 1, claiming a direct
+      relationship with a gene it has no established path to.
+    * how the pocket's conformation relates to the direction you want.
+      Docking still says nothing about whether a compound agonises or
+      antagonises; what it can say is that the pocket it was docked into
+      is the conformation you want stabilised, or the opposite one.
     """
     runs = docking if isinstance(docking, list) else [docking]
     out = []
@@ -537,18 +571,73 @@ def from_docking(docking: dict) -> list[Route]:
         auc, ef1 = run.get("auc"), run.get("ef1")
         pocket = run.get("pocket") or {}
         state = pocket.get("state")
+
+        roles = {k.upper(): v for k, v in (tf_roles or {}).items()}
+        on_pathway = (not roles) or tf.upper() in roles
+        role = roles.get(tf.upper())
+
+        # How the docked conformation relates to the direction wanted.
+        # "supports" and "opposes" are about the POCKET, never about the
+        # compound: a molecule that fits the active conformation may still
+        # be an antagonist of it.
+        fit, fit_note = "unaddressed", None
+        if state in ("active", "inactive") and role:
+            from .drugs import desired_direction
+            want = desired_direction(role, goal)
+            want_state = ("active" if want == "up" else
+                          "inactive" if want == "down" else None)
+            if want_state:
+                fit = "supports" if state == want_state else "opposes"
+                fit_note = (
+                    f"to move your gene {goal} through a {role} you want "
+                    f"{tf} {'more' if want == 'up' else 'less'} active, so "
+                    f"the conformation to stabilise is {want_state}. This "
+                    f"pocket is the {state} one"
+                    + ("." if fit == "supports" else
+                       ". A compound that fits it is as likely to hold the "
+                       "factor in the state you do NOT want. That is a "
+                       "property of the structure chosen, not a measurement "
+                       "of this compound - an antagonist can bind the "
+                       "active conformation."))
+
         for h in run.get("hits", []):
             score = h.get("score")
             if score is None:
                 continue
+            notes = [
+                f"structure {pocket.get('pdb_id')}"
+                + (f", ligand {pocket.get('ligand_resname')}"
+                   if pocket.get("ligand_resname") else ""),
+                "a docking score says the molecule can occupy the "
+                "pocket. It does not say whether it activates or "
+                "inhibits, and that decides the direction your gene "
+                "moves",
+            ]
+            if fit_note:
+                notes.append(fit_note)
+            if not on_pathway:
+                notes.append(
+                    f"{tf} is not one of the factors found at this "
+                    f"promoter, so this run establishes a pocket and not "
+                    f"a route to your gene. Whatever connects them was "
+                    f"asserted when the dock was launched, and is not "
+                    f"evidenced here.")
+
             out.append(Route(
                 drug=h.get("drug") or "?",
-                category="TF: predicted pocket binder",
+                category=("TF: predicted pocket binder" if on_pathway
+                          else "off-pathway pocket binder"),
                 mechanism=(f"docks into the {tf} pocket at "
                            f"{score:.1f} kcal/mol"
-                           + (f" ({state} conformation)" if state and
+                           + (f" ({state} conformation, {fit} the direction "
+                              f"wanted)" if fit != "unaddressed" else
+                              f" ({state} conformation)" if state and
                               state != "unknown" else "")),
-                acts_on=tf, tier=4, directness=1,
+                # Directness 1 means "acts on a factor at this promoter".
+                # A protein that is not one of them is at least one more
+                # step away, and how many more is unknown - 2 is the
+                # smallest honest answer, not a measured hop count.
+                acts_on=tf, tier=4, directness=1 if on_pathway else 2,
                 # Strength is the POCKET's validated enrichment, not this
                 # compound's score: the score separates binders from
                 # non-binders and ranks binders badly, so reading it as a
@@ -558,15 +647,7 @@ def from_docking(docking: dict) -> list[Route]:
                           + (f", {ef1}-fold top-1% enrichment" if ef1
                              else "")),
                 approved=True, source="docking",
-                notes=[
-                    f"structure {pocket.get('pdb_id')}"
-                    + (f", ligand {pocket.get('ligand_resname')}"
-                       if pocket.get("ligand_resname") else ""),
-                    "a docking score says the molecule can occupy the "
-                    "pocket. It does not say whether it activates or "
-                    "inhibits, and that decides the direction your gene "
-                    "moves",
-                ]))
+                notes=notes))
     return out
 
 
@@ -739,7 +820,8 @@ def build(result_block: dict, *, goal: str = "up",
     routes += from_screen(result_block.get("screens") or {})
     routes += from_activity_drugs(
         result_block.get("activity_drugs") or {})
-    routes += from_docking(result_block.get("docking") or {})
+    routes += from_docking(result_block.get("docking") or {}, goal=goal,
+                           tf_roles=result_block.get("tf_roles"))
     routes += from_abundance(
         result_block.get("factor_abundance") or [])
     if include_chromatin:

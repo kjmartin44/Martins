@@ -129,6 +129,38 @@ def chain_sequences(pdb_text: str) -> dict[str, str]:
     return {c: "".join(s) for c, s in seqs.items()}
 
 
+def state_for(role: str, goal: str = "up") -> str | None:
+    """Which receptor conformation to dock into, from role and goal.
+
+    The direction depends on BOTH, which is the whole point:
+
+        activator + raise  -> you want the factor ON   -> active
+        repressor + raise  -> you want the factor OFF  -> inactive
+        activator + lower  -> inactive
+        repressor + lower  -> active
+
+    `--state` used to be set by hand against help text that only
+    described the activator case, so anyone working on a repressor had to
+    invert it themselves or silently dock the wrong conformation.
+
+    None when the role is unknown or dual, because this filter DISCARDS
+    structures: guess wrong and the only pocket with a co-crystallised
+    ligand is thrown away and the dock refused outright. That is stricter
+    than `drugs.desired_direction`, which folds dual in with activator -
+    there a wrong guess only reorders a table, here it can delete the
+    evidence.
+    """
+    from .drugs import desired_direction
+    if (role or "unknown") not in ("activator", "repressor"):
+        return None
+    want = desired_direction(role, goal)
+    if want == "up":
+        return "active"
+    if want == "down":
+        return "inactive"
+    return None
+
+
 def classify_conformation(pdb_text: str, pdb_id: str = "?",
                           max_peptide_len: int = 35) -> Conformation:
     """Active vs inactive, from bound coactivator/corepressor peptides.
@@ -1313,6 +1345,7 @@ def choose_pocket(client, uniprot: str, out_dir, *, limit: int = 12,
         return None
 
     best = None
+    filtered_out: list = []
     for pdb_id in ids:
         path = fetch_pdb(client, pdb_id, out_dir)
         if path is None:
@@ -1323,6 +1356,10 @@ def choose_pocket(client, uniprot: str, out_dir, *, limit: int = 12,
             continue
         conf = classify_conformation(text, pdb_id)
         if want_state and conf.state != want_state:
+            # Dropped for its conformation, not for lacking a ligand. The
+            # caller needs to tell those apart or it reports "the PDB has
+            # no usable structure", which is false.
+            filtered_out.append(f"{pdb_id} is {conf.state}")
             continue
         lig_path = write_ligand_pdb(
             text, lig, out_dir / f"{pdb_id}_{lig['resname']}.pdb")
@@ -1343,6 +1380,11 @@ def choose_pocket(client, uniprot: str, out_dir, *, limit: int = 12,
         if conf.state != "unknown":
             return choice
         best = best or choice
+
+    if best is None and filtered_out:
+        log.info("%s: %d structure(s) with a ligand were excluded for not "
+                 "being in the %r conformation (%s)", uniprot,
+                 len(filtered_out), want_state, "; ".join(filtered_out[:6]))
     return best
 
 
@@ -1366,6 +1408,27 @@ def dock_screen_for_target(client, symbol: str, uniprot: str, library: list,
                                            + SETUP, "usable": False}
 
     pocket = choose_pocket(client, uniprot, work_dir, want_state=want_state)
+    if pocket is None and want_state:
+        # Was it the conformation filter, or is there genuinely no usable
+        # structure? Asking again without the filter answers that, and
+        # costs nothing: every structure is already cached on disk from
+        # the first pass.
+        unfiltered = choose_pocket(client, uniprot, work_dir)
+        if unfiltered is not None:
+            return {
+                "target": symbol, "usable": False,
+                "excluded_by_conformation": True,
+                "error": (
+                    f"{symbol} ({uniprot}) has a structure with a "
+                    f"co-crystallised ligand ({unfiltered.pdb_id}, "
+                    f"conformation {unfiltered.state}), but none in the "
+                    f"{want_state} conformation that was asked for. "
+                    f"Docking the other conformation would answer a "
+                    f"different question, so it is refused rather than "
+                    f"substituted. Pass --state to choose explicitly, or "
+                    f"leave --state and --role out to dock whichever "
+                    f"pocket exists."),
+            }
     if pocket is None:
         return {
             "target": symbol, "usable": False,
@@ -1703,9 +1766,19 @@ def main(argv=None) -> int:
                    help="UniProt accession, if the symbol does not resolve")
     p.add_argument("--state", choices=["active", "inactive"],
                    help="dock into the agonist-bound (active) or "
-                        "antagonist-bound (inactive) conformation. Pick "
-                        "active when you want to RAISE your gene through an "
-                        "activator")
+                        "antagonist-bound (inactive) conformation. Leave it "
+                        "out and it is derived from --direction and the "
+                        "factor's role, which is what decides it: to raise "
+                        "a gene you want an ACTIVATOR active and a "
+                        "REPRESSOR inactive")
+    p.add_argument("--direction", choices=["up", "down"], default="up",
+                   help="which way you want YOUR GENE to move (default up). "
+                        "Used with the factor's role to pick the "
+                        "conformation when --state is not given")
+    p.add_argument("--role", choices=["activator", "repressor", "dual"],
+                   help="the factor's role, if it cannot be resolved from "
+                        "local annotation. Without it the conformation is "
+                        "not filtered rather than guessed")
     p.add_argument("--top", type=int, default=25,
                    help="how many hits to report (default 25)")
     p.add_argument("--cpu", type=int, default=1,
@@ -1757,6 +1830,32 @@ def main(argv=None) -> int:
         p.error("--gene, --uniprot, --bundle or --check is required")
 
     # Networked half: fetch everything, write a portable folder, stop.
+    # The conformation to dock into follows from the factor's role and the
+    # direction wanted for the gene. Resolved once here so the two call
+    # sites below cannot disagree.
+    want_state = args.state
+    state_note = "set explicitly with --state"
+    if want_state is None:
+        role = args.role
+        if role is None and args.gene:
+            try:
+                from . import localannot as _la
+                _ann = _la.annotate_local([args.gene]).get(args.gene) or {}
+                role = _ann.get("role")
+            except Exception:                               # noqa: BLE001
+                role = None
+        want_state = state_for(role or "unknown", args.direction)
+        if want_state:
+            state_note = (f"derived: a {role} factor, to move the gene "
+                          f"{args.direction}")
+        else:
+            state_note = (
+                f"not filtered: the factor's role is "
+                f"{role or 'unresolved'}, so there is no defensible "
+                f"conformation to prefer. Pass --role or --state to "
+                f"choose one")
+    print(f"Conformation   : {want_state or 'any'} ({state_note})")
+
     if args.prepare:
         from .http import Client as _C
         from . import annotate as _ann
@@ -1774,7 +1873,7 @@ def main(argv=None) -> int:
         print(f"Preparing {symbol} ({uniprot}) into {args.prepare} ...")
         man = write_bundle(client, symbol, uniprot, args.prepare,
                            library_limit=args.library_limit,
-                           want_state=args.state, pdb_file=args.pdb,
+                           want_state=want_state, pdb_file=args.pdb,
                            library_file=args.library,
                            actives_file=args.actives)
         if man.get("error"):
@@ -1859,7 +1958,7 @@ def main(argv=None) -> int:
     res = dock_screen_for_target(
         client, symbol, uniprot, library, actives=actives,
         work_dir=args.work_dir, top_n=args.top,
-        exhaustiveness=args.exhaustiveness, want_state=args.state)
+        exhaustiveness=args.exhaustiveness, want_state=want_state)
 
     _report(res, args.top)
 
