@@ -238,7 +238,13 @@ def query_gene(client: Client, gene: str, *, direction: str = "up",
             continue
         meta = r.get("meta") or r
         name = (meta.get("pert_name") or meta.get("drug") or meta.get("id") or "?")
-        score = float(r.get("zscore") or r.get("score") or 0.0)
+        # `a or b` would read a z-score of exactly 0.0 - a gene that did
+        # not move - as missing and silently substitute a different
+        # column. These arrive parsed from JSON, so 0.0 is a real float
+        # here, unlike the CSV path below where every value is a string
+        # and "0" is truthy.
+        _z = r.get("zscore")
+        score = float(_z if _z is not None else (r.get("score") or 0.0))
         h = SignatureHit(
             drug=str(name).title(), gene=gene.upper(), direction=direction,
             score=round(score, 3), cell_line=meta.get("cell_line"),

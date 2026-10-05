@@ -1688,6 +1688,18 @@ def _n_local_gwas(local: dict | None) -> int:
     return int(local.get("n_significant") or 0)
 
 
+def _sig_q(value) -> float:
+    """A q-value for comparison, with None - not 0.0 - meaning missing.
+
+    `value or 1` reads a q of exactly 0.0, the MOST significant result
+    possible, as the least. `tfactivity._q` exists for this and this line
+    reimplemented the broken version. Latent rather than live today only
+    because `tfactivity._bh` floors its output at Q_FLOOR, an invariant
+    held in another module.
+    """
+    return 1.0 if value is None else float(value)
+
+
 def _route_cell(row: dict) -> str:
     """FDA route, compressed. "local only" is the one that rules a drug out."""
     r = row.get("route")
@@ -4212,7 +4224,7 @@ def summary_report(result: dict, top_n: int = SUMMARY_TOP) -> str:
         act = res.get("tf_activity") or {}
         if act.get("n_testable") and not [
                 a for a in (act.get("scanned") or [])
-                if (a.get("q_value") or 1) < 0.05]:
+                if _sig_q(a.get("q_value")) < 0.05]:
             cautions.append(
                 "No factor with a site in this promoter has a detectably "
                 "perturbed regulon in the tissue checked, so these routes "

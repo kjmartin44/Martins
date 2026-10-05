@@ -10112,3 +10112,70 @@ def test_no_test_helper_is_defined_twice_in_this_file():
              if isinstance(n, ast.FunctionDef)]
     dupes = [n for n, c in collections.Counter(names).items() if c > 1]
     assert not dupes, f"defined more than once: {dupes}"
+
+
+def _fam_screen(**kw):
+    base = {"family_model": True, "family": "nuclear receptor",
+            "transfer_auc": 0.78, "model_auc": 0.91,
+            "contributing": [{"symbol": "RXRA"}, {"symbol": "PPARG"}],
+            "enrichment": {"usable": True},
+            "hits": [{"drug": "cpd-1", "quadrant": "NOVEL HYPOTHESIS",
+                      "probability": 0.95}]}
+    base.update(kw)
+    return {"VDR": base}
+
+
+def test_a_family_model_route_rests_on_the_measured_transfer_auc():
+    """The model never saw VDR, so its own probability is not a strength
+    AT VDR. transfer_auc is the measured answer - how well a model trained
+    on relatives ranks VDR's own known ligands - and is what the route
+    carries. Wiring screen_family into the pipeline sent its hits through
+    from_screen, which dropped all of this."""
+    from promoter_tf_drugs import catalogue as cat
+    r = cat.from_screen(_fam_screen())[0]
+    assert r.axes.strength == 0.78, "the in-model probability leaked back in"
+    assert "transfer AUC 0.78" in r.axes.evidence
+    assert "family model" in r.mechanism
+    assert "not on VDR" in r.mechanism
+    assert any("subtype selectivity" in n for n in r.notes)
+
+
+def test_a_receptor_model_route_is_unchanged():
+    from promoter_tf_drugs import catalogue as cat
+    own = {"VDR": {"enrichment": {"usable": True},
+                   "hits": [{"drug": "cpd-1", "quadrant": "NOVEL HYPOTHESIS",
+                             "probability": 0.95}]}}
+    r = cat.from_screen(own)[0]
+    assert r.axes.strength == 0.95
+    assert "family" not in r.mechanism
+
+
+def test_an_established_ligand_keeps_its_tier_under_a_family_model():
+    """The binding was measured at this receptor whichever model surfaced
+    it, so tier 2 is still right - but the route says the model only
+    ranked it."""
+    from promoter_tf_drugs import catalogue as cat
+    sc = _fam_screen(hits=[{"drug": "calcitriol",
+                            "quadrant": "ESTABLISHED LIGAND, untested on "
+                                        "this gene"}])
+    r = cat.from_screen(sc)[0]
+    assert r.tier == 2
+    assert any("did not establish it" in n for n in r.notes)
+
+
+def test_a_q_value_of_zero_is_the_most_significant_not_the_least():
+    """`value or 1` reads 0.0 as missing. tfactivity._q exists for this and
+    the pipeline reimplemented the broken version."""
+    from promoter_tf_drugs import pipeline as pl
+    assert pl._sig_q(0.0) == 0.0
+    assert pl._sig_q(None) == 1.0
+    assert pl._sig_q(0.04) == 0.04
+
+
+def test_a_zscore_of_zero_is_not_swapped_for_another_column():
+    """A gene that did not move has z = 0.0. `a or b` substituted a
+    different field's value for it."""
+    from promoter_tf_drugs import signatures as sig
+    import inspect
+    src = inspect.getsource(sig)
+    assert 'float(r.get("zscore") or r.get("score") or 0.0)' not in src

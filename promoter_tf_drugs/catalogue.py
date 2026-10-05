@@ -736,6 +736,17 @@ def from_screen(screens: dict) -> list[Route]:
     for sym, sc in (screens or {}).items():
         if not (sc.get("enrichment") or {}).get("usable"):
             continue
+
+        # A family model was trained on this receptor's RELATIVES and never
+        # on the receptor. `transfer_auc` is the measured answer to whether
+        # that chemistry carries over, checked against ligands the model
+        # never saw - so it, not the model's own probability, is what a
+        # route's strength may rest on.
+        family = sc.get("family") if sc.get("family_model") else None
+        t_auc = sc.get("transfer_auc")
+        relatives = ", ".join(c["symbol"] for c in
+                              (sc.get("contributing") or [])[:4])
+
         for h in sc.get("hits", []):
             quad = h["quadrant"]
 
@@ -766,11 +777,42 @@ def from_screen(screens: dict) -> list[Route]:
                            f"{sym} moves your gene - the one step a binding "
                            f"assay cannot tell you",
                            f"everything else {sym} regulates moves too, which "
-                           f"a direct agent on your gene would avoid"]))
+                           f"a direct agent on your gene would avoid"]
+                    + ([f"surfaced by a {family} family model, but the tier "
+                        f"rests on the measured {h['drug']}-{sym} binding "
+                        f"rather than on the model - which ranked it, and "
+                        f"did not establish it"] if family else [])))
                 continue
 
             if quad != "NOVEL HYPOTHESIS":
                 continue
+            if family:
+                # Strength is the MEASURED transfer AUC, not the model's
+                # own probability. That probability comes from a model
+                # that never saw this receptor, so reading it as a
+                # strength at this receptor is the overclaim the transfer
+                # check exists to prevent.
+                strength = round(float(t_auc), 3) if t_auc else 0.3
+                out.append(Route(
+                    drug=h["drug"], category="virtual screen hypothesis",
+                    mechanism=(f"predicted ligand at {sym} by a "
+                               f"{family} family model - trained on "
+                               f"{relatives or 'relatives'}, not on {sym}"),
+                    acts_on=sym, tier=5, directness=1,
+                    axes=Axes(strength, 0.4, 0.5,
+                              f"family model, transfer AUC {t_auc}"),
+                    approved=True, source="screening",
+                    notes=[
+                        f"the model was never trained on {sym}. It ranks "
+                        f"{sym}'s own known ligands at AUC {t_auc}, which "
+                        f"is why it is reported at all - but a family "
+                        f"model predicts FAMILY binding, and subtype "
+                        f"selectivity is exactly what it cannot see",
+                        "extrapolation beyond training chemistry; requires "
+                        "a binding assay before it means anything",
+                    ]))
+                continue
+
             out.append(Route(
                 drug=h["drug"], category="virtual screen hypothesis",
                 mechanism=f"predicted ligand at {sym}, never tested there",
