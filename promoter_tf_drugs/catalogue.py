@@ -443,11 +443,27 @@ def from_upstream(upstream: dict) -> list[Route]:
     for sym, hits in (upstream or {}).items():
         for h in hits:
             bp = h["best_path"]
+            # Which way the DRUG must move the node:
+            #     n = want_tf_sign * net_sign
+            # This read net_sign alone, the same inverted expression
+            # `network.attach_drugs` had, so the report said "inhibit" for
+            # every repressor factor and every downregulation goal while
+            # the pipeline selected an activator. The two disagreed on
+            # screen.
+            want_tf = h.get("want_tf_sign")
+            if want_tf is None:
+                # A results.json written before the sign was recorded.
+                # Saying so beats printing a direction that may be wrong.
+                verb = "move"
+            else:
+                verb = ("activate" if want_tf * h["net_sign"] == 1
+                        else "inhibit")
+            hops = bp["hops"]
             for d in h.get("drugs", []):
                 out.append(Route(
                     drug=d["name"], category="upstream signalling",
-                    mechanism=f"{'activate' if h['net_sign'] == 1 else 'inhibit'} "
-                              f"{h['node']} → {sym} ({bp['hops']} hops)",
+                    mechanism=f"{verb} {h['node']} → {sym} "
+                              f"({hops} hop{'' if hops == 1 else 's'})",
                     acts_on=h["node"], tier=4,
                     directness=1 + bp["hops"],
                     axes=Axes(round(bp["confidence"], 3),

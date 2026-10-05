@@ -9899,3 +9899,48 @@ def test_a_family_result_records_what_it_replaced():
     import inspect
     src = inspect.getsource(pipeline.run)
     assert 'fam["replaces"] = sc.get("error")' in src
+
+
+def test_the_upstream_mechanism_text_agrees_with_the_drug_chosen(monkeypatch):
+    """`from_upstream` kept the same inverted expression attach_drugs had,
+    so the pipeline selected an activator of the node while the report
+    printed "inhibit" it. The two disagreed on screen."""
+    from promoter_tf_drugs import catalogue as cat
+    from promoter_tf_drugs import drugs as drugs_mod
+    monkeypatch.setattr(drugs_mod, "chembl_drugs", _both_directions)
+
+    edges = [net.Edge(source="KINASE", target="TFREP", sign=-1,
+                      n_references=3)]
+    hits = net.find_upstream_targets(None, "TFREP", goal="up",
+                                     tf_role="repressor", edges=edges)
+    net.attach_drugs(None, hits, approved_only=True)
+    assert {d["direction"] for d in hits[0].drugs} == {"up"}
+
+    routes = cat.from_upstream({"TFREP": [hits[0].to_dict()]})
+    assert routes, "no route built"
+    assert routes[0].mechanism.startswith("activate KINASE"), (
+        routes[0].mechanism)
+
+
+def test_an_old_result_without_the_sign_does_not_guess_a_direction():
+    """A results.json written before want_tf_sign existed cannot have the
+    direction recovered, so it says "move" rather than printing one that
+    may be backwards."""
+    from promoter_tf_drugs import catalogue as cat
+    h = {"node": "KINASE", "net_sign": -1,
+         "best_path": {"hops": 1, "confidence": 0.8, "specificity": 0.5,
+                       "description": "KINASE -| TFREP"},
+         "drugs": [{"name": "d", "approved": True}]}
+    routes = cat.from_upstream({"TFREP": [h]})
+    assert routes[0].mechanism.startswith("move KINASE")
+
+
+def test_the_hop_count_reads_as_english():
+    from promoter_tf_drugs import catalogue as cat
+    h = {"node": "K", "net_sign": 1, "want_tf_sign": 1,
+         "best_path": {"hops": 1, "confidence": 0.8, "specificity": 0.5,
+                       "description": "x"},
+         "drugs": [{"name": "d", "approved": True}]}
+    assert "(1 hop)" in cat.from_upstream({"TF": [h]})[0].mechanism
+    h["best_path"]["hops"] = 2
+    assert "(2 hops)" in cat.from_upstream({"TF": [h]})[0].mechanism
