@@ -10283,7 +10283,7 @@ def test_a_planted_phenocopy_is_recovered_with_the_right_sign():
     assert by["phenocopier"].direction == "phenocopies"
     assert by["opposer"].direction == "opposes"
     assert len(res.hits) == 2, (
-        "the 40 fragility-only fillers should not survive the control")
+        "the 40 fillers carry no gene signal and must not be reported")
 
 
 def test_too_few_shared_lines_is_refused_not_scored():
@@ -10424,3 +10424,53 @@ def test_the_cli_flag_reaches_the_pipeline():
     assert "--sensitivity-scan" in src
     assert "sensitivity_scan=args.sensitivity_scan" in src
     assert "prism_file=args.prism_file" in src
+
+
+def test_the_fragility_control_removes_a_false_signal_it_is_built_for():
+    """The case the partial correlation exists for, which `_sens_panel`
+    does not cover: it draws the gene profile independently of fragility,
+    so its fillers never acquire a false correlation and are rejected for
+    having no signal rather than by the control.
+
+    Here the gene profile tracks fragility, which is what real data looks
+    like - a gene whose loss hurts will hurt the fragile lines most. Forty
+    compounds with no relationship to the gene then correlate with it
+    strongly through that shared term, and the control is the only thing
+    standing between them and the report.
+    """
+    import numpy as np
+    from promoter_tf_drugs import sensitivity as sn
+
+    rng = np.random.default_rng(7)
+    n = 120
+    frag = rng.normal(0, 0.6, size=n)
+    cols, mat = [], []
+    for j in range(40):
+        cols.append(f"filler-{j:02d}")
+        mat.append(0.9 * frag + rng.normal(0, 0.5, size=n))
+    values = np.vstack(mat).T
+    models = [f"ACH-{i}" for i in range(n)]
+    gene = 0.8 * frag + 0.6 * rng.normal(size=n)      # linked, as in life
+
+    def pearson(a, b):
+        return float(((a - a.mean()) * (b - b.mean())).mean()
+                     / (a.std() * b.std()))
+
+    raw = [abs(pearson(values[:, j], gene)) for j in range(40)]
+    would_pass = sum(1 for r in raw if r >= sn.MIN_ABS_R)
+    assert would_pass >= 30, (
+        f"only {would_pass}/40 fillers carry a false signal; the fixture "
+        f"is not posing the problem this test exists to check")
+
+    res = sn.correlate({"models": models, "columns": cols,
+                        "values": values},
+                       {m: float(v) for m, v in zip(models, gene)},
+                       gene="G", names={})
+    assert res.assessed
+    # Not zero: the control is a correction, not a guarantee, and some
+    # residual false positives are expected at the stated false discovery
+    # rate. What must not happen is most of them surviving.
+    assert len(res.hits) <= 4, (
+        f"{len(res.hits)} of 40 fillers survived; {would_pass} would have "
+        f"passed on the raw correlation, so the control is not working")
+    assert len(res.hits) < would_pass / 4
