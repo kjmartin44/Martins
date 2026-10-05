@@ -10474,3 +10474,160 @@ def test_the_fragility_control_removes_a_false_signal_it_is_built_for():
         f"{len(res.hits)} of 40 fillers survived; {would_pass} would have "
         f"passed on the raw correlation, so the control is not working")
     assert len(res.hits) < would_pass / 4
+
+
+# ===================================================================== #
+# Found by mutation testing: these behaviours had tests that greps the   #
+# source and passed while the behaviour was disabled.                   #
+# ===================================================================== #
+def test_screen_actually_inverts_its_ranking_for_a_down_goal():
+    """`test_screen_family_honours_the_goal_it_accepts` only greps for the
+    text `goal=goal`. Making `screen` ignore the argument entirely left
+    the whole suite green. This calls it and checks the number changes.
+
+    screen() computes p_want = p_agonist for "up" and 1 - p_agonist for
+    "down", so the two goals must give complementary probabilities for
+    the same molecule.
+    """
+    import numpy as np
+    from promoter_tf_drugs import screening as scr, agonism
+
+    class _Clf:
+        """One likely agonist and one likely antagonist."""
+
+        def predict_proba(self, X):
+            return np.array([[0.1, 0.9], [0.9, 0.1]])[:len(X)]
+
+    class _Model:
+        clf = _Clf()
+
+        def nearest_tanimoto(self, bv):
+            return 0.9
+
+    lib = [{"name": "agonist-like", "smiles": "CCO",
+            "chembl_id": "CHEMBL1"},
+           {"name": "antagonist-like", "smiles": "CCN",
+            "chembl_id": "CHEMBL2"}]
+    _X, _b, keep = agonism.fingerprints([d["smiles"] for d in lib])
+    if len(keep) < 2:
+        import pytest
+        pytest.skip("rdkit not available to fingerprint the fixture")
+
+    up = {h.drug for h in scr.screen(_Model(), lib, goal="up")}
+    down = {h.drug for h in scr.screen(_Model(), lib, goal="down")}
+    up = {d.lower() for d in up}
+    down = {d.lower() for d in down}
+    assert up == {"agonist-like"}, up
+    assert down == {"antagonist-like"}, down
+    assert up != down, (
+        "goal is being ignored: both directions returned the same set")
+
+
+def test_the_q_helper_treats_zero_as_the_most_significant_value():
+    """`tfactivity._q` exists so a q-value of 0.0 - the most significant
+    result possible - is not read as missing by a falsy test. Nothing
+    tested it: disabling it left the suite green, because `_bh` floors
+    its output at Q_FLOOR so no real q ever reaches 0.0. The helper is
+    the guard for data that does not come from `_bh`.
+    """
+    from promoter_tf_drugs import tfactivity as tfa
+    assert tfa._q(0.0) == 0.0
+    assert tfa._q(0.0, 1.0) == 0.0, "a falsy zero fell through to default"
+    assert tfa._q(None) == 1.0
+    assert tfa._q(None, 0.5) == 0.5
+    assert tfa._q(0.03) == 0.03
+
+
+def test_bh_never_emits_a_zero_that_a_falsy_test_would_drop():
+    """The invariant the helper above is paired with, pinned explicitly
+    because other modules rely on it without saying so."""
+    from promoter_tf_drugs import tfactivity as tfa
+    qs = tfa._bh([0.0, 1e-300, 1e-12, 0.5, None])
+    assert all(q is None or q >= tfa.Q_FLOOR for q in qs)
+    assert qs[4] is None, "a missing p-value must stay missing"
+
+
+def test_a_zscore_of_zero_survives_the_parse():
+    """Behavioural version. The previous test only asserted that one
+    spelling of the bug was absent from the source, so reintroducing it
+    with different wording passed.
+
+    A gene that did not move has z = 0.0. It must not be silently
+    replaced by whatever is in the `score` field, which is a different
+    quantity.
+    """
+    from promoter_tf_drugs import signatures as sig
+
+    class _Client:
+        def post(self, url, payload):
+            return {"results": [
+                {"zscore": 0.0, "score": -9.9,
+                 "meta": {"pert_name": "flat-drug"}},
+                {"zscore": 2.5, "score": -1.0,
+                 "meta": {"pert_name": "real-drug"}},
+            ]}
+
+    import promoter_tf_drugs.signatures as _s
+    real_is_landmark = _s.is_landmark
+    _s.is_landmark = lambda gene, client=None: True
+    try:
+        hits = sig.query_gene(_Client(), "MYGENE", direction="up")
+    finally:
+        _s.is_landmark = real_is_landmark
+
+    by = {h.drug.lower(): h for h in hits}
+    assert "flat-drug" in by, "the zero-score row was dropped entirely"
+    assert by["flat-drug"].score == 0.0, (
+        f"a z-score of 0.0 became {by['flat-drug'].score}; the `score` "
+        f"column was substituted for it")
+
+
+def test_the_sensitivity_flag_parses_and_the_pipeline_accepts_it():
+    """Behavioural as far as is proportionate, and honest about the rest.
+
+    The parser is exercised and `run`'s real signature is introspected,
+    so a flag that does not parse or a parameter that does not exist both
+    fail here. What this does NOT cover is `run` accepting the flag and
+    then ignoring it: the scan is suppressed under `demo`, every full-run
+    test in this file is a demo run, and standing up a non-demo run needs
+    a genome and a GTF. That gap is real and recorded rather than papered
+    over with a grep that would pass either way.
+    """
+    import inspect
+    from promoter_tf_drugs import cli, pipeline as pl
+
+    args = cli.build_parser().parse_args(
+        ["--gene", "X", "--sensitivity-scan", "--prism-file", "p.csv"])
+    assert args.sensitivity_scan is True
+    assert args.prism_file == "p.csv"
+
+    params = inspect.signature(pl.run).parameters
+    assert "sensitivity_scan" in params
+    assert "prism_file" in params
+    assert params["sensitivity_scan"].default is False, (
+        "the scan must be opt-in; it reads two large matrices")
+
+
+def test_the_scan_is_suppressed_in_demo_mode(monkeypatch):
+    """Demo must not read the real PRISM matrix, the same way it must not
+    read the real LINCS files.
+
+    The first version of this test asserted the result was empty, and
+    passed for the wrong reason: there is no PRISM file in the test
+    directory, so the scan returns nothing whether it is suppressed or
+    not. Disabling the suppression left it green. It now makes the loader
+    itself fail loudly, so the only way to pass is never to call it.
+    """
+    from promoter_tf_drugs import sensitivity as sens
+
+    def _loud(*a, **k):
+        raise AssertionError("demo mode read the PRISM matrix")
+
+    monkeypatch.setattr(sens, "load_prism", _loud)
+    monkeypatch.setattr(sens, "load_compound_names", _loud)
+    monkeypatch.setattr(sens, "phenocopy", _loud)
+
+    res = pipeline.run("DEMOGENE", demo=True, offline=True,
+                       sensitivity_scan=True)
+    for block in res["results"]:
+        assert block.get("sensitivity") == {}
