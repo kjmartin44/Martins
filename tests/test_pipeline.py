@@ -10918,12 +10918,19 @@ def test_the_product_screen_refuses_a_model_that_cannot_rank():
 
 
 def test_no_ligand_source_is_a_missing_source_not_a_bad_target():
+    """The intent, which survived the message becoming more specific: a
+    refusal here must point at what is missing on disk, never imply the
+    protein is undruggable."""
     from promoter_tf_drugs import screening as scr
     res = scr.screen_gene_product(None, "NOSUCHGENE", library=[
         {"name": "x", "smiles": "CCO", "chembl_id": "C1"}])
     assert res["hits"] == []
-    assert "missing source rather than an undruggable protein" in res["error"]
-    assert "actives=" in res["error"]
+    # Whichever of the three causes applies, it names a thing to fix.
+    assert any(hint in res["error"] for hint in (
+        "missing source rather than an undruggable protein",
+        "could not be resolved to a UniProt accession",
+        "holds nothing for")), res["error"]
+    assert "undruggable" not in res["error"] or         "rather than an undruggable" in res["error"]
 
 
 def test_only_the_unannotated_candidates_become_routes():
@@ -11514,3 +11521,43 @@ def test_a_normal_result_carries_no_such_warning():
                       for i in range(k, k + 15)} for k in range(0, 60, 15)}
     text = tfa.summarise(tfa.activity(sig, reg))
     assert "Read that number as a warning" not in text
+
+
+def test_the_potency_refusal_distinguishes_its_three_causes(monkeypatch):
+    """It said "no local potency file" while an 18,229-pair file sat in
+    data/ - it simply held nothing for CCR5, because every ChEMBL activity
+    query this package makes is about a transcription factor rather than a
+    gene's own product. Telling someone to fetch a file they have sends
+    them to fix the wrong thing."""
+    from promoter_tf_drugs import screening as scr, localpotency as lp
+
+    lib = [{"name": "x", "smiles": "CCO", "chembl_id": "C1"}]
+
+    monkeypatch.setattr(lp, "available", lambda: {"bindingdb": None,
+                                                  "chembl_sqlite": None})
+    monkeypatch.setattr(scr, "local_actives_for", lambda *a, **k: [])
+    no_file = scr.screen_gene_product(None, "CCR5", uniprot="P51681",
+                                      library=lib)
+    assert no_file["potency_file_present"] is False
+    assert "No ligand source was readable" in no_file["error"]
+
+    monkeypatch.setattr(lp, "available", lambda: {"bindingdb": "data/x.tsv",
+                                                  "chembl_sqlite": None})
+    absent = scr.screen_gene_product(None, "CCR5", uniprot="P51681",
+                                     library=lib)
+    assert absent["potency_file_present"] is True
+    assert "A potency file IS on disk and holds nothing" in absent["error"]
+    assert "covers factors and not gene products" in absent["error"]
+
+    unresolved = scr.screen_gene_product(None, "NOSUCHGENE", library=lib)
+    assert "could not be resolved to a UniProt accession" in         unresolved["error"]
+
+
+def test_a_thin_target_is_not_blamed_on_a_missing_file():
+    from promoter_tf_drugs import screening as scr
+    res = scr.screen_gene_product(
+        None, "X", uniprot="P1",
+        library=[{"name": "x", "smiles": "CCO", "chembl_id": "C1"}],
+        actives=[{"chembl_id": "A1", "smiles": "CCN", "pchembl": 8.0}])
+    assert res["source"] == "supplied by the caller"
+    assert "thin target rather than a missing file" in res["error"]

@@ -638,21 +638,46 @@ def screen_gene_product(client, gene: str, *, uniprot: str | None = None,
             sources.append("ChEMBL")
 
     if len(actives) < MIN_ACTIVES:
+        # Why there are too few decides what the reader should do, and
+        # the three reasons want three different answers.
+        try:
+            from . import localpotency as _lp
+            have_file = any(_lp.available().values())
+        except Exception:                                   # noqa: BLE001
+            have_file = False
+
+        if sources:
+            why = (f" The source that answered had only these; this is a "
+                   f"thin target rather than a missing file.")
+        elif have_file and not uni:
+            why = (f" A potency file is on disk but {sym} could not be "
+                   f"resolved to a UniProt accession, which is how that "
+                   f"file is keyed. Pass `uniprot=`, or put an HGNC table "
+                   f"in data/.")
+        elif have_file:
+            why = (f" A potency file IS on disk and holds nothing for "
+                   f"{uni}. Every ChEMBL activity query this package makes "
+                   f"is about a transcription factor, so a cache-built "
+                   f"potency table covers factors and not gene products - "
+                   f"fetching BindingDB in full, or passing `actives=`, is "
+                   f"what adds this target.")
+        else:
+            why = (" No ligand source was readable: no local potency file "
+                   "(BindingDB or a ChEMBL SQLite dump in data/), no "
+                   "client, and none supplied. That is a missing source "
+                   "rather than an undruggable protein, and passing "
+                   "`actives=` is the offline way in.")
+
         return {
             "gene": sym, "uniprot": uni, "hits": [],
             "n_actives": len(actives),
             "source": sources[0] if sources else None,
+            "potency_file_present": have_file,
             "error": (
                 f"{sym}'s own product has {len(actives)} measured ligand(s) "
                 f"available, below the {MIN_ACTIVES} needed to train a "
                 f"binding model. A screen without them would rank the "
-                f"library on nothing."
-                + ("" if sources else
-                   " No ligand source was readable: no local potency file "
-                   "(BindingDB or a ChEMBL SQLite dump in data/), no "
-                   "client, and none supplied. That is a missing source "
-                   "rather than an undruggable protein, and passing "
-                   "`actives=` is the offline way in.")),
+                f"library on nothing." + why),
         }
 
     if library is not None:
