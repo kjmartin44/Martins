@@ -140,16 +140,24 @@ def promoter_index(gtf_path, *, upstream: int = UPSTREAM,
     return out
 
 
-def _tf_cell(name: str) -> tuple:
-    """`SMARCA4:HeLa` -> `("SMARCA4", "HELA")`.
+def _tf_cells(name: str) -> tuple:
+    """`SMARCA4:HeLa` -> `("SMARCA4", ["HELA"])`.
 
-    ReMap names the factor first and the cell line second, which is the
-    only support signal in the file: how many distinct cell types show an
-    edge. Counting peaks instead measures how finely the window was
-    tiled, and came back as 1 for 92% of edges.
+    ReMap names the factor first and the cell lines second, and when a
+    peak is merged across experiments that second field is a
+    COMMA-SEPARATED LIST of every cell line it was seen in:
+
+        CTCF:K-562                         one cell line
+        CTCF:hiPSC,HCT-116,HEK293,K-562    four
+
+    Reading the whole field as one name found 564,344 distinct "cell
+    types" in a file that has a few hundred, and scored a peak reproduced
+    in 37 cell lines as support 1 - which is where the claim that 98% of
+    edges rest on a single cell type came from.
     """
-    tf, _, cell = name.partition(":")
-    return tf.strip().upper(), cell.strip().upper()
+    tf, _, cells = name.partition(":")
+    out = [c.strip().upper() for c in cells.split(",") if c.strip()]
+    return tf.strip().upper(), out
 
 
 def build(bed_path, gtf_path, *, out_path=DEFAULT_OUT,
@@ -174,12 +182,16 @@ def build(bed_path, gtf_path, *, out_path=DEFAULT_OUT,
                            protein_coding_only=protein_coding_only)
     want = {t.strip().upper() for t in tfs} if tfs else None
 
-    # Each edge carries a bitmask of the cell types supporting it, so
-    # distinct-cell-type support costs one integer per edge rather than a
-    # set of strings per edge - there are 16 million placements and the
-    # sets would not fit.
-    cell_bit: dict = {}
-    edges: dict = defaultdict(lambda: defaultdict(int))
+    # An edge holds the id of the cell type that showed it, as a plain
+    # int, and is promoted to a set only when a second one appears. 98% of
+    # edges never are, so this is one small int per edge instead of the
+    # thousand-bit mask the first version allocated on every placement.
+    cell_id: dict = {}
+    edges: dict = {}
+    # Factors that passed the promiscuity cap mid-scan. Their edges are
+    # discarded there and then: carrying a factor that binds a quarter of
+    # the genome until write time is what made this need 28 GB.
+    over_cap: dict = {}
     n_lines = n_placed = 0
 
     with _open(bed_path) as fh:
@@ -194,12 +206,19 @@ def build(bed_path, gtf_path, *, out_path=DEFAULT_OUT,
             idx = index.get(chrom)
             if idx is None:
                 continue
-            tf, cell = _tf_cell(f[3])
+            tf, cells = _tf_cells(f[3])
             if not tf or (want is not None and tf not in want):
                 continue
-            bit = cell_bit.get(cell)
-            if bit is None:
-                bit = cell_bit[cell] = 1 << len(cell_bit)
+            if tf in over_cap:
+                continue
+            cids = []
+            for cell in cells:
+                c = cell_id.get(cell)
+                if c is None:
+                    c = cell_id[cell] = len(cell_id)
+                cids.append(c)
+            if not cids:
+                continue
             try:
                 p_start, p_end = int(f[1]), int(f[2])
             except ValueError:
@@ -212,28 +231,65 @@ def build(bed_path, gtf_path, *, out_path=DEFAULT_OUT,
             # bounded because promoter windows are short and few overlap.
             k = bisect.bisect_right(starts, p_end)
             hit = False
+            d = edges.get(tf)
+            if d is None:
+                d = edges[tf] = {}
             for m in range(k - 1, max(-1, k - 60), -1):
-                if ends[m] >= p_start:
-                    edges[tf][genes[m]] |= bit
-                    hit = True
+                if ends[m] < p_start:
+                    continue
+                gene = genes[m]
+                cur = d.get(gene)
+                if cur is None:
+                    if max_targets is not None and len(d) >= max_targets:
+                        # Over the cap. Drop it here rather than at the
+                        # end: the count is recorded as "at least the
+                        # cap", because the true one is never learned.
+                        over_cap[tf] = len(d)
+                        edges.pop(tf, None)
+                        d = None
+                        break
+                    # One int while a single cell line supports the edge,
+                    # a set as soon as a second does.
+                    d[gene] = cids[0] if len(cids) == 1 else set(cids)
+                elif cur.__class__ is int:
+                    if len(cids) == 1:
+                        if cur != cids[0]:
+                            d[gene] = {cur, cids[0]}
+                    else:
+                        new = set(cids)
+                        new.add(cur)
+                        d[gene] = new
+                else:
+                    cur.update(cids)
+                hit = True
             if hit:
                 n_placed += 1
 
-    log.info("%d distinct cell type(s) in the peak file", len(cell_bit))
+    log.info("%d distinct cell type(s) in the peak file; %d factor(s) "
+             "dropped mid-scan for binding more than %s promoters",
+             len(cell_id), len(over_cap), max_targets)
     return _write(edges, out_path, n_lines=n_lines, n_placed=n_placed,
                   min_cell_types=min_cell_types, max_targets=max_targets,
                   upstream=upstream, downstream=downstream,
-                  n_cell_types=len(cell_bit))
+                  n_cell_types=len(cell_id), over_cap=over_cap)
+
+
+def _support(value) -> int:
+    """How many cell types back an edge, from either representation."""
+    return 1 if value.__class__ is int else len(value)
 
 
 def _write(edges: dict, out_path, *, n_lines: int, n_placed: int,
            min_cell_types: int, max_targets: int | None,
-           upstream: int, downstream: int, n_cell_types: int = 0) -> dict:
+           upstream: int, downstream: int, n_cell_types: int = 0,
+           over_cap: dict | None = None) -> dict:
     """Write the table and report what was kept, dropped and why."""
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    too_broad: list = []
+    # Recorded when the cap bit mid-scan, so the count is a floor.
+    too_broad: list = sorted(((tf, n) for tf, n in (over_cap or {}).items()),
+                             key=lambda t: -t[1])
     n_edges = 0
     kept_tfs = 0
     sizes: list = []
@@ -243,13 +299,14 @@ def _write(edges: dict, out_path, *, n_lines: int, n_placed: int,
         # direction, and the last column holds the experiment count so a
         # reader can threshold on support rather than take it on trust.
         for tf in sorted(edges):
-            targets = {g: mask.bit_count() for g, mask in edges[tf].items()
-                       if mask.bit_count() >= min_cell_types}
+            targets = {g: _support(v) for g, v in edges[tf].items()
+                       if _support(v) >= min_cell_types}
             if not targets:
                 continue
             if max_targets is not None and len(targets) > max_targets:
                 too_broad.append((tf, len(targets)))
                 continue
+
             kept_tfs += 1
             sizes.append(len(targets))
             for gene in sorted(targets):
@@ -301,7 +358,8 @@ def summarise(acc: dict) -> str:
                           for t, n in acc["excluded_too_broad"][:5])
         parts.append(
             f"{acc['n_excluded_too_broad']} factor(s) bound more promoters "
-            f"than the cap and were excluded ({names}). A factor binding "
+            f"than the cap and were excluded (at least {names}). A factor "
+            f"binding "
             f"most of the genome is not specific to your gene, and keeping "
             f"it costs the activity statistic its power.")
     parts.append(

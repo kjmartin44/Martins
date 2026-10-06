@@ -11317,3 +11317,129 @@ def test_the_pipeline_tells_the_catalogue_which_gene_is_the_target():
     from promoter_tf_drugs import catalogue as cat
     src = inspect.getsource(cat.build)
     assert 'gene=result_block.get("gene_symbol")' in src
+
+
+def _gtf_genes(path, n):
+    """`n` protein-coding genes on chr1, 10 kb apart, all + strand."""
+    tab, nl = chr(9), chr(10)
+    rows = []
+    for i in range(n):
+        rows.append(tab.join([
+            "chr1", "x", "gene", str(i * 10000 + 5000),
+            str(i * 10000 + 9000), ".", "+", ".",
+            'gene_name "G' + str(i) + '"; gene_type "protein_coding";']))
+    path.write_text(nl.join(rows) + nl, encoding="utf-8")
+
+
+def _bed_peaks(path, rows):
+    """rows are (start, end, name)."""
+    tab, nl = chr(9), chr(10)
+    out = [tab.join([
+        "chr1", str(s), str(e), name, "1", "."]) for s, e, name in rows]
+    path.write_text(nl.join(out) + nl, encoding="utf-8")
+
+
+def test_a_promiscuous_factor_is_dropped_during_the_scan(tmp_path):
+    """Holding every factor until write time is what made this need 28 GB:
+    AGO1 bound 23,318 promoters and was carried the whole way before being
+    discarded. The cap bites while reading now, so the structure is
+    bounded by factors x cap rather than factors x genome."""
+    from promoter_tf_drugs import chipregulon as cr
+    gtf = tmp_path / "g.gtf"
+    _gtf_genes(gtf, 12)
+    bed = tmp_path / "p.bed"
+    rows = [(i * 10000 + 4900, i * 10000 + 5100, "BROAD:HeLa")
+            for i in range(12)]
+    rows += [(i * 10000 + 4900, i * 10000 + 5100, "NARROW:HeLa")
+             for i in range(2)]
+    _bed_peaks(bed, rows)
+
+    acc = cr.build(bed, gtf, out_path=tmp_path / "out.tsv", max_targets=5)
+    text = (tmp_path / "out.tsv").read_text(encoding="utf-8")
+    assert "NARROW" in text
+    assert "BROAD" not in text, "the promiscuous factor was written out"
+    assert acc["n_excluded_too_broad"] == 1
+    assert acc["excluded_too_broad"][0][0] == "BROAD"
+    # The count is a floor: the scan stopped counting when the cap bit.
+    assert "at least" in cr.summarise(acc)
+
+
+def test_cell_type_support_promotes_only_when_a_second_appears(tmp_path):
+    """One int per edge until a second cell type shows up. 98% of edges
+    never see one, which is why a thousand-bit mask per edge was the
+    wrong representation."""
+    from promoter_tf_drugs import chipregulon as cr
+    gtf = tmp_path / "g.gtf"
+    _gtf_genes(gtf, 1)
+    bed = tmp_path / "p.bed"
+    _bed_peaks(bed, [(4900, 5100, "TF:HeLa"),
+                     (4950, 5150, "TF:HeLa"),     # same cell again
+                     (4900, 5100, "TF:K562")])    # a second cell
+    cr.build(bed, gtf, out_path=tmp_path / "out.tsv", max_targets=None)
+    line = (tmp_path / "out.tsv").read_text(encoding="utf-8").strip()
+    assert line.endswith("ReMap_cells:2"), line
+
+
+def test_one_cell_type_stays_one(tmp_path):
+    from promoter_tf_drugs import chipregulon as cr
+    gtf = tmp_path / "g.gtf"
+    _gtf_genes(gtf, 1)
+    bed = tmp_path / "p.bed"
+    _bed_peaks(bed, [(4900, 5100, "TF:HeLa"), (4950, 5150, "TF:HeLa")])
+    cr.build(bed, gtf, out_path=tmp_path / "out.tsv", max_targets=None)
+    line = (tmp_path / "out.tsv").read_text(encoding="utf-8").strip()
+    assert line.endswith("ReMap_cells:1"), line
+
+
+def test_support_reads_both_representations():
+    from promoter_tf_drugs import chipregulon as cr
+    assert cr._support(3) == 1
+    assert cr._support({1, 2, 5}) == 3
+
+
+def test_the_scan_does_not_allocate_a_mask_per_edge():
+    """The first version built `1 << len(cell_bit)` per placement, which
+    is roughly 150 bytes with ReMap's ~1,000 cell lines, on 16.5 million
+    placements."""
+    import inspect
+    from promoter_tf_drugs import chipregulon as cr
+    src = inspect.getsource(cr.build)
+    assert "1 <<" not in src
+    assert "bit_count" not in inspect.getsource(cr)
+
+
+def test_remap_lists_every_cell_line_a_merged_peak_was_seen_in():
+    """`TF:K-562` is one cell line and `TF:hiPSC,HCT-116,HEK293` is three.
+    Taking the whole field as one name found 564,344 distinct cell types
+    in a file with a few hundred, and scored a peak reproduced in 37 cell
+    lines as support 1."""
+    from promoter_tf_drugs.chipregulon import _tf_cells
+    tf, cells = _tf_cells("CTCF:hiPSC,HCT-116,HEK293,K-562,WA09")
+    assert tf == "CTCF"
+    assert cells == ["HIPSC", "HCT-116", "HEK293", "K-562", "WA09"]
+    assert _tf_cells("SMARCA4:HeLa") == ("SMARCA4", ["HELA"])
+    assert _tf_cells("TF:") == ("TF", [])
+
+
+def test_a_merged_peak_counts_every_cell_line_it_names(tmp_path):
+    from promoter_tf_drugs import chipregulon as cr
+    gtf = tmp_path / "g.gtf"
+    _gtf_genes(gtf, 1)
+    bed = tmp_path / "p.bed"
+    _bed_peaks(bed, [(4900, 5100, "TF:K-562,HeLa,HEK293")])
+    cr.build(bed, gtf, out_path=tmp_path / "out.tsv", max_targets=None)
+    line = (tmp_path / "out.tsv").read_text(encoding="utf-8").strip()
+    assert line.endswith("ReMap_cells:3"), line
+
+
+def test_cell_lines_union_across_peaks(tmp_path):
+    """Two peaks naming overlapping sets give the union, not the sum."""
+    from promoter_tf_drugs import chipregulon as cr
+    gtf = tmp_path / "g.gtf"
+    _gtf_genes(gtf, 1)
+    bed = tmp_path / "p.bed"
+    _bed_peaks(bed, [(4900, 5100, "TF:K-562,HeLa"),
+                     (4950, 5150, "TF:HeLa,HEK293")])
+    cr.build(bed, gtf, out_path=tmp_path / "out.tsv", max_targets=None)
+    line = (tmp_path / "out.tsv").read_text(encoding="utf-8").strip()
+    assert line.endswith("ReMap_cells:3"), line
