@@ -561,3 +561,72 @@ def summarise(actives: list, symbol: str | None = None) -> str:
             f"converted, since a failed experiment is not a weak binding "
             f"constant, and repeated measurements are summarised by their "
             f"median rather than their best.")
+
+
+def main(argv=None) -> int:
+    """`python -m promoter_tf_drugs.localpotency` - prepare the file."""
+    import argparse
+    import logging
+
+    p = argparse.ArgumentParser(
+        prog="python -m promoter_tf_drugs.localpotency",
+        description=("Prepare and inspect the local potency table. The "
+                     "full BindingDB release is 9 GB across 640 columns "
+                     "and seven of them are read here, so it is projected "
+                     "down once and everything afterwards reads that."))
+    p.add_argument("--distil", nargs="?", const="", metavar="SRC",
+                   help="project a full BindingDB_All.tsv down to the "
+                        "columns this package reads. Without a path, the "
+                        "usual locations are searched")
+    p.add_argument("--out", default=DISTILLED,
+                   help=f"where to write it (default {DISTILLED})")
+    p.add_argument("--min-pchembl", type=float, default=0.0,
+                   help="drop measurements weaker than this. The default "
+                        "keeps everything, and it matters: a row-level "
+                        "threshold drops weak Ki values and lets a "
+                        "stronger IC50 win the assay preference, which "
+                        "changes answers rather than only the file size")
+    p.add_argument("--uniprot", metavar="ACC",
+                   help="report how many ligands the table holds for one "
+                        "accession, then exit")
+    p.add_argument("-v", "--verbose", action="store_true")
+    args = p.parse_args(argv)
+    logging.basicConfig(
+        level=logging.INFO if args.verbose else logging.WARNING,
+        format="%(levelname)s %(name)s: %(message)s")
+
+    if args.uniprot:
+        rows = actives_for(args.uniprot.strip().upper())
+        print(f"{args.uniprot.upper()}: {len(rows)} measured ligand(s)")
+        if rows:
+            best = max((r.get("pchembl") or 0) for r in rows)
+            print(f"  strongest pChEMBL: {best}")
+        return 0 if rows else 1
+
+    if args.distil is not None:
+        src = args.distil or None
+        try:
+            stats = distil_bindingdb(src, args.out,
+                                     min_pchembl=args.min_pchembl)
+        except FileNotFoundError as exc:
+            print(f"error: {exc}")
+            return 1
+        for k, v in stats.items():
+            print(f"  {k}: {v}")
+        return 0
+
+    avail = available()
+    for name, path in avail.items():
+        print(f"{name:14} {path or 'not found'}")
+    if not any(avail.values()):
+        print()
+        print("Nothing found. The full release is at")
+        print("  https://www.bindingdb.org/bind/chemsearch/marvin/"
+              "Download.jsp")
+        print("Put BindingDB_All.tsv under data/ and run --distil.")
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

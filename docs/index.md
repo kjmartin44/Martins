@@ -9,6 +9,8 @@ inputs and inspect the evidence behind each route.
 - [Installation](installation.md): environments, extras, and Windows launchers.
 - [Usage](usage.md): analysis, directions, offline runs, and saved-result tools.
 - [Inputs and outputs](data.md): file formats, coordinates, and cache behavior.
+- [Running with no network](offline.md): every data file, where it comes
+  from, where to put it, and the three that need building first.
 - [Methods and limitations](methods.md): how routes are constructed and ranked.
 - [Specificity and evidence](specificity.md): the four collateral axes, and
   how a failed lookup is kept from reading as a measured negative.

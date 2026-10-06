@@ -446,6 +446,10 @@ more robust, not more specific.
 
 ## Running without a usable network
 
+[Running with no network](offline.md) is the checklist: every file,
+its source, where it goes, and what to run on it first. This section
+covers why the two halves of a run can be separated at all.
+
 Several sources are web APIs, and on a corporate network they are often
 blocked or intermittent. Two things make that survivable.
 

@@ -213,7 +213,7 @@ Generated from each module's own first docstring line.
 | `ligands.py` | 306 | Change the natural ligand, not the receptor. |
 | `localannot.py` | 378 | Gene annotation and genetic evidence from files, not web APIs. |
 | `localdrugs.py` | 971 | Approved drugs and their known targets, from a file instead of an API. |
-| `localpotency.py` | 563 | Measured binding potency from a file, not from the ChEMBL API. |
+| `localpotency.py` | 632 | Measured binding potency from a file, not from the ChEMBL API. |
 | `modalities.py` | 330 | Design a direct modality for YOUR gene, rather than looking up existing ones. |
 | `modulators.py` | 301 | Orthosteric agonists vs allosteric modulators: a comparison, not a ranking. |
 | `motifs.py` | 296 | Load TF binding motifs and scan a promoter with them. |
