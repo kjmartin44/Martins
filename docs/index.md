@@ -11,8 +11,12 @@ inputs and inspect the evidence behind each route.
 - [Specificity and evidence](specificity.md): the four collateral axes, and
   how a failed lookup is kept from reading as a measured negative.
 - [Comparing several genes](panel.md): the narrowing funnel and its control.
+- [Docking](docking.md): what a docking score is worth, the validation
+  gate it has to pass first, and how the pocket is chosen.
 - [Command reference](cli.md): complete help for all five commands.
 - [Python API](api.md): calling the package from Python.
+- [How the package is laid out](architecture.md): the chain from gene to
+  ranked table, and which of the sixty-one modules owns each step.
 - [Development](development.md): tests, builds, and repository structure.
 - [Validation record](validation.md): the requested live gene runs and caveats.
 - [Improvement review](improvements.md): remaining work and its priority.

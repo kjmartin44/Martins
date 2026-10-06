@@ -22,10 +22,28 @@ not accidentally required. Also exercise each installed command's `--help`.
 
 ## Structure
 
-`pipeline.py` owns orchestration, report formatting, and export. The main CLI
-translates user options to its `run` function. Source adapters and scientific
-helpers live in individual modules. `http.py` centralizes external requests.
-`shortlist.py` and `explain.py` operate entirely on saved result dictionaries.
+[How the package is laid out](architecture.md) is the map: the chain from a
+gene symbol to a ranked table, which of the sixty-one modules owns each step,
+and a table of every module with its purpose.
+
+The short version. `pipeline.py` owns orchestration, report formatting and
+export, and at about 4,600 lines it is the largest file by a wide margin —
+splitting it is the first item under maintainability in the
+[improvement review](improvements.md). The main CLI translates user options
+into its `run` function, and both CLIs derive those options from `run`'s own
+signature through `cli.run_kwargs_from_args`, so a new flag reaches both
+without anyone maintaining a list. `http.py` centralises external requests.
+`shortlist.py` and `explain.py` work entirely on saved result dictionaries.
+
+The module table in `architecture.md` is generated, not hand-written:
+
+```sh
+python scripts/generate_module_table.py           # rewrite it
+python scripts/generate_module_table.py --check   # fail if stale
+```
+
+The `--check` form runs as a test, so a new module cannot be added without
+the map noticing.
 
 The existing `test_pipeline.py` covers many domains in one file. New operational
 regressions are in `test_reliability.py`. Keep tests focused on observable behavior

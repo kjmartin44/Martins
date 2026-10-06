@@ -12981,3 +12981,69 @@ def test_the_funnel_counts_reconcile():
         if prev is not None:
             assert st.n_in == prev, f"{st.name} filtered a stale list"
         prev = st.n_remaining
+
+
+def test_the_module_map_is_not_stale():
+    """A map of sixty-one modules that is quietly wrong is worse than
+    none, so it is generated and this is the check that it was."""
+    import subprocess
+    import sys
+    import pathlib
+    root = pathlib.Path(__file__).resolve().parent.parent
+    r = subprocess.run(
+        [sys.executable, "scripts/generate_module_table.py", "--check"],
+        cwd=str(root), capture_output=True, text=True, timeout=120)
+    assert r.returncode == 0, r.stderr or r.stdout
+
+
+def test_every_doc_page_is_reachable_from_the_index():
+    """A guide nobody links to is a guide nobody reads."""
+    import pathlib
+    root = pathlib.Path(__file__).resolve().parent.parent
+    index = (root / "docs" / "index.md").read_text(encoding="utf-8")
+    missing = [p.name for p in sorted((root / "docs").glob("*.md"))
+               if p.name != "index.md" and p.name not in index]
+    assert not missing, f"not linked from docs/index.md: {missing}"
+
+
+def test_internal_documentation_links_resolve():
+    """A link to a page that moved, or to a heading that was renamed,
+    sends the reader to the top of a file and looks like the page is
+    missing a section. Checks both the file and the anchor."""
+    import pathlib
+    import re
+
+    root = pathlib.Path(__file__).resolve().parent.parent
+    pages = sorted(root.glob("docs/*.md")) + [root / "README.md"]
+
+    def anchors(text):
+        out = set()
+        for line in text.splitlines():
+            if line.startswith("#"):
+                title = line.lstrip("#").strip().lower()
+                # GitHub's rule: drop anything but words, spaces and
+                # hyphens, then spaces become hyphens.
+                slug = re.sub(r"[^\w\s-]", "", title).replace(" ", "-")
+                out.add(slug)
+        return out
+
+    bad = []
+    for page in pages:
+        if not page.exists():
+            continue
+        text = page.read_text(encoding="utf-8")
+        for m in re.finditer(r"\[[^\]]*\]\(([^)]+)\)", text):
+            href = m.group(1).strip()
+            if href.startswith(("http://", "https://", "mailto:")):
+                continue
+            path_part, _, anchor = href.partition("#")
+            target = (page.parent / path_part).resolve() if path_part \
+                else page
+            if not target.exists():
+                bad.append(f"{page.name} -> {href} (no such file)")
+                continue
+            if anchor:
+                have = anchors(target.read_text(encoding="utf-8"))
+                if anchor.lower() not in have:
+                    bad.append(f"{page.name} -> {href} (no such heading)")
+    assert not bad, "broken documentation links: " + "; ".join(bad)
