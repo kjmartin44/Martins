@@ -4,6 +4,8 @@ promoter-tf-drugs builds candidate routes from a gene's promoter to transcriptio
 factors and drugs. Start with the synthetic demo, then run a gene with explicit
 inputs and inspect the evidence behind each route.
 
+- [A full workup](workflow.md): the five steps, end to end, with the
+  commands and what would make you stop at each one.
 - [Installation](installation.md): environments, extras, and Windows launchers.
 - [Usage](usage.md): analysis, directions, offline runs, and saved-result tools.
 - [Inputs and outputs](data.md): file formats, coordinates, and cache behavior.
