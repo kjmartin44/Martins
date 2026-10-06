@@ -12546,3 +12546,89 @@ def test_the_gate_measures_every_metric_it_has(monkeypatch):
     assert "metric_note" in val
     # Reported, not acted on: the decision still uses the affinity.
     assert val["auc"] == val["auc_by_metric"]["affinity"]["auc"]
+
+
+# ===================================================================== #
+# Documented commands have to be runnable commands.                     #
+# ===================================================================== #
+def _parser_flags(module_name):
+    """Every long option a module's CLI accepts, or None if it has none."""
+    import argparse
+    import contextlib
+    import importlib
+    import io
+    import re
+
+    mod = importlib.import_module(module_name)
+    if hasattr(mod, "build_parser"):
+        try:
+            p = mod.build_parser()
+        except TypeError:
+            return None
+        return {o for a in p._actions for o in a.option_strings
+                if o.startswith("--")}
+    if not hasattr(mod, "main"):
+        return None
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf):
+            mod.main(["--help"])
+    except SystemExit:
+        pass
+    except Exception:                                       # noqa: BLE001
+        return None
+    text = buf.getvalue()
+    if "usage:" not in text:
+        return None
+    return set(re.findall(r"--[a-z0-9][a-z0-9-]*", text))
+
+
+def test_every_documented_command_uses_flags_its_parser_accepts():
+    """A command example that does not run is worse than no example:
+    the reader assumes their setup is broken rather than the page.
+
+    This checks every `python -m promoter_tf_drugs.X` line in docs and
+    the README against that module's own parser, so a renamed flag
+    cannot leave the documentation behind.
+    """
+    import pathlib
+    import re
+
+    root = pathlib.Path(__file__).resolve().parent.parent
+    pages = sorted(root.glob("docs/*.md")) + [root / "README.md"]
+    cache, bad = {}, []
+    for page in pages:
+        if not page.exists():
+            continue
+        text = page.read_text(encoding="utf-8")
+        # A shell example wraps with a trailing backslash, and stopping
+        # at the first newline reads only its first line - which is how
+        # this guard let a renamed flag on the second line through when
+        # it was first checked against a real page.
+        for m in re.finditer(
+                r"python -m (promoter_tf_drugs\.[a-z_]+)"
+                r"((?:[^\n`]*\\\n)*[^\n`]*)", text):
+            mod, rest = m.group(1), m.group(2)
+            if mod not in cache:
+                cache[mod] = _parser_flags(mod)
+            flags = cache[mod]
+            if flags is None:
+                continue
+            for f in re.findall(r"--[a-z0-9][a-z0-9-]*", rest):
+                if f not in flags:
+                    bad.append(f"{page.name}: {mod} has no {f}")
+    assert not bad, "documented flags that do not exist: " + "; ".join(bad)
+
+
+def test_the_documented_command_check_would_notice_a_renamed_flag(
+        tmp_path):
+    """The guard reporting zero proves nothing until it has gone red."""
+    import re
+    flags = _parser_flags("promoter_tf_drugs.docking")
+    assert flags, "docking parser produced no flags"
+    assert "--jobs" in flags and "--state" in flags
+    # A flag that does not exist must be detected by the same matching.
+    fake = "python -m promoter_tf_drugs.docking --not-a-real-flag"
+    found = re.findall(r"--[a-z0-9][a-z0-9-]*", fake.split("docking")[1])
+    assert found == ["--not-a-real-flag"]
+    assert found[0] not in flags
