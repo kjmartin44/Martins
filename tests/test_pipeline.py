@@ -11012,3 +11012,214 @@ def test_the_gene_accession_exists_even_without_the_direct_step():
     i = src.index("uniprot = None")
     j = src.index("if include_direct:")
     assert i < j, "the accession is still defined inside the branch"
+
+
+# ===================================================================== #
+# Promoter DNA: the only route that targets no protein.                 #
+# ===================================================================== #
+def _gc_rich(n=600, seed=1):
+    """RANDOM at 80% GC, not a tandem repeat.
+
+    The first version of this was "GGGGCGGGG..." repeated, which is a
+    perfectly ordered arrangement - a dinucleotide shuffle destroys it, so
+    the scan called it enriched and was right to. Composition alone is
+    what this fixture has to pose, so the bases are drawn independently.
+    """
+    import random
+    rng = random.Random(seed)
+    return "".join(rng.choices("GCGCGCGCAT", k=n))
+
+
+def _at_rich(n=600, seed=2):
+    import random
+    rng = random.Random(seed)
+    return "".join(rng.choices("ATATATATGC", k=n))
+
+
+def test_a_feature_must_beat_the_promoter_s_own_shuffles():
+    """A GC-rich promoter produces quadruplexes and GC-boxes by
+    composition alone. Proposing an agent for those would propose one for
+    most of the genome, so each count is tested against dinucleotide
+    shuffles of the same sequence."""
+    from promoter_tf_drugs import promoterdna as pd
+    scan = pd.scan_features(_gc_rich(), shuffles=60, seed=0)
+    gc = scan["features"]["gc_box"]
+    assert gc["n_observed"] > 0, "the fixture should carry GC-boxes"
+    # Everything here is GC-box; a shuffle of it is too.
+    assert not gc["enriched"], (
+        "a feature present purely by composition was called enriched")
+
+
+def test_a_real_enrichment_is_reported():
+    from promoter_tf_drugs import promoterdna as pd
+    # One quadruplex dropped into an AT-rich background: composition
+    # cannot explain it, so the shuffles should not reproduce it.
+    seq = _at_rich(400) + "GGGTTAGGGTTAGGGTTAGGG" + _at_rich(400)
+    scan = pd.scan_features(seq, shuffles=120, seed=0)
+    g4 = scan["features"]["g4"]
+    assert g4["n_observed"] >= 1
+    assert g4["enriched"], (g4["n_observed"], g4["expected"], g4["p_value"])
+    names = {h["drug"] for h in pd.candidates(scan)}
+    assert "Pyridostatin" in names
+
+
+def test_nothing_enriched_proposes_nothing():
+    from promoter_tf_drugs import promoterdna as pd
+    scan = pd.scan_features(_gc_rich(), shuffles=60, seed=0)
+    assert pd.candidates(scan) == []
+    text = pd.summarise(scan, [])
+    assert "explained by base composition" in text
+
+
+def test_the_dinucleotide_shuffle_preserves_composition():
+    """A mononucleotide shuffle would destroy GG pairs and call every
+    GC-rich promoter enriched for quadruplexes."""
+    import random
+    from promoter_tf_drugs import promoterdna as pd
+    seq = _gc_rich(500)
+    sh = pd._dinucleotide_shuffle(seq, random.Random(0))
+    assert len(sh) == len(seq)
+    for base in "ACGT":
+        assert abs(sh.count(base) - seq.count(base)) <= 2, base
+
+
+def test_a_short_sequence_is_refused_not_scanned():
+    from promoter_tf_drugs import promoterdna as pd
+    scan = pd.scan_features("ACGT" * 5)
+    assert "too short" in scan.get("error", "")
+    assert pd.candidates(scan) == []
+
+
+def test_the_dna_route_says_what_it_cannot_tell_you():
+    from promoter_tf_drugs import catalogue as cat
+    dna = {"candidates": [{
+        "drug": "Pyridostatin", "prefers": "g4", "feature": "G-quadruplex",
+        "n_sites": 3, "expected": 0.4, "p_value": 0.008,
+        "mechanism": "selective G-quadruplex stabiliser",
+        "approved": False, "note": "a tool compound"}]}
+    routes = cat.from_promoter_dna(dna)
+    assert len(routes) == 1
+    r = routes[0]
+    assert r.category == "promoter DNA binder"
+    assert r.acts_on == "promoter DNA"
+    assert r.directness == 0, "it acts at the promoter, with no protein"
+    assert r.tier == 5
+    assert r.axes.specificity <= 0.2, (
+        "these bind their feature genome-wide; specificity is the axis "
+        "they fail")
+    joined = " ".join(r.notes)
+    assert "wherever it occurs" in joined
+    assert "not a folded structure" in joined
+    assert "not an approved drug" in joined
+
+
+def test_an_approved_dna_agent_is_not_labelled_unapproved():
+    from promoter_tf_drugs import catalogue as cat
+    dna = {"candidates": [{
+        "drug": "Mithramycin", "prefers": "gc_box", "feature": "SP1 GC-box",
+        "n_sites": 11, "expected": 6.1, "p_value": 0.02,
+        "mechanism": "displaces SP1", "approved": True, "note": "x"}]}
+    r = cat.from_promoter_dna(dna)[0]
+    assert r.approved is True
+    assert not any("not an approved drug" in n for n in r.notes)
+
+
+def test_every_curated_dna_agent_declares_its_feature():
+    from promoter_tf_drugs import promoterdna as pd
+    keys = {"g4", "imotif", "gc_box", "at_tract"}
+    for a in pd.AGENTS:
+        assert a.prefers in keys, (a.name, a.prefers)
+        assert len(a.note) > 30, a.name
+
+
+# ===================================================================== #
+# The high-burden table.                                                 #
+# ===================================================================== #
+def _burden_rows():
+    base = {"tier": 3, "score": 30.0, "category": "TF: abundance change",
+            "axes": {"specificity": 0.45}, "directness": 1, "grade": None,
+            "_notes": "", "_chip_known": False, "approved": True,
+            "mechanism": "m", "acts_on": "RBPJ"}
+    hot = dict(base, drug="dinaciclib", burden="high",
+               _burden_assessed=True,
+               drug_class="antineoplastic kinase inhibitor")
+    cold = dict(base, drug="Maraviroc", tier=1, score=60.0, burden="low",
+                _burden_assessed=False, drug_class=None,
+                category="direct: gene product", acts_on="CCR5")
+    return [hot, cold]
+
+
+def test_a_high_burden_row_is_set_aside_not_deleted():
+    from promoter_tf_drugs import shortlist as sl
+    kept, aside = sl.split_by_burden(_burden_rows(), max_burden="moderate")
+    assert [r["drug"] for r in kept] == ["Maraviroc"]
+    assert [r["drug"] for r in aside] == ["dinaciclib"]
+
+
+def test_with_no_burden_criterion_nothing_is_set_aside():
+    from promoter_tf_drugs import shortlist as sl
+    kept, aside = sl.split_by_burden(_burden_rows())
+    assert aside == []
+    assert len(kept) == 2
+
+
+def test_the_burden_table_warns_that_they_are_cytotoxic():
+    from promoter_tf_drugs import shortlist as sl
+    text = sl.render([], {}, 2, set_aside=[_burden_rows()[0]])
+    assert "These are cytotoxic or otherwise high-burden drugs" in text
+    assert "only if nothing in the table above will do" in text
+    assert "on-mechanism rather than side effects" in text
+    # and it must name the class that put each row there
+    assert "antineoplastic kinase inhibitor" in text
+
+
+def test_the_burden_table_explains_why_the_class_qualifies():
+    from promoter_tf_drugs import shortlist as sl
+    text = sl.render([], {}, 2, set_aside=[_burden_rows()[0]])
+    assert "Why these are set aside, by class" in text
+    assert "stop cells dividing" in text
+
+
+# ===================================================================== #
+# Agonist versus antagonist at the gene product.                         #
+# ===================================================================== #
+def test_the_product_screen_annotates_direction_when_it_can():
+    import pytest
+    pytest.importorskip("sklearn")
+    from promoter_tf_drugs import screening as scr, localdrugs as ld, agonism
+    lib = ld.library()
+    ant = [d for d in lib if d["name"].lower().endswith("olol")
+           and d.get("smiles")]
+    ago = [d for d in lib if d["name"].lower().endswith("terol")
+           and d.get("smiles")]
+    if len(ant) < agonism.MIN_PER_CLASS or len(ago) < agonism.MIN_PER_CLASS:
+        pytest.skip("no local library with both halves of a direction set")
+    lab = ([{"chembl_id": d["chembl_id"], "smiles": d["smiles"],
+             "label": "antagonist"} for d in ant]
+           + [{"chembl_id": d["chembl_id"], "smiles": d["smiles"],
+               "label": "agonist"} for d in ago])
+    acts = [{"chembl_id": d["chembl_id"], "smiles": d["smiles"],
+             "pchembl": 8.0} for d in ant]
+    res = scr.screen_gene_product(None, "ADRB1", library=lib, actives=acts,
+                                  labelled=lab, goal="down", top_n=10)
+    assert res["direction_model"] is True
+    notes = " ".join(n for h in res["hits"] for n in h["notes"])
+    assert "predicted antagonist at ADRB1" in notes
+
+
+def test_too_few_labels_declares_direction_unknown_rather_than_guessing():
+    import pytest
+    pytest.importorskip("sklearn")
+    from promoter_tf_drugs import screening as scr, localdrugs as ld
+    lib = ld.library()
+    ant = [d for d in lib if d["name"].lower().endswith("olol")
+           and d.get("smiles")]
+    if len(ant) < 20:
+        pytest.skip("no local library")
+    acts = [{"chembl_id": d["chembl_id"], "smiles": d["smiles"],
+             "pchembl": 8.0} for d in ant]
+    res = scr.screen_gene_product(None, "ADRB1", library=lib, actives=acts,
+                                  labelled=[], goal="down")
+    assert res["direction_model"] is False
+    assert "Direction not predicted" in res["direction_note"]
+    assert "needs a functional assay" in res["direction_note"]

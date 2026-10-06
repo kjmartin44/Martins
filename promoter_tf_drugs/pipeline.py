@@ -12,6 +12,7 @@ from . import (annotate, catalogue as cat_mod, cellcycle, congeners as cong_mod,
                delivery as dlv_mod,
                liabilities as liab_mod,
                sensitivity as sens_mod,
+               promoterdna as dna_mod,
                tfactivity as tfa_mod,
                depmap as depmap_mod,
                corpora as corpora_mod,
@@ -184,6 +185,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         prism_file: str | None = None,
         sensitivity_scan: bool = False,
         screen_product: bool = False,
+        promoter_dna: bool = False,
         docking_results: str | None = None,
         activity_tissue: str | None = None,
         activity_permutations: int = 0, lincs_gmt: tuple | None = None, expression_file: str | None = None,
@@ -577,6 +579,40 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                         # it again.
                         screens.setdefault(r.symbol, _screen_cache[tid])
                         break
+
+        # ------------------- 8a-ter. the promoter sequence itself
+        # The only route that targets no protein. Gated on the sequence
+        # beating its own dinucleotide shuffles, because a GC-rich
+        # promoter produces quadruplexes and GC-boxes by composition and
+        # proposing an agent for those would be proposing one for most of
+        # the genome.
+        promoter_dna_scan: dict = {}
+        if promoter_dna and prom.sequence:
+            scan = _optional(
+                "promoter DNA feature scan",
+                lambda: dna_mod.scan_features(prom.sequence), {}) or {}
+            if scan and not scan.get("error"):
+                cands = dna_mod.candidates(scan)
+                promoter_dna_scan = dict(scan)
+                promoter_dna_scan["candidates"] = cands
+                promoter_dna_scan["summary"] = dna_mod.summarise(
+                    scan, cands)
+                n_enr = sum(1 for f in (scan.get("features") or {}).values()
+                            if f.get("enriched"))
+                ledger.record(
+                    "promoter_dna", requested=True, ok=bool(cands),
+                    yielded=len(cands),
+                    detail=(f"{n_enr} sequence feature(s) enriched over "
+                            f"{scan.get('shuffles')} shuffles; "
+                            f"{len(cands)} agent(s) prefer them"
+                            if cands else
+                            "no sequence feature beat the shuffled null, "
+                            "so no DNA-directed agent is proposed"))
+            else:
+                ledger.record("promoter_dna", requested=True, ok=False,
+                              yielded=0,
+                              detail=str(scan.get("error") or
+                                         "no promoter sequence"))
 
         # ------------------- 8a-bis. the gene's OWN product
         # Every screen above points at a transcription factor. This one
@@ -1216,6 +1252,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                          for r in ranked},
             "sensitivity": sensitivity,
             "product_screen": product_screen,
+            "promoter_dna": promoter_dna_scan,
             "gene_symbol": prom.gene_symbol,
         }
         all_routes = cat_mod.build(block_for_catalogue, goal=goal)
@@ -1283,6 +1320,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             "dependencies": dependencies,
             "sensitivity": sensitivity,
             "product_screen": product_screen,
+            "promoter_dna": promoter_dna_scan,
             "modality_design": modality,
             "screen_plan": screen_plan,
             "lincs": lincs,

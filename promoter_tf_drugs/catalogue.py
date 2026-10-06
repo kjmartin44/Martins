@@ -65,6 +65,7 @@ CATEGORIES = [
     "direct: gene or transcript",
     "direct: gene product",
     "direct: predicted product binder",
+    "promoter DNA binder",
     "TF: orthosteric ligand",
     "TF: inferred activity change",
     "TF: abundance change",
@@ -255,6 +256,32 @@ CATEGORY_GUIDE = {
         "differs": "Unlike 'direct: gene product', nothing was measured "
                    "or curated for this compound at this protein - that "
                    "category is annotation, this is a model.",
+    },
+    "promoter DNA binder": {
+        "changes": "abundance",
+        "assay": "an EMSA or footprint on this promoter first, then a "
+                 "reporter, then RT-qPCR - and a counter-screen on an "
+                 "unrelated promoter carrying the same feature, because "
+                 "selectivity is the whole question here",
+        "what": "A small molecule with a documented preference for a "
+                "sequence feature this promoter carries - a quadruplex, a "
+                "GC-box, an AT tract - proposed because the feature is "
+                "enriched against shuffles of this same sequence.",
+        "why": "It is the only route that acts on the promoter itself "
+               "rather than on a protein, so it needs no druggable factor "
+               "and no annotation. Where a promoter depends on one "
+               "feature, occupying it is a direct intervention.",
+        "cost": "Sequence preference is not selectivity. These agents "
+                "bind the feature wherever it occurs and most of the "
+                "genome's copies are not in your gene, so the dose that "
+                "engages your promoter engages thousands of others. "
+                "Nearly every approved member is cytotoxic, which is how "
+                "it works rather than a side effect. And a motif is not a "
+                "folded structure in a cell.",
+        "differs": "Unlike every TF route, no protein is targeted - which "
+                   "removes the question of whether the factor controls "
+                   "your gene and replaces it with whether the molecule "
+                   "can tell your promoter from any other.",
     },
     "TF: orthosteric ligand": {
         "changes": "abundance",
@@ -901,6 +928,48 @@ def from_product_screen(screen: dict, gene: str) -> list[Route]:
     return out
 
 
+def from_promoter_dna(dna: dict) -> list[Route]:
+    """Agents preferring a sequence feature this promoter is enriched for.
+
+    Tier 5. The feature is measured - it is in the sequence, and it beat a
+    shuffled null - but that an agent preferring it would move this gene
+    is entirely untested. Directness 0 because it acts at the promoter
+    with no protein in between, which makes it the shortest route in the
+    report and among the least evidenced, and the tier is what carries
+    that.
+
+    Specificity is pinned low on purpose. These bind their feature
+    wherever it occurs, so the axis that asks how little else is touched
+    is the one they fail.
+    """
+    hits = (dna or {}).get("candidates") or []
+    out = []
+    for h in hits:
+        approved = bool(h.get("approved"))
+        out.append(Route(
+            drug=h.get("drug") or "?",
+            category="promoter DNA binder",
+            mechanism=(f"{h.get('mechanism')}; this promoter carries "
+                       f"{h.get('n_sites')} {h.get('feature')} "
+                       f"(expected {h.get('expected')} by composition, "
+                       f"p={h.get('p_value')})"),
+            acts_on="promoter DNA", tier=5, directness=0,
+            axes=Axes(0.4, 0.15, 0.4,
+                      f"sequence feature enriched at p={h.get('p_value')}"),
+            approved=approved, source="promoter_dna",
+            notes=[
+                h.get("note") or "",
+                "binds this feature wherever it occurs in the genome, not "
+                "only in your promoter - selectivity is the question to "
+                "ask first, and a counter-screen on an unrelated promoter "
+                "carrying the same feature is the experiment",
+                "a motif in sequence is not a folded structure in a cell",
+            ] + ([] if approved else
+                 ["not an approved drug; included because it is the "
+                  "reference compound for this feature"])))
+    return out
+
+
 def from_abundance(hits: list) -> list[Route]:
     """Compounds that change how much of the factor exists.
 
@@ -1116,6 +1185,7 @@ def build(result_block: dict, *, goal: str = "up",
                            tf_roles=result_block.get("tf_roles"))
     routes += from_abundance(
         result_block.get("factor_abundance") or [])
+    routes += from_promoter_dna(result_block.get("promoter_dna") or {})
     routes += from_product_screen(
         result_block.get("product_screen") or {},
         result_block.get("gene_symbol") or "")

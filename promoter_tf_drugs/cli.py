@@ -209,6 +209,13 @@ def add_analysis_args(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
                         "--bundle DIR --out JSON`, which is the step "
                         "that needs Linux. Prepare and report here, "
                         "dock there")
+    p.add_argument("--promoter-dna", action="store_true",
+                   help="look for sequence features in the promoter that "
+                        "DNA-binding small molecules prefer - quadruplexes, "
+                        "GC-boxes, AT tracts - and propose agents only "
+                        "where a feature beats shuffles of the same "
+                        "sequence. Nearly every approved agent of this "
+                        "kind is cytotoxic")
     p.add_argument("--screen-product", action="store_true",
                    help="virtual-screen the approved library against the "
                         "GENE'S OWN protein, not just the transcription "
@@ -335,6 +342,7 @@ def _execute(args) -> int:
         prism_file=args.prism_file,
         sensitivity_scan=args.sensitivity_scan,
         screen_product=args.screen_product,
+        promoter_dna=args.promoter_dna,
         docking_results=args.docking_results,
         tf_activity=args.tf_activity,
         activity_tissue=args.activity_tissue,

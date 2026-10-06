@@ -579,6 +579,7 @@ def local_library(path=None) -> list:
 def screen_gene_product(client, gene: str, *, uniprot: str | None = None,
                         goal: str = "up", library: list[dict] | None = None,
                         actives: list[dict] | None = None,
+                        labelled: list[dict] | None = None,
                         top_n: int = 25, decoy_ratio: int = 3,
                         seed: int = 0) -> dict:
     """Approved drugs predicted to bind this gene's own protein product.
@@ -702,6 +703,46 @@ def screen_gene_product(client, gene: str, *, uniprot: str | None = None,
     known_back = [h for h in hits if h.known_ligand]
     novel = [h for h in hits if h.quadrant == "NOVEL HYPOTHESIS"][:top_n]
     hits = known_back + novel
+
+    # Binding is one question and direction is another. `agonism` trains a
+    # per-receptor agonist/antagonist classifier from the molecules whose
+    # ACTION at this protein is recorded, which is a much smaller set than
+    # the ones with a measured affinity - so this is annotated where it
+    # can be and declared missing where it cannot, rather than guessed.
+    direction_note = None
+    lig = labelled
+    if lig is None and client is not None:
+        from .drugs import _chembl_targets
+        lig = []
+        for tid in (_chembl_targets(client, sym, uni) or [])[:1]:
+            lig.extend(agonism.fetch_labelled_ligands(client, tid))
+    dir_model = agonism.train_model(lig or [])
+    if dir_model is None:
+        direction_note = (
+            f"Direction not predicted: {len(lig or [])} molecule(s) with a "
+            f"recorded action at {sym} were available, too few to train a "
+            f"classifier. Every hit below is a predicted BINDER - whether "
+            f"it would activate or inhibit {sym}, and so whether it serves "
+            f"a goal of '{goal}', is unknown and needs a functional assay.")
+    else:
+        by_id = {d.get("chembl_id"): d.get("smiles") for d in lib}
+        for h in hits:
+            pred = agonism.predict(dir_model, by_id.get(h.chembl_id) or "",
+                                   drug_name=h.drug, target_symbol=sym)
+            if pred.predicted == "undetermined":
+                continue
+            h.notes.append(
+                f"predicted {pred.predicted} at {sym} "
+                f"(p={pred.probability_agonist}, {pred.confidence} "
+                f"confidence)")
+            wrong = ((goal == "up" and pred.predicted == "antagonist")
+                     or (goal == "down" and pred.predicted == "agonist"))
+            if wrong:
+                h.notes.append(
+                    f"predicted direction is OPPOSITE to a goal of "
+                    f"'{goal}': inhibiting the product lowers its "
+                    f"activity and activating it raises it, and this is "
+                    f"predicted to do the other one")
     for h in novel:
         h.notes.append(
             f"predicted to bind the {sym} PROTEIN, not to change {sym} "
@@ -725,6 +766,9 @@ def screen_gene_product(client, gene: str, *, uniprot: str | None = None,
         "enrichment": enrichment_check(hits),
         "source": sources[0] if sources else None,
         "offline": "local potency file" in sources,
+        "direction_model": dir_model is not None,
+        "direction_note": direction_note,
+        "n_labelled_ligands": len(lig or []),
         "control_note": (
             f"{len(known_back)} of {sym}'s own known binders came back in "
             f"the top {top_n}. Their scores are an IN-SAMPLE fit - they "

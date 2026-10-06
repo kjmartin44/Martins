@@ -377,14 +377,52 @@ def filter_rows(rows: list[dict], **f) -> list[dict]:
     return out
 
 
+def split_by_burden(rows, **f) -> tuple:
+    """`(kept, set_aside)` - the rows a burden filter removed, and why.
+
+    A drug dropped for its clinical burden is a different thing from a
+    drug that failed on evidence. It passed everything the report asks
+    about the biology and was set aside for what it would do to the
+    patient, which is a judgement the reader may want to make
+    differently - a cytotoxic is wrong for a chronic target and may be
+    exactly right for an acute one.
+
+    So it is reported rather than deleted. Everything else is filtered
+    normally; only the burden criterion diverts.
+    """
+    burden_keys = {"max_burden", "exclude_drug_classes",
+                   "max_dependency_burden"}
+    without = {k: v for k, v in f.items() if k not in burden_keys}
+    only = {k: v for k, v in f.items() if k in burden_keys}
+
+    # `rows` may be the enriched rows or the raw result dict. Taking the
+    # dict routes through `filter_routes`, which is the seam the CLI's
+    # criteria have always been observable at - moving off it silently
+    # disabled a test that checks an explicit CLI zero beats a preset.
+    if isinstance(rows, dict):
+        passed_rest = filter_routes(rows, **without)
+    else:
+        passed_rest = filter_rows(rows, **without)
+    if not only:
+        return passed_rest, []
+    kept = [r for r in passed_rest if keep(r, **only)]
+    aside = [r for r in passed_rest if not keep(r, **only)]
+    aside.sort(key=lambda r: (r["tier"], -r["score"]))
+    return kept, aside
+
+
 def filter_routes(result: dict, **f) -> list[dict]:
     """Apply filters across every promoter block in a results.json."""
     return filter_rows(enrich_rows(result), **f)
 
 
-def render(rows: list[dict], criteria: dict, total: int) -> str:
+def render(rows: list[dict], criteria: dict, total: int,
+           set_aside: list | None = None) -> str:
+    set_aside = set_aside or []
     L = ["# Shortlist", ""]
-    L.append(f"{len(rows)} of {total} routes kept.")
+    L.append(f"{len(rows)} of {total} routes kept"
+             + (f", {len(set_aside)} set aside for clinical burden"
+                if set_aside else "") + ".")
     L.append("")
     L.append("Criteria: " + ", ".join(f"{k}={v}" for k, v in criteria.items()))
     L.append("")
@@ -394,6 +432,13 @@ def render(rows: list[dict], criteria: dict, total: int) -> str:
                  "for this gene on current evidence. Loosen one criterion at a "
                  "time to see which one is binding — usually `require_chip` or "
                  "`min_grade`.")
+        # Not an early return when something was set aside: in that
+        # case that table IS the whole result, and returning here hid
+        # it on exactly the runs where the reader most needs to see
+        # what was held back and why.
+        if set_aside:
+            L.append("")
+            L.extend(_burden_table(set_aside))
         return "\n".join(L)
 
     L.append("| Tier | Grade | Drug | Category | Acts on | Steps | Spec | Score | New? |")
@@ -410,7 +455,61 @@ def render(rows: list[dict], criteria: dict, total: int) -> str:
         L.append("")
         for r in flagged[:12]:
             L.append(f"- **{r['drug']}** — {r['notes'][0][:110]}")
+    if set_aside:
+        L.append("")
+        L.extend(_burden_table(set_aside))
     return "\n".join(L)
+
+
+def _burden_table(rows: list[dict]) -> list:
+    """The rows a burden criterion set aside, with the class that did it."""
+    L = ["## Set aside for clinical burden", ""]
+    L.append("> **These are cytotoxic or otherwise high-burden drugs. "
+             "Use one only if nothing in the table above will do, and "
+             "only where the indication justifies the harm.** Most are "
+             "dosed to stop cells dividing, so myelosuppression, "
+             "mucositis and organ toxicity are on-mechanism rather than "
+             "side effects — they are not something a lower dose avoids. "
+             "For a chronic target this table is usually the wrong half "
+             "of the report.")
+    L.append("")
+    L.append(f"{len(rows)} route(s) passed every evidence criterion and "
+             f"were held back for what the drug does beyond your gene. "
+             f"They are listed because that is a judgement you may make "
+             f"differently: a cytotoxic is the wrong answer for a chronic "
+             f"target and can be the right one for an acute indication.")
+    L.append("")
+    L.append("| Tier | Drug | Class | Burden | Acts on | Category | Score |")
+    L.append("|---|---|---|---|---|---|---|")
+    for r in rows:
+        L.append(f"| {r['tier']} | {r['drug']} | "
+                 f"{r.get('drug_class') or '—'} | "
+                 f"{r.get('burden') or '—'} | {r.get('acts_on')} | "
+                 f"{r['category']} | {r['score']} |")
+    L.append("")
+    classes = sorted({r.get("drug_class") for r in rows if r.get("drug_class")})
+    if classes:
+        L.append("Why these are set aside, by class: "
+                 + "; ".join(_why_class(c) for c in classes) + ".")
+        L.append("")
+    L.append("An antiproliferative moves the abundance of a great many "
+             "transcription factors, because that is what stopping a cell "
+             "dividing does. So it reaches a signature-derived shortlist "
+             "easily without being evidence of a route to any one gene — "
+             "which is the second reason these are separated from the "
+             "table above, beyond the toxicity.")
+    return L
+
+
+def _why_class(name: str) -> str:
+    try:
+        from . import systemic as _sys
+        for c in _sys.CLASSES:
+            if c.name == name:
+                return f"**{name}** — {c.why}"
+    except Exception:                                       # noqa: BLE001
+        pass
+    return f"**{name}**"
 
 
 def main(argv=None) -> int:
@@ -460,8 +559,11 @@ def main(argv=None) -> int:
     # Count distinct routes, not rows. Summing per-block route lists
     # double-counts every gene-level route once per TSS window.
     total = len(enrich_rows(data))
-    rows = filter_routes(data, **criteria)[:args.top]
-    text = render(rows, criteria, total)
+    # Split rather than filter, so a drug held back for its clinical
+    # burden is reported in its own table instead of vanishing.
+    kept, aside = split_by_burden(data, **criteria)
+    rows = kept[:args.top]
+    text = render(rows, criteria, total, set_aside=aside[:args.top])
 
     if args.out:
         Path(args.out).write_text(text, encoding="utf-8")
