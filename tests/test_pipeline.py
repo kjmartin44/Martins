@@ -10427,13 +10427,19 @@ def test_the_section_warns_that_a_correlation_is_not_a_target():
 
 def test_the_cli_flag_reaches_the_pipeline():
     """A flag that is parsed and never passed does nothing, which is the
-    failure this project keeps finding."""
-    import inspect
+    failure this project keeps finding.
+
+    Checked by calling the forwarder rather than by looking for the
+    assignment in the source: the arguments are derived from run()'s
+    signature now, so no literal `x=args.x` exists to find, and the
+    value arriving is the thing that actually matters.
+    """
     from promoter_tf_drugs import cli
-    src = inspect.getsource(cli)
-    assert "--sensitivity-scan" in src
-    assert "sensitivity_scan=args.sensitivity_scan" in src
-    assert "prism_file=args.prism_file" in src
+    args = cli.build_parser().parse_args(
+        ["--gene", "X", "--sensitivity-scan", "--prism-file", "p.csv"])
+    kw = cli.run_kwargs_from_args(args)
+    assert kw["sensitivity_scan"] is True
+    assert kw["prism_file"] == "p.csv"
 
 
 def test_the_fragility_control_removes_a_false_signal_it_is_built_for():
@@ -11007,10 +11013,9 @@ def test_the_library_reader_keeps_the_identifier_column():
 def test_the_product_screen_flag_reaches_the_pipeline():
     import inspect
     from promoter_tf_drugs import cli, pipeline as pl
-    src = inspect.getsource(cli)
-    assert "--screen-product" in src
-    assert "screen_product=args.screen_product" in src
     assert "screen_product" in inspect.signature(pl.run).parameters
+    args = cli.build_parser().parse_args(["--gene", "X", "--screen-product"])
+    assert cli.run_kwargs_from_args(args)["screen_product"] is True
 
 
 def test_the_gene_accession_exists_even_without_the_direct_step():
@@ -12055,7 +12060,22 @@ def _unread_cli_flags(path):
                     dest = arg.value[2:].replace("-", "_")
         if dest and not skip:
             dests[dest] = n.lineno
+    # A dest the shared forwarder carries into pipeline.run is read,
+    # even though no literal `x=args.x` appears anywhere: the arguments
+    # are derived from run()'s signature rather than listed by hand.
+    forwarded = set()
+    try:
+        from promoter_tf_drugs import cli as _cli
+        forwarded = set(_cli._ARG_TO_RUN) | set(_cli._NEGATED_ARGS)
+        import inspect as _inspect
+        from promoter_tf_drugs import pipeline as _pl
+        forwarded |= set(_inspect.signature(_pl.run).parameters)
+    except Exception:                                       # noqa: BLE001
+        pass
+
     for dest, lineno in sorted(dests.items()):
+        if dest in forwarded:
+            continue
         if (f".{dest}" not in src and f'"{dest}"' not in src
                 and f"'{dest}'" not in src):
             bad.append(f"{path.name}:{lineno} "
@@ -12843,3 +12863,64 @@ def test_a_same_tier_runner_up_still_gets_a_margin():
         pnl.Panel(genes=[]), {}, rows, [], {})
     assert "not separable from noise" in text, text[-900:]
     assert "tier 3" in text
+
+
+def test_both_clis_forward_every_run_argument_they_parse():
+    """The panel accepted --genetics, --lincs, --upstream-network,
+    --tf-activity and --docking-results, reported them in --help, and
+    forwarded none of them: it kept a hand-written list of twenty-one
+    keys against the fifty-seven run() takes.
+
+    The per-gene results recorded use_genetics False after being asked
+    for True, which is worse than refusing the flag, because the run
+    then looks complete. The parity check could not catch it either -
+    every gene is deprived equally, so they agree.
+    """
+    import inspect
+    from promoter_tf_drugs import cli, panel, pipeline
+    params = {n for n in inspect.signature(pipeline.run).parameters
+              if n != "gene"}
+    for mod, base in ((cli, ["--gene", "CCR5"]),
+                      (panel, ["--genes", "CCR5"])):
+        args = mod.build_parser().parse_args(base)
+        kw = cli.run_kwargs_from_args(args)
+        missing = sorted(params - set(kw))
+        assert not missing, f"{mod.__name__} drops: {missing}"
+
+
+def test_a_requested_source_is_not_silently_turned_off():
+    """The specific failure: asking for a source and having the result
+    record it as not requested."""
+    from promoter_tf_drugs import cli, panel
+    for mod, base in ((cli, ["--gene", "CCR5"]),
+                      (panel, ["--genes", "CCR5"])):
+        args = mod.build_parser().parse_args(
+            base + ["--genetics", "--lincs", "--upstream-network",
+                    "--promoter-dna", "--screen-product",
+                    "--docking-results", "d.json"])
+        kw = cli.run_kwargs_from_args(args)
+        assert kw["use_genetics"] is True, mod.__name__
+        assert kw["use_lincs"] is True, mod.__name__
+        assert kw["upstream_network"] is True, mod.__name__
+        assert kw["promoter_dna"] is True, mod.__name__
+        assert kw["screen_product"] is True, mod.__name__
+        assert kw["docking_results"] == "d.json", mod.__name__
+
+
+def test_negated_flags_keep_their_sense():
+    """`--no-grade` sets grade_drugs=False, and `--include-investigational`
+    sets approved_only=False. Getting one of these backwards would
+    silently invert a default rather than fail."""
+    from promoter_tf_drugs import cli
+    plain = cli.run_kwargs_from_args(
+        cli.build_parser().parse_args(["--gene", "X"]))
+    assert plain["grade_drugs"] is True
+    assert plain["approved_only"] is True
+    assert plain["mask_repeats"] is True
+    flipped = cli.run_kwargs_from_args(
+        cli.build_parser().parse_args(
+            ["--gene", "X", "--no-grade", "--include-investigational",
+             "--no-mask-repeats"]))
+    assert flipped["grade_drugs"] is False
+    assert flipped["approved_only"] is False
+    assert flipped["mask_repeats"] is False

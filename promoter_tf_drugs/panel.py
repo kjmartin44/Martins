@@ -1048,12 +1048,7 @@ def build_parser():
     return p
 
 
-_RUN_KEYS = (
-    "species", "upstream", "downstream", "pvalue", "min_ic", "pfm_file",
-    "matrix_ids", "all_tss", "chip_bed", "chip_api", "tissue", "tf_weight",
-    "regulon_file", "proliferation", "cell_type_check", "expression_file",
-    "lincs_file", "signature_file", "cache_dir", "offline", "demo",
-)
+
 
 
 def _check_flag_combinations(parser, args) -> None:
@@ -1153,11 +1148,12 @@ def main(argv=None) -> int:
               file=sys.stderr)
         return 2
 
-    run_kwargs = {k: getattr(args, k) for k in _RUN_KEYS
-                  if getattr(args, k, None) is not None}
-    run_kwargs["goal"] = getattr(args, "direction", "up")
-    if getattr(args, "no_mask_repeats", False):
-        run_kwargs["mask_repeats"] = False
+    # The same derivation the single-gene CLI uses. A hand-written list
+    # here forwarded twenty-one of the fifty arguments run() takes, so
+    # --genetics, --lincs, --upstream-network, --tf-activity and
+    # --docking-results were accepted and silently dropped.
+    from .cli import run_kwargs_from_args
+    run_kwargs = run_kwargs_from_args(args)
 
     panel = run_panel(genes, out_dir=args.out,
                       require_interpretable=args.require_interpretable,

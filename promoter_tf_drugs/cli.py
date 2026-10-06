@@ -344,53 +344,62 @@ def main(argv=None) -> int:
         return 1
 
 
+# argparse dest -> run() parameter, where the two names differ.
+_ARG_TO_RUN = {
+    "direction": "goal",
+    "lincs": "use_lincs",
+    "genetics": "use_genetics",
+    "screen": "screen_receptors",
+    "include_unknown_direction": "allow_unknown_direction",
+}
+
+# Flags phrased as the negation of the parameter they set.
+_NEGATED_ARGS = {
+    "no_mask_repeats": "mask_repeats",
+    "no_grade": "grade_drugs",
+    "no_direct": "include_direct",
+    "no_outcome": "estimate_outcome",
+    "no_improvements": "find_improvements",
+    "no_mechanisms": "compare_mechanisms",
+    "no_stabilizers": "include_stabilizers",
+    "include_investigational": "approved_only",
+    "no_dgidb": "use_dgidb",
+    "no_opentargets": "use_opentargets",
+}
+
+
+def run_kwargs_from_args(args) -> dict:
+    """Every `pipeline.run` argument a parsed namespace supplies.
+
+    Derived from run()'s own signature rather than listed by hand, and
+    shared by the single-gene CLI and the panel so the two cannot
+    diverge. The panel used to keep a tuple of twenty-one keys against
+    the fifty run() takes, so --genetics, --lincs, --upstream-network,
+    --tf-activity and --docking-results were accepted and dropped
+    without a word.
+
+    A flag absent from one parser is simply absent here; run()'s own
+    default then applies.
+    """
+    import inspect
+
+    from .pipeline import run as _run
+
+    params = {n for n in inspect.signature(_run).parameters if n != "gene"}
+    out: dict = {}
+    for dest, value in vars(args).items():
+        if dest in _NEGATED_ARGS:
+            out[_NEGATED_ARGS[dest]] = not value
+        elif dest in _ARG_TO_RUN:
+            out[_ARG_TO_RUN[dest]] = value
+        elif dest in params:
+            out[dest] = value
+    return {k: v for k, v in out.items() if k in params}
+
+
 def _execute(args) -> int:
 
-    result = run(
-        args.gene,
-        upstream=args.upstream, downstream=args.downstream,
-        pvalue=args.pvalue, species=args.species,
-        pfm_file=args.pfm_file, chip_bed=args.chip_bed, chip_api=args.chip_api,
-        matrix_ids=args.matrix_ids, all_tss=args.all_tss,
-        mask_repeats=not args.no_mask_repeats, goal=args.direction,
-        grade_drugs=not args.no_grade, tissue=args.tissue,
-        tf_weight=args.tf_weight, predict_direction=args.predict_direction,
-        regulon_file=args.regulon_file, include_direct=not args.no_direct,
-        estimate_outcome=not args.no_outcome, screen_receptors=args.screen,
-        find_improvements=not args.no_improvements,
-        compare_mechanisms=not args.no_mechanisms,
-        proliferation=args.proliferation,
-        allow_unknown_direction=args.include_unknown_direction, cell_type_check=args.cell_type_check,
-        include_stabilizers=not args.no_stabilizers,
-        design_screen=args.design_screen,
-        design_modality=args.design_modality,
-        use_lincs=args.lincs,
-        signature_file=args.signature_file, lincs_file=args.lincs_file,
-        depmap_file=args.depmap_file,
-        prism_file=args.prism_file,
-        sensitivity_scan=args.sensitivity_scan,
-        screen_product=args.screen_product,
-        promoter_dna=args.promoter_dna,
-        docking_results=args.docking_results,
-        tf_activity=args.tf_activity,
-        activity_tissue=args.activity_tissue,
-        activity_permutations=args.activity_permutations,
-        lincs_geneinfo=args.lincs_geneinfo,
-        lincs_gmt=args.lincs_gmt,
-        expression_file=args.expression_file,
-        promoter_fasta=args.promoter_fasta,
-        gtf=args.gtf,
-        genome=args.genome,
-        has_ptc=args.has_ptc, use_genetics=args.genetics,
-        upstream_network=args.upstream_network,
-        upstream_depth=args.upstream_depth,
-        approved_only=not args.include_investigational,
-        use_dgidb=not args.no_dgidb,
-        use_opentargets=not args.no_opentargets,
-        find_analogs=args.find_analogs,
-        demo=args.demo, offline=args.offline,
-        cache_dir=args.cache_dir, min_ic=args.min_ic,
-    )
+    result = run(args.gene, **run_kwargs_from_args(args))
 
     written = write_outputs(result, args.out, top_n=args.top)
     print(markdown_report(result, top_n=args.top))
