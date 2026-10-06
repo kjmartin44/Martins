@@ -11443,3 +11443,74 @@ def test_cell_lines_union_across_peaks(tmp_path):
     cr.build(bed, gtf, out_path=tmp_path / "out.tsv", max_targets=None)
     line = (tmp_path / "out.tsv").read_text(encoding="utf-8").strip()
     assert line.endswith("ReMap_cells:3"), line
+
+
+def test_the_magnitude_statistic_gets_a_q_value():
+    """It was computed and dropped at the FDR step: `q_value` came only
+    from the directional p, which is None without signed edges. A fully
+    unsigned regulon therefore produced no q at all and the run reported
+    "0 reached q<0.05" when nothing had been tested at that level."""
+    from promoter_tf_drugs import tfactivity as tfa
+    sig = {f"G{i}": float(i % 7) - 3 for i in range(400)}
+    reg = {"TF1": {f"G{i}": 0 for i in range(40)},
+           "TF2": {f"G{i}": 0 for i in range(40, 80)}}
+    acts = tfa.activity(sig, reg)
+    assert acts
+    assert all(a.nes is None for a in acts), "fixture should be unsigned"
+    assert all(a.q_value is None for a in acts)
+    assert all(a.magnitude_q is not None for a in acts), (
+        "the magnitude test ran and its result was discarded")
+
+
+def test_an_oversized_regulon_is_flagged_as_not_factor_specific():
+    """A set covering a tenth of the measured genes inherits the
+    signature's structure, so the test on it is near-guaranteed."""
+    from promoter_tf_drugs import tfactivity as tfa
+    sig = {f"G{i}": float(i % 5) - 2 for i in range(300)}
+    reg = {"BIG": {f"G{i}": 0 for i in range(150)},
+           "SMALL": {f"G{i}": 0 for i in range(12)}}
+    acts = {a.tf: a for a in tfa.activity(sig, reg)}
+    assert acts["BIG"].regulon_share > tfa.MAX_REGULON_SHARE
+    assert any("not specific to this factor" in c
+               for c in acts["BIG"].caveats)
+    assert not any("not specific to this factor" in c
+                   for c in acts["SMALL"].caveats)
+
+
+def test_half_the_factors_moving_is_reported_as_a_warning():
+    """Factors do not act in concert. When a large share move, and mostly
+    the same way, the statistic is reading the signature rather than the
+    factors."""
+    from promoter_tf_drugs import tfactivity as tfa
+
+    class _A:
+        def __init__(self, i):
+            self.tf = f"TF{i}"
+            self.nes = None
+            self.p_value = None
+            self.q_value = None
+            self.magnitude = -9.0
+            self.magnitude_p = 1e-9
+            self.magnitude_q = 1e-6
+            self.direction = "unknown"
+            self.n_measured = 2000
+            self.n_signed = 0
+            self.n_regulon = 2000
+            self.coverage = 1.0
+            self.regulon_share = 0.4
+            self.confounded_with = None
+            self.confounded_jaccard = 0.2
+            self.caveats = []
+
+    text = tfa.summarise([_A(i) for i in range(10)])
+    assert "Read that number as a warning" in text
+    assert "do not act in concert" in text
+
+
+def test_a_normal_result_carries_no_such_warning():
+    from promoter_tf_drugs import tfactivity as tfa
+    sig = {f"G{i}": float((i * 7) % 11) - 5 for i in range(500)}
+    reg = {f"TF{k}": {f"G{i}": (1 if i % 2 else -1)
+                      for i in range(k, k + 15)} for k in range(0, 60, 15)}
+    text = tfa.summarise(tfa.activity(sig, reg))
+    assert "Read that number as a warning" not in text

@@ -98,11 +98,20 @@ class TFActivity:
     q_value: float | None = None
     magnitude: float | None = None    # two-tailed, uses unsigned edges too
     magnitude_p: float | None = None
+    # Corrected separately from `q_value`, which can only exist where the
+    # regulon is signed. A fully unsigned regulon - every ChIP-derived one
+    # is - produces no directional q at all, and without this the whole
+    # scan silently reports nothing rather than reporting movement.
+    magnitude_q: float | None = None
     direction: str = "unknown"        # activated | repressed | unchanged
     n_measured: int = 0               # targets present in the signature
     n_signed: int = 0                 # of those, edges with a known mode
     n_regulon: int = 0                # the full regulon
     coverage: float = 0.0             # n_measured / n_regulon
+    # What share of the measured genes this regulon is. Occupancy sets
+    # reach a tenth of the genome, where the statistic stops being a test
+    # of one factor.
+    regulon_share: float = 0.0
     confounded_with: str | None = None
     confounded_jaccard: float | None = None
     method: str = ""
@@ -435,6 +444,15 @@ def activity(signature: dict, regulons: dict, *,
         else:
             a.direction = "unchanged"
 
+        share = n / float(len(z)) if z else 0.0
+        a.regulon_share = round(share, 4)
+        if share > MAX_REGULON_SHARE:
+            a.caveats.append(
+                f"this regulon is {share:.0%} of every gene measured in "
+                f"the signature. A set that large carries the signature's "
+                f"own structure, so the magnitude test on it is close to "
+                f"guaranteed and is not specific to this factor - read it "
+                f"as 'these genes moved', not as 'this factor acted'")
         if a.coverage < 0.2:
             a.caveats.append(
                 f"only {a.coverage:.0%} of the regulon was measured in this "
@@ -460,13 +478,21 @@ def activity(signature: dict, regulons: dict, *,
     qs = _bh([a.p_value for a in out])
     for a, q in zip(out, qs):
         a.q_value = q
+    # The magnitude p is corrected over its own family. Mixing the two
+    # into one BH call would be wrong: they are different tests, and a
+    # factor contributing to both would be counted twice.
+    mqs = _bh([a.magnitude_p for a in out])
+    for a, q in zip(out, mqs):
+        a.magnitude_q = q
 
     out.sort(key=lambda a: -(abs(a.nes) if a.nes is not None
                              else abs(_q(a.magnitude, 0.0))))
     log.info("activity inferred for %d factor(s); %d directional, %d "
-             "significant at q<0.05", len(out),
+             "significant at q<0.05, %d on magnitude alone", len(out),
              sum(1 for a in out if a.nes is not None),
-             sum(1 for a in out if _q(a.q_value) < 0.05))
+             sum(1 for a in out if _q(a.q_value) < 0.05),
+             sum(1 for a in out
+                 if a.q_value is None and _q(a.magnitude_q) < 0.05))
     return out
 
 
@@ -612,18 +638,54 @@ def summarise(activities: list, *, scanned: list | None = None) -> str:
     if not activities:
         return ("No factor had enough measured targets to infer activity. "
                 "That is a statement about the regulon table and the "
-                "signature, not about the factors: with TRRUST, most of the "
-                "~1,600 human transcription factors have too few curated "
-                "targets to test at all.")
+                "signature, not about the factors: with TRRUST, most of "
+                "the ~1,600 human transcription factors have too few "
+                "curated targets to test at all.")
 
     sig = [a for a in activities if _q(a.q_value) < 0.05
            and a.direction != "unknown"]
     directional = [a for a in activities if a.nes is not None]
+    # Factors whose regulon moved without a callable direction. On a
+    # fully unsigned regulon - every ChIP-derived one - this is the ONLY
+    # result available, and counting just the directional ones reported
+    # "0 reached q<0.05" when nothing had been tested at that level.
+    moved = [a for a in activities
+             if a.q_value is None and _q(a.magnitude_q) < 0.05]
+    n_signed_edges = sum(a.n_signed for a in activities)
+
     lines = [
         f"Activity was testable for {len(activities)} factor(s) - those with "
-        f"at least {MIN_TARGETS} curated targets measured in this signature. "
+        f"at least {MIN_TARGETS} targets measured in this signature. "
         f"{len(directional)} had enough signed edges for a direction, and "
         f"{len(sig)} reached q<0.05."]
+    if moved:
+        lines.append(
+            f"A further {len(moved)} factor(s) have a regulon that MOVED at "
+            f"q<0.05 without a callable direction: the edges carry no mode, "
+            f"so the test is whether the targets shifted at all, not which "
+            f"way the factor went.")
+        share = len(moved) / float(len(activities))
+        big = [a for a in moved
+               if a.regulon_share > MAX_REGULON_SHARE]
+        same_way = [a for a in moved if (a.magnitude or 0) < 0]
+        one_way = max(len(same_way), len(moved) - len(same_way))
+        if share > IMPLAUSIBLE_SIGNIFICANT_SHARE:
+            lines.append(
+                f"**Read that number as a warning, not a result.** "
+                f"{share:.0%} of the testable factors moved, "
+                f"{one_way / len(moved):.0%} of them the same way, and "
+                f"{len(big)} sit on a regulon covering more than "
+                f"{MAX_REGULON_SHARE:.0%} of the measured genes. Factors do "
+                f"not act in concert like that. What this is measuring is "
+                f"the signature's own structure, reported once per overlapping "
+                f"gene set - occupancy regulons are large and share most of "
+                f"their members, so they all inherit it together.")
+    elif not directional and activities:
+        lines.append(
+            f"No factor had a single signed edge, so no direction could be "
+            f"called for any of them - that is a property of the regulon "
+            f"table, not of this tissue. The magnitude test ran on all "
+            f"{len(activities)} and none moved at q<0.05 either.")
 
     if scanned:
         scanned_set = {s.upper() for s in scanned}
@@ -723,6 +785,16 @@ MIN_CONSISTENCY = 0.6
 # about an effect too small to matter. A floor on the median effect is what
 # separates "moves the regulon" from "leans one way".
 MIN_MEDIAN_Z = 1.0
+# A regulon covering more than this share of the measured genes is not a
+# test of one factor: at that size the set inherits the signature's own
+# structure, and the magnitude statistic reports it whatever the factor
+# does. ChIP occupancy sets routinely exceed it; curated ones never do.
+MAX_REGULON_SHARE = 0.05
+
+# Above this share of testable factors reaching significance, the result
+# is about the signature rather than about the factors.
+IMPLAUSIBLE_SIGNIFICANT_SHARE = 0.25
+
 MIN_SIGNIFICANT = 2
 
 
