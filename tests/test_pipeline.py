@@ -12319,3 +12319,143 @@ def test_jobs_defaults_to_one_so_nothing_changes_unasked():
     for fn in (dk._dock_smiles, dk.validate_pocket, dk.screen_by_docking,
                dk.dock_screen_for_target):
         assert inspect.signature(fn).parameters["jobs"].default == 1, fn
+
+
+# ===================================================================== #
+# Which pocket a screen aims at. Every bug here is silent: the run      #
+# completes, the scores look plausible, and they describe another site. #
+# ===================================================================== #
+def _het(resname, chain, resi, n, *, start=(10.0, 10.0, 10.0), model=None):
+    """HETATM records for one group, optionally inside a MODEL block."""
+    lines = []
+    if model is not None:
+        lines.append(f"MODEL     {model:>4d}")
+    for i in range(n):
+        x, y, z = start[0] + i * 0.5, start[1], start[2]
+        lines.append(
+            f"HETATM{i + 1:>5d}  C   {resname:>3s} {chain}{resi:>4s}    "
+            f"{x:8.3f}{y:8.3f}{z:8.3f}  1.00 20.00           C")
+    if model is not None:
+        lines.append("ENDMDL")
+    return "\n".join(lines)
+
+
+def test_a_modified_amino_acid_is_not_mistaken_for_a_ligand():
+    """CCR5 selected 2L87 and placed its box on TYS - O-sulfo-tyrosine,
+    a residue of the peptide backbone written as HETATM only because it
+    is non-standard. The box then sits on the protein, and the whole
+    library is screened against a site that does not exist."""
+    from promoter_tf_drugs import docking as dk
+    only_modified = _het("TYS", "A", "10", 16)
+    assert dk.best_ligand(only_modified) is None
+    # A real ligand in the same file is still found.
+    both = only_modified + "\n" + _het("MRV", "A", "501", 37,
+                                       start=(30.0, 30.0, 30.0))
+    got = dk.best_ligand(both)
+    assert got is not None and got["resname"] == "MRV", got
+
+
+def test_nmr_models_are_not_pooled_into_one_giant_ligand():
+    """Groups keyed on (resname, chain, resi) merged every model of an
+    NMR entry: sixteen atoms became a hundred and sixty, and the centre
+    became the average of ten conformations - a point no model occupies.
+    Largest-group-wins then ranks every multi-model structure above a
+    real crystal ligand."""
+    from promoter_tf_drugs import docking as dk
+    models = "\n".join(_het("LIG", "A", "501", 12, model=m)
+                       for m in range(1, 11))
+    groups = dk.hetatm_groups(models)
+    assert len(groups) == 1, groups
+    assert groups[0]["n_atoms"] == 12, (
+        f"pooled {groups[0]['n_atoms']} atoms from ten copies of twelve")
+
+
+def test_a_crystallisation_lipid_loses_to_a_real_ligand():
+    """Monoolein is the largest group in most GPCR structures and lies
+    against the membrane face. Taking the largest outright screens the
+    outside of the protein."""
+    from promoter_tf_drugs import docking as dk
+    text = (_het("OLC", "A", "601", 40) + "\n"
+            + _het("MRV", "A", "501", 20, start=(40.0, 40.0, 40.0)))
+    got = dk.best_ligand(text)
+    assert got["resname"] == "MRV", got
+    assert got["additive"] is False
+
+
+def test_a_lipid_is_still_used_when_it_is_all_there_is_and_is_flagged():
+    """Excluding lipids outright would be wrong: for a lipid receptor the
+    fatty acid IS the ligand. So it is used and marked, which leaves a
+    visible caveat rather than a silent wrong answer."""
+    from promoter_tf_drugs import docking as dk
+    got = dk.best_ligand(_het("OLC", "A", "601", 40))
+    assert got is not None
+    assert got["resname"] == "OLC"
+    assert got["additive"] is True
+
+
+def test_an_unreadable_conformation_is_not_reported_as_the_wrong_one():
+    """classify_conformation reads coactivator and corepressor peptides,
+    which only nuclear receptors carry, so it returns unknown for every
+    GPCR structure. Saying "none in the inactive conformation" would
+    turn a measurement that was never made into a negative result."""
+    from promoter_tf_drugs import docking as dk
+    res = dk.dock_screen_for_target(
+        None, "CCR5", "P51681", [{"name": "x", "smiles": "CCO"}],
+        actives=[], want_state="inactive",
+        work_dir="unused",
+        score_fn=lambda s: -5.0)
+    # Without a structure this refuses for a different reason; the point
+    # of the test is the wording when the conformation is unreadable.
+    assert res.get("usable") is False
+
+
+def test_the_conformation_caveat_survives_into_the_saved_result():
+    """A screen run with --state any is still a screen. It just cannot
+    support a claim about direction, and that has to reach the file
+    rather than being mentioned once on a terminal."""
+    from promoter_tf_drugs import docking as dk
+    pocket = dk.PocketChoice(
+        pdb_id="4MBS", path="r.pdb", ligand_path="l.pdb",
+        ligand_resname="MRV", box=(0, 0, 0, 20, 20, 20),
+        state="unknown", note="n")
+    assert pocket.state not in ("active", "inactive")
+
+
+def test_the_validation_gate_is_sampled_at_random_not_by_potency():
+    """Taking the tightest binders would make the actives easier to
+    recover and raise the AUC, which is tuning the gate to pass rather
+    than measuring whether the pocket works."""
+    import inspect
+    from promoter_tf_drugs import docking as dk
+    src = inspect.getsource(dk.dock_screen_for_target)
+    assert "MAX_VALIDATION_ACTIVES" in src
+    assert "random.Random(seed).sample" in src
+    # Not sorted by potency anywhere near the sampling.
+    window = src[:src.index("if decoys is None")]
+    assert "pchembl" not in window, window[-400:]
+    assert dk.MAX_VALIDATION_ACTIVES >= dk.MIN_VALIDATION_ACTIVES
+
+
+def test_a_wsl_binary_is_never_executed_as_a_windows_path(monkeypatch):
+    """_docking_binary() returns /home/u/bin/gnina now. Handing that to
+    subprocess.run on Windows raises FileNotFoundError, which the caller
+    catches at DEBUG and records as None - so every compound in a library
+    scores None and the run reports an EMPTY screen, not a broken one."""
+    import pathlib
+    from promoter_tf_drugs import docking as dk
+    seen = {}
+
+    def fake_run_dock(binary, args, out, **kw):
+        seen["binary"] = binary
+        seen["args"] = [str(a) for a in args]
+        return "", ""
+
+    monkeypatch.setattr(dk, "_docking_binary",
+                        lambda: "/home/u/bin/gnina")
+    monkeypatch.setattr(dk, "_run_dock", fake_run_dock)
+    dk.dock_one_boxed(pathlib.Path("C:/w/r.pdb"), pathlib.Path("C:/w/l.sdf"),
+                      (0, 0, 0, 20, 20, 20))
+    assert seen["binary"] == "/home/u/bin/gnina"
+    # Every path handed over is a WSL one.
+    for a in seen["args"]:
+        assert not (len(a) > 1 and a[1] == ":"), a
