@@ -1037,9 +1037,38 @@ _RUN_KEYS = (
 )
 
 
+def _check_flag_combinations(parser, args) -> None:
+    """Reject flag combinations that cannot work, before anything runs.
+
+    A full run is a quarter of an hour of scanning and lookups. Learning
+    at the end that a requested source could never have produced
+    anything wastes all of it, and the condition is knowable before the
+    first request goes out.
+
+    This is the CLI's check, not the pipeline's: `run()` still records a
+    failed source and carries on, because a library caller may want the
+    rest of the run regardless.
+    """
+    if getattr(args, "tf_activity", False) and not getattr(
+            args, "activity_tissue", None):
+        parser.error(
+            "--tf-activity needs --activity-tissue: it infers which "
+            "factors are active from their targets' expression in one "
+            "tissue, and without a tissue there is no expression profile "
+            "to infer from. Name a tissue as the expression table spells "
+            "it, e.g. --activity-tissue liver.")
+    if getattr(args, "activity_permutations", 0) and not getattr(
+            args, "tf_activity", False):
+        parser.error(
+            "--activity-permutations only applies to --tf-activity, "
+            "which was not requested. It would do nothing here.")
+
+
 def main(argv=None) -> int:
     import sys
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    _check_flag_combinations(parser, args)
     for stream in (sys.stdout, sys.stderr):
         try:
             stream.reconfigure(encoding="utf-8", errors="replace")

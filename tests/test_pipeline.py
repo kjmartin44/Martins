@@ -12728,3 +12728,45 @@ def test_the_absent_compound_caveat_states_measured_counts(monkeypatch):
     assert "3 had no 3D conformer" in text, text
     assert "usually" not in text, text
     assert run.failures == {"embedding_failed": 3}
+
+
+def test_impossible_flag_combinations_are_refused_before_any_work():
+    """--tf-activity without --activity-tissue failed twelve minutes into
+    a run: the scan, the ChIP intersection, the drug lookups and the
+    docking merge all ran first, and only then did the report say the
+    requested source could never have produced anything.
+
+    AGENTS.md: validate user input before expensive work.
+    """
+    import pytest
+    from promoter_tf_drugs import cli, panel
+    for mod in (cli, panel):
+        gene_flag = (["--gene", "CCR5"] if mod is cli
+                     else ["--genes", "CCR5"])
+        with pytest.raises(SystemExit) as exc:
+            mod.main(gene_flag + ["--tf-activity", "--demo"])
+        assert exc.value.code != 0, mod.__name__
+
+
+def test_the_library_call_still_degrades_rather_than_raising():
+    """The CLI check must not become a pipeline check. A library caller
+    may want everything else the run produces, and the ledger recording
+    a failed source is the honest way to say one of them did not."""
+    from promoter_tf_drugs import pipeline as pl
+    res = pl.run("DEMOGENE", demo=True, tf_activity=True,
+                 activity_tissue=None)
+    sources = res["evidence_sources"]["sources"]
+    assert sources["tf_activity"]["ok"] is False
+    assert "activity-tissue" in sources["tf_activity"]["detail"]
+    # The rest of the run still happened.
+    assert res["results"], "the run should still produce blocks"
+
+
+def test_a_flag_that_would_do_nothing_is_refused_too():
+    """--activity-permutations without --tf-activity is accepted silently
+    and has no effect, which reads as though the null model ran."""
+    import pytest
+    from promoter_tf_drugs import cli
+    with pytest.raises(SystemExit):
+        cli.main(["--gene", "CCR5", "--activity-permutations", "100",
+                  "--demo"])
