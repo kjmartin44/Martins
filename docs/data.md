@@ -195,10 +195,73 @@ needs PDBQT for both receptor and ligand, which `pip install meeko` and
 screen and reused. There is no reason to prefer that route when smina
 installs in one command.
 
-A screen is thousands of independent docking jobs, so `--cpu` is the
-largest speed lever available. Measured at 3.7 seconds per compound on
-eight cores with smina, which puts a 600-compound library at roughly ten
-minutes on forty cores and several hours on one.
+A screen is thousands of independent docking jobs, and a docking program
+spreads a single job across cores with heavy diminishing returns. So the
+largest speed lever is `--jobs`, which docks that many compounds at once,
+not `--cpu`, which makes one compound use more cores.
+
+Measured on the CCR5 library against 4MBS:
+
+| setting | per compound | 3,315 compounds |
+| --- | --- | --- |
+| `--cpu 16` | 11.4 s | 10.5 h |
+| `--jobs 8 --cpu 4` | 2.0 s | 1.8 h |
+
+Scores are identical either way: same receptor, same box, same seed, and
+the only thing that changed is how many run at once. `--jobs` defaults
+to 1, so nothing changes unless you ask.
+
+```
+python -m promoter_tf_drugs.docking --gene VDR --state active \
+    --jobs 8 --cpu 4 --library data/approved_library.tsv
+```
+
+A screen reports its progress and its rate as it goes. A run that printed
+nothing until it finished looked exactly like a wedged one, which is the
+question that gets asked an hour in.
+
+### Which pocket gets screened
+
+The box is placed on a co-crystallised ligand, because that is the only
+reliable marker of where the orthosteric site is. Choosing that ligand
+has three traps, all of which were hit by CCR5 and none of which fail
+loudly - the run completes and the scores describe another site.
+
+**Modified amino acids are not ligands.** Sulfotyrosine, phosphoserine
+and selenomethionine are written as HETATM because they are non-standard,
+not because they are bound. CCR5's N-terminal structures are full of
+sulfated tyrosines and one was selected as the ligand.
+
+**NMR entries hold many models of the same atoms.** Grouping by residue
+pooled all of them, so a sixteen-atom residue in a ten-model file counted
+as a hundred and sixty atoms, with a centre averaged across ten
+conformations - a point no model occupies. Largest-group-wins then put
+every multi-model structure ahead of a real crystal ligand.
+
+**Crystallisation lipids are usually the largest group.** A membrane
+protein solved in a lipidic cubic phase is full of monoolein, and it lies
+against the outside of the protein. These are ranked last rather than
+excluded, because for a lipid receptor the fatty acid is the genuine
+ligand; where nothing else exists the choice is made and flagged.
+
+### Conformation, and when it cannot be read
+
+`--state` picks the agonist-bound or antagonist-bound structure, because
+docking the wrong one answers a different question. The conformation is
+read from bound coactivator and corepressor peptides: an LXXLL peptide
+can only sit in the AF-2 groove when helix 12 is in its active position.
+
+That signal is specific to nuclear receptors. A GPCR, a kinase or an
+enzyme has no such peptide, so every structure comes back `unknown` and
+a run asking for a particular conformation is refused. The refusal says
+which case it is - a structure classified as the other conformation is a
+finding, a structure that could not be classified is not.
+
+`--state any` docks whichever pocket exists and records the conformation
+as unverified, which is what a GPCR needs. It withholds the direction
+claim rather than guessing it: the result carries
+`conformation_verified: false` and a caveat saying that binding and
+direction are different questions and only the first was addressed.
 
 A GPU is worth having for gnina and for nothing else here. An earlier
 version of this page said a GPU does not help, on the grounds that the
