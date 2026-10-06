@@ -12232,3 +12232,28 @@ def test_validation_does_not_add_a_runtime_dependency():
             imported.add(n.module.split(".")[0])
     assert imported <= {"math", "dataclasses", "pathlib", "inspect",
                         "typing", "__future__"}, imported
+
+
+def test_a_chip_regulon_is_not_reported_as_curated():
+    """A TRRUST row says somebody read a paper and asserted the factor
+    regulates the gene. A ReMap row says the factor was found bound near
+    it. Binding is not regulation, so calling both "curated" promotes
+    one of them a tier in the one line of the report whose job is to say
+    where the evidence came from."""
+    from promoter_tf_drugs import regulon as r
+    chip = "AATF\tAACS\tUnknown\tReMap_cells:1\n" * 20
+    cur = "AATF\tBAX\tRepression\t22909821\n" * 20
+    import pathlib
+    import tempfile
+    d = pathlib.Path(tempfile.mkdtemp())
+    (d / "chip.tsv").write_text(chip, encoding="utf-8")
+    (d / "cur.tsv").write_text(cur, encoding="utf-8")
+    kind_chip, phrase_chip = r.describe_source(d / "chip.tsv")
+    kind_cur, phrase_cur = r.describe_source(d / "cur.tsv")
+    assert kind_chip == "chip", phrase_chip
+    assert "curated" not in phrase_chip.lower()
+    assert "not regulation" in phrase_chip
+    assert kind_cur == "curated", phrase_cur
+    # A file with neither marker is unknown, not quietly curated.
+    (d / "bare.tsv").write_text("A\tB\n" * 20, encoding="utf-8")
+    assert r.describe_source(d / "bare.tsv")[0] == "unknown"

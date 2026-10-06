@@ -334,9 +334,15 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
     ledger = prov_mod.Ledger()
 
     regulons = regulon_mod.load_regulons(regulon_file) if regulon_file else None
+    # Say which KIND of regulon arrived. A ChIP table and a curated one
+    # support different claims, and the ledger is the line that is
+    # supposed to make that visible.
+    _reg_kind, _reg_phrase = (regulon_mod.describe_source(regulon_file)
+                              if regulon_file and regulons
+                              else ("none", ""))
     ledger.record("regulon", requested=bool(regulon_file),
                   ok=bool(regulons), yielded=len(regulons or {}),
-                  detail=(f"{len(regulons or {})} TFs with curated targets"
+                  detail=(f"{len(regulons or {})} {_reg_phrase}"
                           if regulons else
                           "no regulon file; coarse bundled tiers in use"))
     if expression_file:

@@ -71,6 +71,49 @@ def tier_for(symbol: str) -> str:
 
 
 # ------------------------------------------------------------- file loading
+def describe_source(path, *, sample: int = 200) -> tuple:
+    """`(kind, phrase)` for a regulon file, read from its evidence column.
+
+    The two tables this accepts are not the same kind of claim. TRRUST
+    names a PubMed id: a person read that paper and asserted the factor
+    regulates the gene. ReMap names cell lines: the factor was found
+    BOUND near the gene, which is a different and much weaker statement,
+    because most occupancy has no measured effect on transcription.
+
+    Calling both "curated" promotes one of them a tier, in the line of
+    the report whose job is to say where the evidence came from.
+    """
+    path = Path(path)
+    sep = "," if path.suffix.lower() == ".csv" else "\t"
+    pmid = chip = other = 0
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            for i, line in enumerate(fh):
+                if i >= sample:
+                    break
+                parts = line.rstrip("\n").split(sep)
+                if len(parts) < 4:
+                    other += 1
+                    continue
+                ev = parts[3].strip().strip('"')
+                if ev.upper().startswith("REMAP"):
+                    chip += 1
+                elif ev.replace(";", "").replace(",", "").strip().isdigit():
+                    pmid += 1
+                else:
+                    other += 1
+    except OSError:
+        return "unknown", "targets from a regulon file"
+
+    if chip > pmid and chip > other:
+        return "chip", ("TFs with targets called from ChIP occupancy. "
+                        "A peak near a gene is binding, not regulation")
+    if pmid > chip and pmid > other:
+        return "curated", "TFs with literature-curated targets"
+    return "unknown", ("TFs with targets from a regulon file of "
+                       "unrecorded provenance")
+
+
 def load_regulons(path: str | Path) -> dict[str, set]:
     """Parse TRRUST-style TSV: TF <tab> target <tab> mode <tab> pmid.
 
