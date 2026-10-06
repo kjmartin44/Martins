@@ -248,7 +248,20 @@ def fetch_pdb(client, pdb_id: str, out_dir: Path) -> Path | None:
 
 # ------------------------------------------------------------------ docking
 def _docking_binary() -> str | None:
-    for name in ("smina", "smina.static", "vina", "gnina"):
+    """The best docking binary reachable, Windows PATH or WSL.
+
+    WSL is tried FIRST, and gnina first within it, because the only
+    reason to look there is that the better programs are Linux software.
+    A Windows smina or vina is the fallback, not the preference.
+    """
+    try:
+        from . import wsldock as _wsl
+        name, path = _wsl.find_binary()
+        if path:
+            return path
+    except Exception:                                       # noqa: BLE001
+        pass
+    for name in ("gnina", "smina", "smina.static", "vina"):
         path = shutil.which(name)
         if path:
             return path
@@ -292,6 +305,152 @@ def dock_one(receptor_pdb: Path, ligand_sdf: Path, *, autobox_ligand: Path | Non
             scores = [float(m.group(1)) for m in
                       re.finditer(r"^\s+1\s+(-?\d+\.\d+)", proc.stdout, re.M)]
         return min(scores) if scores else None
+
+
+@dataclass
+class PoseScore:
+    """What a docking program said about one ligand's best pose.
+
+    Three numbers because the programs answer different questions and
+    disagree often enough that collapsing them would hide it.
+    """
+    affinity: float | None = None       # Vina-style kcal/mol, lower binds
+    cnn_score: float | None = None      # 0-1, how pose-like the geometry is
+    cnn_affinity: float | None = None   # predicted pK, larger binds
+    engine: str = "?"
+
+    def best(self, metric: str = "affinity") -> float | None:
+        """One number for ranking, in the convention the caller asks for.
+
+        `affinity` and `cnn_affinity` point opposite ways - more negative
+        is tighter for the first, larger for the other two - so this
+        returns everything in the "lower is better" convention the rest
+        of the module already uses, by negating the CNN numbers.
+        """
+        if metric == "cnn_score":
+            return None if self.cnn_score is None else -self.cnn_score
+        if metric == "cnn_affinity":
+            return None if self.cnn_affinity is None else -self.cnn_affinity
+        return self.affinity
+
+    def to_dict(self) -> dict:
+        return dict(self.__dict__)
+
+
+def _parse_poses(sdf_text: str, stdout: str, engine: str) -> list:
+    """Every pose's scores, in the order the program wrote them.
+
+    Anchored on the SDF tag syntax - a property is `> <NAME>` alone on a
+    line with its value on the next - because a loose search for
+    `CNNaffinity` also matches `CNNaffinity_variance`, which gnina writes
+    for every pose. That read nine poses as eighteen and interleaved each
+    affinity with its own variance, so half of them came back near 0.18
+    and looked like weak binders.
+    """
+    def tagged(field):
+        pat = re.compile(
+            r"^>\s*<" + re.escape(field) + r">[^\n]*\n\s*(-?\d+\.?\d*)",
+            re.M)
+        return [float(m.group(1)) for m in pat.finditer(sdf_text)]
+
+    aff = tagged("minimizedAffinity")
+    cnn = tagged("CNNscore")
+    cnn_aff = tagged("CNNaffinity")
+    if not aff:
+        # Vina and older smina print a table instead of tagging the SDF.
+        aff = [float(m.group(1)) for m in
+               re.finditer(r"^\s+\d+\s+(-?\d+\.\d+)", stdout, re.M)]
+    n = max(len(aff), len(cnn), len(cnn_aff))
+    out = []
+    for i in range(n):
+        out.append(PoseScore(
+            affinity=aff[i] if i < len(aff) else None,
+            cnn_score=cnn[i] if i < len(cnn) else None,
+            cnn_affinity=cnn_aff[i] if i < len(cnn_aff) else None,
+            engine=engine))
+    return out
+
+
+def _run_dock(binary: str, args: list, out_sdf: Path, *,
+              timeout: float = 1800) -> tuple:
+    """Run a docking binary, on Windows or through WSL, and read it back.
+
+    The binary is a WSL one when it is an absolute POSIX path, which is
+    what `wsldock.find_binary` returns. Paths in `args` are translated
+    for that side; on Windows they are passed through.
+    """
+    from . import wsldock as _wsl
+
+    is_wsl = binary.startswith("/")
+    if is_wsl:
+        script = _wsl.dock_script(binary, args)
+        try:
+            proc = _wsl.run_script(script, timeout=timeout)
+        except Exception as exc:                            # noqa: BLE001
+            log.warning("WSL docking failed: %s", str(exc)[:160])
+            return None, ""
+    else:
+        try:
+            proc = subprocess.run([binary] + [str(a) for a in args],
+                                  capture_output=True, text=True,
+                                  timeout=timeout)
+        except subprocess.TimeoutExpired:
+            log.warning("docking timed out")
+            return None, ""
+    if proc.returncode != 0:
+        log.warning("docking failed: %s", (proc.stderr or "").strip()[:220])
+        return None, ""
+    text = out_sdf.read_text(errors="replace") if out_sdf.exists() else ""
+    return proc.stdout or "", text
+
+
+def _dock_args(binary: str, receptor: Path, ligand: Path, out: Path,
+               box: tuple, *, exhaustiveness: int, seed: int, cpu: int,
+               num_modes: int = 9) -> list:
+    """Command-line arguments, with paths on the side the binary runs."""
+    from . import wsldock as _wsl
+
+    conv = _wsl.to_wsl_path if binary.startswith("/") else (lambda p: str(p))
+    cx, cy, cz, sx, sy, sz = box
+    args = ["-r", conv(receptor), "-l", conv(ligand), "-o", conv(out),
+            "--center_x", f"{cx:.3f}", "--center_y", f"{cy:.3f}",
+            "--center_z", f"{cz:.3f}",
+            "--size_x", f"{sx:.3f}", "--size_y", f"{sy:.3f}",
+            "--size_z", f"{sz:.3f}",
+            "--exhaustiveness", str(exhaustiveness),
+            "--seed", str(seed), "--cpu", str(cpu),
+            "--num_modes", str(num_modes)]
+    if "gnina" in binary:
+        # Rescore every pose, not only the top one, so the CNN can
+        # reorder them - which is the entire reason to use gnina.
+        args += ["--cnn_scoring", "rescore"]
+    return args
+
+
+def dock_one_scored(receptor_pdb: Path, ligand_sdf: Path, box: tuple, *,
+                    exhaustiveness: int = 8, seed: int = 0, cpu: int = 1,
+                    binary: str | None = None) -> PoseScore | None:
+    """Dock one ligand and return every score the program produced."""
+    binary = binary or _docking_binary()
+    if binary is None:
+        raise RuntimeError(
+            "no docking binary found. " + SETUP)
+    engine = ("gnina" if "gnina" in binary else
+              "smina" if "smina" in binary else "vina")
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / "docked.sdf"
+        args = _dock_args(binary, receptor_pdb, ligand_sdf, out, box,
+                          exhaustiveness=exhaustiveness, seed=seed, cpu=cpu)
+        stdout, sdf = _run_dock(binary, args, out)
+        if stdout is None:
+            return None
+        poses = _parse_poses(sdf, stdout, engine)
+        if not poses:
+            return None
+        # The program writes poses best-first on its own scoring, so the
+        # first is its answer. Re-ranking on the CNN is the caller's
+        # decision, not something to bury here.
+        return poses[0]
 
 
 def smiles_to_sdf(smiles: str, path: Path, n_confs: int = 1, seed: int = 0) -> Path:
@@ -1289,37 +1448,79 @@ def dock_one_vina(receptor_pdb: Path, smiles: str, box: tuple, *,
 SETUP = """\
 To run docking you need two things.
 
-1. A docking binary on PATH. smina is the one to get: a single static
-   file that takes a PDB receptor and an SDF ligand directly.
+1. A docking binary. There are two tiers, and the difference is real.
+
+   gnina - the better answer
+     It docks the way smina does and then RESCORES every pose with a
+     convolutional network trained on crystal structures, which is a
+     different kind of judgement about whether a pose looks real. You
+     get a CNNscore (0-1, how pose-like the geometry is) and a
+     CNNaffinity (predicted pK, comparable across ligands in a way a
+     Vina score is not) alongside the usual empirical number.
+
+     Linux, or Windows through WSL:
+       curl -L -o gnina https://github.com/gnina/gnina/releases/latest/download/gnina
+       chmod +x gnina && mkdir -p ~/bin && mv gnina ~/bin/
+
+     The release is static in everything except CUDA, so it still needs
+     a few NVIDIA shared libraries. With no root and no toolkit:
+
+       python scripts/install_gnina_libs.py
+
+     which unpacks them from NVIDIA's PyPI wheels into ~/cuda-libs.
+     Check what was found with:
+
+       python -m promoter_tf_drugs.wsldock
+
+     On Windows there is no gnina build, so it runs through WSL and this
+     package handles the path translation. A GPU changes the speed, not
+     the answer; without one the rescoring falls back to CPU.
+
+     Measured on PDB 1DB1: calcitriol redocked from a SMILES-embedded
+     conformer, with no crystal coordinate in the input, came back at
+     1.04 A from the crystal pose - correct by the usual 2 A convention.
+     Affinity and CNNaffinity chose the same pose, and the CNN separated
+     it far more sharply, collapsing to 0.63 for a 9.7 A pose the
+     empirical score still rated -10.0 kcal/mol.
+
+   smina - the fallback
+     A single static file, and the easier install. Empirical scoring
+     only, so no CNN rescoring.
 
      Linux / WSL / macOS
        curl -L -o smina https://sourceforge.net/projects/smina/files/smina.static/download
        chmod +x smina && sudo mv smina /usr/local/bin/
 
      Windows - no WSL needed
-       conda-forge ships smina for win-64, so this is one command:
+       conda install -c conda-forge smina
 
-         conda install -c conda-forge smina
+       Verified working: smina 2020.12.10 on win-64, docking PDB 1DB1
+       with its own vitamin D ligands at AUC 1.0 against twelve
+       unrelated approved drugs.
 
-       Verified working: smina 2020.12.10 on win-64, docking PDB 1DB1 with
-       its own vitamin D ligands at AUC 1.0 against twelve unrelated
-       approved drugs.
+     AutoDock Vina also works and needs PDBQT for both files, which
+     `pip install meeko` and `pip install openbabel-wheel` provide.
+     There is no reason to prefer that route.
 
-       If you would rather use AutoDock Vina, it has a Windows executable
-       and needs PDBQT for both files, which `pip install meeko` and
-       `pip install openbabel-wheel` provide. There is no reason to prefer
-       that route now that smina installs directly.
+   Speed
+     A screen is thousands of independent jobs, so --cpu is the biggest
+     lever. Measured: 3.7 s per compound on 8 cores with smina, so a
+     600-compound library is about ten minutes on 40 cores and several
+     hours on one. gnina on a GPU is comparable per compound.
 
-     Speed
-       A screen is thousands of independent jobs, so --cpu is the biggest
-       lever. Measured: 3.7 s per compound on 8 cores, so a 600-compound
-       library is about ten minutes on 40 cores and several hours on one.
+   None of this changes what a screen means. A better scoring function
+   ranks a VALIDATED pocket better; it does not make an unvalidated one
+   meaningful, and screen_by_docking still refuses below its AUC and
+   enrichment floors. A network confident a molecule binds also says
+   nothing about whether binding activates or inhibits, which is what
+   decides the direction your gene moves.
 
 2. RDKit, for turning SMILES into 3D ligands.
 
      pip install rdkit
 
-Check it with:  smina --version
+Check it with:  python -m promoter_tf_drugs.wsldock
+           or:  smina --version
 """
 
 

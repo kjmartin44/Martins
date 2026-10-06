@@ -33,6 +33,9 @@ WHEELS = {
     # Transitive: cusolver and cusparse link against it, so it does not
     # appear in gnina's own `ldd` until the two above are resolved.
     "nvidia-nvjitlink-cu12": ["libnvJitLink.so.12"],
+    # dlopen'd at runtime by the PyTorch gnina embeds, so it appears in
+    # no `ldd` output at all - only in a crash once docking starts.
+    "nvidia-cuda-nvrtc-cu12": ["libnvrtc.so.12"],
 }
 
 DEST = Path(os.path.expanduser("~/cuda-libs"))

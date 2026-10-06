@@ -11697,3 +11697,217 @@ def test_an_unmatchable_active_set_warns_rather_than_silently_passing(
             actives=[{"smiles": "c1ccccc1" + "C" * i, "pchembl": 8.0}
                      for i in range(25)])
     assert "not guaranteed free of real binders" in caplog.text
+
+
+# ===================================================================== #
+# gnina through WSL: parsing, sign conventions, and delivery.           #
+# ===================================================================== #
+GNINA_SDF = """
+  calcitriol
+  one pose
+
+> <minimizedAffinity>
+-12.79365
+
+> <CNNscore>
+0.9585389495
+
+> <CNNaffinity>
+8.5596036911
+
+> <CNNaffinity_variance>
+0.18330000
+
+$$$$
+  calcitriol
+  second pose
+
+> <minimizedAffinity>
+-11.79270
+
+> <CNNscore>
+0.6926998496
+
+> <CNNaffinity>
+7.9490647316
+
+> <CNNaffinity_variance>
+0.21400000
+
+$$$$
+"""
+
+
+def test_cnn_affinity_is_not_confused_with_its_own_variance():
+    """gnina writes CNNaffinity and CNNaffinity_variance for every pose,
+    so a loose search for the first name matches both. That read two
+    poses as four and interleaved each affinity with its variance - and
+    a variance is a small positive number, so half the affinities came
+    back near 0.2 and looked like weak binders rather than like a parse
+    error. Nothing raised; the numbers were just wrong."""
+    from promoter_tf_drugs import docking as dk
+    poses = dk._parse_poses(GNINA_SDF, "", "gnina")
+    assert len(poses) == 2, [p.cnn_affinity for p in poses]
+    assert poses[0].cnn_affinity == 8.5596036911
+    assert poses[1].cnn_affinity == 7.9490647316
+    # The variances must not appear anywhere in the parsed output.
+    assert 0.1833 not in [p.cnn_affinity for p in poses]
+    assert poses[0].affinity == -12.79365
+    assert poses[0].cnn_score == 0.9585389495
+    assert poses[0].engine == "gnina"
+
+
+def test_pose_scores_are_returned_in_one_direction():
+    """affinity is tighter when more negative and the two CNN numbers are
+    tighter when larger. Ranking them together without a convention sorts
+    the CNN backwards, which puts the worst pose first while every number
+    on the row still looks right."""
+    from promoter_tf_drugs import docking as dk
+    tight = dk.PoseScore(affinity=-12.0, cnn_score=0.95, cnn_affinity=8.5)
+    loose = dk.PoseScore(affinity=-6.0, cnn_score=0.20, cnn_affinity=6.0)
+    for metric in ("affinity", "cnn_score", "cnn_affinity"):
+        assert tight.best(metric) < loose.best(metric), metric
+    missing = dk.PoseScore()
+    assert missing.best("cnn_affinity") is None
+    assert missing.best("affinity") is None
+
+
+def test_vina_scores_are_read_from_its_table_when_the_sdf_has_no_tags():
+    """vina and older smina print a table and tag nothing, so a parser
+    that only reads SDF tags silently returns no poses at all for them."""
+    from promoter_tf_drugs import docking as dk
+    stdout = ("mode |   affinity | dist from best mode\n"
+              "-----+------------+--------------------\n"
+              "   1       -9.400          0.000\n"
+              "   2       -8.100          2.345\n")
+    poses = dk._parse_poses("no tags here", stdout, "vina")
+    assert [p.affinity for p in poses] == [-9.4, -8.1]
+    assert all(p.cnn_score is None for p in poses)
+
+
+def test_cnn_rescoring_is_requested_only_of_gnina(tmp_path):
+    """--cnn_scoring is the whole reason to run gnina, and it is not a
+    flag smina or vina accept - passing it to them makes the run fail."""
+    from promoter_tf_drugs import docking as dk
+    box = (1.0, 2.0, 3.0, 20.0, 20.0, 20.0)
+    args = dk._dock_args("/home/u/bin/gnina", tmp_path / "r.pdb",
+                         tmp_path / "l.sdf", tmp_path / "o.sdf", box,
+                         exhaustiveness=8, seed=0, cpu=1)
+    assert "--cnn_scoring" in args
+    assert args[args.index("--cnn_scoring") + 1] == "rescore"
+    plain = dk._dock_args("C:/tools/smina.exe", tmp_path / "r.pdb",
+                          tmp_path / "l.sdf", tmp_path / "o.sdf", box,
+                          exhaustiveness=8, seed=0, cpu=1)
+    assert "--cnn_scoring" not in plain
+
+
+def test_paths_are_translated_only_for_the_side_the_binary_runs_on(
+        tmp_path):
+    """A WSL binary handed C:\\... reports that the receptor does not
+    exist, which reads like a missing file rather than a path that was
+    never converted."""
+    from promoter_tf_drugs import docking as dk
+    from promoter_tf_drugs import wsldock as wd
+    box = (0.0, 0.0, 0.0, 20.0, 20.0, 20.0)
+    rec = tmp_path / "r.pdb"
+    args = dk._dock_args("/home/u/bin/gnina", rec, tmp_path / "l.sdf",
+                         tmp_path / "o.sdf", box, exhaustiveness=8,
+                         seed=0, cpu=1)
+    given = args[args.index("-r") + 1]
+    assert not given[1:2] == ":", given
+    assert given == wd.to_wsl_path(rec)
+    win = dk._dock_args("smina.exe", rec, tmp_path / "l.sdf",
+                        tmp_path / "o.sdf", box, exhaustiveness=8,
+                        seed=0, cpu=1)
+    assert win[win.index("-r") + 1] == str(rec)
+
+
+def test_windows_drive_letters_become_mount_points():
+    from promoter_tf_drugs import wsldock as wd
+    got = wd.to_wsl_path("C:\\Users\\x\\y.pdb")
+    assert got.startswith("/mnt/c/"), got
+    assert "\\" not in got
+    # An already-POSIX path is left alone rather than mangled.
+    assert wd.to_wsl_path("/home/u/x.pdb") == "/home/u/x.pdb"
+
+
+def test_scripts_reach_wsl_as_bytes_with_unix_newlines(monkeypatch):
+    """Two delivery faults, both of which read as a broken script rather
+    than as a broken way of sending one.
+
+    With text=True Python rewrites every newline to CRLF on Windows and
+    bash fails on the first multi-line construct. And a script passed as
+    a `bash -c` argument is rebuilt by the interop layer on the way
+    through: `wsl.exe -- bash -c "echo $PATH"` comes back a syntax error.
+    """
+    from promoter_tf_drugs import wsldock as wd
+    seen = {}
+
+    def fake_run(cmd, **kw):
+        seen["cmd"] = cmd
+        seen["kw"] = kw
+        import subprocess as sp
+        return sp.CompletedProcess(cmd, 0, b"ok", b"")
+
+    monkeypatch.setattr(wd.subprocess, "run", fake_run)
+    wd.run_script("for i in 1 2; do\n  echo $i\ndone\n")
+    assert "-c" not in seen["cmd"], seen["cmd"]
+    assert seen["cmd"][-1] == "-s"
+    payload = seen["kw"]["input"]
+    assert isinstance(payload, bytes)
+    assert b"\r" not in payload
+    assert seen["kw"].get("text") is not True
+
+
+def test_nul_bytes_are_stripped_from_wsl_output(monkeypatch):
+    """The interop layer interleaves NUL bytes into the output. They make
+    every comparison against it fail in a way that reads like the command
+    having produced nothing at all."""
+    from promoter_tf_drugs import wsldock as wd
+
+    def fake_run(cmd, **kw):
+        import subprocess as sp
+        noisy = "/home/u/bin/gnina".encode("utf-8")
+        noisy = b"\x00".join(noisy[i:i + 1] for i in range(len(noisy)))
+        return sp.CompletedProcess(cmd, 0, noisy, b"\x00")
+
+    monkeypatch.setattr(wd.subprocess, "run", fake_run)
+    out = wd.run_script("command -v gnina")
+    assert out.stdout.strip() == "/home/u/bin/gnina"
+    assert chr(0) not in out.stdout
+    assert chr(0) not in out.stderr
+
+
+def test_a_linux_gnina_is_preferred_over_a_windows_vina(monkeypatch):
+    """The only reason to reach into WSL is that the better programs are
+    Linux software, so a Windows vina on PATH must not win over it."""
+    from promoter_tf_drugs import docking as dk
+    from promoter_tf_drugs import wsldock as wd
+    monkeypatch.setattr(wd, "find_binary",
+                        lambda prefer=None: ("gnina", "/home/u/bin/gnina"))
+    monkeypatch.setattr(dk.shutil, "which",
+                        lambda n: "C:/tools/vina.exe" if n == "vina" else None)
+    assert dk._docking_binary() == "/home/u/bin/gnina"
+
+
+def test_a_windows_binary_is_still_used_when_wsl_has_none(monkeypatch):
+    """WSL being unusable must degrade to the Windows binary, not to an
+    exception - most machines running this have no WSL at all."""
+    from promoter_tf_drugs import docking as dk
+    from promoter_tf_drugs import wsldock as wd
+
+    def boom(prefer=None):
+        raise OSError("wsl.exe not found")
+
+    monkeypatch.setattr(wd, "find_binary", boom)
+    monkeypatch.setattr(dk.shutil, "which",
+                        lambda n: "C:/tools/smina.exe" if n == "smina" else None)
+    assert dk._docking_binary() == "C:/tools/smina.exe"
+
+
+def test_a_failed_docking_run_returns_nothing_rather_than_a_zero_score():
+    """A score of 0 from a crashed run is a confident claim of a weak
+    binder. The absence of a result has to stay absent."""
+    from promoter_tf_drugs import docking as dk
+    poses = dk._parse_poses("", "", "gnina")
+    assert poses == []

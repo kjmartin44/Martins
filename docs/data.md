@@ -132,9 +132,48 @@ python -m promoter_tf_drugs.docking --check
 It reports what is present and what to install. Two things are needed: a
 docking binary on PATH, and RDKit.
 
-smina is the binary to get. It is a single static file and takes a PDB
-receptor with an SDF ligand directly, which is why it is preferred here.
-On Linux, WSL or macOS:
+There are two binaries worth having, and the difference between them
+is not speed.
+
+**gnina** docks the way smina does and then rescores every pose with a
+convolutional network trained on crystal structures. That is a second,
+different judgement about whether a pose looks like a real binding mode,
+and it gives two numbers the empirical function cannot:
+
+| number | what it says |
+| --- | --- |
+| `CNNscore` | how pose-like the geometry is, 0 to 1 |
+| `CNNaffinity` | predicted affinity in pK, larger being tighter, and comparable between ligands in a way a Vina score is not |
+
+The Vina-style `minimizedAffinity` is still produced and still reported.
+The three disagree often enough to be worth seeing side by side.
+
+On Linux, or on Windows inside WSL:
+
+```
+curl -L -o gnina https://github.com/gnina/gnina/releases/latest/download/gnina
+chmod +x gnina && mkdir -p ~/bin && mv gnina ~/bin/
+```
+
+The release is described as static and is static in everything except
+CUDA: it still links against seven NVIDIA shared libraries, and loads an
+eighth, `libnvrtc.so.12`, at runtime where `ldd` cannot see it. Where
+there is no toolkit and no root:
+
+```
+python scripts/install_gnina_libs.py
+```
+
+unpacks them from NVIDIA's PyPI wheels into `~/cuda-libs`. Check what was
+found with `python -m promoter_tf_drugs.wsldock`.
+
+There is no Windows build of gnina, so on Windows it runs through WSL.
+Nothing about that is visible from the Windows side: the package
+translates paths and passes scripts over stdin, and `--gene VDR` works
+the same either way.
+
+**smina** is the fallback, and the easier install. A single static file,
+empirical scoring only. On Linux, WSL or macOS:
 
 ```
 curl -L -o smina https://sourceforge.net/projects/smina/files/smina.static/download
@@ -158,15 +197,41 @@ installs in one command.
 
 A screen is thousands of independent docking jobs, so `--cpu` is the
 largest speed lever available. Measured at 3.7 seconds per compound on
-eight cores, which puts a 600-compound library at roughly ten minutes on
-forty cores and several hours on one.
+eight cores with smina, which puts a 600-compound library at roughly ten
+minutes on forty cores and several hours on one.
 
-A GPU does not help much here. The GPU-accelerated engines are
-Linux-only (unidock on conda-forge is linux-64; gnina and Vina-GPU are not
-packaged for conda at all), and with enough CPU cores the library finishes
-in minutes anyway. The case for a GPU would be DiffDock, which is a
-different method rather than a faster one, and whose confidence score
-rates the predicted pose rather than binding strength.
+A GPU is worth having for gnina and for nothing else here. An earlier
+version of this page said a GPU does not help, on the grounds that the
+accelerated engines were out of reach; gnina through WSL is the
+counterexample, and the CNN rescoring is what it accelerates. Without a
+GPU gnina falls back to CPU and produces the same numbers more slowly, so
+this is a question of speed and not of answers.
+
+### What was measured
+
+PDB 1DB1 is the vitamin D receptor with calcitriol bound, so the right
+answer is in the file. Redocking the ligand from a conformer embedded
+from SMILES, with no crystal coordinate surviving into the input:
+
+| rank | RMSD from crystal | affinity | CNNscore | CNNaffinity |
+| --- | --- | --- | --- | --- |
+| 1 | 1.04 A | -12.79 | 0.959 | 8.56 |
+| 2 | 1.77 A | -11.79 | 0.693 | 7.95 |
+| 3 | 9.65 A | -10.02 | 0.628 | 7.91 |
+
+The top-ranked pose is correct by the usual 2 A convention, and both
+scoring functions chose it. The CNN separated it much more sharply:
+ranks 1 and 2 differ by 1.0 kcal/mol of affinity but by 0.27 of
+CNNscore, and the CNN collapses to 0.63 for a pose 9.7 A out of place
+that the empirical score still rates at -10.0 kcal/mol.
+
+That is a pose-accuracy measurement on one complex whose answer was
+known. It is not a measurement of whether a screen finds real drugs,
+which is what the AUC and enrichment floors in `screen_by_docking` are
+for, and a better scoring function does not make an unvalidated pocket
+mean anything. Nor does any of it address direction: a network confident
+that a molecule binds says nothing about whether binding activates or
+inhibits, which is what decides which way your gene moves.
 
 Then run a screen:
 
@@ -188,8 +253,10 @@ needed.
 python -m promoter_tf_drugs.docking --gene VDR --state active --prepare dock_vdr
 ```
 
-Step two, where smina is, with no network at all. WSL sees Windows drives
-under `/mnt/c`, so the folder does not need copying.
+Step two, where the docking binary is, with no network at all. WSL sees
+Windows drives under `/mnt/c`, so the folder does not need copying - and
+if you are driving WSL from Windows the package converts the paths itself,
+so a Windows path works here too.
 
 ```
 python -m promoter_tf_drugs.docking --bundle /mnt/c/Users/you/dock_vdr --out dock_vdr/results.json
