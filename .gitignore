@@ -70,6 +70,8 @@ Thumbs.db
 /data/gwas_catalog*.tsv
 /data/BindingDB_All.tsv*
 /data/bindingdb*.tsv
+/data/bindingdb_distilled.tsv
+/data/BindingDB_All_*_tsv.zip
 /data/chembl*.db
 /data/repurposing_*.txt
 

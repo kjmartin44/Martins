@@ -755,6 +755,11 @@ def screen_gene_product(client, gene: str, *, uniprot: str | None = None,
     active_ids = {a["chembl_id"] for a in actives if a.get("chembl_id")}
     active_ids |= match_actives_to_library(actives, lib)
     pool = [d for d in lib if d.get("chembl_id") not in active_ids]
+    # How many of the LIBRARY's compounds are known actives, which is the
+    # number that matters: `active_ids` is mostly ids of ligands that are
+    # not approved drugs and never appear here, so reporting its size
+    # read as 1,854 library hits when the true answer was 1.
+    n_in_library = len(lib) - len(pool)
     if not active_ids:
         log.warning(
             "none of %s's %d active(s) could be matched to the library by "
@@ -849,7 +854,8 @@ def screen_gene_product(client, gene: str, *, uniprot: str | None = None,
         "is_gene_product": True,
         "hits": [h.to_dict() for h in hits],
         "n_actives": len(actives), "n_decoys": len(decoys),
-        "n_actives_in_library": len(active_ids),
+        "n_actives_in_library": n_in_library,
+        "n_active_ids": len(active_ids),
         "library_size": len(lib),
         "model_auc": round(auc, 3) if auc is not None else None,
         "n_known_recovered": len(known_back),

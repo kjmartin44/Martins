@@ -56,6 +56,10 @@ from pathlib import Path
 log = logging.getLogger(__name__)
 
 DEFAULT_BINDINGDB_PATHS = (
+    # The distilled projection first: same columns, a fraction of the
+    # size, and reading the 9 GB original once per target is minutes of
+    # re-reading the same file.
+    "data/bindingdb_distilled.tsv",
     "data/BindingDB_All.tsv", "data/bindingdb_all.tsv",
     "data/BindingDB_All.tsv.gz", "data/bindingdb.tsv",
 )
@@ -247,6 +251,124 @@ def _looser(prev: str, new: str) -> bool:
     return rank(new) < rank(prev)
 
 
+DISTILLED = "data/bindingdb_distilled.tsv"
+
+
+def distil_bindingdb(src=None, out=DISTILLED, *,
+                     min_pchembl: float = 0.0) -> dict:
+    """Project the full release down to the columns this package reads.
+
+    BindingDB_All is 9 GB across 640 columns and seven of them are used
+    here. A pass takes under three minutes, which is tolerable once and
+    not once per target - so this writes a small file with the same
+    columns, and everything afterwards reads that instead.
+
+    `min_pchembl` defaults to 0: every row with a target, a structure
+    and a parseable affinity is carried.
+
+    That is not timidity. `load_bindingdb` collects ALL of a
+    target-ligand pair's measurements and then prefers Ki, then Kd, then
+    IC50, then EC50, because the first two are equilibrium constants.
+    Dropping a weak Ki ROW removes it from that pair, so a stronger IC50
+    wins the preference instead and the pair clears a threshold its best
+    evidence says it should fail. Measured: at 4.0, CCR5 gained three
+    ligands and PPARG seventy-nine against the same read of the full
+    file, while the distilled file held strictly FEWER rows.
+
+    Any row-level threshold does this. The projection must change the
+    columns and nothing else.
+    """
+    import csv as _csv
+
+    src = resolve(src)
+    if not src:
+        return {"error": "no BindingDB file on disk to distil. " + SOURCE}
+    out_path = Path(out)
+    if Path(src).resolve() == out_path.resolve():
+        return {"error": f"{out} is the source; nothing to do"}
+
+    keep = ["UniProt (SwissProt) Primary ID of Target Chain 1",
+            "Ligand SMILES", "ChEMBL ID of Ligand",
+            "Ki (nM)", "Kd (nM)", "IC50 (nM)", "EC50 (nM)"]
+    n_in = n_out = 0
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with _open(src) as fh, open(out_path, "w", encoding="utf-8",
+                                newline="") as dst:
+        reader = _csv.reader(fh, delimiter="\t")
+        try:
+            header = next(reader)
+        except StopIteration:
+            return {"error": f"{src} is empty"}
+
+        # Column INDICES, not DictReader: building a 640-key dict per row
+        # is most of the cost of reading this file.
+        idx = {}
+        for name in keep:
+            if name in header:
+                idx[name] = header.index(name)
+        uni_i = next((idx[c] for c in _UNIPROT_COLS if c in idx), None)
+        smi_i = next((idx[c] for c in _SMILES_COLS if c in idx), None)
+        if uni_i is None or smi_i is None:
+            return {"error": f"{src} has no UniProt or SMILES column; "
+                             f"this does not look like BindingDB"}
+        aff_i = [(idx[c], c) for c, _ in _AFFINITY_COLS if c in idx]
+        id_i = next((idx[c] for c in _ID_COLS if c in idx), None)
+
+        dst.write("\t".join(
+            ["UniProt (SwissProt) Primary ID of Target Chain",
+             "Ligand SMILES", "ChEMBL ID of Ligand"]
+            + [c for _, c in aff_i]) + "\n")
+
+        width = max([uni_i, smi_i] + [i for i, _ in aff_i]
+                    + ([id_i] if id_i is not None else [])) + 1
+        for row in reader:
+            n_in += 1
+            if len(row) < width:
+                continue
+            uni = row[uni_i].strip().upper()
+            smi = row[smi_i].strip()
+            if not uni or not smi:
+                continue
+            # Every value on a kept row goes through unchanged. Blanking
+            # the weak ones changed which assay type wins the Ki > Kd >
+            # IC50 > EC50 preference downstream, so a pair whose best
+            # evidence was a weak Ki came back as a potent IC50 binder.
+            # The threshold decides which ROWS are worth carrying, never
+            # which measurement within one is visible.
+            vals = [row[i].strip() for i, _ in aff_i]
+            usable = False
+            for raw in vals:
+                pch, _censored = to_pchembl(raw)
+                # A censored bound counts as a measurement worth carrying:
+                # the lookup is what decides ">10000 nM" is not a binding
+                # constant, and deciding it here would hide it.
+                if pch is not None and pch >= min_pchembl:
+                    usable = True
+                    break
+                if raw.strip()[:1] in "><~" and raw.strip()[1:].strip():
+                    usable = True
+                    break
+            if not usable:
+                continue
+            dst.write("\t".join(
+                [uni, smi, (row[id_i].strip() if id_i is not None else "")]
+                + vals) + "\n")
+            n_out += 1
+
+    size = out_path.stat().st_size
+    log.info("distilled %s: %d of %d row(s) kept, %.0f MB",
+             out_path.name, n_out, n_in, size / 1e6)
+    return {"path": str(out_path), "rows_in": n_in, "rows_out": n_out,
+            "bytes": size, "min_pchembl": min_pchembl}
+
+
+# Per-process memo of what has been read, keyed by (file, accession).
+# `actives_for` is called once per target and each call is a full pass, so
+# without this a run screening seven targets reads the file seven times.
+_LOADED: dict = {}
+
+
 def load_bindingdb(uniprots, path=None, *, min_pchembl: float = 5.0) -> dict:
     """`{uniprot: [{chembl_id, smiles, pchembl, measure, n}]}` in one pass.
 
@@ -401,11 +523,17 @@ def actives_for(uniprot: str, *, bindingdb=None, chembl_db=None,
     u = (uniprot or "").strip().upper()
     if not u:
         return []
+    memo_key = (resolve(bindingdb), u, min_pchembl)
+    if memo_key in _LOADED:
+        return _LOADED[memo_key]
     if resolve(chembl_db, DEFAULT_CHEMBL_SQLITE_PATHS):
         got = load_chembl_sqlite([u], chembl_db, min_pchembl=min_pchembl)
         if got.get(u):
+            _LOADED[memo_key] = got[u]
             return got[u]
-    return load_bindingdb([u], bindingdb, min_pchembl=min_pchembl).get(u, [])
+    got = load_bindingdb([u], bindingdb, min_pchembl=min_pchembl).get(u, [])
+    _LOADED[memo_key] = got
+    return got
 
 
 def available() -> dict:
