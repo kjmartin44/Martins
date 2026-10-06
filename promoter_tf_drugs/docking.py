@@ -2167,15 +2167,58 @@ def _report(res: dict, top: int = 25) -> None:
         return
     pk = res.get("pocket") or {}
     print(f"Structure : {pk.get('pdb_id')} "
-          f"(ligand {pk.get('ligand_resname')}, "
-          f"conformation {pk.get('state')})")
+          f"(ligand {pk.get('ligand_resname')})")
+
+    state = pk.get("state")
+    if res.get("conformation_verified"):
+        print(f"Conformation: {state}, read from the structure")
+    else:
+        print(f"Conformation: {state} - NOT read from the structure. "
+              f"Nothing below says whether a hit would activate or "
+              f"inhibit.")
+
     print(f"Validation: AUC {res.get('auc')}, "
           f"top-1% enrichment {res.get('ef1')}")
+    n_av = res.get("n_actives_available")
+    n_used = res.get("n_actives_used_for_gate")
+    if n_av and n_used and n_av > n_used:
+        print(f"            measured on {n_used} of {n_av} known "
+              f"ligand(s), sampled at random")
+
+    by_metric = res.get("auc_by_metric") or {}
+    if len(by_metric) > 1:
+        print()
+        print("What each score was worth on this pocket's own ligands:")
+        print(f"  {'metric':14s} {'AUC':>6s} {'EF1%':>7s}")
+        for name, m in sorted(by_metric.items(),
+                              key=lambda kv: -kv[1]["auc"]):
+            ef = m.get("ef1")
+            print(f"  {name:14s} {m['auc']:6.3f} "
+                  f"{(f'{ef:.1f}' if ef is not None else '-'):>7s}")
+        print("  Ranking below uses the affinity.")
+
+    # Only show the CNN columns when the engine produced them, so a
+    # smina run does not print blanks that look like measurements.
+    hits = res.get("hits", [])[:top]
+    has_cnn = any("cnn_affinity" in h for h in hits)
     print()
-    print(f"{'drug':34s} {'kcal/mol':>9s}")
-    for h in res.get("hits", [])[:top]:
-        print(f"{h['drug'][:34]:34s} {h['score']:9.2f}")
+    if has_cnn:
+        print(f"{'drug':32s} {'kcal/mol':>9s} {'CNNscore':>9s} "
+              f"{'CNNaff':>7s}")
+        for h in hits:
+            cs = h.get("cnn_score")
+            ca = h.get("cnn_affinity")
+            print(f"{h['drug'][:32]:32s} {h['score']:9.2f} "
+                  f"{(f'{cs:.3f}' if cs is not None else '-'):>9s} "
+                  f"{(f'{ca:.2f}' if ca is not None else '-'):>7s}")
+    else:
+        print(f"{'drug':34s} {'kcal/mol':>9s}")
+        for h in hits:
+            print(f"{h['drug'][:34]:34s} {h['score']:9.2f}")
+
     print()
+    if res.get("conformation_caveat"):
+        print(f"  - {res['conformation_caveat']}")
     for c in res.get("caveats", []):
         print(f"  - {c}")
 
