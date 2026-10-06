@@ -13205,3 +13205,55 @@ def test_direction_never_changes_the_ranking():
         source="test")
     assert [h["drug"] for h in run.hits] == before
     assert [h["score"] for h in run.hits] == [-5.0, -6.0, -7.0, -8.0]
+
+
+def test_a_run_does_not_inherit_the_previous_run_expression_table(tmp_path):
+    """`_LOCAL_EXPRESSION` is module state. Two analyses in one process,
+    the first with --expression-file and the second without, and the
+    second silently used the first one's table while reporting the
+    source as present - from inside there is no way to tell a table you
+    loaded from one somebody else did.
+
+    The panel runs several genes in one process, so this is not
+    hypothetical.
+    """
+    from promoter_tf_drugs import delivery as dlv
+    f = tmp_path / "expr.tsv"
+    f.write_text(
+        "Gene\tGene name\tTissue\tnTPM\n"
+        "ENSG1\tMYGENE\tliver\t42.0\n"
+        "ENSG1\tMYGENE\tbrain\t9.0\n"
+        "ENSG2\tOTHER\tliver\t5.0\n", encoding="utf-8")
+
+    dlv.reset_expression()
+    dlv.load_expression_file(f)
+    assert dlv.tissue_expression(None, "MYGENE") == {"liver", "brain"}
+
+    # A later analysis that asked for no table must find none.
+    dlv.reset_expression()
+    assert dlv.tissue_expression(None, "MYGENE") == set()
+    assert dlv.tissue_universe_size() is None
+    status = dlv.expression_source_status()
+    assert "local expression table" not in status["detail"]
+
+
+def test_the_run_clears_the_table_when_it_was_not_given_one():
+    """The clear has to happen inside run(), not be left to the caller."""
+    import inspect
+    from promoter_tf_drugs import pipeline as pl
+    src = inspect.getsource(pl.run)
+    i = src.index("reset_expression()")
+    j = src.index("load_expression_file(")
+    assert i < j, "the table must be cleared before a new one is loaded"
+
+
+def test_a_disabled_lookup_does_not_outlive_the_run_it_names():
+    """expression_status calls it "disabled for this run" and it was
+    outliving the run it named, so a later analysis was told a lookup had
+    failed that it never attempted."""
+    from promoter_tf_drugs import delivery as dlv
+    dlv._EXPR_DISABLED["value"] = True
+    dlv._EXPR_DISABLED["reason"] = "schema change"
+    assert dlv.expression_source_status()["ok"] is False
+    dlv.reset_expression()
+    assert dlv.expression_source_status()["ok"] is True

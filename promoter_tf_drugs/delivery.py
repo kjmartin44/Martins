@@ -468,6 +468,20 @@ def expression_source_status() -> dict:
             "detail": "Open Targets expression lookup in use"}
 
 
+def reset_expression() -> None:
+    """Forget any expression table and any disabled lookup.
+
+    Called at the start of every run so one analysis cannot inherit
+    another's table. Without it, a second run in the same process that
+    asked for no expression file silently used the first one's, and
+    reported the source as present, because from inside there is no way
+    to tell a table you loaded from one somebody else did.
+    """
+    _LOCAL_EXPRESSION.clear()
+    _EXPR_DISABLED["value"] = False
+    _EXPR_DISABLED["reason"] = ""
+
+
 def load_expression_file(path, *, min_value: float = 1.0) -> dict:
     """Load a tissue-expression table from disk, so this works with no network.
 

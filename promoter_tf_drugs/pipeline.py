@@ -336,6 +336,10 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                   detail=(f"{len(regulons or {})} {_reg_phrase}"
                           if regulons else
                           "no regulon file; coarse bundled tiers in use"))
+    # Established from this run's arguments, every run. The table is
+    # module state, so without the clear a second analysis in the same
+    # process inherits the first one's and reports it as its own.
+    dlv_mod.reset_expression()
     if expression_file:
         dlv_mod.load_expression_file(expression_file)
 
