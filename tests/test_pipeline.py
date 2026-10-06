@@ -12770,3 +12770,35 @@ def test_a_flag_that_would_do_nothing_is_refused_too():
     with pytest.raises(SystemExit):
         cli.main(["--gene", "CCR5", "--activity-permutations", "100",
                   "--demo"])
+
+
+def test_every_evidence_source_says_what_its_failure_cost():
+    """The CCR5 run printed `- **tf_activity** — ` and stopped. The
+    section above promises these are the sources that did not deliver
+    and that nothing rests on them, then declines to say what was lost.
+
+    IMPACT covered 7 of the 14 sources a real run records; the rest were
+    added when their features were and the table was not.
+    """
+    from promoter_tf_drugs import pipeline as pl, provenance as prov
+    res = pl.run("DEMOGENE", demo=True)
+    names = set(res["evidence_sources"]["sources"])
+    missing = sorted(n for n in names if not prov.IMPACT.get(n))
+    assert not missing, (
+        "evidence sources with no stated impact when they fail: "
+        + ", ".join(missing))
+
+
+def test_a_failed_source_bullet_is_never_bare():
+    """Belt and braces for the table above: even a source nobody wrote
+    an impact for must say something, because a bullet that stops after
+    the dash is worse than the plain fact."""
+    from promoter_tf_drugs import pipeline as pl
+    res = pl.run("DEMOGENE", demo=True, tf_activity=True,
+                 activity_tissue=None)
+    report = pl.markdown_report(res)
+    assert "— \n" not in report, "bare failed-source bullet"
+    assert "**tf_activity** — " in report
+    line = next(ln for ln in report.splitlines()
+                if ln.startswith("- **tf_activity**"))
+    assert len(line.split("—", 1)[1].strip()) > 20, line

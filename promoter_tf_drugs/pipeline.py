@@ -2126,7 +2126,13 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                      "them:")
             L.append("")
             for s in failed:
-                L.append(f"- **{s['name']}** — {s.get('impact', '')}")
+                # The source's own detail when no impact is written for
+                # it. A bullet that stops after the dash promises an
+                # explanation and then withholds it, which reads worse
+                # than saying the plain thing.
+                why = (s.get("impact") or s.get("detail")
+                       or "no impact recorded for this source")
+                L.append(f"- **{s['name']}** — {why}")
             L.append("")
         missing = [s for s in srcs.values() if s["state"] == "not requested"]
         if missing:

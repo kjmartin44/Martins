@@ -65,6 +65,27 @@ IMPACT = {
     "screen": "No untested drug/receptor pairs are surfaced.",
     "direction_model": "Agonist-vs-antagonist was taken from the database annotation alone, with no independent structural check "
                         "— so a mislabelled action_type passes through unchallenged.",
+    "tf_activity": "Motif hits are unchecked against whether the factor is "
+                   "actually active. A site in a promoter is a sequence "
+                   "match; without this there is nothing saying the factor "
+                   "that matches it does anything in your cells.",
+    "docking": "No structural check on whether a compound can occupy the "
+               "pocket. Routes rest on annotation alone.",
+    "product_screen": "The gene's own protein was not screened, so any "
+                      "compound acting on the product rather than on its "
+                      "transcription is absent rather than ruled out.",
+    "promoter_dna": "The promoter sequence was not examined for features a "
+                    "small molecule could bind directly, so DNA-directed "
+                    "agents are absent rather than excluded.",
+    "factor_abundance": "No check on whether a compound changes the "
+                        "factor's own transcript, which is the one "
+                        "mechanism here that a western blot would see.",
+    "trans_eqtl": "No human genetic evidence that variation in a factor "
+                  "moves this gene, so the factor-to-gene link rests on "
+                  "annotation.",
+    "activity_drugs": "No compound was tested against inferred factor "
+                      "activity, so the activity calls generate no routes "
+                      "of their own.",
 }
 
 
