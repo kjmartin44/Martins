@@ -132,6 +132,121 @@ def to_pchembl(value: str) -> tuple:
     return round(-math.log10(nm * 1e-9), 2), censored
 
 
+BINDINGDB_REST = "https://bindingdb.org/rest/getLigandsByUniprot"
+
+# BindingDB prefixes every field in the JSON response, and names the
+# response object after a typo of its own method. Both are theirs.
+_BDB_ROOT = "getLindsByUniprotResponse"
+
+
+def fetch_bindingdb(client, uniprots, path=None) -> dict:
+    """Add targets to the local potency table, one request each.
+
+    The full BindingDB release is about 1.5 GB zipped, and almost all of
+    it is targets this gene has nothing to do with. One accession at a
+    time through the cached client is a few hundred kilobytes, re-reads
+    from cache afterwards, and honours `--offline` like every other call
+    here.
+
+    Merges into whatever is already on disk rather than replacing it, so
+    a table built from the cache keeps its rows and gains these.
+    """
+    import csv as _csv
+
+    want = [u.strip().upper() for u in uniprots if u and u.strip()]
+    if not want:
+        return {"added": 0, "targets": {}, "error": "no accession given"}
+
+    # Default to the file ALREADY IN USE, not the first candidate path.
+    # `resolve` returns the first that exists, so writing to the first
+    # candidate created a second file that shadowed it - fetching CCR5
+    # took ESR1 from 2,020 actives to zero, because the new file won the
+    # lookup and held only CCR5.
+    out_path = Path(path or resolve() or DEFAULT_BINDINGDB_PATHS[0])
+    if not out_path.suffix:
+        out_path = out_path.with_suffix(".tsv")
+
+    # Keyed on (accession, smiles, assay type) so a re-fetch updates in
+    # place instead of duplicating.
+    rows: dict = {}
+    header = ["UniProt (SwissProt) Primary ID of Target Chain",
+              "Ligand SMILES", "BindingDB MonomerID",
+              "Ki (nM)", "Kd (nM)", "IC50 (nM)", "EC50 (nM)"]
+    if out_path.exists():
+        with _open(out_path) as fh:
+            reader = _csv.DictReader(fh, delimiter="\t")
+            # Carry over any column the existing file has that this one
+            # does not, including whichever identifier column it uses, so
+            # a merge never drops data that was already there.
+            for c in (reader.fieldnames or []):
+                if c not in header:
+                    header.append(c)
+            for row in reader:
+                uni = (row.get(header[0]) or "").strip().upper()
+                smi = (row.get(header[1]) or "").strip()
+                if uni and smi:
+                    rows[(uni, smi)] = dict(row)
+
+    before = len(rows)
+    per_target: dict = {}
+    for uni in want:
+        try:
+            res = client.get(BINDINGDB_REST,
+                             {"uniprot": uni,
+                              "response": "application/json"})
+        except Exception as exc:                            # noqa: BLE001
+            per_target[uni] = f"failed: {type(exc).__name__}"
+            log.warning("BindingDB fetch failed for %s: %s", uni,
+                        str(exc)[:120])
+            continue
+        root = (res or {}).get(_BDB_ROOT) or {}
+        recs = root.get("bdb.affinities") or []
+        kept = 0
+        for a in recs:
+            smi = (a.get("bdb.smile") or "").strip()
+            val = (a.get("bdb.affinity") or "").strip()
+            kind = (a.get("bdb.affinity_type") or "").strip().upper()
+            col = {"KI": "Ki (nM)", "KD": "Kd (nM)", "IC50": "IC50 (nM)",
+                   "EC50": "EC50 (nM)"}.get(kind)
+            if not (smi and val and col):
+                continue
+            rec = rows.setdefault((uni, smi), {
+                header[0]: uni, header[1]: smi,
+                header[2]: str(a.get("bdb.monomerid") or "")})
+            # Keep the relation: BindingDB writes ">10000" for a compound
+            # that did nothing, and `to_pchembl` is what decides that is
+            # not a binding constant.
+            prev = rec.get(col)
+            if not prev or _looser(prev, val):
+                rec[col] = val
+            kept += 1
+        per_target[uni] = kept
+        log.info("BindingDB %s: %d affinity record(s)", uni, kept)
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "w", encoding="utf-8", newline="") as fh:
+        fh.write("\t".join(header) + "\n")
+        for (uni, smi), rec in sorted(rows.items()):
+            fh.write("\t".join(str(rec.get(c, "") or "")
+                                for c in header) + "\n")
+
+    return {"path": str(out_path), "targets": per_target,
+            "rows_before": before, "rows_after": len(rows),
+            "added": len(rows) - before}
+
+
+def _looser(prev: str, new: str) -> bool:
+    """Prefer an exact measurement, then the more potent one."""
+    def rank(t):
+        t = (t or "").strip()
+        try:
+            return (1 if t[:1] in "><~" else 0,
+                    float(t.lstrip("><~= ").strip()))
+        except (ValueError, IndexError):
+            return (2, float("inf"))
+    return rank(new) < rank(prev)
+
+
 def load_bindingdb(uniprots, path=None, *, min_pchembl: float = 5.0) -> dict:
     """`{uniprot: [{chembl_id, smiles, pchembl, measure, n}]}` in one pass.
 

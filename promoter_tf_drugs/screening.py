@@ -576,6 +576,62 @@ def local_library(path=None) -> list:
         return []
 
 
+_PARENT_KEYS: dict = {}
+_MISSING = object()
+
+
+def match_actives_to_library(actives: list, library: list) -> set:
+    """Library ids whose STRUCTURE matches one of the actives.
+
+    Sources number the same molecule differently - BindingDB MonomerID,
+    ChEMBL id - and write different canonical SMILES for it. For CCR5,
+    zero of 254 actives matched the approved library on either. So the
+    join is on `localdrugs.parent_key`, the connectivity layer of the
+    parent structure, which is what the drug-table merge already uses to
+    collapse salt forms across sources.
+
+    This matters twice over. An unrecognised known ligand is reported as
+    an untested compound, and - worse - the decoy pool is built by
+    excluding the actives, so a real binder sitting in the library gets
+    sampled as a decoy and trained on as a negative.
+    """
+    try:
+        from .localdrugs import parent_key
+    except Exception:                                       # noqa: BLE001
+        return set()
+
+    # Memoised across calls: a pipeline run screens many targets against
+    # the SAME library, and an InChIKey per molecule per target made that
+    # the slowest step in the section.
+    def key_of(smi):
+        k = _PARENT_KEYS.get(smi, _MISSING)
+        if k is _MISSING:
+            k = _PARENT_KEYS[smi] = parent_key(smi)
+        return k
+
+    keys = set()
+    for a in actives or []:
+        smi = a.get("smiles")
+        if not smi:
+            continue
+        k = key_of(smi)
+        if k:
+            keys.add(k)
+    if not keys:
+        return set()
+
+    out = set()
+    for d in library or []:
+        cid = d.get("chembl_id")
+        smi = d.get("smiles")
+        if not (cid and smi):
+            continue
+        k = key_of(smi)
+        if k and k in keys:
+            out.add(cid)
+    return out
+
+
 def screen_gene_product(client, gene: str, *, uniprot: str | None = None,
                         goal: str = "up", library: list[dict] | None = None,
                         actives: list[dict] | None = None,
@@ -693,8 +749,17 @@ def screen_gene_product(client, gene: str, *, uniprot: str | None = None,
                           "`python -m promoter_tf_drugs.localdrugs "
                           "--merge FILE...`.")}
 
+    # By structure, not by id: see match_actives_to_library. Falling back
+    # to whatever ids the actives carry keeps the cheap path working when
+    # both sides came from the same source.
     active_ids = {a["chembl_id"] for a in actives if a.get("chembl_id")}
+    active_ids |= match_actives_to_library(actives, lib)
     pool = [d for d in lib if d.get("chembl_id") not in active_ids]
+    if not active_ids:
+        log.warning(
+            "none of %s's %d active(s) could be matched to the library by "
+            "id or by structure, so the decoys are not guaranteed free of "
+            "real binders", sym, len(actives))
     rng = random.Random(seed)
     decoys = rng.sample(pool, min(len(pool), len(actives) * decoy_ratio))
 
@@ -784,6 +849,7 @@ def screen_gene_product(client, gene: str, *, uniprot: str | None = None,
         "is_gene_product": True,
         "hits": [h.to_dict() for h in hits],
         "n_actives": len(actives), "n_decoys": len(decoys),
+        "n_actives_in_library": len(active_ids),
         "library_size": len(lib),
         "model_auc": round(auc, 3) if auc is not None else None,
         "n_known_recovered": len(known_back),

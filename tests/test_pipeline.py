@@ -10127,8 +10127,11 @@ def test_no_test_helper_is_defined_twice_in_this_file():
     import collections
     from pathlib import Path
     src = Path(__file__).read_text(encoding="utf-8")
+    # Classes too: a second `class _FakeClient` shadowed the first and
+    # broke two unrelated tests, the same way a second `def _dock_run`
+    # had. Checking only functions missed it.
     names = [n.name for n in ast.parse(src).body
-             if isinstance(n, ast.FunctionDef)]
+             if isinstance(n, (ast.FunctionDef, ast.ClassDef))]
     dupes = [n for n, c in collections.Counter(names).items() if c > 1]
     assert not dupes, f"defined more than once: {dupes}"
 
@@ -11561,3 +11564,136 @@ def test_a_thin_target_is_not_blamed_on_a_missing_file():
         actives=[{"chembl_id": "A1", "smiles": "CCN", "pchembl": 8.0}])
     assert res["source"] == "supplied by the caller"
     assert "thin target rather than a missing file" in res["error"]
+
+
+# ===================================================================== #
+# BindingDB, fetched per target rather than downloaded whole.            #
+# ===================================================================== #
+def _bdb_response(uniprot="P51681", n=3):
+    return {"getLindsByUniprotResponse": {
+        "bdb.primary": uniprot, "bdb.hit": str(n),
+        "bdb.affinities": [
+            {"bdb.monomerid": str(1000 + i), "bdb.smile": "C" * (i + 2) + "O",
+             "bdb.affinity_type": "IC50", "bdb.affinity": str(10 * (i + 1))}
+            for i in range(n)]}}
+
+
+class _FakeBdbClient:
+    def __init__(self, payload):
+        self.payload = payload
+        self.calls = []
+
+    def get(self, url, params=None, **kw):
+        self.calls.append((url, dict(params or {})))
+        return self.payload
+
+
+def test_the_fetch_merges_into_the_file_already_in_use(tmp_path,
+                                                       monkeypatch):
+    """`resolve` returns the first path that EXISTS, so writing to the
+    first CANDIDATE path created a second file that shadowed it - adding
+    CCR5 took ESR1 from 2,020 actives to zero, because the new file won
+    the lookup and held only CCR5."""
+    from promoter_tf_drugs import localpotency as lp
+    monkeypatch.chdir(tmp_path)
+    d = tmp_path / "data"
+    d.mkdir()
+    tab, nl = chr(9), chr(10)
+    existing = d / "bindingdb.tsv"
+    existing.write_text(
+        tab.join(["UniProt (SwissProt) Primary ID of Target Chain",
+                  "Ligand SMILES", "ChEMBL ID of Ligand", "Ki (nM)"]) + nl
+        + tab.join(["P03372", "CCCC", "CHEMBL1", "5"]) + nl,
+        encoding="utf-8")
+    assert lp.resolve() == str(existing).replace(str(tmp_path) + chr(92),
+                                                 "") or lp.resolve()
+
+    acc = lp.fetch_bindingdb(_FakeBdbClient(_bdb_response()), ["P51681"])
+    assert acc["rows_before"] == 1, "the existing rows were not read"
+    assert acc["added"] == 3
+    # One file, both targets.
+    assert not (d / "BindingDB_All.tsv").exists(), "a shadow file appeared"
+    assert len(lp.actives_for("P03372", min_pchembl=0)) == 1
+    assert len(lp.actives_for("P51681", min_pchembl=0)) == 3
+
+
+def test_the_fetch_keeps_columns_the_existing_file_had(tmp_path,
+                                                       monkeypatch):
+    from promoter_tf_drugs import localpotency as lp
+    monkeypatch.chdir(tmp_path)
+    d = tmp_path / "data"
+    d.mkdir()
+    tab, nl = chr(9), chr(10)
+    (d / "bindingdb.tsv").write_text(
+        tab.join(["UniProt (SwissProt) Primary ID of Target Chain",
+                  "Ligand SMILES", "ChEMBL ID of Ligand", "Ki (nM)"]) + nl
+        + tab.join(["P03372", "CCCC", "CHEMBL1", "5"]) + nl,
+        encoding="utf-8")
+    lp.fetch_bindingdb(_FakeBdbClient(_bdb_response()), ["P51681"])
+    head = (d / "bindingdb.tsv").read_text(
+        encoding="utf-8").splitlines()[0]
+    assert "ChEMBL ID of Ligand" in head, "an existing column was dropped"
+    assert "BindingDB MonomerID" in head
+
+
+def test_a_failed_target_does_not_lose_the_others(tmp_path, monkeypatch):
+    from promoter_tf_drugs import localpotency as lp
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data").mkdir()
+
+    class _Boom(_FakeBdbClient):
+        def get(self, url, params=None, **kw):
+            if params and params.get("uniprot") == "BAD":
+                raise RuntimeError("upstream is down")
+            return self.payload
+
+    acc = lp.fetch_bindingdb(_Boom(_bdb_response()), ["BAD", "P51681"])
+    assert "failed" in str(acc["targets"]["BAD"])
+    assert acc["targets"]["P51681"] == 3
+    assert acc["added"] == 3
+
+
+# ===================================================================== #
+# Actives matched to the library by structure, not by a source's id.     #
+# ===================================================================== #
+def test_actives_match_the_library_by_structure_not_by_id():
+    """BindingDB numbers ligands with MonomerIDs and ChEMBL with CHEMBL
+    ids, and the two write different canonical SMILES. For CCR5, zero of
+    254 actives matched the library on either - so no known ligand was
+    recognised, and the decoy pool, which is built by EXCLUDING the
+    actives, could hand a real binder to the model as a negative."""
+    import pytest
+    pytest.importorskip("rdkit")
+    from promoter_tf_drugs import screening as scr
+    # Same molecule, different source spellings and different ids.
+    actives = [{"chembl_id": None, "smiles": "OC(=O)Cc1ccccc1",
+                "pchembl": 8.0}]
+    lib = [{"name": "same", "chembl_id": "CHEMBL_A",
+            "smiles": "c1ccccc1CC(O)=O"},
+           {"name": "other", "chembl_id": "CHEMBL_B", "smiles": "CCCCCCO"}]
+    got = scr.match_actives_to_library(actives, lib)
+    assert got == {"CHEMBL_A"}, got
+
+
+def test_a_salt_form_still_matches_its_parent():
+    import pytest
+    pytest.importorskip("rdkit")
+    from promoter_tf_drugs import screening as scr
+    actives = [{"smiles": "CN(C)C(=N)NC(N)=N", "pchembl": 8.0}]
+    lib = [{"name": "salt", "chembl_id": "C1",
+            "smiles": "CN(C)C(=N)NC(N)=N.Cl"}]
+    assert scr.match_actives_to_library(actives, lib) == {"C1"}
+
+
+def test_an_unmatchable_active_set_warns_rather_than_silently_passing(
+        caplog):
+    import logging
+    from promoter_tf_drugs import screening as scr
+    with caplog.at_level(logging.WARNING):
+        scr.screen_gene_product(
+            None, "X", uniprot="P1",
+            library=[{"name": "a", "smiles": "CCCCCCCCO",
+                      "chembl_id": "C1"}],
+            actives=[{"smiles": "c1ccccc1" + "C" * i, "pchembl": 8.0}
+                     for i in range(25)])
+    assert "not guaranteed free of real binders" in caplog.text
