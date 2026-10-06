@@ -10803,3 +10803,42 @@ def test_routes_carry_a_checked_approval_field():
     built = cat.build(block, goal="down")
     for r in built["routes"]:
         assert "approval_verified" in r
+
+
+def test_strict_carries_the_burden_criterion():
+    """It is the criterion that takes a real CCR5 shortlist from 21 rows
+    to 4, so a silent removal would be a large regression that no count
+    assertion elsewhere would notice."""
+    from promoter_tf_drugs import shortlist as sl
+    assert sl.PRESETS["strict"].get("max_burden") == "moderate"
+
+
+def test_strict_drops_a_cytotoxic_and_keeps_the_direct_agent():
+    """The shape of the real result: the tier-1 agent on the gene itself
+    survives while an antiproliferative reaching it through a factor's
+    abundance does not. A filter that cleaned up by removing everything
+    would pass a count assertion and be useless."""
+    from promoter_tf_drugs import shortlist as sl
+    rows = [
+        {"drug": "Maraviroc", "tier": 1, "score": 60.0, "category":
+         "direct: gene product", "axes": {"specificity": 0.55},
+         "directness": 0, "grade": "A", "_notes": "", "_chip_known": False,
+         "burden": "low", "_burden_assessed": False, "approved": True,
+         "mechanism": "CCR5 antagonist", "acts_on": "CCR5"},
+        {"drug": "dinaciclib", "tier": 3, "score": 35.0, "category":
+         "TF: abundance change", "axes": {"specificity": 0.45},
+         "directness": 1, "grade": None, "_notes": "", "_chip_known": False,
+         "burden": "high", "_burden_assessed": True, "approved": True,
+         "mechanism": "lowers RBPJ transcript", "acts_on": "RBPJ"},
+    ]
+    kept = [r["drug"] for r in sl.filter_rows(rows, **sl.PRESETS["strict"])]
+    assert kept == ["Maraviroc"], kept
+
+
+def test_the_other_presets_are_left_alone():
+    """strict is the one that answers "what would I order next week?".
+    `novel` and `empirical` exist to show what is there, so silently
+    narrowing them would hide the thing they are for."""
+    from promoter_tf_drugs import shortlist as sl
+    for name in ("mechanism", "empirical", "novel", "specific"):
+        assert "max_burden" not in sl.PRESETS[name], name

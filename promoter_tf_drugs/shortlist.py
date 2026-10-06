@@ -10,7 +10,11 @@ The presets are opinionated on purpose. Each encodes a different question:
 
   strict      "what would I actually order next week?" Evidence tier 1-3,
               grade A/B, no withdrawn or black-box drugs, no direction
-              conflicts, TF must have measured binding at the promoter.
+              conflicts, TF must have measured binding at the promoter, and
+              no drug whose clinical burden is high — cytotoxics and
+              oncology kinase inhibitors move most factors' abundance
+              whatever they are aimed at, so they crowd a signature-derived
+              list without being evidence about your gene.
               Usually returns single digits, and often zero — which is a real
               answer about your gene, not a failure of the filter.
 
@@ -51,6 +55,18 @@ PRESETS = {
         # Genome-wide agents have no letter grade, so without this they slip
         # through the grade filter on a technicality despite specificity ~0.05.
         "exclude_categories": ["chromatin-level"], "min_specificity": 0.3,
+        # A cytotoxic or an oncology kinase inhibitor moves the abundance
+        # of a great many transcription factors, because that is what
+        # stopping a cell dividing does. So they dominate an
+        # expression-signature shortlist without being evidence of a route
+        # to any one gene, and for a chronic target they are the wrong end
+        # of the library. On a real CCR5 run this criterion alone took the
+        # list from 21 rows to 4 and left the tier-1 answer standing.
+        #
+        # Drugs the class table does not list still pass: it is
+        # hand-maintained, so membership is evidence of burden and
+        # non-membership is not evidence of its absence.
+        "max_burden": "moderate",
     },
     "mechanism": {
         "max_tier": 4, "require_mechanism": True,
