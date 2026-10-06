@@ -268,43 +268,46 @@ def _docking_binary() -> str | None:
     return None
 
 
-def dock_one(receptor_pdb: Path, ligand_sdf: Path, *, autobox_ligand: Path | None = None,
+def dock_one(receptor_pdb: Path, ligand_sdf: Path, *,
+             autobox_ligand: Path | None = None,
              exhaustiveness: int = 16, seed: int = 0,
              cpu: int = 1) -> float | None:
-    """Run one docking job; return the best score in kcal/mol."""
+    """Run one docking job; return the best score in kcal/mol.
+
+    Goes through `_run_dock` rather than calling the binary directly,
+    because the binary may live in WSL. Handing a Windows-side
+    subprocess a path like /home/u/bin/gnina raises FileNotFoundError,
+    and the caller catches that and records None - so every compound in
+    a library scores None and the run reports an empty screen rather
+    than a broken one.
+    """
     binary = _docking_binary()
     if binary is None:
         raise RuntimeError(
-            "no docking binary found on PATH. Install smina "
-            "(https://github.com/mwaskom/smina) or AutoDock Vina and make sure "
-            "it is callable as 'smina' or 'vina'."
-        )
+            "no docking binary found. " + SETUP)
+
+    from . import wsldock as _wsl
+    conv = _wsl.to_wsl_path if binary.startswith("/") else (lambda q: str(q))
 
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "docked.sdf"
-        cmd = [binary, "-r", str(receptor_pdb), "-l", str(ligand_sdf),
-               "-o", str(out), "--exhaustiveness", str(exhaustiveness),
-               "--seed", str(seed), "--cpu", str(cpu)]
-        # Box: reuse the crystallographic ligand when we have one, which is the
-        # only reliable way to place the box on the orthosteric pocket.
+        args = ["-r", conv(receptor_pdb), "-l", conv(ligand_sdf),
+                "-o", conv(out), "--exhaustiveness", str(exhaustiveness),
+                "--seed", str(seed), "--cpu", str(cpu)]
+        # Box: reuse the crystallographic ligand when we have one, which
+        # is the only reliable way to place the box on the orthosteric
+        # pocket.
         if autobox_ligand:
-            cmd += ["--autobox_ligand", str(autobox_ligand), "--autobox_add", "4"]
-        try:
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
-        except subprocess.TimeoutExpired:
-            log.warning("docking timed out: %s", receptor_pdb.name)
+            args += ["--autobox_ligand", conv(autobox_ligand),
+                     "--autobox_add", "4"]
+        if "gnina" in binary:
+            args += ["--cnn_scoring", "rescore"]
+        stdout, sdf = _run_dock(binary, args, out)
+        if stdout is None:
             return None
-        if proc.returncode != 0:
-            log.warning("docking failed (%s): %s", receptor_pdb.name,
-                        proc.stderr.strip()[:200])
-            return None
-
-        scores = [float(m.group(1)) for m in
-                  re.finditer(r"minimizedAffinity[^\d\-]*(-?\d+\.\d+)", out.read_text())]
-        if not scores:
-            scores = [float(m.group(1)) for m in
-                      re.finditer(r"^\s+1\s+(-?\d+\.\d+)", proc.stdout, re.M)]
-        return min(scores) if scores else None
+        poses = _parse_poses(sdf, stdout, engine_name(binary))
+        affinities = [q.affinity for q in poses if q.affinity is not None]
+        return min(affinities) if affinities else None
 
 
 @dataclass
@@ -721,6 +724,13 @@ MIN_DOCKING_AUC = 0.70
 MIN_EF1 = 2.0
 MIN_VALIDATION_ACTIVES = 5
 
+# Above this the gate is sampled rather than run whole. Sixty actives
+# against ten times as many decoys puts the standard error on the AUC at
+# roughly 0.02, which is far finer than the distinction being made, and
+# a target with thousands of measured ligands would otherwise spend more
+# docking on the gate than on the library it is gating.
+MAX_VALIDATION_ACTIVES = 60
+
 
 def roc_auc(scores: list, labels: list, *, lower_is_better: bool = True
             ) -> float | None:
@@ -1048,6 +1058,45 @@ SOLVENTS = frozenset({
 # that marks out a drug-sized pocket.
 MIN_LIGAND_ATOMS = 10
 
+# Modified amino acids. These are part of the polypeptide and are written
+# as HETATM only because they are non-standard, so a box placed on one
+# sits on the protein rather than in a pocket. CCR5 found this the
+# expensive way: its N-terminal structures carry sulfated tyrosines, and
+# TYS was selected as the co-crystallised ligand.
+#
+# Hand-maintained and certainly incomplete. A residue missing from here
+# is treated as a ligand, which is the failure this exists to catch, so
+# it is worth extending when a screen chooses something odd.
+MODIFIED_RESIDUES = frozenset({
+    "MSE", "SEC", "PYL",                      # selenium, rare encodings
+    "TYS", "PTR", "SEP", "TPO", "NEP",        # sulfation, phosphorylation
+    "CSO", "CSD", "CSX", "OCS", "CME", "SMC", "SNC", "CAS", "CSS",
+    "KCX", "LLP", "MLY", "M3L", "MLZ", "ALY", "DM0",
+    "HYP", "PCA", "FME", "CGU", "HIC", "MHO", "TPQ", "DAH", "ABA",
+    "AIB", "SAC", "ORN", "DAL", "DLE", "DVA", "DPR", "MVA", "NLE",
+    "PHD", "AGM", "2MR", "DDE", "SCY", "YCM", "CZZ", "MGN",
+})
+
+
+# Lipids, detergents and cryoprotectant fragments that come from the
+# crystallisation rather than from biology. A membrane protein solved in
+# a lipidic cubic phase is full of monoolein, and it lies against the
+# outside of the protein, so a box placed on one screens the membrane
+# face instead of the pocket.
+#
+# NOT excluded, only ranked last. For a lipid receptor the fatty acid is
+# the real ligand, and a blanket rule would throw away the structure that
+# answers the question. Where nothing else is present the choice is still
+# made and flagged.
+CRYSTALLISATION_ADDITIVES = frozenset({
+    "OLC", "OLA", "OLB", "MOH", "D10", "D12", "DD9", "R16", "PLM",
+    "STE", "MYR", "DAO", "LDA", "LMT", "LMU", "BNG", "BOG", "OCT",
+    "C8E", "9BA", "12P", "PE4", "PEU", "P6G", "2PE", "7PE", "15P",
+    "CLR", "CHD", "CHS", "Y01", "HC3",
+    "PC1", "PEE", "PGW", "PGV", "POV", "PLC", "LHG", "DGA", "3PE",
+    "SQU", "TRD", "UND", "HEX", "HEZ", "DKA", "LI1", "HTG", "SOG",
+})
+
 
 def hetatm_groups(pdb_text: str) -> list:
     """Every non-solvent HETATM group, largest first.
@@ -1058,10 +1107,19 @@ def hetatm_groups(pdb_text: str) -> list:
     """
     groups: dict = {}
     for line in pdb_text.splitlines():
+        # An NMR entry holds many models of the same atoms. Keyed on
+        # (resname, chain, resi) they all pool into one group, so a
+        # sixteen-atom residue in a ten-model file counts as a
+        # hundred and sixty atoms and its centre is averaged across ten
+        # different conformations - a point no model occupies. Since the
+        # largest group is taken as the ligand, that makes every
+        # multi-model structure outrank a real crystal ligand.
+        if line.startswith("ENDMDL"):
+            break
         if not line.startswith("HETATM"):
             continue
         resn = line[17:20].strip().upper()
-        if resn in SOLVENTS:
+        if resn in SOLVENTS or resn in MODIFIED_RESIDUES:
             continue
         element = line[76:78].strip().upper() if len(line) >= 78 else ""
         if element == "H":
@@ -1086,10 +1144,27 @@ def hetatm_groups(pdb_text: str) -> list:
 
 
 def best_ligand(pdb_text: str) -> dict | None:
-    """The HETATM group most likely to mark the orthosteric pocket."""
-    for g in hetatm_groups(pdb_text):
-        if g["n_atoms"] >= MIN_LIGAND_ATOMS:
+    """The HETATM group most likely to mark the orthosteric pocket.
+
+    A real ligand beats a crystallisation additive of any size. Monoolein
+    in a GPCR structure is routinely the largest group in the file and
+    lies against the membrane face, so taking the largest outright
+    screens the outside of the protein.
+
+    An additive is still returned when it is all there is, carrying
+    `additive: True`, because for a lipid receptor it may be the genuine
+    ligand. The caller decides what that is worth; it is not silently
+    presented as an orthosteric pocket.
+    """
+    groups = [g for g in hetatm_groups(pdb_text)
+              if g["n_atoms"] >= MIN_LIGAND_ATOMS]
+    for g in groups:
+        if g["resname"] not in CRYSTALLISATION_ADDITIVES:
+            g["additive"] = False
             return g
+    if groups:
+        groups[0]["additive"] = True
+        return groups[0]
     return None
 
 
@@ -1173,54 +1248,38 @@ def dock_one_boxed(receptor_pdb: Path, ligand_sdf: Path, box: tuple, *,
     """Dock into an explicit box, so the command works on any of the three.
 
     smina and gnina accept a PDB receptor and an SDF ligand and do the
-    atom typing themselves. AutoDock Vina wants PDBQT for both, which is a
-    separate preparation step, so it is detected and refused here with an
-    instruction rather than failing inside the binary.
+    atom typing themselves. AutoDock Vina wants PDBQT for both, which is
+    a separate preparation step, so it is detected and refused here with
+    an instruction rather than failing inside the binary.
+
+    Returns the empirical affinity, for compatibility with every caller
+    that ranks on it. `dock_one_scored` returns the CNN numbers too.
     """
     binary = _docking_binary()
     if binary is None:
         raise RuntimeError(
-            "no docking binary found on PATH. See docking.SETUP for what to "
-            "install.")
+            "no docking binary found. " + SETUP)
     eng = engine_name(binary)
     if eng == "vina":
-        # Vina wants PDBQT for both files. That conversion is available on
-        # Windows without WSL, so this is no longer a refusal: the ligand
-        # goes through Meeko and the receptor through Meeko or Open Babel.
+        # Vina wants PDBQT for both files. That conversion is available
+        # on Windows without WSL, so this is no longer a refusal: the
+        # ligand goes through Meeko and the receptor through Meeko or
+        # Open Babel.
         raise _NeedsVinaPath(
             "AutoDock Vina needs PDBQT input; use dock_one_vina, which "
             "prepares it.")
 
-    cx, cy, cz, sx, sy, sz = box
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "docked.sdf"
-        cmd = [binary, "-r", str(receptor_pdb), "-l", str(ligand_sdf),
-               "-o", str(out),
-               "--center_x", f"{cx:.3f}", "--center_y", f"{cy:.3f}",
-               "--center_z", f"{cz:.3f}",
-               "--size_x", f"{sx:.3f}", "--size_y", f"{sy:.3f}",
-               "--size_z", f"{sz:.3f}",
-               "--exhaustiveness", str(exhaustiveness),
-               "--seed", str(seed), "--cpu", str(cpu)]
-        try:
-            proc = subprocess.run(cmd, capture_output=True, text=True,
-                                  timeout=1800)
-        except subprocess.TimeoutExpired:
-            log.warning("docking timed out: %s", receptor_pdb.name)
+        args = _dock_args(binary, receptor_pdb, ligand_sdf, out, box,
+                          exhaustiveness=exhaustiveness, seed=seed,
+                          cpu=cpu)
+        stdout, sdf = _run_dock(binary, args, out)
+        if stdout is None:
             return None
-        if proc.returncode != 0:
-            log.warning("docking failed (%s): %s", receptor_pdb.name,
-                        proc.stderr.strip()[:200])
-            return None
-        text = out.read_text() if out.exists() else ""
-        scores = [float(m.group(1)) for m in
-                  re.finditer(r"minimizedAffinity[^\d\-]*(-?\d+\.\d+)",
-                              text)]
-        if not scores:
-            scores = [float(m.group(1)) for m in
-                      re.finditer(r"^\s+1\s+(-?\d+\.\d+)", proc.stdout,
-                                  re.M)]
-        return min(scores) if scores else None
+        poses = _parse_poses(sdf, stdout, eng)
+        affinities = [q.affinity for q in poses if q.affinity is not None]
+        return min(affinities) if affinities else None
 
 
 # ===================================================================== #
@@ -1389,8 +1448,17 @@ def dock_one_vina(receptor_pdb: Path, smiles: str, box: tuple, *,
     """
     binary = shutil.which("vina") or shutil.which("vina.exe")
     if binary is None:
-        raise RuntimeError("vina not found on PATH. "
-                           + VINA_SETUP_WINDOWS)
+        # A vina inside WSL is still a vina. The PDBQT files are written
+        # on the Windows side and WSL reads them under /mnt/c, so the
+        # only difference is how the binary is invoked.
+        from . import wsldock as _wsl
+        try:
+            _, binary = _wsl.find_binary(prefer="vina")
+        except Exception:                                   # noqa: BLE001
+            binary = None
+        if binary is None or "vina" not in binary:
+            raise RuntimeError("vina not found on PATH. "
+                               + VINA_SETUP_WINDOWS)
 
     cache = receptor_pdbqt_cache if receptor_pdbqt_cache is not None else {}
     key = str(receptor_pdb)
@@ -1414,22 +1482,19 @@ def dock_one_vina(receptor_pdb: Path, smiles: str, box: tuple, *,
         lp = Path(tmp) / "lig.pdbqt"
         lp.write_text(lig, encoding="utf-8")
         op = Path(tmp) / "out.pdbqt"
-        cmd = [binary, "--receptor", rec_pdbqt, "--ligand", str(lp),
-               "--out", str(op),
-               "--center_x", f"{cx:.3f}", "--center_y", f"{cy:.3f}",
-               "--center_z", f"{cz:.3f}",
-               "--size_x", f"{sx:.3f}", "--size_y", f"{sy:.3f}",
-               "--size_z", f"{sz:.3f}",
-               "--exhaustiveness", str(exhaustiveness),
-               "--seed", str(seed), "--cpu", str(cpu)]
-        try:
-            proc = subprocess.run(cmd, capture_output=True, text=True,
-                                  timeout=1800)
-        except subprocess.TimeoutExpired:
-            log.warning("vina timed out")
-            return None
-        if proc.returncode != 0:
-            log.warning("vina failed: %s", proc.stderr.strip()[:200])
+        from . import wsldock as _wsl
+        conv = (_wsl.to_wsl_path if binary.startswith("/")
+                else (lambda q: str(q)))
+        args = ["--receptor", conv(rec_pdbqt), "--ligand", conv(lp),
+                "--out", conv(op),
+                "--center_x", f"{cx:.3f}", "--center_y", f"{cy:.3f}",
+                "--center_z", f"{cz:.3f}",
+                "--size_x", f"{sx:.3f}", "--size_y", f"{sy:.3f}",
+                "--size_z", f"{sz:.3f}",
+                "--exhaustiveness", str(exhaustiveness),
+                "--seed", str(seed), "--cpu", str(cpu)]
+        stdout, _unused = _run_dock(binary, args, op)
+        if stdout is None:
             return None
 
         text = op.read_text() if op.exists() else ""
@@ -1437,8 +1502,7 @@ def dock_one_vina(receptor_pdb: Path, smiles: str, box: tuple, *,
                   re.finditer(r"REMARK VINA RESULT:\s+(-?\d+\.\d+)", text)]
         if not scores:
             scores = [float(m.group(1)) for m in
-                      re.finditer(r"^\s+1\s+(-?\d+\.\d+)", proc.stdout,
-                                  re.M)]
+                      re.finditer(r"^\s+1\s+(-?\d+\.\d+)", stdout, re.M)]
         return min(scores) if scores else None
 
 
@@ -1561,6 +1625,7 @@ def choose_pocket(client, uniprot: str, out_dir, *, limit: int = 12,
         return None
 
     best = None
+    best_atoms = (-1, -1)
     filtered_out: list = []
     for pdb_id in ids:
         path = fetch_pdb(client, pdb_id, out_dir)
@@ -1591,11 +1656,26 @@ def choose_pocket(client, uniprot: str, out_dir, *, limit: int = 12,
             ligand_resname=lig["resname"], box=box, state=conf.state,
             note=(f"box placed on {lig['resname']} ({lig['n_atoms']} atoms) "
                   f"in chain {lig['chain']}; conformation {conf.state} "
-                  f"({conf.evidence})"))
+                  f"({conf.evidence})"
+                  + (f". {lig['resname']} is a crystallisation lipid or "
+                     f"detergent, not necessarily a ligand: the box may "
+                     f"be on the membrane-facing surface rather than in "
+                     f"a pocket. Treat a screen against it as unvalidated "
+                     f"unless this target genuinely binds lipids."
+                     if lig.get("additive") else "")))
         # A structure whose conformation is known beats one that is not.
         if conf.state != "unknown":
             return choice
-        best = best or choice
+        # Among the unreadable ones, keep the BEST rather than the first.
+        # For a GPCR every structure is unreadable, so "first" meant
+        # whichever PDB id happened to sort earliest: CCR5 picked a
+        # peptide fragment over 4MBS, which has maraviroc bound. A bigger
+        # co-crystallised ligand is the better evidence of a drug-sized
+        # pocket, which is the only thing being judged here.
+        # A real ligand outranks any additive, regardless of size.
+        rank = (0 if lig.get("additive") else 1, lig["n_atoms"])
+        if best is None or rank > best_atoms:
+            best, best_atoms = choice, rank
 
     if best is None and filtered_out:
         log.info("%s: %d structure(s) with a ligand were excluded for not "
@@ -1609,7 +1689,7 @@ def dock_screen_for_target(client, symbol: str, uniprot: str, library: list,
                            work_dir="docking_work", top_n: int = 25,
                            exhaustiveness: int = 8, seed: int = 0,
                            want_state: str | None = None,
-                           score_fn=None) -> dict:
+                           score_fn=None, cpu: int = 1) -> dict:
     """Gene symbol to a validated, ranked shortlist of approved drugs.
 
     Returns the DockingScreen as a dict, plus which structure was used.
@@ -1631,6 +1711,33 @@ def dock_screen_for_target(client, symbol: str, uniprot: str, library: list,
         # the first pass.
         unfiltered = choose_pocket(client, uniprot, work_dir)
         if unfiltered is not None:
+            if unfiltered.state == "unknown":
+                # Not "the other conformation" - no conformation at all.
+                # The classifier reads coactivator and corepressor
+                # peptides, which only nuclear receptors carry, so for a
+                # GPCR or a kinase it returns unknown for every
+                # structure. Reporting that as "none in the inactive
+                # conformation" would turn a measurement that was never
+                # made into a negative result.
+                return {
+                    "target": symbol, "usable": False,
+                    "excluded_by_conformation": True,
+                    "conformation_unreadable": True,
+                    "error": (
+                        f"{symbol} ({uniprot}) has a structure with a "
+                        f"co-crystallised ligand ({unfiltered.pdb_id}), "
+                        f"but its conformation could not be read, and "
+                        f"the {want_state} conformation was asked for. "
+                        f"This is not a finding about the structure: the "
+                        f"classifier works by spotting a coactivator or "
+                        f"corepressor peptide, which only nuclear "
+                        f"receptors carry, so every structure of a GPCR, "
+                        f"a kinase or an enzyme comes back unknown. "
+                        f"Nothing was measured and nothing is claimed. "
+                        f"Dock it anyway with --state any, which reports "
+                        f"the conformation as unverified and withholds "
+                        f"the direction claim that depends on it."),
+                }
             return {
                 "target": symbol, "usable": False,
                 "excluded_by_conformation": True,
@@ -1638,12 +1745,12 @@ def dock_screen_for_target(client, symbol: str, uniprot: str, library: list,
                     f"{symbol} ({uniprot}) has a structure with a "
                     f"co-crystallised ligand ({unfiltered.pdb_id}, "
                     f"conformation {unfiltered.state}), but none in the "
-                    f"{want_state} conformation that was asked for. "
-                    f"Docking the other conformation would answer a "
+                    f"{want_state} conformation that was asked for. That "
+                    f"IS a finding: the structure was classified and it "
+                    f"is the other one. Docking it would answer a "
                     f"different question, so it is refused rather than "
-                    f"substituted. Pass --state to choose explicitly, or "
-                    f"leave --state and --role out to dock whichever "
-                    f"pocket exists."),
+                    f"substituted. Use --state any to dock it regardless "
+                    f"and have the mismatch recorded."),
             }
     if pocket is None:
         return {
@@ -1655,6 +1762,18 @@ def dock_screen_for_target(client, symbol: str, uniprot: str, library: list,
                       f"is refused rather than approximated."),
         }
 
+    # Sample the gate when the target has more known ligands than it
+    # needs. At random under the seed, never by potency: taking the
+    # tightest binders would make the actives easier to recover and
+    # raise the AUC, which is tuning the gate to pass rather than
+    # measuring whether the pocket works.
+    n_actives_available = len(actives)
+    if len(actives) > MAX_VALIDATION_ACTIVES:
+        actives = random.Random(seed).sample(actives,
+                                             MAX_VALIDATION_ACTIVES)
+        log.info("validation gate sampled %d of %d known ligand(s)",
+                 len(actives), n_actives_available)
+
     if decoys is None:
         rng = random.Random(seed)
         pool = [d for d in library
@@ -1664,10 +1783,24 @@ def dock_screen_for_target(client, symbol: str, uniprot: str, library: list,
     run = screen_by_docking(
         Path(pocket.path), library, target=symbol, actives=actives,
         decoys=decoys, top_n=top_n, exhaustiveness=exhaustiveness,
+        cpu=cpu,
         seed=seed, score_fn=score_fn,
         box=pocket.box)
     out = run.to_dict()
     out["pocket"] = pocket.to_dict()
+    # Whether the pocket's conformation was READ, not merely accepted.
+    # A screen run with --state any against an unreadable structure is
+    # still a screen; it just cannot support a claim about direction,
+    # and the difference has to survive into the saved result.
+    out["n_actives_available"] = n_actives_available
+    out["n_actives_used_for_gate"] = len(actives)
+    out["conformation_verified"] = pocket.state in ("active", "inactive")
+    if not out["conformation_verified"]:
+        out["conformation_caveat"] = (
+            "The conformation of this structure could not be read, so "
+            "nothing here says whether a hit would activate or inhibit. "
+            "Binding and direction are different questions, and only the "
+            "first was addressed.")
     return out
 
 
@@ -1980,13 +2113,17 @@ def main(argv=None) -> int:
     p.add_argument("--gene", help="receptor gene symbol, e.g. VDR or RARA")
     p.add_argument("--uniprot",
                    help="UniProt accession, if the symbol does not resolve")
-    p.add_argument("--state", choices=["active", "inactive"],
+    p.add_argument("--state", choices=["active", "inactive", "any"],
                    help="dock into the agonist-bound (active) or "
                         "antagonist-bound (inactive) conformation. Leave it "
                         "out and it is derived from --direction and the "
                         "factor's role, which is what decides it: to raise "
                         "a gene you want an ACTIVATOR active and a "
-                        "REPRESSOR inactive")
+                        "REPRESSOR inactive. 'any' docks whichever pocket "
+                        "exists and records the conformation as unverified "
+                        "- needed for GPCRs, kinases and enzymes, whose "
+                        "conformation this cannot read, and it withholds "
+                        "the direction claim rather than guessing it")
     p.add_argument("--direction", choices=["up", "down"], default="up",
                    help="which way you want YOUR GENE to move (default up). "
                         "Used with the factor's role to pick the "
@@ -2058,7 +2195,14 @@ def main(argv=None) -> int:
     # sites below cannot disagree.
     want_state = args.state
     state_note = "set explicitly with --state"
-    if want_state is None and args.product:
+    if want_state == "any":
+        # An explicit opt-out, not an absence of one. Left as None it
+        # would fall into the derivation below and come back as exactly
+        # the state the user asked to stop filtering on.
+        want_state = None
+        state_note = ("not filtered, by request: the conformation is "
+                      "recorded as unverified and no direction is claimed")
+    elif want_state is None and args.product:
         want_state = state_for_product(args.direction)
         state_note = (f"the gene's own product, to move its activity "
                       f"{args.direction}")
@@ -2147,14 +2291,44 @@ def main(argv=None) -> int:
 
     print(f"Receptor  : {symbol} ({uniprot})")
 
-    # The validation set: this receptor's own measured ligands.
+    # The library first: it is also where this target's known ligands
+    # come from, so resolving the actives before loading it read
+    # `local_rows` before it was assigned and the whole command died.
     from . import localdrugs as ld
+    local_rows = ld.library(args.library)
+    if local_rows:
+        library = [{"name": d["name"], "smiles": d["smiles"]}
+                   for d in local_rows[:args.library_limit]]
+        print(f"Library from a local table: {len(library)} compound(s)")
+    else:
+        from .screening import approved_library
+        library = approved_library(client)[:args.library_limit]
+    print(f"Approved library: {len(library)} compound(s)")
+
+    # The validation set: this receptor's own measured ligands.
     actives: list = []
     if args.actives:
         actives = [{"smiles": a["smiles"], "pchembl": None}
                    for a in ld.read_table(args.actives, approved_only=False)]
     elif local_rows:
         actives = ld.actives_for(symbol, local_rows)
+    if not actives:
+        # The local potency tables, before the network. BindingDB holds
+        # thousands of measured ligands for targets the drug table
+        # annotates with none, and going online for them when they are
+        # already on disk makes an offline run refuse a target it could
+        # have validated.
+        from . import localpotency as _lp
+        try:
+            rows = _lp.actives_for(uniprot)
+        except Exception as exc:                            # noqa: BLE001
+            log.warning("local potency lookup failed: %s", str(exc)[:120])
+            rows = []
+        if rows:
+            actives = [{"smiles": r["smiles"], "pchembl": r.get("pchembl")}
+                       for r in rows if r.get("smiles")]
+            print(f"Known ligands from a local potency table: "
+                  f"{len(actives)}")
     if not actives:
         from .drugs import _chembl_targets
         tids = _chembl_targets(client, symbol, uniprot)
@@ -2168,24 +2342,21 @@ def main(argv=None) -> int:
               f"confident nonsense, so nothing is reported.")
         return 1
 
-    from . import localdrugs as ld
-    local_rows = ld.library(args.library)
-    if local_rows:
-        library = [{"name": d["name"], "smiles": d["smiles"]}
-                   for d in local_rows[:args.library_limit]]
-        print(f"Library from a local table: {len(library)} compound(s)")
-    else:
-        from .screening import approved_library
-        library = approved_library(client)[:args.library_limit]
-    print(f"Approved library: {len(library)} compound(s)")
-    print(f"\nThis will run roughly {len(library) + len(actives) * 11} "
-          f"docking jobs. At a few seconds each that is "
-          f"{(len(library) + len(actives) * 11) * 4 // 60} minutes or more.\n")
+    # The gate is sampled, so the estimate has to use the capped
+    # count or it reports several times the work to be done.
+    n_gate = min(len(actives), MAX_VALIDATION_ACTIVES)
+    n_jobs = (len(library) + n_gate
+              + min(len(library), max(50, n_gate * 10)))
+    print(f"\nThis will run roughly {n_jobs} docking jobs "
+          f"({len(library)} library, {n_gate} known ligand(s) and "
+          f"their decoys for the validation gate). At a few seconds "
+          f"each that is {n_jobs * 4 // 60} minutes or more.\n")
 
     res = dock_screen_for_target(
         client, symbol, uniprot, library, actives=actives,
         work_dir=args.work_dir, top_n=args.top,
-        exhaustiveness=args.exhaustiveness, want_state=want_state)
+        exhaustiveness=args.exhaustiveness, want_state=want_state,
+        cpu=args.cpu)
 
     _report(res, args.top)
 

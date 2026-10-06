@@ -31,6 +31,7 @@ from . import (annotate, catalogue as cat_mod, cellcycle, congeners as cong_mod,
                regulon as regulon_mod,
                screens as screens_mod, signatures as sig_mod,
                stabilizers as stab_mod)
+from . import validation as _validation
 from .http import Client
 
 log = logging.getLogger(__name__)
@@ -164,6 +165,114 @@ def score_tf(res: TFResult, has_chip: bool, goal: str = "up") -> float:
     return s
 
 
+# ===================================================================== #
+# What run() accepts.                                                   #
+# ===================================================================== #
+# fifty-eight arguments, of which about fifteen used to be enforced by a
+# block of hand-written checks below. The annotations covered the rest
+# and Python never read them, so `upstream="1000"` reached the window
+# arithmetic and failed somewhere that looked unrelated.
+#
+# `why` carries what a bad value DOES, which is the part that is not
+# obvious from the rule. See validation.py for why this is a table here
+# rather than a pydantic model.
+_V = _validation.Spec
+_FLAG = _V("bool")
+
+RUN_SPECS: dict = {
+    "gene": _V("str", why="a symbol like CCR5 or an Ensembl gene ID."),
+    "upstream": _V("int", minimum=0,
+                   why="bases before the TSS; with downstream it sets the "
+                       "scanned window."),
+    "downstream": _V("int", minimum=0,
+                     why="bases after the TSS."),
+    "pvalue": _V("float", minimum=0, maximum=1, exclusive_min=True,
+                 exclusive_max=True,
+                 why="per-base motif threshold. At 1.0 every position "
+                     "calls a site."),
+    "species": _V("str", why="an Ensembl species name."),
+    "pfm_file": _V("path", optional=True, must_exist=True,
+                   why="JASPAR matrices. Without it the motif set is the "
+                       "small bundled one."),
+    "chip_bed": _V("path", optional=True, must_exist=True,
+                   why="measured occupancy. Its absence is not evidence "
+                       "that a factor does not bind."),
+    "matrix_ids": _V("list", optional=True),
+    "all_tss": _FLAG,
+    "mask_repeats": _FLAG,
+    "goal": _V("str", choices=("up", "down"),
+               why="which way you want the gene to move. It decides "
+                   "whether an activator is wanted on or off, so a wrong "
+                   "value inverts every recommendation."),
+    "grade_drugs": _FLAG,
+    "tissue": _V("str", optional=True, choices=("cns",),
+                 why="down-weights drugs unlikely to reach the "
+                     "compartment."),
+    "tf_weight": _V("float", minimum=0, maximum=1,
+                    why="how much factor-level evidence counts against "
+                        "drug-level evidence."),
+    "predict_direction": _FLAG,
+    "regulon_file": _V("path", optional=True, must_exist=True,
+                       why="TF to target mapping."),
+    "include_direct": _FLAG,
+    "estimate_outcome": _FLAG,
+    "screen_receptors": _FLAG,
+    "find_improvements": _FLAG,
+    "chip_api": _FLAG,
+    "compare_mechanisms": _FLAG,
+    "proliferation": _V("str",
+                        choices=("cycling", "post-mitotic", "mixed",
+                                 "unknown"),
+                        why="whether the target cells divide, which "
+                            "decides if an antiproliferative is a "
+                            "mechanism or a side effect."),
+    "allow_unknown_direction": _FLAG,
+    "cell_type_check": _FLAG,
+    "include_stabilizers": _FLAG,
+    "design_screen": _FLAG,
+    "design_modality": _FLAG,
+    "use_lincs": _FLAG,
+    "signature_file": _V("path", optional=True, must_exist=True),
+    "lincs_file": _V("path", optional=True, must_exist=True),
+    "lincs_geneinfo": _V("any", optional=True),
+    "tf_activity": _FLAG,
+    "depmap_file": _V("path", optional=True),
+    "prism_file": _V("path", optional=True),
+    "sensitivity_scan": _FLAG,
+    "screen_product": _FLAG,
+    "promoter_dna": _FLAG,
+    "docking_results": _V("path", optional=True),
+    "activity_tissue": _V("str", optional=True),
+    "activity_permutations": _V("int", minimum=0,
+                                why="null draws for the activity score. "
+                                    "0 means no empirical p-value is "
+                                    "computed, not that it is 1."),
+    "lincs_gmt": _V("tuple", optional=True),
+    "expression_file": _V("path", optional=True, must_exist=True),
+    "promoter_fasta": _V("path", optional=True),
+    "has_ptc": _V("bool", optional=True,
+                  why="None means unknown, which is different from False. "
+                      "Whether the transcript carries a premature stop "
+                      "decides if raising it helps or makes more truncated "
+                      "protein."),
+    "gtf": _V("path", optional=True),
+    "genome": _V("path", optional=True),
+    "use_genetics": _FLAG,
+    "upstream_network": _FLAG,
+    "upstream_depth": _V("int", minimum=1,
+                         why="how many edges upstream to walk."),
+    "approved_only": _FLAG,
+    "use_dgidb": _FLAG,
+    "use_opentargets": _FLAG,
+    "find_analogs": _FLAG,
+    "demo": _FLAG,
+    "offline": _FLAG,
+    "cache_dir": _V("str", optional=True),
+    "min_ic": _V("float", minimum=0,
+                 why="information content floor for a motif."),
+}
+
+
 def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         pvalue: float = 1e-4, species: str = "homo_sapiens",
         pfm_file: str | None = None, chip_bed: str | None = None,
@@ -202,35 +311,16 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         demo: bool = False, offline: bool = False,
         cache_dir: str | None = None, min_ic: float = 6.0) -> dict:
     """Run the full pipeline and return a JSON-serialisable result dict."""
-    if not isinstance(gene, str) or not gene.strip():
-        raise ValueError("gene must be a non-empty symbol or Ensembl ID")
+    # locals() here is exactly the arguments, before anything else is
+    # bound. Every one is checked against RUN_SPECS, so an annotation
+    # stops being a comment.
+    _validation.check_all(RUN_SPECS, dict(locals()))
     gene = gene.strip()
-    for name, value in (("upstream", upstream), ("downstream", downstream),
-                        ("upstream_depth", upstream_depth)):
-        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-            raise ValueError(f"{name} must be a non-negative integer")
+    # The one rule that spans two arguments, so it has no place in a
+    # per-argument table.
     if upstream + downstream == 0:
-        raise ValueError("upstream and downstream must define a non-empty window")
-    if upstream_depth < 1:
-        raise ValueError("upstream_depth must be at least 1")
-    if not math.isfinite(pvalue) or not 0 < pvalue < 1:
-        raise ValueError("pvalue must be finite and between 0 and 1 (exclusive)")
-    if not math.isfinite(tf_weight) or not 0 <= tf_weight <= 1:
-        raise ValueError("tf_weight must be finite and between 0 and 1")
-    if not math.isfinite(min_ic) or min_ic < 0:
-        raise ValueError("min_ic must be finite and non-negative")
-    if goal not in ("up", "down"):
-        raise ValueError("goal must be 'up' or 'down'")
-    if tissue not in (None, "cns"):
-        raise ValueError("tissue must be None or 'cns'")
-    if proliferation not in ("cycling", "post-mitotic", "mixed", "unknown"):
-        raise ValueError("invalid proliferation state")
-    for name, value in (("pfm_file", pfm_file), ("chip_bed", chip_bed),
-                        ("regulon_file", regulon_file), ("lincs_file", lincs_file),
-                        ("signature_file", signature_file),
-                        ("expression_file", expression_file)):
-        if value is not None and not Path(value).is_file():
-            raise FileNotFoundError(f"{name}: file not found: {value}")
+        raise ValueError(
+            "upstream and downstream must define a non-empty window")
     client = (Client(cache_dir=cache_dir, offline=offline or demo)
               if cache_dir else Client(offline=offline or demo))
 

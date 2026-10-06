@@ -11911,3 +11911,324 @@ def test_a_failed_docking_run_returns_nothing_rather_than_a_zero_score():
     from promoter_tf_drugs import docking as dk
     poses = dk._parse_poses("", "", "gnina")
     assert poses == []
+
+
+# ===================================================================== #
+# Static guards for two bug classes that running the code found and     #
+# eight hundred tests did not.                                          #
+# ===================================================================== #
+_SCOPES = None
+
+
+def _scope_types():
+    """Node types that open a new scope in Python 3."""
+    import ast
+    return (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda,
+            ast.ClassDef, ast.ListComp, ast.SetComp, ast.DictComp,
+            ast.GeneratorExp)
+
+
+def _own_scope_nodes(fn):
+    """Nodes belonging to `fn` itself, not to a nested scope.
+
+    A comprehension has its own scope, and `[s for s in xs]` split over
+    two lines puts the use of `s` above its binding. Treating that as a
+    read-before-assignment produced sixty-five false reports against
+    nine real ones.
+    """
+    import ast
+    out, stack = [], list(ast.iter_child_nodes(fn))
+    while stack:
+        node = stack.pop()
+        out.append(node)
+        if isinstance(node, _scope_types()):
+            continue
+        stack.extend(ast.iter_child_nodes(node))
+    return out
+
+
+def _module_level_names(tree):
+    import ast
+    out = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            for a in node.names:
+                out.add((a.asname or a.name).split(".")[0])
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef,
+                             ast.ClassDef)):
+            out.add(node.name)
+        elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+            targets = (node.targets if isinstance(node, ast.Assign)
+                       else [node.target])
+            for t in targets:
+                for n in ast.walk(t):
+                    if isinstance(n, ast.Name):
+                        out.add(n.id)
+    return out
+
+
+def _reads_before_assignment(path):
+    import ast
+    import builtins
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    outer = _module_level_names(tree) | set(dir(builtins))
+    bad = []
+    for fn in ast.walk(tree):
+        if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        a = fn.args
+        bound = {p.arg for p in a.posonlyargs + a.args + a.kwonlyargs}
+        if a.vararg:
+            bound.add(a.vararg.arg)
+        if a.kwarg:
+            bound.add(a.kwarg.arg)
+        declared, stores, loads = set(), {}, {}
+        for n in _own_scope_nodes(fn):
+            if isinstance(n, (ast.Global, ast.Nonlocal)):
+                declared |= set(n.names)
+            elif isinstance(n, (ast.Import, ast.ImportFrom)):
+                for al in n.names:
+                    nm = (al.asname or al.name).split(".")[0]
+                    if nm not in stores or n.lineno < stores[nm]:
+                        stores[nm] = n.lineno
+            elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef,
+                                ast.ClassDef)):
+                stores.setdefault(n.name, n.lineno)
+            elif isinstance(n, ast.ExceptHandler) and n.name:
+                # The EARLIEST handler binds it; a function with two
+                # `except ... as exc` blocks is not a bug.
+                if n.name not in stores or n.lineno < stores[n.name]:
+                    stores[n.name] = n.lineno
+            elif isinstance(n, ast.Name):
+                if isinstance(n.ctx, (ast.Store, ast.Del)):
+                    if n.id not in stores or n.lineno < stores[n.id]:
+                        stores[n.id] = n.lineno
+                elif isinstance(n.ctx, ast.Load):
+                    if n.id not in loads or n.lineno < loads[n.id]:
+                        loads[n.id] = n.lineno
+        for name, lineno in loads.items():
+            if (name in bound or name in outer or name in declared
+                    or name not in stores):
+                continue
+            if stores[name] > lineno:
+                bad.append(f"{path.name}:{lineno} {fn.name}(): {name!r} "
+                           f"read before its assignment on line "
+                           f"{stores[name]}")
+    return bad
+
+
+def test_no_local_is_read_before_it_is_assigned():
+    """`local_rows` was read fifteen lines above its assignment, so the
+    docking CLI's --gene path died with UnboundLocalError the first time
+    anyone used it. Eight hundred and eighty-five tests passed."""
+    import pathlib
+    from promoter_tf_drugs import __file__ as pkg
+    bad = []
+    for f in sorted(pathlib.Path(pkg).parent.glob("*.py")):
+        bad += _reads_before_assignment(f)
+    assert not bad, "read before assignment: " + "; ".join(bad)
+
+
+def _unread_cli_flags(path):
+    import ast
+    src = path.read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    dests, bad = {}, []
+    for n in ast.walk(tree):
+        if not (isinstance(n, ast.Call)
+                and isinstance(n.func, ast.Attribute)
+                and n.func.attr == "add_argument"):
+            continue
+        dest, skip = None, False
+        for kw in n.keywords:
+            if kw.arg == "dest" and isinstance(kw.value, ast.Constant):
+                dest = kw.value.value
+            if (kw.arg == "action" and isinstance(kw.value, ast.Constant)
+                    and kw.value.value in ("help", "version")):
+                skip = True
+        if dest is None:
+            for arg in n.args:
+                if (isinstance(arg, ast.Constant)
+                        and isinstance(arg.value, str)
+                        and arg.value.startswith("--")):
+                    dest = arg.value[2:].replace("-", "_")
+        if dest and not skip:
+            dests[dest] = n.lineno
+    for dest, lineno in sorted(dests.items()):
+        if (f".{dest}" not in src and f'"{dest}"' not in src
+                and f"'{dest}'" not in src):
+            bad.append(f"{path.name}:{lineno} "
+                       f"--{dest.replace('_', '-')} parsed but never read")
+    return bad
+
+
+def test_every_cli_flag_is_read_somewhere_in_its_module():
+    """--cpu was parsed, documented as "the single biggest speed-up
+    available", and never passed to the function that does the work, so
+    every docking job ran on one core of forty.
+
+    The existing parameter guard cannot see this: the value arrives as
+    an attribute of `args`, which that check skips by design.
+    """
+    import pathlib
+    from promoter_tf_drugs import __file__ as pkg
+    bad = []
+    for f in sorted(pathlib.Path(pkg).parent.glob("*.py")):
+        bad += _unread_cli_flags(f)
+    assert not bad, "CLI flags parsed but never read: " + "; ".join(bad)
+
+
+def test_the_read_before_assignment_guard_catches_the_real_bug(tmp_path):
+    """A guard reporting zero proves nothing until it has gone red."""
+    src = tmp_path / "sample.py"
+    src.write_text(
+        "def main(args):\n"
+        "    if rows:\n"
+        "        pass\n"
+        "    rows = load(args)\n"
+        "    return rows\n", encoding="utf-8")
+    assert any("rows" in b for b in _reads_before_assignment(src))
+    # And a legitimate two-handler function is not flagged.
+    ok = tmp_path / "ok.py"
+    ok.write_text(
+        "def main():\n"
+        "    try:\n"
+        "        a = 1\n"
+        "    except ValueError as exc:\n"
+        "        print(exc)\n"
+        "    try:\n"
+        "        b = 2\n"
+        "    except KeyError as exc:\n"
+        "        print(exc)\n"
+        "    return [s for s in (a, b)]\n", encoding="utf-8")
+    assert _reads_before_assignment(ok) == []
+
+
+def test_the_cli_flag_guard_catches_the_real_bug(tmp_path):
+    src = tmp_path / "cli_sample.py"
+    src.write_text(
+        "import argparse\n"
+        "def build():\n"
+        "    p = argparse.ArgumentParser()\n"
+        "    p.add_argument('--cpu', type=int, default=1)\n"
+        "    p.add_argument('--out')\n"
+        "    return p\n"
+        "def main():\n"
+        "    args = build().parse_args()\n"
+        "    return args.out\n", encoding="utf-8")
+    bad = _unread_cli_flags(src)
+    assert any("--cpu" in b for b in bad), bad
+    assert not any("--out" in b for b in bad), bad
+
+
+# ===================================================================== #
+# run()'s argument contract is a table, and the table cannot drift.     #
+# ===================================================================== #
+def test_every_run_argument_has_a_validation_rule():
+    """The point of the table. run() takes fifty-eight arguments and
+    about fifteen were enforced; the other annotations were comments.
+    A new argument with no rule fails here rather than failing later
+    somewhere that looks unrelated."""
+    from promoter_tf_drugs import pipeline, validation
+    missing, extra = validation.coverage(pipeline.RUN_SPECS, pipeline.run)
+    assert not missing, f"run() arguments with no validation rule: {missing}"
+    assert not extra, f"rules for arguments run() does not take: {extra}"
+
+
+def test_a_flag_given_a_string_is_refused():
+    """Not caught before. `all_tss="yes"` is truthy, so it turned the
+    flag on and the run proceeded - the one case where a bad value
+    silently does something rather than failing."""
+    import pytest
+    from promoter_tf_drugs import pipeline as pl
+    with pytest.raises(ValueError, match="all_tss"):
+        pl.run("CCR5", all_tss="yes", demo=True)
+    with pytest.raises(ValueError, match="activity_permutations"):
+        pl.run("CCR5", activity_permutations="10", demo=True)
+
+
+def test_a_true_flag_is_not_accepted_as_a_window_size():
+    """bool subclasses int, so an unguarded isinstance(x, int) lets True
+    through as 1 and the window silently becomes one base."""
+    import pytest
+    from promoter_tf_drugs import pipeline as pl
+    with pytest.raises(ValueError, match="upstream"):
+        pl.run("CCR5", upstream=True, demo=True)
+
+
+def test_the_old_validation_rules_all_still_hold():
+    """Behaviour preservation for the hand-written block this replaced."""
+    import pytest
+    from promoter_tf_drugs import pipeline as pl
+    bad = [
+        dict(gene=""),
+        dict(gene="X", upstream=-1),
+        dict(gene="X", upstream=0, downstream=0),
+        dict(gene="X", upstream_depth=0),
+        dict(gene="X", pvalue=1.0),
+        dict(gene="X", pvalue=0.0),
+        dict(gene="X", tf_weight=2.0),
+        dict(gene="X", min_ic=-1.0),
+        dict(gene="X", goal="sideways"),
+        dict(gene="X", tissue="liver"),
+        dict(gene="X", proliferation="fast"),
+    ]
+    for kw in bad:
+        with pytest.raises((ValueError, FileNotFoundError)):
+            pl.run(demo=True, **kw)
+
+
+def test_a_missing_input_file_is_a_filenotfounderror_not_a_valueerror():
+    """A missing file and a malformed argument are different problems and
+    the caller usually needs to tell them apart."""
+    import pytest
+    from promoter_tf_drugs import pipeline as pl
+    with pytest.raises(FileNotFoundError, match="pfm_file"):
+        pl.run("CCR5", pfm_file="definitely_not_here.txt", demo=True)
+
+
+def test_none_is_allowed_only_where_it_means_something():
+    """has_ptc=None means unknown, which is not False: whether the
+    transcript carries a premature stop decides whether raising the gene
+    helps or just makes more truncated protein."""
+    from promoter_tf_drugs import validation as v
+    spec = v.Spec("bool", optional=True)
+    v.check("has_ptc", None, spec)            # unknown is a real state
+    v.check("has_ptc", False, spec)
+    import pytest
+    with pytest.raises(ValueError):
+        v.check("has_ptc", "no", spec)
+    with pytest.raises(ValueError, match="must not be None"):
+        v.check("goal", None, v.Spec("str", choices=("up", "down")))
+
+
+def test_a_validator_reports_what_a_bad_value_would_do():
+    """`why` is the part that is not obvious from the rule. A message
+    saying pvalue must be under 1 states the rule; saying that at 1.0
+    every position calls a site says what you got wrong."""
+    import pytest
+    from promoter_tf_drugs import pipeline as pl
+    with pytest.raises(ValueError) as exc:
+        pl.run("CCR5", pvalue=1.0, demo=True)
+    assert "every position" in str(exc.value)
+
+
+def test_validation_does_not_add_a_runtime_dependency():
+    """The package keeps NumPy as its only required runtime dependency,
+    so the checking is a table rather than a pydantic model. The reason
+    it is not pydantic is in validation.py; this is the part a test can
+    hold."""
+    import ast
+    import pathlib
+    from promoter_tf_drugs import validation
+    tree = ast.parse(pathlib.Path(validation.__file__).read_text(
+        encoding="utf-8"))
+    imported = set()
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Import):
+            imported |= {a.name.split(".")[0] for a in n.names}
+        elif isinstance(n, ast.ImportFrom) and n.level == 0 and n.module:
+            imported.add(n.module.split(".")[0])
+    assert imported <= {"math", "dataclasses", "pathlib", "inspect",
+                        "typing", "__future__"}, imported
