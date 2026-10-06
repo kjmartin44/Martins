@@ -226,6 +226,7 @@ Generated from each module's own first docstring line.
 | `pipeline.py` | Orchestration: gene -> promoter -> motifs -> activators -> approved drugs. |
 | `posttranscriptional.py` | Raising a gene's output after transcription has already happened. |
 | `predictions.py` | The headline answer: which medications the model predicts, and why. |
+| `progress.py` | Telling the user what the run is doing while it does it. |
 | `promoterdna.py` | Small molecules aimed at the promoter DNA rather than at a protein. |
 | `provenance.py` | Did each evidence source actually produce evidence? |
 | `pwm.py` | Position-weight-matrix mathematics. |

@@ -14,6 +14,7 @@ import sys
 
 from .pipeline import run, write_outputs, markdown_report
 from .http import HttpError
+from . import progress as _progress
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -283,6 +284,10 @@ def add_analysis_args(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
     p.add_argument("--offline", action="store_true",
                    help="fail rather than hit the network; use cached responses only")
     p.add_argument("--cache-dir")
+    p.add_argument("--quiet", action="store_true",
+                   help="no progress checkpoints. They go to stderr, so "
+                        "they do not touch a piped report; this is for "
+                        "when stderr itself is being read")
     p.add_argument("-v", "--verbose", action="count", default=0)
     return p
 
@@ -318,6 +323,10 @@ def main(argv=None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     _check_flag_combinations(parser, args)
+    # Checkpoints to stderr. The report goes to stdout, so a
+    # piped run is unaffected.
+    if not getattr(args, "quiet", False):
+        _progress.enable()
     if args.top < 1:
         parser.error("--top must be a positive integer")
 

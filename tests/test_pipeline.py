@@ -13321,3 +13321,96 @@ def test_parity_notices_a_gene_run_without_the_docking_results():
     for field in ("docking_results", "tf_activity", "upstream_network",
                   "expression_file", "screen_product"):
         assert f'"{field}"' in src, field
+
+
+# ===================================================================== #
+# Progress checkpoints.                                                 #
+# ===================================================================== #
+def test_progress_never_writes_to_stdout(capsys):
+    """stdout carries the report. A progress line spliced into the
+    middle of the markdown would corrupt a piped run."""
+    from promoter_tf_drugs import pipeline as pl, progress
+    progress.enable()                       # defaults to stderr
+    try:
+        pl.run("DEMOGENE", demo=True)
+    finally:
+        progress.disable()
+    out, err = capsys.readouterr()
+    assert out == "", f"progress reached stdout: {out[:200]}"
+    assert "/10" in err, err[:200]
+
+
+def test_progress_is_off_unless_asked(capsys):
+    """run() is a library function and a library that prints is a
+    nuisance. The commands turn it on; an embedding program does not get
+    it by accident."""
+    from promoter_tf_drugs import pipeline as pl, progress
+    progress.disable()
+    pl.run("DEMOGENE", demo=True)
+    out, err = capsys.readouterr()
+    assert "/10" not in out and "/10" not in err
+
+
+def test_a_broken_stream_does_not_take_the_run_down():
+    """A closed pipe or a console that cannot encode the text must not
+    lose a fifteen-minute run at the last step."""
+    from promoter_tf_drugs import progress
+
+    class _Broken:
+        def write(self, _):
+            raise OSError("broken pipe")
+
+        def flush(self):
+            raise OSError("broken pipe")
+
+    progress.enable(_Broken())
+    try:
+        progress.start("x")
+        progress.step(1, "y", "z")
+        progress.note("n")
+        progress.finish()
+    finally:
+        progress.disable()
+
+
+def test_every_stage_reports_a_checkpoint():
+    """Ten stages, ten checkpoints. A gap reads as a stage that hung."""
+    import io
+    from promoter_tf_drugs import pipeline as pl, progress
+    buf = io.StringIO()
+    progress.enable(buf)
+    try:
+        pl.run("DEMOGENE", demo=True)
+    finally:
+        progress.disable()
+    seen = {line.split("/10")[0].split("]")[-1].strip()
+            for line in buf.getvalue().splitlines() if "/10" in line}
+    assert seen == {str(n) for n in range(progress.stage_count())}, seen
+
+
+def test_a_checkpoint_says_what_the_stage_found():
+    """"scanning motifs" tells you nothing you did not know from the
+    command. The count it found is the part worth printing."""
+    import io
+    from promoter_tf_drugs import pipeline as pl, progress
+    buf = io.StringIO()
+    progress.enable(buf)
+    try:
+        pl.run("DEMOGENE", demo=True)
+    finally:
+        progress.disable()
+    text = buf.getvalue()
+    assert "motifs loaded" in text and "p <= 0.0001" in text
+    assert "factors annotated" in text
+    assert "rests on sequence alone" in text      # no ChIP in demo
+    assert text.rstrip().endswith("done")
+
+
+def test_both_commands_can_turn_progress_off():
+    from promoter_tf_drugs import cli, panel
+    for mod, base in ((cli, ["--gene", "X"]), (panel, ["--genes", "X"])):
+        flags = {o for a in mod.build_parser()._actions
+                 for o in a.option_strings}
+        assert "--quiet" in flags, mod.__name__
+        args = mod.build_parser().parse_args(base + ["--quiet"])
+        assert args.quiet is True

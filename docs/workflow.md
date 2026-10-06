@@ -77,6 +77,21 @@ inverts every recommendation.
 Writes `report.md`, `summary.md`, `results.json`, `tf_summary.tsv`,
 `sites.bed` and `promoter.fa`.
 
+While it works it prints a checkpoint per stage to stderr, with the
+elapsed time and what the stage found:
+
+```
+[  0:00] CCR5: lowering
+[  0:04]  2/10  motifs loaded - 879 at p <= 0.0001; scanning
+[  0:31]  4/10  measured occupancy - peaks for 103 of 200 factor(s)
+[  3:18]  6/10  drug/factor pairs graded - 412 pair(s)
+```
+
+They go to stderr, so piping the report to a file leaves them on the
+terminal and the markdown untouched. `--quiet` turns them off; `-v`
+leaves them on and adds the full lookup log underneath, which is a
+debugging tool rather than progress.
+
 **Stop if:** the evidence table at the top of the report says a source you
 asked for failed. A failed lookup is recorded as failed, never as zero,
 and the verdict degrades to say so — but it is still on you to decide

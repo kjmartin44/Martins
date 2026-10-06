@@ -32,6 +32,7 @@ from . import (annotate, catalogue as cat_mod, cellcycle, congeners as cong_mod,
                screens as screens_mod, signatures as sig_mod,
                stabilizers as stab_mod)
 from . import validation as _validation
+from . import progress as _progress
 from .http import Client
 
 log = logging.getLogger(__name__)
@@ -347,6 +348,9 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             "upstream and downstream must define a non-empty window")
     client = (Client(cache_dir=cache_dir, offline=offline or demo)
               if cache_dir else Client(offline=offline or demo))
+    _progress.start(f"{gene}: {'raising' if goal == 'up' else 'lowering'}"
+                    + (", demo data" if demo else "")
+                    + (", offline" if offline and not demo else ""))
 
     _screen_cache: dict = {}   # receptor -> screen, shared across promoters
     _gene_linked: set = set()  # drugs CTD already reports as moving this gene
@@ -464,6 +468,10 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             client, gene, uniprot, goal=goal,
             approved_only=approved_only, use_dgidb=use_dgidb, demo=demo)
 
+    _progress.step(0, "drugs acting on the gene itself",
+                   f"{len(direct_hits)} found" if direct_hits
+                   else "none annotated")
+
     # ---------------------------------------------------------- 1. promoter
     if demo:
         seq = demo_data.demo_promoter_sequence(upstream, downstream)
@@ -480,10 +488,15 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                                         all_tss=all_tss,
                                         mask="soft" if mask_repeats else None)
 
+    _progress.step(1, "promoter sequence",
+                   f"{len(promoters)} transcript(s)")
+
     # ------------------------------------------------------------ 2. motifs
     motif_set = (demo_data.demo_motifs() if demo
                  else motifs_mod.load_motifs(client, pfm_file, matrix_ids))
     log.info("scanning with %d motifs at p <= %g", len(motif_set), pvalue)
+    _progress.step(2, "motifs loaded",
+                   f"{len(motif_set)} at p <= {pvalue:g}; scanning")
 
     outputs = []
     for prom in promoters:
@@ -514,6 +527,9 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             for s in h.tf_symbols:
                 by_tf[s].hits.append(h)
 
+        _progress.step(3, "factors annotated",
+                       f"{len(symbols)} with a site in this window")
+
         # --------------------------------------------------- 4. ChIP evidence
         # ------------------- 3b. is this window uniquely this gene's?
         # Asked before any ranking, because a window containing another
@@ -531,6 +547,12 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         chip_src = ledger.record("chip", **chip_status)
         for s, r in by_tf.items():
             r.chip_peaks = chip_counts.get(s.upper(), 0)
+
+        _progress.step(
+            4, "measured occupancy",
+            f"peaks for {sum(1 for r in by_tf.values() if r.chip_peaks)} "
+            f"of {len(by_tf)} factor(s)" if chip_status.get("ok")
+            else "none; factor ranking rests on sequence alone")
 
         # ---------------------------------------------- 5. actionable subset
         actionable = {s: r.annotation for s, r in by_tf.items()
@@ -593,6 +615,10 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             log.info("removed %d cell-cycle-incompatible TFs", len(blocked))
             ranked = [r for r in ranked if r.symbol not in blocked]
 
+        _progress.step(5, "factors worth pursuing",
+                       f"{len(actionable)} of {len(by_tf)} have a role or "
+                       f"are nuclear receptors")
+
         # ------------------------------------------- 6. grade each TF/drug pair
         grades = []
         collapsed: dict = {}
@@ -637,6 +663,10 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                         "same active moiety as " + ", ".join(alts[:4])
                         + (f" (+{len(alts) - 4} more)" if len(alts) > 4 else ""))
 
+        _progress.step(6, "drug/factor pairs graded",
+                       f"{len(grades)} pair(s)" if grade_drugs
+                       else "skipped, --no-grade")
+
         # ------------------------------ 7. propagate to a transcriptional call
         estimates = []
         if estimate_outcome:
@@ -654,6 +684,10 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             # discovery winner could fall outside the printed rows while worse
             # candidates were shown — two rankings disagreeing silently.
             estimates.sort(key=lambda e: -e["p_point"])
+
+        _progress.step(7, "transcriptional call",
+                       f"{len(estimates)} route(s) estimated"
+                       if estimate_outcome else "skipped, --no-outcome")
 
         # ------------------------------------- 8. optional library screen
         screens = {}
@@ -1317,6 +1351,9 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                 [t.to_dict() for t in direct_hits]).to_dict()
 
         # -------------------------- 9. what beats the current standard of care
+        _progress.step(8, "library screen",
+                       "run" if (screen_receptors and not demo)
+                       else "not requested")
         improvements = {}
         if find_improvements:
             improvements = discovery.discover(
@@ -1459,7 +1496,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
     tss_overlap = nbr_mod.window_overlap(
         [o["promoter"] for o in outputs]) if len(outputs) > 1 else []
 
-    return {
+    _result = {
         "direct_therapies": [t.to_dict() for t in direct_hits],
         "tss_window_overlap": tss_overlap,
         "evidence_sources": ledger.to_dict(),
@@ -1470,6 +1507,11 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         "weights": WEIGHTS,
         "drug_weights": drug_scoring.DRUG_WEIGHTS,
     }
+    _progress.step(9, "report assembled",
+                   f"{sum(len(o.get('all_routes') or {}) for o in outputs)} "
+                   f"route group(s) over {len(outputs)} promoter(s)")
+    _progress.finish()
+    return _result
 
 
 

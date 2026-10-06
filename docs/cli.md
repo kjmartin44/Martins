@@ -29,11 +29,13 @@ usage: promoter-tf-drugs [-h] --gene GENE [--out OUT] [--top TOP]
                          [--no-improvements] [--no-outcome] [--screen]
                          [--tissue {cns}] [--tf-activity]
                          [--activity-tissue TISSUE] [--docking-results JSON]
+                         [--promoter-dna] [--screen-product]
+                         [--sensitivity-scan] [--prism-file CSV]
                          [--depmap-file CSV] [--activity-permutations N]
                          [--tf-weight TF_WEIGHT] [--chip-bed CHIP_BED]
                          [--chip-api] [--include-investigational] [--no-dgidb]
                          [--find-analogs] [--no-opentargets] [--demo]
-                         [--offline] [--cache-dir CACHE_DIR] [-v]
+                         [--offline] [--cache-dir CACHE_DIR] [--quiet] [-v]
 
 Find a gene's promoter, the TFs predicted to bind it, and approved drugs that
 push those TFs in whichever direction moves your target gene (--direction
@@ -207,6 +209,31 @@ options:
                         `python -m promoter_tf_drugs.docking --bundle DIR
                         --out JSON`, which is the step that needs Linux.
                         Prepare and report here, dock there (default: None)
+  --promoter-dna        look for sequence features in the promoter that DNA-
+                        binding small molecules prefer - quadruplexes, GC-
+                        boxes, AT tracts - and propose agents only where a
+                        feature beats shuffles of the same sequence. Nearly
+                        every approved agent of this kind is cytotoxic
+                        (default: False)
+  --screen-product      virtual-screen the approved library against the GENE'S
+                        OWN protein, not just the transcription factors. Finds
+                        compounds whose chemistry fits the product's known
+                        ligands and which nobody has annotated against it.
+                        This changes what the existing protein does rather
+                        than how much of it there is, so RT-qPCR will not see
+                        it (default: False)
+  --sensitivity-scan    correlate every approved compound in the PRISM panel
+                        against each factor's CRISPR knockout profile. Finds
+                        drugs that behave as though they remove the factor,
+                        with no annotation of any kind behind them - the one
+                        route here that can surface a compound nobody has
+                        linked to the gene. Needs both the DepMap and PRISM
+                        matrices on disk (default: False)
+  --prism-file CSV      PRISM Repurposing LFC matrix.
+                        data/Repurposing_Public_24Q2_LFC_COLLAPSED.csv is
+                        picked up automatically if present, and the compound
+                        list beside it turns BRD ids into drug names (default:
+                        None)
   --depmap-file CSV     DepMap CRISPRGeneEffect.csv. Measures what happens to
                         a cell when each factor is knocked out, which is the
                         collateral question the regulon count stands in for.
@@ -248,6 +275,9 @@ options:
   --offline             fail rather than hit the network; use cached responses
                         only (default: False)
   --cache-dir CACHE_DIR
+  --quiet               no progress checkpoints. They go to stderr, so they do
+                        not touch a piped report; this is for when stderr
+                        itself is being read (default: False)
   -v, --verbose
 ```
 
@@ -291,13 +321,15 @@ usage: promoter-tf-drugs.panel [-h] [--genes GENES] [--gene-file GENE_FILE]
                                [--no-improvements] [--no-outcome] [--screen]
                                [--tissue {cns}] [--tf-activity]
                                [--activity-tissue TISSUE]
-                               [--docking-results JSON] [--depmap-file CSV]
+                               [--docking-results JSON] [--promoter-dna]
+                               [--screen-product] [--sensitivity-scan]
+                               [--prism-file CSV] [--depmap-file CSV]
                                [--activity-permutations N]
                                [--tf-weight TF_WEIGHT] [--chip-bed CHIP_BED]
                                [--chip-api] [--include-investigational]
                                [--no-dgidb] [--find-analogs]
                                [--no-opentargets] [--demo] [--offline]
-                               [--cache-dir CACHE_DIR] [-v]
+                               [--cache-dir CACHE_DIR] [--quiet] [-v]
 
 Compare several CANDIDATE genes and narrow to the route with the least
 collateral effect. The genes are treated as alternatives, so a drug recurring
@@ -495,6 +527,29 @@ options:
                         `python -m promoter_tf_drugs.docking --bundle DIR
                         --out JSON`, which is the step that needs Linux.
                         Prepare and report here, dock there
+  --promoter-dna        look for sequence features in the promoter that DNA-
+                        binding small molecules prefer - quadruplexes, GC-
+                        boxes, AT tracts - and propose agents only where a
+                        feature beats shuffles of the same sequence. Nearly
+                        every approved agent of this kind is cytotoxic
+  --screen-product      virtual-screen the approved library against the GENE'S
+                        OWN protein, not just the transcription factors. Finds
+                        compounds whose chemistry fits the product's known
+                        ligands and which nobody has annotated against it.
+                        This changes what the existing protein does rather
+                        than how much of it there is, so RT-qPCR will not see
+                        it
+  --sensitivity-scan    correlate every approved compound in the PRISM panel
+                        against each factor's CRISPR knockout profile. Finds
+                        drugs that behave as though they remove the factor,
+                        with no annotation of any kind behind them - the one
+                        route here that can surface a compound nobody has
+                        linked to the gene. Needs both the DepMap and PRISM
+                        matrices on disk
+  --prism-file CSV      PRISM Repurposing LFC matrix.
+                        data/Repurposing_Public_24Q2_LFC_COLLAPSED.csv is
+                        picked up automatically if present, and the compound
+                        list beside it turns BRD ids into drug names
   --depmap-file CSV     DepMap CRISPRGeneEffect.csv. Measures what happens to
                         a cell when each factor is knocked out, which is the
                         collateral question the regulon count stands in for.
@@ -532,6 +587,9 @@ options:
   --offline             fail rather than hit the network; use cached responses
                         only
   --cache-dir CACHE_DIR
+  --quiet               no progress checkpoints. They go to stderr, so they do
+                        not touch a piped report; this is for when stderr
+                        itself is being read
   -v, --verbose
 ```
 

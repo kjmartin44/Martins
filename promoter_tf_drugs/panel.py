@@ -45,6 +45,7 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import progress as _progress
 from . import (congeners as cong_mod, delivery as dlv_mod,
                paralogs as par_mod, pipeline,
                provenance as prov_mod, regulon as regulon_mod,
@@ -100,8 +101,13 @@ def run_panel(genes, *, out_dir=None, require_interpretable: bool = False,
     the same reasoning as `pipeline._optional`, one level up.
     """
     panel = Panel()
-    for symbol in genes:
+    genes = list(genes)
+    for i, symbol in enumerate(genes, 1):
         pg = PanelGene(symbol=symbol)
+        # Several genes run one after another, so each one's checkpoints
+        # say which gene this is and how many are left.
+        if _progress.enabled():
+            _progress.enable(prefix=f"({i}/{len(genes)}) ")
         try:
             pg.result = pipeline.run(symbol, **run_kwargs)
         except Exception as exc:                            # noqa: BLE001
@@ -1099,6 +1105,10 @@ def main(argv=None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     _check_flag_combinations(parser, args)
+    # Checkpoints go to stderr. The panel report goes to stdout, so a
+    # piped run is unaffected.
+    if not getattr(args, "quiet", False):
+        _progress.enable()
     for stream in (sys.stdout, sys.stderr):
         try:
             stream.reconfigure(encoding="utf-8", errors="replace")
