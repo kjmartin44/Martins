@@ -25,6 +25,14 @@ below remain follow-up work; they are not claims of completed implementation.
    filters, tissue rules, clinical comparison labels, and outcome “probabilities”
    need a documented evidence trail and independent benchmarks. Successful
    software tests cannot establish scientific validity.
+5. **Consider other routes to identify similarities to FDA approved Drugs**
+    in the docking strategy could we identify potential ligands/agonists/
+    antagonists depending on the goal of the screen then compare similarity to
+    known FDA approved ligands to guess on action
+6. **guess on if a molecule will act as an agonist or antagonist based on structure**
+   if the mechanism of a certain ligand is unknown, compare structures to structures with
+   known interactions to make an educated guess if it would improve or dampen gene activity
+   or expression.
 
 ## Maintainability and release work
 

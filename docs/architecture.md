@@ -223,7 +223,7 @@ Generated from each module's own first docstring line.
 | `outcome.py` | 181 | From "the drug binds the receptor" to "my gene goes up": the chain, explicitly. |
 | `panel.py` | 1201 | Compare several candidate genes and narrow to the cleanest route. |
 | `paralogs.py` | 229 | How many close relatives share the pocket you are trying to hit? |
-| `pipeline.py` | 4649 | Orchestration: gene -> promoter -> motifs -> activators -> approved drugs. |
+| `pipeline.py` | 1493 | Orchestration: gene -> promoter -> motifs -> activators -> approved drugs. |
 | `posttranscriptional.py` | 229 | Raising a gene's output after transcription has already happened. |
 | `predictions.py` | 456 | The headline answer: which medications the model predicts, and why. |
 | `promoterdna.py` | 342 | Small molecules aimed at the promoter DNA rather than at a protein. |
@@ -231,6 +231,7 @@ Generated from each module's own first docstring line.
 | `pwm.py` | 161 | Position-weight-matrix mathematics. |
 | `reactivation.py` | 247 | Reactivating a silenced allele, which is a different problem from a low gene. |
 | `regulon.py` | 252 | How many genes does this TF control? The specificity that actually matters. |
+| `report.py` | 3200 | Turning a finished run into something a person reads. |
 | `screening.py` | 1035 | Screen the whole approved-drug library against a receptor. |
 | `screens.py` | 294 | Design the experiment that settles what this whole package only predicts. |
 | `sensitivity.py` | 631 | Which approved drugs behave as though they act on your factor. |

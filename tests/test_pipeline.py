@@ -1145,6 +1145,7 @@ def test_path_describes_its_own_mechanism():
 
 def test_repressor_tf_inverts_the_required_direction():
     """To raise a gene through a repressor you must LOWER the repressor."""
+    from promoter_tf_drugs import report as rep
     edges = _toy_network()
     act = net.find_upstream_targets(None, "TF", goal="up", tf_role="activator",
                                     edges=edges)
@@ -2196,6 +2197,7 @@ def test_scan_quality_recognises_real_enrichment():
 
 def test_no_signal_warning_reaches_the_report():
     from promoter_tf_drugs import pipeline as pl
+    from promoter_tf_drugs import report as rep
     res = pl.run("DEMOGENE", demo=True, offline=True)
     res["results"][0]["scan_quality"] = {
         "verdict": "no signal", "observed": 953, "expected_by_chance": 960.0,
@@ -5740,20 +5742,22 @@ def test_footnote_describes_only_the_states_present():
     """A note warning about a borderline pass in a table with none is
     noise; one that stays silent about unknowns when 20 rows are unknown is
     worse."""
-    only_unknown = " ".join(pipeline._bbb_footnote({"—": 5}))
+    from promoter_tf_drugs import report as rep
+    only_unknown = " ".join(rep._bbb_footnote({"—": 5}))
     assert "is not a no" in only_unknown
     assert "question mark" not in only_unknown
 
-    with_borderline = " ".join(pipeline._bbb_footnote({"yes?": 1, "no": 2}))
+    with_borderline = " ".join(rep._bbb_footnote({"yes?": 1, "no": 2}))
     assert "question mark" in with_borderline
     assert "Atenolol" in with_borderline
     assert "is not a no" not in with_borderline
 
-    assert pipeline._bbb_footnote({}) == []
+    assert rep._bbb_footnote({}) == []
 
 
 def test_footnote_states_what_a_yes_does_not_establish():
-    note = " ".join(pipeline._bbb_footnote({"yes": 3}))
+    from promoter_tf_drugs import report as rep
+    note = " ".join(rep._bbb_footnote({"yes": 3}))
     assert "passive diffusion" in note
     assert "P-glycoprotein" in note
     # and the reliable direction is named as such
@@ -5906,6 +5910,7 @@ def test_null_is_calibrated():
     """If the statistic is right, random regulons on a random signature
     produce NES with unit variance. A systematically wide null would make
     every factor look significant."""
+    from promoter_tf_drugs import report as rep
     from promoter_tf_drugs import tfactivity as ta
     import numpy as np
     rng = np.random.default_rng(11)
@@ -6052,6 +6057,7 @@ def test_set_based_test_is_calibrated_under_the_null():
     nominal rate. Demanding ZERO rejections would be wrong - at q<0.05 the
     occasional one IS the error rate - so this checks the rate over several
     replicates instead."""
+    from promoter_tf_drugs import report as rep
     from promoter_tf_drugs import tfactivity as ta
     import numpy as np
     rng = np.random.default_rng(13)
@@ -6225,12 +6231,13 @@ def test_regulon_count_carries_its_provenance():
 def test_a_factor_with_no_regulon_entry_says_not_counted():
     """Absence from the table is not a small number. Rendering it as 0 - or
     omitting it - would read as maximal specificity."""
+    from promoter_tf_drugs import report as rep
     from promoter_tf_drugs import regulon as reg
     n, prov = reg.regulon_size("TOTALLYFAKETF9", None)
     assert n is None
     assert prov == "unknown"
 
-    note = pipeline._regulon_column_note(
+    note = rep._regulon_column_note(
         True, False, [{"n_regulon": None, "regulon_provenance": "unknown"}])
     assert "not counted" in " ".join(note)
     assert "It is not a small number" in " ".join(note)
@@ -6240,8 +6247,9 @@ def test_small_curated_regulon_is_flagged_as_understudied_not_selective():
     """The trap on this column. A factor with eight curated targets is far
     more likely under-studied than specific, and reading a small count as
     specificity selects for obscurity."""
+    from promoter_tf_drugs import report as rep
     from promoter_tf_drugs import regulon as reg
-    note = " ".join(pipeline._regulon_column_note(
+    note = " ".join(rep._regulon_column_note(
         True, True, [{"n_regulon": 4, "regulon_provenance": "regulon file"}]))
     assert "understudied than" in note
     assert str(reg.MIN_CREDIBLE_REGULON) or "credible floor" in note
@@ -6249,13 +6257,15 @@ def test_small_curated_regulon_is_flagged_as_understudied_not_selective():
 
 
 def test_regulon_note_says_counts_measure_curation_too():
-    note = " ".join(pipeline._regulon_column_note(True, False, []))
+    from promoter_tf_drugs import report as rep
+    note = " ".join(rep._regulon_column_note(True, False, []))
     assert "literature curation" in note
     assert "SP1" in note
 
 
 def test_regulon_column_absent_without_a_regulon_source():
-    note = " ".join(pipeline._regulon_column_note(False, False, []))
+    from promoter_tf_drugs import report as rep
+    note = " ".join(rep._regulon_column_note(False, False, []))
     assert "--regulon-file" in note
     assert "no basis" in note
 
@@ -6323,7 +6333,8 @@ def test_report_says_why_the_same_receptors_appear_for_every_gene():
     """The user-visible symptom: the screen lists retinoids whatever gene
     is run. It is a property of which receptors have enough medicinal
     chemistry to train a model, not a result about the gene."""
-    note = " ".join(pipeline._screen_scope_note(["RARA"], ["VDR"]))
+    from promoter_tf_drugs import report as rep
+    note = " ".join(rep._screen_scope_note(["RARA"], ["VDR"]))
     assert "whatever gene you run" in note
     assert "retinoid" in note
     assert "not a result about your gene" in note
@@ -6335,7 +6346,8 @@ def test_report_says_why_the_same_receptors_appear_for_every_gene():
 
 
 def test_scope_note_names_what_ran_and_what_did_not():
-    note = " ".join(pipeline._screen_scope_note(["RARA", "RXRA"], ["VDR"]))
+    from promoter_tf_drugs import report as rep
+    note = " ".join(rep._screen_scope_note(["RARA", "RXRA"], ["VDR"]))
     assert "**Screened:** RARA, RXRA" in note
     assert "**Not screened:** VDR" in note
 
@@ -6343,12 +6355,13 @@ def test_scope_note_names_what_ran_and_what_did_not():
 def test_pchembl_cutoff_is_one_constant_not_two_numbers():
     """The report cites the floor the fetch applies. If they drifted apart
     the report would describe a screen that did not happen."""
+    from promoter_tf_drugs import report as rep
     from promoter_tf_drugs import agonism as ag
     import inspect
     sig = inspect.signature(ag.fetch_actives)
     assert sig.parameters["pchembl_cutoff"].default == ag.PCHEMBL_CUTOFF
     assert f"pChEMBL {ag.PCHEMBL_CUTOFF:.0f}" in \
-        " ".join(pipeline._screen_scope_note(["X"], []))
+        " ".join(rep._screen_scope_note(["X"], []))
 
 
 # ===================================================================== #
@@ -6742,11 +6755,12 @@ def test_compounds_with_no_indication_are_named_not_dropped():
     """CTD contributes environmental agents and research chemicals, which
     have no indication because they are not drugs. Silently omitting them
     would make the glossary look complete when it is not."""
+    from promoter_tf_drugs import report as rep
     from promoter_tf_drugs import indications as ind
     out = ind.describe_all(["Tazarotene", "Totallyfakedrug9"])
     assert out["Totallyfakedrug9"]["treats"] is None
 
-    note = " ".join(pipeline._drug_glossary(
+    note = " ".join(rep._drug_glossary(
         [{"drug": "Totallyfakedrug9", "mechanism": ""}], {}))
     assert "No description established" in note
     assert "not that the compound has no approved use" in note
@@ -7024,11 +7038,12 @@ def test_depmap_column_and_section_render(tmp_path):
 def test_dispensable_factor_shows_no_most_dependent_lineage(tmp_path):
     """For a factor nothing depends on, the 'most dependent' lineage is
     whichever drifted furthest below zero - noise dressed as a finding."""
+    from promoter_tf_drugs import report as rep
     from promoter_tf_drugs import depmap as dm
     eff, mod = _depmap_release(tmp_path, {"VDR": "none"})
     deps = dm.assess_many(["VDR"], effect_path=eff, model_path=mod)
     res = pipeline.run("DEMOGENE", demo=True, offline=True)
-    rows = pipeline._depmap_section(
+    rows = rep._depmap_section(
         {k: v.to_dict() for k, v in deps.items()}, res)
     body = [r for r in rows if r.startswith("| VDR |")]
     assert body
@@ -7953,11 +7968,12 @@ def test_archs4_is_not_offered_as_a_drug_corpus():
 def test_report_says_when_only_one_corpus_was_available():
     """With one corpus, internal replication cannot detect an error common
     to all of its signatures."""
+    from promoter_tf_drugs import report as rep
     res = pipeline.run("DEMOGENE", demo=True, offline=True)
     res["results"][0]["corpus_scans"] = {
         "TP53": {"lincs": {"available": True},
                  "drugmatrix": {"available": False}}}
-    note = " ".join(pipeline._corpus_note(res["results"][0]))
+    note = " ".join(rep._corpus_note(res["results"][0]))
     assert "Only one corpus was available" in note
     assert "A second corpus is what would" in note
     assert "drugmatrix" in note
@@ -8022,10 +8038,11 @@ def test_summary_states_the_approved_indication_for_every_row():
 def test_summary_never_truncates_mid_word():
     """A cut like "renal fai" reads as a rendering bug and costs the
     reader the one fact the column carries."""
-    assert pipeline._clip("short", 58) == "short"
+    from promoter_tf_drugs import report as rep
+    assert rep._clip("short", 58) == "short"
     long = ("hypocalcaemia and secondary hyperparathyroidism in renal "
             "failure")
-    out = pipeline._clip(long, 58)
+    out = rep._clip(long, 58)
     assert out.endswith("…")
     assert not out[:-1].endswith(" ")
     # the last kept token is whole
@@ -9248,6 +9265,7 @@ def test_pains_discounts_a_predicted_route_in_the_report(monkeypatch):
     route and for a long while was imported by nothing. This pins it to
     the table."""
     from promoter_tf_drugs import pipeline as pl
+    from promoter_tf_drugs import report as rep
     import inspect
     src = inspect.getsource(pl.corroboration)
     assert "liab_mod.assess" in src, "liabilities is not called"
@@ -9259,6 +9277,7 @@ def test_the_reach_column_is_rendered_and_its_absence_is_explained():
     """A blank Reach column has to say it means unknown route. Silently
     blank reads as "fine"."""
     from promoter_tf_drugs import pipeline as pl
+    from promoter_tf_drugs import report as rep
     import inspect
     src = inspect.getsource(pl.corroboration_table)
     assert "Reach" in src
@@ -9271,6 +9290,7 @@ def test_the_reach_column_is_rendered_and_its_absence_is_explained():
 
 def test_the_reach_and_pains_footnotes_fire_on_the_right_rows():
     from promoter_tf_drugs import pipeline as pl
+    from promoter_tf_drugs import report as rep
     import inspect
     src = inspect.getsource(pl.corroboration_table)
     assert "approved only by local routes" in src
@@ -9280,11 +9300,12 @@ def test_the_reach_and_pains_footnotes_fire_on_the_right_rows():
 
 def test_route_cell_marks_local_only_and_leaves_unknown_blank():
     from promoter_tf_drugs import pipeline as pl
-    assert pl._route_cell({"route": "local only"}) == "**local only**"
-    assert pl._route_cell({"route": "systemic"}) == "systemic"
-    assert pl._route_cell({"route": "unclear"}) == "unclear"
-    assert pl._route_cell({}) == "\u2014"
-    assert pl._route_cell({"route": None}) == "\u2014"
+    from promoter_tf_drugs import report as rep
+    assert rep._route_cell({"route": "local only"}) == "**local only**"
+    assert rep._route_cell({"route": "systemic"}) == "systemic"
+    assert rep._route_cell({"route": "unclear"}) == "unclear"
+    assert rep._route_cell({}) == "\u2014"
+    assert rep._route_cell({"route": None}) == "\u2014"
 
 
 def test_local_gwas_is_offered_as_the_weaker_evidence_it_is(tmp_path,
@@ -9322,6 +9343,7 @@ def test_a_gwas_file_read_with_no_hits_is_not_a_genetics_success(
     says ok only when something arrived."""
     from promoter_tf_drugs import genetics as gen, localannot as la
     from promoter_tf_drugs import pipeline as pl
+    from promoter_tf_drugs import report as rep
     monkeypatch.chdir(tmp_path)
     d = tmp_path / "data"
     d.mkdir(exist_ok=True)
@@ -9338,6 +9360,7 @@ def test_a_gwas_file_read_with_no_hits_is_not_a_genetics_success(
 
 def test_genetics_detail_names_which_source_found_what():
     from promoter_tf_drugs import pipeline as pl
+    from promoter_tf_drugs import report as rep
     both = pl._genetics_detail(
         [{"trait": "x"}], {"n_significant": 3, "assessed": True})
     assert "Open Targets" in both and "GWAS Catalog" in both
@@ -9435,7 +9458,8 @@ def test_consensus_survives_a_hit_with_no_score():
 
 def test_the_docking_section_reports_validation_and_disagreement():
     from promoter_tf_drugs import pipeline as pl
-    out = "\n".join(pl._docking_section([_dock_run()], {}))
+    from promoter_tf_drugs import report as rep
+    out = "\n".join(rep._docking_section([_dock_run()], {}))
     assert "ROC AUC" in out and "0.95" in out and "3.4x" in out
     assert "Validated" in out
     # No overlap is a real disagreement, not a missing result.
@@ -9445,16 +9469,18 @@ def test_the_docking_section_reports_validation_and_disagreement():
 
 def test_an_unvalidated_pocket_is_flagged_not_hidden():
     from promoter_tf_drugs import pipeline as pl
-    out = "\n".join(pl._docking_section([_dock_run(usable=False)], {}))
+    from promoter_tf_drugs import report as rep
+    out = "\n".join(rep._docking_section([_dock_run(usable=False)], {}))
     assert "did not validate" in out
     assert "**no**" in out
 
 
 def test_the_consensus_table_names_both_methods_that_found_each_drug():
     from promoter_tf_drugs import pipeline as pl
+    from promoter_tf_drugs import report as rep
     from promoter_tf_drugs import docking as dk
     both = {"VDR": dk.consensus(_dock_run(), _ligand_hits(), top_frac=0.5)}
-    out = "\n".join(pl._docking_section([_dock_run()], both))
+    out = "\n".join(rep._docking_section([_dock_run()], both))
     assert "picked by both methods" in out
     assert "calcitriol" in out
     assert "-11.6" in out
@@ -9463,7 +9489,8 @@ def test_the_consensus_table_names_both_methods_that_found_each_drug():
 
 def test_no_docking_means_no_section_rather_than_an_empty_one():
     from promoter_tf_drugs import pipeline as pl
-    assert pl._docking_section([], {}) == []
+    from promoter_tf_drugs import report as rep
+    assert rep._docking_section([], {}) == []
 
 
 # ===================================================================== #
@@ -9722,7 +9749,7 @@ def test_no_public_function_accepts_a_parameter_it_never_reads():
 
     skip = {"self", "cls", "client", "kwargs", "args"}
     # Reporting helpers whose signature is kept uniform on purpose.
-    allowed = {("pipeline.py", "_drug_glossary", "res"),
+    allowed = {("report.py", "_drug_glossary", "res"),
                ("screens.py", "crispra_plan", "promoter"),
                ("discovery.py", "axes_from_grade", "tf_result"),
                ("congeners.py", "collapse_grades", "set_name"),
@@ -10189,9 +10216,10 @@ def test_a_q_value_of_zero_is_the_most_significant_not_the_least():
     """`value or 1` reads 0.0 as missing. tfactivity._q exists for this and
     the pipeline reimplemented the broken version."""
     from promoter_tf_drugs import pipeline as pl
-    assert pl._sig_q(0.0) == 0.0
-    assert pl._sig_q(None) == 1.0
-    assert pl._sig_q(0.04) == 0.04
+    from promoter_tf_drugs import report as rep
+    assert rep._sig_q(0.0) == 0.0
+    assert rep._sig_q(None) == 1.0
+    assert rep._sig_q(0.04) == 0.04
 
 
 def test_a_zscore_of_zero_is_not_swapped_for_another_column():
@@ -10403,7 +10431,8 @@ def test_an_unassessed_scan_contributes_no_routes():
 
 def test_the_section_reports_a_scan_that_found_nothing(tmp_path):
     from promoter_tf_drugs import pipeline as pl
-    out = "\n".join(pl._sensitivity_section(
+    from promoter_tf_drugs import report as rep
+    out = "\n".join(rep._sensitivity_section(
         {"VDR": {"assessed": True, "n_drugs_tested": 4000, "hits": []}}))
     assert "none cleared" in out
     assert "bounds what this method contributes" in out
@@ -10411,7 +10440,8 @@ def test_the_section_reports_a_scan_that_found_nothing(tmp_path):
 
 def test_the_section_says_when_nothing_could_be_scanned():
     from promoter_tf_drugs import pipeline as pl
-    out = "\n".join(pl._sensitivity_section(
+    from promoter_tf_drugs import report as rep
+    out = "\n".join(rep._sensitivity_section(
         {"VDR": {"assessed": False, "error": "no PRISM matrix loaded"}}))
     assert "Nothing was scanned" in out
     assert "no PRISM matrix loaded" in out
@@ -10419,7 +10449,8 @@ def test_the_section_says_when_nothing_could_be_scanned():
 
 def test_the_section_warns_that_a_correlation_is_not_a_target():
     from promoter_tf_drugs import pipeline as pl
-    out = "\n".join(pl._sensitivity_section(_sens_block()))
+    from promoter_tf_drugs import report as rep
+    out = "\n".join(rep._sensitivity_section(_sens_block()))
     assert "This is not a target" in out
     assert "Partial r" in out
     assert "proliferation readout" in out
@@ -11023,6 +11054,7 @@ def test_the_gene_accession_exists_even_without_the_direct_step():
     product screen would have raised NameError on a --no-direct run."""
     import inspect
     from promoter_tf_drugs import pipeline as pl
+    from promoter_tf_drugs import report as rep
     src = inspect.getsource(pl.run)
     i = src.index("uniprot = None")
     j = src.index("if include_direct:")
@@ -12162,6 +12194,7 @@ def test_a_flag_given_a_string_is_refused():
     silently does something rather than failing."""
     import pytest
     from promoter_tf_drugs import pipeline as pl
+    from promoter_tf_drugs import report as rep
     with pytest.raises(ValueError, match="all_tss"):
         pl.run("CCR5", all_tss="yes", demo=True)
     with pytest.raises(ValueError, match="activity_permutations"):
@@ -12173,6 +12206,7 @@ def test_a_true_flag_is_not_accepted_as_a_window_size():
     through as 1 and the window silently becomes one base."""
     import pytest
     from promoter_tf_drugs import pipeline as pl
+    from promoter_tf_drugs import report as rep
     with pytest.raises(ValueError, match="upstream"):
         pl.run("CCR5", upstream=True, demo=True)
 
@@ -12181,6 +12215,7 @@ def test_the_old_validation_rules_all_still_hold():
     """Behaviour preservation for the hand-written block this replaced."""
     import pytest
     from promoter_tf_drugs import pipeline as pl
+    from promoter_tf_drugs import report as rep
     bad = [
         dict(gene=""),
         dict(gene="X", upstream=-1),
@@ -12204,6 +12239,7 @@ def test_a_missing_input_file_is_a_filenotfounderror_not_a_valueerror():
     the caller usually needs to tell them apart."""
     import pytest
     from promoter_tf_drugs import pipeline as pl
+    from promoter_tf_drugs import report as rep
     with pytest.raises(FileNotFoundError, match="pfm_file"):
         pl.run("CCR5", pfm_file="definitely_not_here.txt", demo=True)
 
@@ -12229,6 +12265,7 @@ def test_a_validator_reports_what_a_bad_value_would_do():
     every position calls a site says what you got wrong."""
     import pytest
     from promoter_tf_drugs import pipeline as pl
+    from promoter_tf_drugs import report as rep
     with pytest.raises(ValueError) as exc:
         pl.run("CCR5", pvalue=1.0, demo=True)
     assert "every position" in str(exc.value)
@@ -12773,6 +12810,7 @@ def test_the_library_call_still_degrades_rather_than_raising():
     may want everything else the run produces, and the ledger recording
     a failed source is the honest way to say one of them did not."""
     from promoter_tf_drugs import pipeline as pl
+    from promoter_tf_drugs import report as rep
     res = pl.run("DEMOGENE", demo=True, tf_activity=True,
                  activity_tissue=None)
     sources = res["evidence_sources"]["sources"]
@@ -12814,6 +12852,7 @@ def test_a_failed_source_bullet_is_never_bare():
     an impact for must say something, because a bullet that stops after
     the dash is worse than the plain fact."""
     from promoter_tf_drugs import pipeline as pl
+    from promoter_tf_drugs import report as rep
     res = pl.run("DEMOGENE", demo=True, tf_activity=True,
                  activity_tissue=None)
     report = pl.markdown_report(res)
