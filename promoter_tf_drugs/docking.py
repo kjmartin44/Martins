@@ -993,6 +993,8 @@ class DockingScreen:
     auc_by_metric: dict | None = None
     # Why each absent compound is absent, counted rather than assumed.
     failures: dict | None = None
+    # Whether agonist/antagonist was predicted for the hits, and on what.
+    direction: dict | None = None
     hits: list = field(default_factory=list)
     error: str | None = None
     caveats: list = field(default_factory=list)
@@ -1839,6 +1841,105 @@ def choose_pocket(client, uniprot: str, out_dir, *, limit: int = 12,
     return best
 
 
+def direction_labels(client, symbol: str, *, library: list | None = None,
+                     target_chembl_id: str | None = None) -> tuple:
+    """Ligands of this receptor whose direction is known, and where from.
+
+    A local drug table first, because it needs no network and most runs
+    have no network. ChEMBL's mechanism endpoint second.
+    """
+    from . import agonism
+
+    rows = library
+    if rows is None:
+        try:
+            from . import localdrugs as _ld
+            rows = _ld.library(None, approved_only=False)
+        except Exception:                                   # noqa: BLE001
+            rows = []
+    local = agonism.labelled_ligands_local(symbol, rows or [])
+    if local:
+        return local, "a local drug table's mechanism column"
+
+    if client is not None and target_chembl_id:
+        try:
+            got = agonism.fetch_labelled_ligands(client, target_chembl_id)
+        except Exception as exc:                            # noqa: BLE001
+            log.debug("labelled ligand fetch failed: %s", str(exc)[:90])
+            got = []
+        if got:
+            return got, "ChEMBL mechanism annotations"
+    return [], "no source"
+
+
+def annotate_directions(run, symbol: str, labelled: list, *,
+                        source: str = "?") -> dict:
+    """Predict agonist or antagonist for each hit, in place.
+
+    Returns a summary dict for the report. Every hit keeps its position:
+    this annotates, it does not rank or filter. A hit the model will not
+    call is left uncalled and counted, rather than defaulted to either
+    direction.
+    """
+    from . import agonism
+
+    hits = getattr(run, "hits", None)
+    if hits is None:
+        hits = (run or {}).get("hits") or []
+    out = {"attempted": True, "source": source,
+           "n_labelled": len(labelled), "n_called": 0,
+           "n_out_of_domain": 0, "model_auc": None}
+
+    if len(labelled) < 2 * agonism.MIN_PER_CLASS:
+        out.update(attempted=False, reason=(
+            f"only {len(labelled)} ligand(s) of known direction for "
+            f"{symbol}, below what a per-receptor classifier needs. "
+            f"Direction is not annotated rather than guessed."))
+        return out
+
+    try:
+        model = agonism.train_model(labelled)
+    except ImportError:
+        out.update(attempted=False, reason=(
+            "scikit-learn is not installed, so direction cannot be "
+            "predicted. pip install 'promoter-tf-drugs[chemistry]'"))
+        return out
+    except Exception as exc:                                # noqa: BLE001
+        out.update(attempted=False,
+                   reason=f"direction model failed to train: "
+                          f"{str(exc)[:120]}")
+        return out
+
+    if model is None:
+        n_ag = sum(1 for x in labelled if x.get("label") == "agonist")
+        out.update(attempted=False, reason=(
+            f"{symbol} has {n_ag} agonist(s) and {len(labelled) - n_ag} "
+            f"antagonist(s) of known direction, and a classifier needs at "
+            f"least {agonism.MIN_PER_CLASS} of each. Direction is not "
+            f"annotated rather than guessed."))
+        return out
+
+    out["model_auc"] = model.auc
+    for h in hits:
+        smi = h.get("smiles")
+        if not smi:
+            continue
+        pred = agonism.predict(model, smi, drug_name=h.get("drug") or "?",
+                               target_symbol=symbol)
+        h["direction"] = pred.predicted
+        h["direction_confidence"] = pred.confidence
+        h["direction_in_domain"] = pred.in_domain
+        if pred.probability_agonist is not None:
+            h["probability_agonist"] = round(pred.probability_agonist, 3)
+        if pred.nearest_tanimoto is not None:
+            h["nearest_labelled_tanimoto"] = round(pred.nearest_tanimoto, 3)
+        if pred.predicted in ("agonist", "antagonist"):
+            out["n_called"] += 1
+        if not pred.in_domain:
+            out["n_out_of_domain"] += 1
+    return out
+
+
 def dock_screen_for_target(client, symbol: str, uniprot: str, library: list,
                            *, actives: list, decoys: list | None = None,
                            work_dir="docking_work", top_n: int = 25,
@@ -1942,6 +2043,14 @@ def dock_screen_for_target(client, symbol: str, uniprot: str, library: list,
         cpu=cpu, jobs=jobs,
         seed=seed, score_fn=score_fn,
         box=pocket.box)
+    # Which way each hit would push the receptor. An annotation, never a
+    # filter: the screen ranks on fit, and direction is a prediction
+    # about the protein rather than about the pocket.
+    labelled, src = direction_labels(client, symbol)
+    run.direction = annotate_directions(run, symbol, labelled, source=src)
+    if not run.direction.get("attempted") and run.direction.get("reason"):
+        run.caveats.append(run.direction["reason"])
+
     out = run.to_dict()
     out["pocket"] = pocket.to_dict()
     # Whether the pocket's conformation was READ, not merely accepted.
@@ -2206,6 +2315,21 @@ def load_results(path) -> dict:
     return data
 
 
+def _direction_cell(hit: dict) -> str:
+    """The predicted direction for one hit, or why there is none.
+
+    A molecule outside the model's applicability domain reads as "-",
+    not as a weak call: the model has not seen anything like it and a
+    low-confidence guess would look like a measurement.
+    """
+    d = hit.get("direction")
+    if not d or d == "undetermined":
+        return "-"
+    conf = hit.get("direction_confidence") or ""
+    short = {"agonist": "agonist", "antagonist": "antagonist"}.get(d, d)
+    return short if conf in ("high", "moderate") else f"{short}?"
+
+
 def _report(res: dict, top: int = 25) -> None:
     """Print a screen result, from either the one-shot or bundle path."""
     if res.get("error"):
@@ -2219,9 +2343,10 @@ def _report(res: dict, top: int = 25) -> None:
     if res.get("conformation_verified"):
         print(f"Conformation: {state}, read from the structure")
     else:
-        print(f"Conformation: {state} - NOT read from the structure. "
-              f"Nothing below says whether a hit would activate or "
-              f"inhibit.")
+        print(f"Conformation: {state} - NOT read from the structure, so "
+              f"the docking addresses fit and not direction. A direction "
+              f"column below, if there is one, is a separate ligand-based "
+              f"prediction rather than a reading of this structure.")
 
     print(f"Validation: AUC {res.get('auc')}, "
           f"top-1% enrichment {res.get('ef1')}")
@@ -2247,20 +2372,35 @@ def _report(res: dict, top: int = 25) -> None:
     # smina run does not print blanks that look like measurements.
     hits = res.get("hits", [])[:top]
     has_cnn = any("cnn_affinity" in h for h in hits)
+
+    d = res.get("direction") or {}
+    if d.get("attempted"):
+        auc = d.get("model_auc")
+        print()
+        print(f"Direction predicted from {d.get('n_labelled')} ligand(s) of "
+              f"known direction ({d.get('source')})"
+              + (f", cross-validated AUC {auc:.2f}" if auc else "")
+              + f". Called for {d.get('n_called')} of {len(hits)} hit(s); "
+              + str(d.get("n_out_of_domain"))
+              + (" was" if d.get("n_out_of_domain") == 1 else " were")
+              + " unlike anything the model was trained on and is left "
+                "uncalled.")
     print()
     if has_cnn:
-        print(f"{'drug':32s} {'kcal/mol':>9s} {'CNNscore':>9s} "
-              f"{'CNNaff':>7s}")
+        print(f"{'drug':28s} {'kcal/mol':>9s} {'CNNscore':>9s} "
+              f"{'CNNaff':>7s} {'direction':>12s}")
         for h in hits:
             cs = h.get("cnn_score")
             ca = h.get("cnn_affinity")
-            print(f"{h['drug'][:32]:32s} {h['score']:9.2f} "
+            print(f"{h['drug'][:28]:28s} {h['score']:9.2f} "
                   f"{(f'{cs:.3f}' if cs is not None else '-'):>9s} "
-                  f"{(f'{ca:.2f}' if ca is not None else '-'):>7s}")
+                  f"{(f'{ca:.2f}' if ca is not None else '-'):>7s} "
+                  f"{_direction_cell(h):>12s}")
     else:
-        print(f"{'drug':34s} {'kcal/mol':>9s}")
+        print(f"{'drug':30s} {'kcal/mol':>9s} {'direction':>12s}")
         for h in hits:
-            print(f"{h['drug'][:34]:34s} {h['score']:9.2f}")
+            print(f"{h['drug'][:30]:30s} {h['score']:9.2f} "
+                  f"{_direction_cell(h):>12s}")
 
     print()
     if res.get("conformation_caveat"):

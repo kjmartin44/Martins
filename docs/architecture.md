@@ -183,11 +183,11 @@ Generated from each module's own first docstring line.
 | Module | Lines | Purpose |
 | --- | --- | --- |
 | `abundance.py` | 325 | Drugs that change how much of the factor exists, not what it does. |
-| `agonism.py` | 416 | Predict the *functional direction* of a drug at a receptor from its structure. |
+| `agonism.py` | 488 | Predict the *functional direction* of a drug at a receptor from its structure. |
 | `analogs.py` | 210 | Approved drugs that resemble a known modulator but are not annotated at it. |
 | `annotate.py` | 199 | Decide which of the motif-matched TFs are plausible *activators*. |
 | `audit.py` | 343 | Are the hand-curated tables still true? |
-| `catalogue.py` | 1263 | Every route that acts on your gene, in one table, on one scale. |
+| `catalogue.py` | 1277 | Every route that acts on your gene, in one table, on one scale. |
 | `cellcycle.py` | 247 | Cell-cycle phase dependence of TF activity — a separate axis from everything else. |
 | `chipregulon.py` | 419 | Regulons built from ChIP peaks, for the factors curation never reached. |
 | `cli.py` | 411 | Command-line interface. |
@@ -199,7 +199,7 @@ Generated from each module's own first docstring line.
 | `depmap.py` | 433 | What happens to a cell when a factor is removed, measured not curated. |
 | `direct.py` | 230 | Drugs that act on the target gene directly, bypassing transcription factors. |
 | `discovery.py` | 516 | Find interventions that plausibly BEAT what already exists for this gene. |
-| `docking.py` | 2577 | Structure-based prediction of functional direction, done the way that can |
+| `docking.py` | 2717 | Structure-based prediction of functional direction, done the way that can |
 | `drug_scoring.py` | 454 | Grade each TF/drug pair by combining TF-level confidence with drug quality. |
 | `drugs.py` | 492 | TF -> approved drug lookup, filtered to pharmacology that moves the TF in |
 | `eqtl.py` | 266 | Trans-eQTL evidence: does variation in the factor actually move your gene? |

@@ -219,6 +219,78 @@ def fetch_labelled_ligands(client: Client, target_chembl_id: str) -> list[dict]:
 
 
 # ------------------------------------------------------------- descriptors
+# Free-text mechanism phrases, as a drug table writes them. ChEMBL gives
+# an action_type from a controlled vocabulary; a table like the Broad
+# Repurposing Hub gives prose. These are the words that decide direction
+# in that prose, longest first so "inverse agonist" is not read as
+# "agonist".
+_MOA_ANTAGONIST = (
+    "inverse agonist", "negative allosteric modulator", "antagonist",
+    "inhibitor", "blocker", "degrader", "downregulator", "suppressor",
+    "negative modulator",
+)
+_MOA_AGONIST = (
+    "positive allosteric modulator", "partial agonist", "agonist",
+    "activator", "opener", "stimulant", "positive modulator",
+    "upregulator",
+)
+
+
+def label_from_text(text: str | None) -> str | None:
+    """`"CCR5 antagonist"` -> `"antagonist"`. None when it does not say.
+
+    Checked against the antagonist vocabulary first and longest phrase
+    first, because the words nest: "inverse agonist" contains "agonist"
+    and means the opposite of it, and a substring test in the other
+    order labels every inverse agonist as an agonist.
+
+    Returns None rather than guessing. A wrong direction label is worse
+    than a missing one - it trains the classifier to predict backwards,
+    and nothing downstream could tell.
+    """
+    if not text:
+        return None
+    low = str(text).strip().lower()
+    if not low:
+        return None
+    for phrase in _MOA_ANTAGONIST:
+        if phrase in low:
+            return "antagonist"
+    for phrase in _MOA_AGONIST:
+        if phrase in low:
+            return "agonist"
+    return None
+
+
+def labelled_ligands_local(symbol: str, rows: list) -> list[dict]:
+    """Direction-labelled ligands of one target, from a local drug table.
+
+    The offline counterpart of `fetch_labelled_ligands`. Rows need a
+    mechanism string and a SMILES; rows whose mechanism names no
+    direction are dropped rather than defaulted.
+    """
+    want = (symbol or "").strip().upper()
+    if not want:
+        return []
+    out, seen = [], set()
+    for r in rows or []:
+        smi = r.get("smiles")
+        if not smi or smi in seen:
+            continue
+        targets = r.get("targets") or []
+        if isinstance(targets, str):
+            targets = [targets]
+        if want not in {str(t).strip().upper() for t in targets}:
+            continue
+        label = label_from_text(r.get("moa") or r.get("mechanism"))
+        if label is None:
+            continue
+        seen.add(smi)
+        out.append({"smiles": smi, "label": label,
+                    "name": r.get("name") or "?", "mw": r.get("mw")})
+    return out
+
+
 def fingerprints(smiles_list: list[str], radius: int = 2, n_bits: int = 2048):
     """Morgan fingerprints as a dense array, plus the RDKit bit vectors."""
     Chem, DataStructs, AllChem, _, _ = _rdkit()

@@ -13086,3 +13086,122 @@ def test_internal_documentation_links_resolve():
                 if anchor.lower() not in have:
                     bad.append(f"{page.name} -> {href} (no such heading)")
     assert not bad, "broken documentation links: " + "; ".join(bad)
+
+
+# ===================================================================== #
+# Which way a docking hit would push the receptor.                      #
+# ===================================================================== #
+def test_inverse_agonist_is_not_read_as_an_agonist():
+    """The words nest: "inverse agonist" contains "agonist" and means the
+    opposite. A substring test in the wrong order labels every inverse
+    agonist as an agonist, and a wrong direction label is worse than a
+    missing one - it trains the classifier to predict backwards."""
+    from promoter_tf_drugs import agonism as ag
+    assert ag.label_from_text("serotonin inverse agonist") == "antagonist"
+    assert ag.label_from_text("partial agonist") == "agonist"
+    assert ag.label_from_text("negative allosteric modulator") == "antagonist"
+    assert ag.label_from_text("positive allosteric modulator") == "agonist"
+
+
+def test_an_ambiguous_mechanism_gets_no_label():
+    """"kinase modulator" names no direction. None, not a guess."""
+    from promoter_tf_drugs import agonism as ag
+    for text in ("kinase modulator", "binder", "", None, "unknown",
+                 "receptor ligand"):
+        assert ag.label_from_text(text) is None, text
+
+
+def test_direction_labels_come_from_a_local_table_without_a_network():
+    from promoter_tf_drugs import agonism as ag
+    rows = [
+        {"name": "a", "smiles": "CCO", "targets": ["CCR5"],
+         "moa": "CCR5 antagonist"},
+        {"name": "b", "smiles": "CCC", "targets": ["CCR5"],
+         "moa": "CCR5 agonist"},
+        {"name": "c", "smiles": "CCN", "targets": ["CCR5"],
+         "moa": "CCR5 binder"},                      # no direction
+        {"name": "d", "smiles": "CCF", "targets": ["VDR"],
+         "moa": "VDR agonist"},                      # other target
+    ]
+    got = ag.labelled_ligands_local("CCR5", rows)
+    assert {g["name"] for g in got} == {"a", "b"}
+    assert {g["label"] for g in got} == {"antagonist", "agonist"}
+
+
+def test_a_molecule_unlike_the_training_set_is_left_uncalled():
+    """The applicability domain is the honesty of the whole thing. A
+    confident call on a molecule the model has seen nothing like would
+    read as a measurement."""
+    import pytest
+    pytest.importorskip("sklearn")
+    pytest.importorskip("rdkit")
+    from promoter_tf_drugs import docking as dk
+
+    ago = ["CC(=O)Oc1ccccc1C(=O)O", "CCOC(=O)c1ccccc1",
+           "COc1ccccc1C(=O)O", "CC(=O)Nc1ccccc1", "CCc1ccccc1C(=O)O",
+           "CC(C)c1ccccc1C(=O)O", "CCCc1ccccc1C(=O)O",
+           "CCCCc1ccccc1C(=O)O"]
+    ant = ["CN1CCC(CC1)c1ccccc1", "CN(C)CCOc1ccccc1",
+           "CN1CCCCC1c1ccccc1", "CN(C)CCCc1ccccc1", "CN1CCN(C)CC1",
+           "CN(C)CCNc1ccccc1", "CN1CCC(CC1)Oc1ccccc1",
+           "CN(C)CCCNc1ccccc1"]
+    labelled = ([{"smiles": s, "label": "agonist", "name": f"a{i}"}
+                 for i, s in enumerate(ago)]
+                + [{"smiles": s, "label": "antagonist", "name": f"x{i}"}
+                   for i, s in enumerate(ant)])
+
+    class _Run:
+        hits = [{"drug": "far outside", "smiles": "[Na+].[Cl-]"}]
+        caveats: list = []
+
+    run = _Run()
+    summary = dk.annotate_directions(run, "T", labelled, source="test")
+    assert summary["attempted"] is True
+    assert run.hits[0]["direction"] == "undetermined"
+    assert run.hits[0]["direction_in_domain"] is False
+    assert summary["n_out_of_domain"] == 1
+
+
+def test_too_few_labels_refuses_rather_than_annotating():
+    """A per-receptor classifier needs examples of both directions. With
+    too few it says so instead of calling every hit."""
+    from promoter_tf_drugs import docking as dk
+
+    class _Run:
+        hits = [{"drug": "x", "smiles": "CCO"}]
+        caveats: list = []
+
+    run = _Run()
+    summary = dk.annotate_directions(
+        run, "T", [{"smiles": "CCO", "label": "agonist"}], source="test")
+    assert summary["attempted"] is False
+    assert "not annotated rather than guessed" in summary["reason"]
+    assert "direction" not in run.hits[0]
+
+
+def test_direction_never_changes_the_ranking():
+    """It is an annotation. The screen ranks on fit, and direction is a
+    prediction about the protein rather than about the pocket."""
+    import pytest
+    pytest.importorskip("sklearn")
+    pytest.importorskip("rdkit")
+    from promoter_tf_drugs import docking as dk
+
+    hits = [{"drug": f"d{i}", "smiles": s, "score": -5.0 - i}
+            for i, s in enumerate(
+                ["CCO", "CCC", "CCN", "CN(C)CCCc1ccccc1"])]
+
+    class _Run:
+        caveats: list = []
+
+    run = _Run()
+    run.hits = hits
+    before = [h["drug"] for h in run.hits]
+    dk.annotate_directions(
+        run, "T",
+        [{"smiles": f"CC{'C' * i}O", "label": "agonist"} for i in range(9)]
+        + [{"smiles": f"CN(C)C{'C' * i}c1ccccc1", "label": "antagonist"}
+           for i in range(9)],
+        source="test")
+    assert [h["drug"] for h in run.hits] == before
+    assert [h["score"] for h in run.hits] == [-5.0, -6.0, -7.0, -8.0]

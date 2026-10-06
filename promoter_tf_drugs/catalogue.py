@@ -798,6 +798,20 @@ def from_docking(docking: dict, *, goal: str = "up",
                 "inhibits, and that decides the direction your gene "
                 "moves",
             ]
+            # Unless something else did say. The direction comes from a
+            # classifier over this receptor's own ligands of known
+            # action, not from the docking, so it is reported as the
+            # separate claim it is - with the confidence attached,
+            # because a low-confidence call is a different thing from a
+            # measurement.
+            if h.get("direction") in ("agonist", "antagonist"):
+                conf = h.get("direction_confidence") or "unstated"
+                notes.append(
+                    f"predicted {h['direction']} at {tf}, {conf} "
+                    f"confidence, from structural similarity to ligands "
+                    f"of known action rather than from the docking. A "
+                    f"prediction about the receptor, not a measurement "
+                    f"of this compound")
             if fit_note:
                 notes.append(fit_note)
             if is_product:
