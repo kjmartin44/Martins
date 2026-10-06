@@ -11223,3 +11223,97 @@ def test_too_few_labels_declares_direction_unknown_rather_than_guessing():
     assert res["direction_model"] is False
     assert "Direction not predicted" in res["direction_note"]
     assert "needs a functional assay" in res["direction_note"]
+
+
+# ===================================================================== #
+# Docking the gene's OWN product. It was classified off-pathway, which   #
+# is right for an upstream kinase and backwards for the gene itself.     #
+# ===================================================================== #
+def _dock_on(target, state="inactive"):
+    return {"target": target, "usable": True, "auc": 0.93, "ef1": 3.2,
+            "pocket": {"pdb_id": "4MBS", "ligand_resname": "MRV",
+                       "state": state},
+            "hits": [{"drug": "cpd-1", "score": -11.2}]}
+
+
+def test_docking_the_gene_s_own_product_is_the_most_direct_route():
+    """It is not one of the promoter's factors, so the off-pathway test
+    called it the longest route when it is the shortest."""
+    from promoter_tf_drugs import catalogue as cat
+    r = cat.from_docking(_dock_on("CCR5"), goal="down",
+                         tf_roles={"VDR": "activator"}, gene="CCR5")[0]
+    assert r.category == "direct: predicted product binder"
+    assert r.directness == 0
+    assert not any("not one of the factors" in n for n in r.notes)
+
+
+def test_the_three_docking_targets_keep_their_order():
+    """Gene product, then a factor at this promoter, then anything else.
+    The directness gradient is what the score penalty reads."""
+    from promoter_tf_drugs import catalogue as cat
+    roles = {"VDR": "activator"}
+    got = {}
+    for target in ("CCR5", "VDR", "MTOR"):
+        r = cat.from_docking(_dock_on(target), goal="down",
+                             tf_roles=roles, gene="CCR5")[0]
+        got[target] = (r.category, r.directness)
+    assert got["CCR5"][1] == 0
+    assert got["VDR"][1] == 1
+    assert got["MTOR"][1] == 2
+    assert got["VDR"][0] == "TF: predicted pocket binder"
+    assert got["MTOR"][0] == "off-pathway pocket binder"
+
+
+def test_the_product_pocket_warns_about_the_readout():
+    from promoter_tf_drugs import catalogue as cat
+    r = cat.from_docking(_dock_on("CCR5"), goal="down", tf_roles={},
+                         gene="CCR5")[0]
+    joined = " ".join(r.notes)
+    assert "on CCR5 itself" in joined
+    assert "RT-qPCR will not see it" in joined
+
+
+def test_the_product_conformation_follows_the_goal_directly():
+    """No factor role in between: wanting more of the gene's activity
+    wants the agonist-bound structure and wanting less wants the other."""
+    from promoter_tf_drugs import catalogue as cat
+    cases = {("up", "active"): "supports", ("up", "inactive"): "opposes",
+             ("down", "inactive"): "supports", ("down", "active"): "opposes"}
+    for (goal, state), expect in cases.items():
+        r = cat.from_docking(_dock_on("CCR5", state), goal=goal,
+                             tf_roles={}, gene="CCR5")[0]
+        assert expect in r.mechanism, (goal, state, r.mechanism)
+
+
+def test_state_for_product_needs_no_role():
+    from promoter_tf_drugs.docking import state_for_product, state_for
+    assert state_for_product("up") == "active"
+    assert state_for_product("down") == "inactive"
+    # Same answer as an activator factor, for a different reason - which
+    # is why it is its own function rather than a call with a fake role.
+    assert state_for_product("up") == state_for("activator", "up")
+
+
+def test_the_docking_cli_offers_the_product_flag():
+    import inspect
+    from promoter_tf_drugs import docking as dk
+    src = inspect.getsource(dk.main)
+    assert '"--product"' in src
+    assert "state_for_product(args.direction)" in src
+
+
+def test_without_a_gene_nothing_is_called_a_product_dock():
+    """`gene` is optional, and a bundle read without it must not promote
+    an arbitrary target to directness 0."""
+    from promoter_tf_drugs import catalogue as cat
+    r = cat.from_docking(_dock_on("CCR5"), goal="down",
+                         tf_roles={"VDR": "activator"})[0]
+    assert r.category == "off-pathway pocket binder"
+    assert r.directness == 2
+
+
+def test_the_pipeline_tells_the_catalogue_which_gene_is_the_target():
+    import inspect
+    from promoter_tf_drugs import catalogue as cat
+    src = inspect.getsource(cat.build)
+    assert 'gene=result_block.get("gene_symbol")' in src

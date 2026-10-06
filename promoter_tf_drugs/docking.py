@@ -129,6 +129,21 @@ def chain_sequences(pdb_text: str) -> dict[str, str]:
     return {c: "".join(s) for c, s in seqs.items()}
 
 
+def state_for_product(goal: str = "up") -> str:
+    """Which conformation to dock into for the gene's OWN product.
+
+    Simpler than `state_for`, which needs a transcription factor's role
+    because a factor can activate or repress the gene it binds. The
+    product has no such ambiguity: you are moving the thing itself, so
+    wanting more of its activity means the agonist-bound conformation and
+    wanting less means the antagonist-bound one.
+
+    Worth its own function rather than calling `state_for("activator")`,
+    which gives the same answer for a reason that does not apply.
+    """
+    return "active" if goal == "up" else "inactive"
+
+
 def state_for(role: str, goal: str = "up") -> str | None:
     """Which receptor conformation to dock into, from role and goal.
 
@@ -1775,6 +1790,13 @@ def main(argv=None) -> int:
                    help="which way you want YOUR GENE to move (default up). "
                         "Used with the factor's role to pick the "
                         "conformation when --state is not given")
+    p.add_argument("--product", action="store_true",
+                   help="the target is the gene's own protein, not a "
+                        "transcription factor. The conformation then "
+                        "follows --direction directly: raising the gene's "
+                        "activity wants the agonist-bound structure, "
+                        "lowering it wants the antagonist-bound one, with "
+                        "no factor role in between")
     p.add_argument("--role", choices=["activator", "repressor", "dual"],
                    help="the factor's role, if it cannot be resolved from "
                         "local annotation. Without it the conformation is "
@@ -1835,7 +1857,11 @@ def main(argv=None) -> int:
     # sites below cannot disagree.
     want_state = args.state
     state_note = "set explicitly with --state"
-    if want_state is None:
+    if want_state is None and args.product:
+        want_state = state_for_product(args.direction)
+        state_note = (f"the gene's own product, to move its activity "
+                      f"{args.direction}")
+    elif want_state is None:
         role = args.role
         if role is None and args.gene:
             try:

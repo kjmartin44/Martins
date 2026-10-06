@@ -239,9 +239,10 @@ CATEGORY_GUIDE = {
                  "functional assay for direction - RT-qPCR will not see "
                  "this route at all, and a western blot reads it as no "
                  "effect",
-        "what": "A compound from the approved library whose chemistry "
-                "resembles the known ligands of this gene's own protein, "
-                "and which nobody has recorded as acting on it.",
+        "what": "A compound predicted to bind this gene's own protein "
+                "and not recorded as acting on it - either because its "
+                "chemistry resembles the protein's known ligands, or "
+                "because it docks into the protein's pocket.",
         "why": "It is the only route here aimed at the gene's own "
                "product rather than at a factor upstream of it, so it "
                "skips every inference about whether moving a factor moves "
@@ -255,7 +256,10 @@ CATEGORY_GUIDE = {
                 "decides whether it serves your goal.",
         "differs": "Unlike 'direct: gene product', nothing was measured "
                    "or curated for this compound at this protein - that "
-                   "category is annotation, this is a model.",
+                   "category is annotation, this is a model. Unlike 'TF: "
+                   "predicted pocket binder', the pocket is on the gene's "
+                   "own product, so no inference about a factor "
+                   "controlling the gene is involved.",
     },
     "promoter DNA binder": {
         "changes": "abundance",
@@ -697,7 +701,8 @@ def from_lincs(lincs: dict) -> list[Route]:
 
 
 def from_docking(docking: dict, *, goal: str = "up",
-                 tf_roles: dict | None = None) -> list[Route]:
+                 tf_roles: dict | None = None,
+                 gene: str | None = None) -> list[Route]:
     """Hits from a docking run performed somewhere else.
 
     Tier 4. The compound is predicted to fit a pocket, which is two
@@ -733,8 +738,16 @@ def from_docking(docking: dict, *, goal: str = "up",
         state = pocket.get("state")
 
         roles = {k.upper(): v for k, v in (tf_roles or {}).items()}
-        on_pathway = (not roles) or tf.upper() in roles
-        role = roles.get(tf.upper())
+        # The gene's own product is the shortest route there is, and the
+        # off-pathway test below would have called it the longest: it is
+        # not one of the promoter's factors, so it was labelled as
+        # establishing no route to the gene it IS.
+        is_product = bool(gene) and tf.upper() == gene.strip().upper()
+        on_pathway = is_product or (not roles) or tf.upper() in roles
+        # For the product, moving it IS the goal - no factor sits between
+        # it and the gene - so the conformation wanted follows the goal
+        # directly rather than through a factor's role.
+        role = "activator" if is_product else roles.get(tf.upper())
 
         # How the docked conformation relates to the direction wanted.
         # "supports" and "opposes" are about the POCKET, never about the
@@ -775,6 +788,13 @@ def from_docking(docking: dict, *, goal: str = "up",
             ]
             if fit_note:
                 notes.append(fit_note)
+            if is_product:
+                notes.append(
+                    f"this pocket is on {tf} itself, not on a factor "
+                    f"upstream of it. A compound binding here changes what "
+                    f"the existing protein DOES rather than how much of it "
+                    f"there is, so RT-qPCR will not see it and a western "
+                    f"blot reads it as no effect")
             if not on_pathway:
                 notes.append(
                     f"{tf} is not one of the factors found at this "
@@ -785,7 +805,8 @@ def from_docking(docking: dict, *, goal: str = "up",
 
             out.append(Route(
                 drug=h.get("drug") or "?",
-                category=("TF: predicted pocket binder" if on_pathway
+                category=("direct: predicted product binder" if is_product
+                          else "TF: predicted pocket binder" if on_pathway
                           else "off-pathway pocket binder"),
                 mechanism=(f"docks into the {tf} pocket at "
                            f"{score:.1f} kcal/mol"
@@ -797,7 +818,8 @@ def from_docking(docking: dict, *, goal: str = "up",
                 # A protein that is not one of them is at least one more
                 # step away, and how many more is unknown - 2 is the
                 # smallest honest answer, not a measured hop count.
-                acts_on=tf, tier=4, directness=1 if on_pathway else 2,
+                acts_on=tf, tier=4,
+                directness=0 if is_product else 1 if on_pathway else 2,
                 # Strength is the POCKET's validated enrichment, not this
                 # compound's score: the score separates binders from
                 # non-binders and ranks binders badly, so reading it as a
@@ -1182,7 +1204,8 @@ def build(result_block: dict, *, goal: str = "up",
     routes += from_activity_drugs(
         result_block.get("activity_drugs") or {})
     routes += from_docking(result_block.get("docking") or {}, goal=goal,
-                           tf_roles=result_block.get("tf_roles"))
+                           tf_roles=result_block.get("tf_roles"),
+                           gene=result_block.get("gene_symbol"))
     routes += from_abundance(
         result_block.get("factor_abundance") or [])
     routes += from_promoter_dna(result_block.get("promoter_dna") or {})
