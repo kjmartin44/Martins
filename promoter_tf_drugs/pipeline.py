@@ -183,6 +183,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         depmap_file: str | None = None,
         prism_file: str | None = None,
         sensitivity_scan: bool = False,
+        screen_product: bool = False,
         docking_results: str | None = None,
         activity_tissue: str | None = None,
         activity_permutations: int = 0, lincs_gmt: tuple | None = None, expression_file: str | None = None,
@@ -322,8 +323,11 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
     # ------------------------------------- 0. drugs that skip the TF route
     # Done first because if one of these exists it outranks everything below.
     direct_hits = []
+    # Defined before the branch: it was only ever assigned inside it, so
+    # anything later that wanted the gene's own accession raised
+    # NameError on a --no-direct run.
+    uniprot = None
     if include_direct:
-        uniprot = None
         if not demo:
             try:
                 ann = annotate.annotate_tfs(client, [gene])
@@ -573,6 +577,33 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                         # it again.
                         screens.setdefault(r.symbol, _screen_cache[tid])
                         break
+
+        # ------------------- 8a-bis. the gene's OWN product
+        # Every screen above points at a transcription factor. This one
+        # points at the gene's own protein, which `direct` only ever
+        # reached by looking up what was already annotated - so the
+        # package could report Maraviroc for CCR5 and could not propose a
+        # compound that might bind CCR5 and is recorded against nothing.
+        product_screen: dict = {}
+        if screen_product and not demo:
+            from . import screening as _scr
+            product_screen = _optional(
+                f"gene-product screen for {prom.gene_symbol}",
+                lambda: _scr.screen_gene_product(
+                    client, prom.gene_symbol, uniprot=uniprot,
+                    goal=goal, library=_library or None),
+                {}) or {}
+            ledger.record(
+                "product_screen", requested=True,
+                ok=bool(product_screen.get("hits")),
+                yielded=len(product_screen.get("hits") or []),
+                detail=(f"{product_screen.get('n_novel', 0)} unannotated "
+                        f"candidate(s) at the {prom.gene_symbol} protein, "
+                        f"cross-validated AUC "
+                        f"{product_screen.get('model_auc')}"
+                        if product_screen.get("hits") else
+                        str(product_screen.get("error") or
+                            "no result")[:200]))
 
         # ------------------- 8b. orthosteric vs allosteric at the top targets
         mechanisms = {}
@@ -1184,6 +1215,8 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             "tf_roles": {r.symbol: (r.annotation or {}).get("role")
                          for r in ranked},
             "sensitivity": sensitivity,
+            "product_screen": product_screen,
+            "gene_symbol": prom.gene_symbol,
         }
         all_routes = cat_mod.build(block_for_catalogue, goal=goal)
 
@@ -1249,6 +1282,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             "docking_consensus": dock_consensus,
             "dependencies": dependencies,
             "sensitivity": sensitivity,
+            "product_screen": product_screen,
             "modality_design": modality,
             "screen_plan": screen_plan,
             "lincs": lincs,

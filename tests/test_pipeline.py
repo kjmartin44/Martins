@@ -2779,9 +2779,16 @@ def test_only_direct_gene_product_changes_activity_rather_than_abundance():
     itself changes what existing protein does and barely moves its level —
     which is why ivacaftor reads as a failure on a western blot."""
     from promoter_tf_drugs import catalogue as c
-    activity = [cat for cat, g in c.CATEGORY_GUIDE.items()
-                if "ACTIVITY" in g["changes"].upper()]
-    assert activity == ["direct: gene product"]
+    activity = {cat for cat, g in c.CATEGORY_GUIDE.items()
+                if "ACTIVITY" in g["changes"].upper()}
+    # Both product categories qualify and nothing else may. The predicted
+    # one was added when the virtual screen was pointed at the gene's own
+    # protein: it acts on the product, so it changes what the existing
+    # protein does rather than how much of it there is, and the same
+    # western-blot warning applies. A transcription-mediated route
+    # appearing in this set would be the error the test is for.
+    assert activity == {"direct: gene product",
+                        "direct: predicted product binder"}
     # and its assay note must warn about the western blot explicitly
     assert "western" in c.CATEGORY_GUIDE["direct: gene product"]["assay"]
 
@@ -10842,3 +10849,166 @@ def test_the_other_presets_are_left_alone():
     from promoter_tf_drugs import shortlist as sl
     for name in ("mechanism", "empirical", "novel", "specific"):
         assert "max_burden" not in sl.PRESETS[name], name
+
+
+# ===================================================================== #
+# The virtual screen, pointed at the gene's OWN product.                 #
+# ===================================================================== #
+def _olol_actives():
+    """Beta-blockers from the local library: one coherent scaffold, so a
+    binding model has something real to learn. Skips when no library is
+    on disk, because this needs real chemistry rather than fixtures."""
+    import pytest
+    from promoter_tf_drugs import localdrugs as ld
+    lib = ld.library()
+    fam = [d for d in lib
+           if d["name"].lower().endswith("olol") and d.get("smiles")
+           and d.get("chembl_id")]
+    if len(fam) < 20:
+        pytest.skip("no local drug library with a usable ligand family")
+    return lib, [{"chembl_id": d["chembl_id"], "smiles": d["smiles"],
+                  "pchembl": 8.0} for d in fam]
+
+
+def test_the_product_screen_recovers_ligands_it_never_trained_on():
+    """The point of pointing a screen at the gene's own product: it can
+    propose a compound nobody annotated against it.
+
+    Trained on the "-olol" beta-blockers only, it returns CARVEDILOL and
+    PROPAFENONE, neither of which ends in -olol and so neither of which
+    was in the training set. Both are real ADRB1 antagonists.
+    """
+    import pytest
+    pytest.importorskip("sklearn")
+    from promoter_tf_drugs import screening as scr
+    lib, actives = _olol_actives()
+    res = scr.screen_gene_product(None, "ADRB1", uniprot="P08588",
+                                  library=lib, actives=actives,
+                                  goal="down", top_n=20)
+    assert not res.get("error"), res.get("error")
+    assert res["model_auc"] >= scr.MIN_BINDING_AUC
+    assert res["n_novel"] >= 1, (
+        "the in-sample known ligands crowded out every novel candidate, "
+        "which is the one thing this screen exists to produce")
+    names = {h["drug"].lower() for h in res["hits"]
+             if h["quadrant"] == "NOVEL HYPOTHESIS"}
+    assert "carvedilol" in names, sorted(names)
+
+
+def test_the_product_screen_refuses_a_model_that_cannot_rank():
+    """A deliberately incoherent active set - one scaffold plus twenty
+    unrelated drugs - gives a cross-validated AUC below the floor, and a
+    model that cannot separate its own actives from decoys says nothing
+    about an untested drug."""
+    import pytest
+    import random
+    pytest.importorskip("sklearn")
+    from promoter_tf_drugs import screening as scr
+    lib, actives = _olol_actives()
+    rng = random.Random(0)
+    noise = rng.sample([d for d in lib if d.get("chembl_id")], 25)
+    mixed = actives[:6] + [{"chembl_id": d["chembl_id"],
+                            "smiles": d["smiles"], "pchembl": 8.0}
+                           for d in noise]
+    res = scr.screen_gene_product(None, "ADRB1", library=lib,
+                                  actives=mixed, goal="down")
+    assert res.get("hits") == [] or res.get("error")
+    if res.get("error"):
+        assert "below" in res["error"]
+
+
+def test_no_ligand_source_is_a_missing_source_not_a_bad_target():
+    from promoter_tf_drugs import screening as scr
+    res = scr.screen_gene_product(None, "NOSUCHGENE", library=[
+        {"name": "x", "smiles": "CCO", "chembl_id": "C1"}])
+    assert res["hits"] == []
+    assert "missing source rather than an undruggable protein" in res["error"]
+    assert "actives=" in res["error"]
+
+
+def test_only_the_unannotated_candidates_become_routes():
+    """The known binders are already reported by `from_direct` at tier 1.
+    Emitting them here too would double-count the same drug and bury the
+    one thing this screen adds."""
+    from promoter_tf_drugs import catalogue as cat
+    screen = {
+        "is_gene_product": True, "gene": "ADRB1", "model_auc": 0.95,
+        "enrichment": {"usable": True},
+        "hits": [
+            {"drug": "atenolol", "quadrant": "ESTABLISHED LIGAND, untested "
+                                             "on this gene", "probability": 0.99},
+            {"drug": "carvedilol", "quadrant": "NOVEL HYPOTHESIS",
+             "probability": 0.71, "notes": ["binds the protein"]},
+        ]}
+    routes = cat.from_product_screen(screen, "ADRB1")
+    assert [r.drug for r in routes] == ["carvedilol"]
+    r = routes[0]
+    assert r.tier == 5
+    assert r.directness == 0, "it acts on the product, with nothing between"
+    assert r.category == "direct: predicted product binder"
+
+
+def test_a_product_screen_that_did_not_validate_contributes_nothing():
+    from promoter_tf_drugs import catalogue as cat
+    assert cat.from_product_screen(
+        {"is_gene_product": True, "enrichment": {"usable": False},
+         "hits": [{"drug": "x", "quadrant": "NOVEL HYPOTHESIS",
+                   "probability": 0.9}]}, "ADRB1") == []
+    assert cat.from_product_screen({}, "ADRB1") == []
+
+
+def test_a_tf_screen_is_not_mistaken_for_a_product_screen():
+    """Both return the same shape; only the product one carries the flag."""
+    from promoter_tf_drugs import catalogue as cat
+    assert cat.from_product_screen(
+        {"enrichment": {"usable": True},
+         "hits": [{"drug": "x", "quadrant": "NOVEL HYPOTHESIS",
+                   "probability": 0.9}]}, "ADRB1") == []
+
+
+def test_the_product_route_warns_that_rtqpcr_will_not_see_it():
+    import inspect
+    from promoter_tf_drugs import screening as scr
+    src = inspect.getsource(scr.screen_gene_product)
+    assert "RT-qPCR will not see" in src
+    assert "binding is not direction" in src
+
+
+def test_the_library_reader_keeps_the_identifier_column():
+    """Every screen keys known ligands, potency and - worst - its decoy
+    EXCLUSION on chembl_id. read_table hardcoded None, so with a local
+    library the training actives could be sampled as decoys."""
+    import tempfile
+    from pathlib import Path
+    from promoter_tf_drugs import localdrugs as ld
+    TAB, NL = chr(9), chr(10)
+    with tempfile.TemporaryDirectory() as td:
+        f = Path(td) / "lib.tsv"
+        f.write_text(
+            "name" + TAB + "smiles" + TAB + "chembl_id" + TAB
+            + "max_phase" + NL
+            + "aspirin" + TAB + "CC(=O)Oc1ccccc1C(=O)O" + TAB
+            + "CHEMBL25" + TAB + "4" + NL,
+            encoding="utf-8")
+        rows = ld.read_table(f)
+    assert rows[0]["chembl_id"] == "CHEMBL25"
+
+
+def test_the_product_screen_flag_reaches_the_pipeline():
+    import inspect
+    from promoter_tf_drugs import cli, pipeline as pl
+    src = inspect.getsource(cli)
+    assert "--screen-product" in src
+    assert "screen_product=args.screen_product" in src
+    assert "screen_product" in inspect.signature(pl.run).parameters
+
+
+def test_the_gene_accession_exists_even_without_the_direct_step():
+    """`uniprot` was assigned only inside `if include_direct:`, so the
+    product screen would have raised NameError on a --no-direct run."""
+    import inspect
+    from promoter_tf_drugs import pipeline as pl
+    src = inspect.getsource(pl.run)
+    i = src.index("uniprot = None")
+    j = src.index("if include_direct:")
+    assert i < j, "the accession is still defined inside the branch"

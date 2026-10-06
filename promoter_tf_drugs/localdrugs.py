@@ -78,6 +78,13 @@ _SMILES_COLS = (
 )
 _TARGET_COLS = ("target", "targets", "gene", "gene_symbol", "target_symbol",
                 "gene_name", "uniprot", "accession")
+# Identifier columns. Dropping these cost the offline screening paths
+# more than it looked: every screen keys its known ligands, its potency
+# lookups and - worst - its decoy EXCLUSION on chembl_id, so a library
+# where every id is None let training actives be sampled as decoys.
+_ID_COLS = ("chembl_id", "molecule_chembl_id", "chembl", "drug_id",
+            "broad_id", "pert_id", "id")
+
 _PHASE_COLS = ("clinical_phase", "phase", "max_phase", "max_clinical_phase",
                "highest_clinical_phase", "status", "development_status")
 
@@ -306,6 +313,7 @@ def read_table(path, *, approved_only: bool = True) -> list:
         smi_c = _pick(reader.fieldnames, _SMILES_COLS)
         tgt_c = _pick(reader.fieldnames, _TARGET_COLS)
         ph_c = _pick(reader.fieldnames, _PHASE_COLS)
+        id_c = _pick(reader.fieldnames, _ID_COLS)
 
         if smi_c is None:
             raise ValueError(
@@ -332,9 +340,12 @@ def read_table(path, *, approved_only: bool = True) -> list:
                            raw.replace(";", "|").replace(",", "|").split("|")
                            if t.strip()]
             name = (row.get(name_c) or "").strip() if name_c else ""
+            cid = (row.get(id_c) or "").strip() if id_c else ""
             out.append({"name": name or smi[:24], "smiles": smi,
                         "targets": targets, "phase": phase or None,
-                        "chembl_id": None,
+                        # Read, not discarded. None only when the table
+                        # genuinely has no identifier column.
+                        "chembl_id": cid or None,
                         # Which column the name came from, so resolve_name
                         # can prefer an INN over a brand name.
                         "_name_column": name_c})

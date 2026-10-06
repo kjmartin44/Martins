@@ -576,6 +576,164 @@ def local_library(path=None) -> list:
         return []
 
 
+def screen_gene_product(client, gene: str, *, uniprot: str | None = None,
+                        goal: str = "up", library: list[dict] | None = None,
+                        actives: list[dict] | None = None,
+                        top_n: int = 25, decoy_ratio: int = 3,
+                        seed: int = 0) -> dict:
+    """Approved drugs predicted to bind this gene's own protein product.
+
+    Every other screen here points at a transcription factor, which moves
+    your gene by changing its transcription. This one points at the gene's
+    own protein, which is a different intervention with a different
+    readout: it changes what the existing protein DOES and barely moves
+    how much of it there is, so RT-qPCR will not see it and a western blot
+    reads it as a failure.
+
+    `direct.protein_level_drugs` already reports drugs annotated against
+    this product. This exists for the ones that are not: a compound in the
+    approved library whose chemistry resembles the product's known
+    ligands, which nobody has recorded as acting on it.
+
+    Two honest limits are built in rather than left to the reader.
+
+    The model is validated out of fold, and refused below
+    MIN_BINDING_AUC - a model that cannot separate known binders from
+    decoys says nothing about an untested drug. And the known binders
+    themselves come back as ESTABLISHED LIGAND rows whose score is an
+    IN-SAMPLE fit, because they were the training set; they are a
+    sanity check that the pipeline found the right protein, not evidence
+    about those drugs.
+    """
+    import random
+
+    from . import agonism
+
+    sym = (gene or "").strip().upper()
+    if not sym:
+        return {"gene": gene, "hits": [], "error": "no gene symbol given"}
+
+    # Known ligands of the product. Local potency first, for the same
+    # reason every other path reads it first: on a blocked network the
+    # ChEMBL call is what leaves this empty.
+    sources: list = []
+    uni = uniprot or uniprot_for(sym)
+    if actives:
+        # Supplied by the caller. Worth having as an input rather than
+        # only an internal lookup: without a local potency file this
+        # screen cannot run offline at all, and whoever is studying the
+        # gene usually knows its ligands.
+        actives = list(actives)
+        sources.append("supplied by the caller")
+    else:
+        actives = local_actives_for(sym, uniprot=uni)
+        if actives:
+            sources.append("local potency file")
+    if not actives and client is not None:
+        from .drugs import _chembl_targets
+        for tid in (_chembl_targets(client, sym, uni) or [])[:2]:
+            actives.extend(agonism.fetch_actives(client, tid))
+        if actives:
+            sources.append("ChEMBL")
+
+    if len(actives) < MIN_ACTIVES:
+        return {
+            "gene": sym, "uniprot": uni, "hits": [],
+            "n_actives": len(actives),
+            "source": sources[0] if sources else None,
+            "error": (
+                f"{sym}'s own product has {len(actives)} measured ligand(s) "
+                f"available, below the {MIN_ACTIVES} needed to train a "
+                f"binding model. A screen without them would rank the "
+                f"library on nothing."
+                + ("" if sources else
+                   " No ligand source was readable: no local potency file "
+                   "(BindingDB or a ChEMBL SQLite dump in data/), no "
+                   "client, and none supplied. That is a missing source "
+                   "rather than an undruggable protein, and passing "
+                   "`actives=` is the offline way in.")),
+        }
+
+    if library is not None:
+        lib = library
+    else:
+        lib = local_library()
+        if not lib and client is not None:
+            lib = approved_library(client)
+    if not lib:
+        return {"gene": sym, "uniprot": uni, "hits": [],
+                "error": ("no screening library: no local drug table on "
+                          "disk and no client to fetch one. Merge one with "
+                          "`python -m promoter_tf_drugs.localdrugs "
+                          "--merge FILE...`.")}
+
+    active_ids = {a["chembl_id"] for a in actives if a.get("chembl_id")}
+    pool = [d for d in lib if d.get("chembl_id") not in active_ids]
+    rng = random.Random(seed)
+    decoys = rng.sample(pool, min(len(pool), len(actives) * decoy_ratio))
+
+    model, auc = build_binding_model(actives, decoys, seed=seed)
+    if model is None:
+        return {"gene": sym, "uniprot": uni, "hits": [],
+                "n_actives": len(actives),
+                "error": "binding model could not be trained (structures "
+                         "unparseable or too few decoys)"}
+    if auc is not None and auc < MIN_BINDING_AUC:
+        return {
+            "gene": sym, "uniprot": uni, "hits": [],
+            "n_actives": len(actives), "model_auc": round(auc, 3),
+            "error": (
+                f"the binding model for {sym} reaches cross-validated AUC "
+                f"{auc:.2f}, below {MIN_BINDING_AUC}. It cannot separate "
+                f"{sym}'s known binders from decoys, so what it says about "
+                f"an untested drug is noise. Screen not reported."),
+        }
+
+    # Ask for room for both. The known ligands are scored IN SAMPLE and
+    # therefore score highest, so a plain top_n comes back as nothing but
+    # the training set - the control crowding out the one thing this
+    # screen exists to produce. Requesting top_n beyond the actives
+    # leaves space for the unannotated candidates underneath them.
+    hits = screen(model, lib, goal="up",       # P(binder), not P(agonist)
+                  known_ids=active_ids, top_n=top_n + len(active_ids),
+                  known_potency={a["chembl_id"]: a["pchembl"]
+                                 for a in actives if a.get("pchembl")})
+
+    known_back = [h for h in hits if h.known_ligand]
+    novel = [h for h in hits if h.quadrant == "NOVEL HYPOTHESIS"][:top_n]
+    hits = known_back + novel
+    for h in novel:
+        h.notes.append(
+            f"predicted to bind the {sym} PROTEIN, not to change {sym} "
+            f"transcription. If it binds, it changes what the existing "
+            f"protein does - RT-qPCR will not see that and a western blot "
+            f"reads it as no effect")
+        h.notes.append(
+            f"binding is not direction: whether this would inhibit {sym} "
+            f"or activate it decides whether it serves a goal of "
+            f"'{goal}', and a binding model cannot tell you which")
+
+    return {
+        "gene": sym, "uniprot": uni, "task": "binding",
+        "is_gene_product": True,
+        "hits": [h.to_dict() for h in hits],
+        "n_actives": len(actives), "n_decoys": len(decoys),
+        "library_size": len(lib),
+        "model_auc": round(auc, 3) if auc is not None else None,
+        "n_known_recovered": len(known_back),
+        "n_novel": len(novel),
+        "enrichment": enrichment_check(hits),
+        "source": sources[0] if sources else None,
+        "offline": "local potency file" in sources,
+        "control_note": (
+            f"{len(known_back)} of {sym}'s own known binders came back in "
+            f"the top {top_n}. Their scores are an IN-SAMPLE fit - they "
+            f"were the training set - so this says the screen found the "
+            f"right protein, and says nothing about those drugs. The "
+            f"out-of-fold number is the AUC above."),
+    }
+
+
 def screen_family(client, symbol: str, *, goal: str = "up",
                   library: list[dict] | None = None, top_n: int = 25,
                   decoy_ratio: int = 3, seed: int = 0,

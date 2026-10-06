@@ -64,6 +64,7 @@ TIERS = {
 CATEGORIES = [
     "direct: gene or transcript",
     "direct: gene product",
+    "direct: predicted product binder",
     "TF: orthosteric ligand",
     "TF: inferred activity change",
     "TF: abundance change",
@@ -230,6 +231,30 @@ CATEGORY_GUIDE = {
         "differs": "Does not touch expression at all — it is here because it "
                    "changes functional output, which is often what you "
                    "actually want.",
+    },
+    "direct: predicted product binder": {
+        "changes": "activity",
+        "assay": "a binding assay against the protein first, then a "
+                 "functional assay for direction - RT-qPCR will not see "
+                 "this route at all, and a western blot reads it as no "
+                 "effect",
+        "what": "A compound from the approved library whose chemistry "
+                "resembles the known ligands of this gene's own protein, "
+                "and which nobody has recorded as acting on it.",
+        "why": "It is the only route here aimed at the gene's own "
+               "product rather than at a factor upstream of it, so it "
+               "skips every inference about whether moving a factor moves "
+               "your gene. And unlike the curated product drugs it can "
+               "propose a compound no one has annotated.",
+        "cost": "Predicted binding and nothing more. The model is "
+                "refused below a cross-validated AUC floor, which bounds "
+                "how badly it can be ranking, but a hit is a hypothesis "
+                "for a binding assay. Direction is separate again: "
+                "whether binding inhibits or activates the protein "
+                "decides whether it serves your goal.",
+        "differs": "Unlike 'direct: gene product', nothing was measured "
+                   "or curated for this compound at this protein - that "
+                   "category is annotation, this is a model.",
     },
     "TF: orthosteric ligand": {
         "changes": "abundance",
@@ -836,6 +861,46 @@ def from_sensitivity(sens: dict, *, goal: str = "up",
     return out
 
 
+def from_product_screen(screen: dict, gene: str) -> list[Route]:
+    """Predicted binders of the gene's own protein product.
+
+    Tier 5. A model trained on the product's known ligands says the
+    chemistry fits; nothing was measured for this compound at this
+    protein.
+
+    Only the NOVEL HYPOTHESIS rows become routes. The established-ligand
+    rows are the drugs already annotated against the product, which
+    `from_direct` reports at tier 1 with far better standing - emitting
+    them here too would double-count the same drug and bury the one thing
+    this screen adds, which is the compounds nobody has annotated.
+    """
+    if not screen or not screen.get("is_gene_product"):
+        return []
+    if not (screen.get("enrichment") or {}).get("usable"):
+        return []
+
+    sym = (gene or screen.get("gene") or "?").upper()
+    auc = screen.get("model_auc")
+    out = []
+    for h in screen.get("hits", []):
+        if h.get("quadrant") != "NOVEL HYPOTHESIS":
+            continue
+        out.append(Route(
+            drug=h.get("drug") or "?",
+            category="direct: predicted product binder",
+            mechanism=(f"predicted to bind the {sym} protein itself, by a "
+                       f"model trained on its known ligands"),
+            # Directness 0: it acts on the gene's own product, with no
+            # factor in between. That is the shortest route in the report
+            # and the tier is what says how little is known about it.
+            acts_on=sym, tier=5, directness=0,
+            axes=Axes(round(float(h.get("probability") or 0.0), 3), 0.6,
+                      0.5, f"binding model, cross-validated AUC {auc}"),
+            approved=True, source="product_screen",
+            notes=list(h.get("notes") or [])[:3]))
+    return out
+
+
 def from_abundance(hits: list) -> list[Route]:
     """Compounds that change how much of the factor exists.
 
@@ -1051,6 +1116,9 @@ def build(result_block: dict, *, goal: str = "up",
                            tf_roles=result_block.get("tf_roles"))
     routes += from_abundance(
         result_block.get("factor_abundance") or [])
+    routes += from_product_screen(
+        result_block.get("product_screen") or {},
+        result_block.get("gene_symbol") or "")
     routes += from_sensitivity(result_block.get("sensitivity") or {},
                                goal=goal,
                                tf_roles=result_block.get("tf_roles"))

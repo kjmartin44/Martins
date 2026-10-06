@@ -209,6 +209,14 @@ def add_analysis_args(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
                         "--bundle DIR --out JSON`, which is the step "
                         "that needs Linux. Prepare and report here, "
                         "dock there")
+    p.add_argument("--screen-product", action="store_true",
+                   help="virtual-screen the approved library against the "
+                        "GENE'S OWN protein, not just the transcription "
+                        "factors. Finds compounds whose chemistry fits the "
+                        "product's known ligands and which nobody has "
+                        "annotated against it. This changes what the "
+                        "existing protein does rather than how much of it "
+                        "there is, so RT-qPCR will not see it")
     p.add_argument("--sensitivity-scan", action="store_true",
                    help="correlate every approved compound in the PRISM "
                         "panel against each factor's CRISPR knockout "
@@ -326,6 +334,7 @@ def _execute(args) -> int:
         depmap_file=args.depmap_file,
         prism_file=args.prism_file,
         sensitivity_scan=args.sensitivity_scan,
+        screen_product=args.screen_product,
         docking_results=args.docking_results,
         tf_activity=args.tf_activity,
         activity_tissue=args.activity_tissue,
