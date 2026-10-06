@@ -13257,3 +13257,67 @@ def test_a_disabled_lookup_does_not_outlive_the_run_it_names():
     assert dlv.expression_source_status()["ok"] is False
     dlv.reset_expression()
     assert dlv.expression_source_status()["ok"] is True
+
+
+def test_the_query_block_records_every_argument_the_run_was_given():
+    """results.json recorded twenty-four of the fifty-eight arguments
+    run() takes, so a result could not be audited against the command
+    that produced it. It is also what hid the panel dropping arguments
+    on the way in: the ones it dropped were not among those recorded."""
+    import inspect
+    from promoter_tf_drugs import pipeline as pl
+    res = pl.run("DEMOGENE", demo=True)
+    params = set(inspect.signature(pl.run).parameters)
+    missing = sorted(params - set(res["query"]))
+    assert not missing, f"arguments absent from the query block: {missing}"
+
+
+def test_the_query_block_keeps_the_keys_it_always_had():
+    """AGENTS.md: preserve the meaning of saved result fields. Anything
+    reading an older result must still find what it read before."""
+    from promoter_tf_drugs import pipeline as pl
+    was = {"gene", "species", "upstream", "downstream", "pvalue", "demo",
+           "mask_repeats", "goal", "tissue", "tf_weight", "proliferation",
+           "cell_type_check", "use_lincs", "use_genetics", "regulon_file",
+           "include_direct", "screen_receptors", "compare_mechanisms",
+           "upstream_network", "find_improvements", "chip_bed",
+           "chip_api", "approved_only", "n_motifs"}
+    q = pl.run("DEMOGENE", demo=True)["query"]
+    assert was <= set(q), sorted(was - set(q))
+    assert q["goal"] == "up" and q["demo"] is True
+
+
+def test_the_query_block_stays_json_serialisable():
+    """A Path or a tuple reaches it from a Python caller, and a result
+    that cannot be written is a run thrown away at the last step."""
+    import json
+    import pathlib
+    from promoter_tf_drugs import pipeline as pl
+    q = pl.query_block({"gene": "X", "pfm_file": pathlib.Path("a/b.txt"),
+                        "lincs_gmt": ("u.gmt", "d.gmt")}, n_motifs=3)
+    json.dumps(q)
+    assert q["pfm_file"] == str(pathlib.Path("a/b.txt"))
+    assert q["n_motifs"] == 3
+
+
+def test_the_query_block_cannot_drift_from_the_signature():
+    """Built from RUN_SPECS, which a separate test holds against the
+    signature - so a new argument appears in the result the moment it
+    exists, rather than when somebody remembers."""
+    import inspect
+    from promoter_tf_drugs import pipeline as pl
+    src = inspect.getsource(pl.query_block)
+    assert "RUN_SPECS" in src
+    assert "for name in RUN_SPECS" in src
+
+
+def test_parity_notices_a_gene_run_without_the_docking_results():
+    """The check exists so a gene that lost a stage for want of evidence
+    is not read as biologically worse. It could not see most arguments
+    because the result did not record them."""
+    from promoter_tf_drugs import panel as pnl
+    import inspect
+    src = inspect.getsource(pnl.parity)
+    for field in ("docking_results", "tf_activity", "upstream_network",
+                  "expression_file", "screen_product"):
+        assert f'"{field}"' in src, field

@@ -134,9 +134,18 @@ def parity(panel: Panel) -> dict:
     nothing to do with its biology, and would look worse than a gene that had
     the evidence.
     """
+    # Every argument that changes what evidence a gene can have. The list
+    # was shorter than this because the result only recorded twenty-four
+    # arguments; now that it records all of them, the check can see the
+    # differences it was written to catch.
     fields = ("goal", "demo", "chip_bed", "chip_api", "cell_type_check",
               "use_lincs", "use_genetics", "regulon_file", "tissue",
-              "approved_only", "pvalue", "upstream", "downstream")
+              "approved_only", "pvalue", "upstream", "downstream",
+              "tf_activity", "activity_tissue", "upstream_network",
+              "docking_results", "promoter_dna", "screen_product",
+              "sensitivity_scan", "expression_file", "lincs_file",
+              "signature_file", "depmap_file", "prism_file",
+              "predict_direction", "all_tss", "pfm_file")
     genes = panel.included
     seen: dict = {f: {} for f in fields}
     for g in genes:

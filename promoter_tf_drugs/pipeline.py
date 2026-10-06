@@ -264,6 +264,33 @@ RUN_SPECS: dict = {
 }
 
 
+def query_block(args: dict, **derived) -> dict:
+    """What the run was asked to do, and what it worked out from that.
+
+    Built from `RUN_SPECS` rather than written out by hand. The
+    hand-written version recorded twenty-four of fifty-eight arguments,
+    so a result could not be audited against the command that produced
+    it - and when the panel turned out to be dropping arguments on the
+    way in, the saved result could not show it, because the dropped ones
+    were not among those recorded.
+
+    `derived` is for values the run computed rather than received, like
+    the number of motifs actually loaded. They are not arguments and are
+    kept distinguishable by being passed separately.
+
+    Paths are recorded as given, not resolved: the record should say
+    what the run was pointed at, not where that happened to be today.
+    """
+    out: dict = {}
+    for name in RUN_SPECS:
+        value = args.get(name)
+        # Path objects are not JSON-serialisable, and a run started from
+        # Python may well pass one.
+        out[name] = str(value) if isinstance(value, Path) else value
+    out.update(derived)
+    return out
+
+
 def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         pvalue: float = 1e-4, species: str = "homo_sapiens",
         pfm_file: str | None = None, chip_bed: str | None = None,
@@ -304,9 +331,15 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
     """Run the full pipeline and return a JSON-serialisable result dict."""
     # locals() here is exactly the arguments, before anything else is
     # bound. Every one is checked against RUN_SPECS, so an annotation
-    # stops being a comment.
-    _validation.check_all(RUN_SPECS, dict(locals()))
+    # stops being a comment, and the same snapshot is what the result's
+    # query block records - so what a run was asked to do cannot drift
+    # from what it reports it was asked to do.
+    _args = dict(locals())
+    _validation.check_all(RUN_SPECS, _args)
     gene = gene.strip()
+    # `gene` is the only argument reassigned below, so the snapshot
+    # needs refreshing once and then matches throughout.
+    _args["gene"] = gene
     # The one rule that spans two arguments, so it has no place in a
     # per-argument table.
     if upstream + downstream == 0:
@@ -1432,23 +1465,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         "evidence_sources": ledger.to_dict(),
         "evidence_verdict": prov_mod.verdict(
             ledger, (outputs[0] or {}).get("scan_quality") if outputs else None),
-        "query": {
-            "gene": gene, "species": species, "upstream": upstream,
-            "downstream": downstream, "pvalue": pvalue, "demo": demo,
-            "mask_repeats": mask_repeats, "goal": goal,
-            "tissue": tissue, "tf_weight": tf_weight,
-            "proliferation": proliferation, "cell_type_check": cell_type_check,
-            "use_lincs": use_lincs,
-            "use_genetics": use_genetics,
-            "regulon_file": regulon_file, "include_direct": include_direct,
-            "screen_receptors": screen_receptors,
-            "compare_mechanisms": compare_mechanisms,
-            "upstream_network": upstream_network,
-            "find_improvements": find_improvements,
-            "chip_bed": chip_bed, "chip_api": chip_api,
-            "approved_only": approved_only,
-            "n_motifs": len(motif_set),
-        },
+        "query": query_block(_args, n_motifs=len(motif_set)),
         "results": outputs,
         "weights": WEIGHTS,
         "drug_weights": drug_scoring.DRUG_WEIGHTS,
