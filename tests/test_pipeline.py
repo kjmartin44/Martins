@@ -12632,3 +12632,35 @@ def test_the_documented_command_check_would_notice_a_renamed_flag(
     found = re.findall(r"--[a-z0-9][a-z0-9-]*", fake.split("docking")[1])
     assert found == ["--not-a-real-flag"]
     assert found[0] not in flags
+
+
+def test_an_unreadable_conformation_is_explained_on_the_route():
+    """A route whose structure has no readable conformation used to read
+    as though the question was never asked. It was asked and could not be
+    answered, which for a GPCR is permanent - the classifier reads
+    coactivator peptides and a GPCR has none."""
+    from promoter_tf_drugs import catalogue as cat
+    run = {"target": "CCR5", "usable": True, "auc": 0.8, "ef1": 10,
+           "pocket": {"pdb_id": "4MBS", "ligand_resname": "MRV",
+                      "state": "unknown"},
+           "hits": [{"drug": "maraviroc", "score": -11.2}]}
+    routes = cat.from_docking(run, goal="down", gene="CCR5")
+    assert routes
+    notes = " ".join(n for r in routes for n in (r.notes or []))
+    assert "could not be read" in notes, notes
+    assert "not a finding about CCR5" in notes
+
+
+def test_a_readable_conformation_still_states_the_fit():
+    """The explanatory note must not replace the real conformation
+    reasoning when the structure can actually be classified."""
+    from promoter_tf_drugs import catalogue as cat
+    run = {"target": "VDR", "usable": True, "auc": 0.9, "ef1": 12,
+           "pocket": {"pdb_id": "1DB1", "ligand_resname": "VDX",
+                      "state": "active"},
+           "hits": [{"drug": "calcitriol", "score": -12.8}]}
+    routes = cat.from_docking(run, goal="up", gene="GENE",
+                              tf_roles={"VDR": "activator"})
+    notes = " ".join(n for r in routes for n in (r.notes or []))
+    assert "could not be read" not in notes, notes
+    assert "conformation to stabilise" in notes, notes

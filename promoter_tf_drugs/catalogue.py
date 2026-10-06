@@ -754,6 +754,18 @@ def from_docking(docking: dict, *, goal: str = "up",
         # compound: a molecule that fits the active conformation may still
         # be an antagonist of it.
         fit, fit_note = "unaddressed", None
+        if state not in ("active", "inactive"):
+            # Asked and unanswerable, not never asked. The conformation
+            # is read from bound coactivator or corepressor peptides,
+            # which only nuclear receptors carry, so for a GPCR, a
+            # kinase or an enzyme it cannot be determined at all.
+            fit_note = (
+                f"the conformation of this structure could not be read, "
+                f"so nothing here says whether the pocket is the one you "
+                f"want stabilised. That is a limit of the method - the "
+                f"conformation is judged by a bound coactivator or "
+                f"corepressor peptide, which only nuclear receptors "
+                f"carry - and not a finding about {tf}")
         if state in ("active", "inactive") and role:
             from .drugs import desired_direction
             want = desired_direction(role, goal)
