@@ -12664,3 +12664,67 @@ def test_a_readable_conformation_still_states_the_fit():
     notes = " ".join(n for r in routes for n in (r.notes or []))
     assert "could not be read" not in notes, notes
     assert "conformation to stabilise" in notes, notes
+
+
+def test_the_reason_a_compound_is_absent_is_counted_not_guessed():
+    """The caveat said compounds were dropped "usually because no 3D
+    conformer could be generated". The code knows which it was and threw
+    the distinction away. A compound that cannot be given a 3D structure
+    and one whose docking crashed are different problems and send you to
+    different places."""
+    import pathlib
+    from promoter_tf_drugs import docking as dk
+
+    def embed(smi, path, **kw):
+        if smi.startswith("BAD"):
+            raise ValueError("3D embedding failed")
+        path.write_text("sdf", encoding="utf-8")
+
+    calls = {"n": 0}
+
+    def boxed(receptor, sdf, box, **kw):
+        calls["n"] += 1
+        if calls["n"] % 3 == 0:
+            raise RuntimeError("gnina exploded")
+        return dk.PoseScore(affinity=-7.0, engine="gnina")
+
+    import unittest.mock as mock
+    with mock.patch.object(dk, "smiles_to_sdf", embed), \
+         mock.patch.object(dk, "dock_one_scored", boxed), \
+         mock.patch.object(dk, "engine_name", lambda *a: "gnina"):
+        tally = {}
+        smis = ["BAD1", "BAD2"] + [f"CC{i}" for i in range(9)]
+        dk._dock_smiles(smis, pathlib.Path("r.pdb"), None,
+                        exhaustiveness=1, seed=0,
+                        box=(0, 0, 0, 20, 20, 20), detailed=True,
+                        tally=tally)
+    assert tally.get("embedding_failed") == 2, tally
+    assert tally.get("docking_failed", 0) >= 1, tally
+
+
+def test_the_absent_compound_caveat_states_measured_counts(monkeypatch):
+    import pathlib
+    from promoter_tf_drugs import docking as dk
+
+    lib = [{"name": f"d{i}", "smiles": "CCO"} for i in range(10)]
+
+    def fake(smiles_list, receptor, autobox, **kw):
+        t = kw.get("tally")
+        if t is not None:
+            t["embedding_failed"] = 3
+        return ([None] * 3
+                + [dk.PoseScore(affinity=-7.0, engine="gnina")] * 7)
+
+    monkeypatch.setattr(dk, "_dock_smiles", fake)
+    monkeypatch.setattr(dk, "_docking_binary", lambda: "/u/gnina")
+    monkeypatch.setattr(dk, "validate_pocket",
+                        lambda *a, **k: {"usable": True, "auc": 0.9,
+                                         "ef1": 10})
+    run = dk.screen_by_docking(pathlib.Path("r.pdb"), lib, target="T",
+                               actives=[{"smiles": "CC"}] * 6,
+                               decoys=[{"smiles": "CCC"}] * 6,
+                               box=(0, 0, 0, 20, 20, 20))
+    text = " ".join(run.caveats)
+    assert "3 had no 3D conformer" in text, text
+    assert "usually" not in text, text
+    assert run.failures == {"embedding_failed": 3}

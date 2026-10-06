@@ -778,7 +778,8 @@ _REC_CACHE: dict = {}
 def _dock_smiles(smiles_list: list, receptor: Path, autobox: Path | None,
                  *, exhaustiveness: int, seed: int, score_fn=None,
                  box: tuple | None = None, cpu: int = 1,
-                 jobs: int = 1, detailed: bool = False) -> list:
+                 jobs: int = 1, detailed: bool = False,
+                 tally: dict | None = None) -> list:
     """Score each SMILES, None where docking or embedding failed.
 
     `score_fn` exists so the gate and the ranking can be exercised
@@ -788,6 +789,11 @@ def _dock_smiles(smiles_list: list, receptor: Path, autobox: Path | None,
     keeping gnina's CNN numbers. Without it they are computed and thrown
     away, which is the whole reason to run gnina rather than smina.
 
+    `tally`, when given, is filled with the counts of what failed and
+    why: a compound that could not be given a 3D structure is a
+    different problem from one whose docking crashed, and reporting
+    either as the other sends you after the wrong thing.
+
     `jobs` runs that many compounds at once. Each is a separate
     subprocess with its own temporary directory, so they share nothing
     but the read-only receptor, and the returned list stays in the order
@@ -795,6 +801,13 @@ def _dock_smiles(smiles_list: list, receptor: Path, autobox: Path | None,
     on it: same receptor, same box, same seed.
     """
     n = len(smiles_list)
+    tally_lock = threading.Lock()
+
+    def _count(kind):
+        if tally is None:
+            return
+        with tally_lock:
+            tally[kind] = tally.get(kind, 0) + 1
 
     def one(smi):
         """Score a single SMILES. Returns None rather than raising."""
@@ -815,6 +828,7 @@ def _dock_smiles(smiles_list: list, receptor: Path, autobox: Path | None,
                 smiles_to_sdf(smi, sdf, seed=seed)
             except Exception as exc:                        # noqa: BLE001
                 log.debug("embedding failed for %s: %s", smi[:40], exc)
+                _count("embedding_failed")
                 return None
             try:
                 if box is not None and engine_name() == "vina":
@@ -824,18 +838,27 @@ def _dock_smiles(smiles_list: list, receptor: Path, autobox: Path | None,
                         cpu=cpu, receptor_pdbqt_cache=_REC_CACHE)
                 if box is not None:
                     if detailed:
-                        return dock_one_scored(
+                        got = dock_one_scored(
                             receptor, sdf, box,
                             exhaustiveness=exhaustiveness, seed=seed,
                             cpu=cpu)
-                    return dock_one_boxed(
-                        receptor, sdf, box,
-                        exhaustiveness=exhaustiveness, seed=seed, cpu=cpu)
-                return dock_one(
+                    else:
+                        got = dock_one_boxed(
+                            receptor, sdf, box,
+                            exhaustiveness=exhaustiveness, seed=seed,
+                            cpu=cpu)
+                    if got is None:
+                        _count("no_pose")
+                    return got
+                got = dock_one(
                     receptor, sdf, autobox_ligand=autobox,
                     exhaustiveness=exhaustiveness, seed=seed, cpu=cpu)
+                if got is None:
+                    _count("no_pose")
+                return got
             except Exception as exc:                        # noqa: BLE001
                 log.debug("docking failed: %s", str(exc)[:80])
+                _count("docking_failed")
                 return None
 
     # A screen used to print nothing until it finished, so a working run
@@ -968,6 +991,8 @@ class DockingScreen:
     # What each scoring metric was worth on this pocket's own known
     # ligands, when the engine produced more than one.
     auc_by_metric: dict | None = None
+    # Why each absent compound is absent, counted rather than assumed.
+    failures: dict | None = None
     hits: list = field(default_factory=list)
     error: str | None = None
     caveats: list = field(default_factory=list)
@@ -1051,8 +1076,9 @@ def screen_by_docking(receptor: Path, library: list, *, target: str = "?",
         run.error = val.get("reason")
         return run
 
+    tally: dict = {}
     poses = _dock_smiles([d["smiles"] for d in library], receptor, autobox,
-                         jobs=jobs, detailed=True,
+                         jobs=jobs, detailed=True, tally=tally,
                          exhaustiveness=exhaustiveness, seed=seed,
                          score_fn=score_fn, box=box, cpu=cpu)
     scored = []
@@ -1092,10 +1118,30 @@ def screen_by_docking(receptor: Path, library: list, *, target: str = "?",
         "direction decides whether a hit raises or lowers your gene. "
         "predict_direction above is the tool for that question")
     if run.n_failed:
+        run.failures = dict(tally)
+        # What actually happened, not what usually happens. These are
+        # different problems: one is a limit of conformer generation,
+        # the other is the docking program failing on input it was
+        # given, and they send you to different places.
+        parts = []
+        if tally.get("embedding_failed"):
+            parts.append(f"{tally['embedding_failed']} had no 3D conformer "
+                         f"that could be generated, which is typical of "
+                         f"macrocycles and peptides")
+        if tally.get("docking_failed"):
+            parts.append(f"{tally['docking_failed']} raised an error in "
+                         f"the docking program")
+        if tally.get("no_pose"):
+            parts.append(f"{tally['no_pose']} were docked but produced no "
+                         f"pose")
+        counted = sum(tally.values())
+        if counted < run.n_failed:
+            parts.append(f"{run.n_failed - counted} for an unrecorded "
+                         f"reason")
         run.caveats.append(
-            f"{run.n_failed} compound(s) could not be docked, usually "
-            f"because no 3D conformer could be generated. They are absent "
-            f"from the ranking rather than ranked badly")
+            f"{run.n_failed} compound(s) are absent from the ranking "
+            f"rather than ranked badly: "
+            + ("; ".join(parts) if parts else "cause not recorded") + ".")
     return run
 
 
