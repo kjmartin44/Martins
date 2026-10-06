@@ -12459,3 +12459,90 @@ def test_a_wsl_binary_is_never_executed_as_a_windows_path(monkeypatch):
     # Every path handed over is a WSL one.
     for a in seen["args"]:
         assert not (len(a) > 1 and a[1] == ":"), a
+
+
+# ===================================================================== #
+# gnina's CNN numbers must survive the screen, not be thrown away.      #
+# ===================================================================== #
+def test_cnn_scores_reach_the_hits(monkeypatch):
+    """The screen used to keep one number per compound, the Vina-style
+    affinity, which for gnina discards the entire reason to run it."""
+    import pathlib
+    from promoter_tf_drugs import docking as dk
+
+    lib = [{"name": f"d{i}", "smiles": "C" * (i + 2)} for i in range(6)]
+
+    def fake(smiles_list, receptor, autobox, **kw):
+        n = len(smiles_list)
+        if not kw.get("detailed"):
+            return [-5.0 - i for i in range(n)]
+        return [dk.PoseScore(affinity=-5.0 - i, cnn_score=0.5,
+                             cnn_affinity=7.0 + i, engine="gnina")
+                for i in range(n)]
+
+    monkeypatch.setattr(dk, "_dock_smiles", fake)
+    monkeypatch.setattr(dk, "_docking_binary", lambda: "/u/gnina")
+    monkeypatch.setattr(dk, "validate_pocket",
+                        lambda *a, **k: {"usable": True, "auc": 0.9,
+                                         "ef1": 10})
+    run = dk.screen_by_docking(pathlib.Path("r.pdb"), lib, target="T",
+                               actives=[{"smiles": "CC"}] * 6,
+                               decoys=[{"smiles": "CCC"}] * 6,
+                               box=(0, 0, 0, 20, 20, 20))
+    assert run.hits, run.error
+    assert all("cnn_affinity" in h for h in run.hits), run.hits[0]
+    assert all(h["engine"] == "gnina" for h in run.hits)
+
+
+def test_an_engine_without_a_cnn_gets_no_empty_cnn_columns(monkeypatch):
+    """A smina run carrying cnn_score: None would read as a measurement
+    that came out blank rather than one that was never made."""
+    import pathlib
+    from promoter_tf_drugs import docking as dk
+
+    lib = [{"name": "d", "smiles": "CCO"}]
+    monkeypatch.setattr(
+        dk, "_dock_smiles",
+        lambda sl, r, a, **kw: [dk.PoseScore(affinity=-7.0,
+                                             engine="smina")])
+    monkeypatch.setattr(dk, "_docking_binary", lambda: "smina")
+    monkeypatch.setattr(dk, "validate_pocket",
+                        lambda *a, **k: {"usable": True, "auc": 0.9,
+                                         "ef1": 10})
+    run = dk.screen_by_docking(pathlib.Path("r.pdb"), lib, target="T",
+                               actives=[{"smiles": "CC"}] * 6,
+                               decoys=[{"smiles": "CCC"}] * 6,
+                               box=(0, 0, 0, 20, 20, 20))
+    assert "cnn_score" not in run.hits[0]
+    assert "cnn_affinity" not in run.hits[0]
+
+
+def test_the_gate_measures_every_metric_it_has(monkeypatch):
+    """Known ligands against decoys is the only honest way to find out
+    whether the CNN separates binders better for a given pocket, and the
+    poses are already scored so it costs nothing."""
+    import pathlib
+    from promoter_tf_drugs import docking as dk
+
+    # The CNN separates perfectly; the affinity is pure noise.
+    def fake(smiles_list, receptor, autobox, **kw):
+        out = []
+        for i, smi in enumerate(smiles_list):
+            active = smi.startswith("A")
+            out.append(dk.PoseScore(
+                affinity=-5.0,
+                cnn_affinity=9.0 if active else 4.0,
+                engine="gnina"))
+        return out
+
+    monkeypatch.setattr(dk, "_dock_smiles", fake)
+    val = dk.validate_pocket(
+        pathlib.Path("r.pdb"),
+        [{"smiles": f"A{i}"} for i in range(10)],
+        [{"smiles": f"D{i}"} for i in range(40)],
+        box=(0, 0, 0, 20, 20, 20))
+    assert "auc_by_metric" in val, val
+    assert val["auc_by_metric"]["cnn_affinity"]["auc"] == 1.0
+    assert "metric_note" in val
+    # Reported, not acted on: the decision still uses the affinity.
+    assert val["auc"] == val["auc_by_metric"]["affinity"]["auc"]

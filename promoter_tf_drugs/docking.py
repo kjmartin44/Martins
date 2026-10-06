@@ -778,11 +778,15 @@ _REC_CACHE: dict = {}
 def _dock_smiles(smiles_list: list, receptor: Path, autobox: Path | None,
                  *, exhaustiveness: int, seed: int, score_fn=None,
                  box: tuple | None = None, cpu: int = 1,
-                 jobs: int = 1) -> list:
+                 jobs: int = 1, detailed: bool = False) -> list:
     """Score each SMILES, None where docking or embedding failed.
 
     `score_fn` exists so the gate and the ranking can be exercised
     without a docking binary; it takes a SMILES and returns a score.
+
+    `detailed` returns a PoseScore per compound rather than one float,
+    keeping gnina's CNN numbers. Without it they are computed and thrown
+    away, which is the whole reason to run gnina rather than smina.
 
     `jobs` runs that many compounds at once. Each is a separate
     subprocess with its own temporary directory, so they share nothing
@@ -796,9 +800,15 @@ def _dock_smiles(smiles_list: list, receptor: Path, autobox: Path | None,
         """Score a single SMILES. Returns None rather than raising."""
         if score_fn is not None:
             try:
-                return score_fn(smi)
+                got = score_fn(smi)
             except Exception:                               # noqa: BLE001
                 return None
+            # The gate and the ranking are exercised without a binary by
+            # passing score_fn, so it has to work in both shapes.
+            if detailed and got is not None and not isinstance(got,
+                                                               PoseScore):
+                return PoseScore(affinity=float(got), engine="score_fn")
+            return got
         with tempfile.TemporaryDirectory() as tmp:
             sdf = Path(tmp) / "lig.sdf"
             try:
@@ -813,6 +823,11 @@ def _dock_smiles(smiles_list: list, receptor: Path, autobox: Path | None,
                         exhaustiveness=exhaustiveness, seed=seed,
                         cpu=cpu, receptor_pdbqt_cache=_REC_CACHE)
                 if box is not None:
+                    if detailed:
+                        return dock_one_scored(
+                            receptor, sdf, box,
+                            exhaustiveness=exhaustiveness, seed=seed,
+                            cpu=cpu)
                     return dock_one_boxed(
                         receptor, sdf, box,
                         exhaustiveness=exhaustiveness, seed=seed, cpu=cpu)
@@ -881,10 +896,30 @@ def validate_pocket(receptor: Path, actives: list, decoys: list, *,
 
     smiles = [a["smiles"] for a in actives] + [d["smiles"] for d in decoys]
     labels = [1] * len(actives) + [0] * len(decoys)
-    scores = _dock_smiles(smiles, receptor, autobox,
-                          jobs=jobs,
-                          exhaustiveness=exhaustiveness, seed=seed,
-                          score_fn=score_fn, box=box, cpu=cpu)
+    poses = _dock_smiles(smiles, receptor, autobox,
+                         jobs=jobs, detailed=True,
+                         exhaustiveness=exhaustiveness, seed=seed,
+                         score_fn=score_fn, box=box, cpu=cpu)
+    scores = [None if q is None else q.affinity for q in poses]
+
+    # What each metric is worth on THIS pocket, measured rather than
+    # assumed. The poses are already scored, so it costs nothing, and
+    # known ligands against decoys is the only honest way to find out
+    # whether the CNN separates binders better than the empirical
+    # function here. Reported, not acted on: the gate still decides on
+    # the affinity, so there is a fixed thing to compare against.
+    by_metric = {}
+    for metric in ("affinity", "cnn_score", "cnn_affinity"):
+        vals = [None if q is None else q.best(metric) for q in poses]
+        if all(v is None for v in vals):
+            continue
+        m_auc = roc_auc(vals, labels)
+        if m_auc is None:
+            continue
+        by_metric[metric] = {
+            "auc": round(m_auc, 3),
+            "ef1": enrichment_factor(vals, labels, fraction=0.01),
+        }
 
     auc = roc_auc(scores, labels)
     ef1 = enrichment_factor(scores, labels, fraction=0.01)
@@ -898,6 +933,17 @@ def validate_pocket(receptor: Path, actives: list, decoys: list, *,
     out = {"usable": usable, "auc": round(auc, 3), "ef1": ef1,
            "n_actives": len(actives), "n_decoys": len(decoys),
            "n_failed": n_failed}
+    if len(by_metric) > 1:
+        out["auc_by_metric"] = by_metric
+        best = max(by_metric, key=lambda k: by_metric[k]["auc"])
+        if best != "affinity":
+            out["metric_note"] = (
+                f"{best} separates this pocket's known ligands better "
+                f"than the empirical affinity "
+                f"(AUC {by_metric[best]['auc']} against "
+                f"{by_metric['affinity']['auc']}). Ranking still uses the "
+                f"affinity; this is a measurement on {len(actives)} known "
+                f"ligand(s) of one pocket, not a general finding.")
     if not usable:
         out["reason"] = (
             f"docking into this pocket ranks its own known ligands at AUC "
@@ -919,6 +965,9 @@ class DockingScreen:
     auc: float | None = None
     ef1: float | None = None
     usable: bool = False
+    # What each scoring metric was worth on this pocket's own known
+    # ligands, when the engine produced more than one.
+    auc_by_metric: dict | None = None
     hits: list = field(default_factory=list)
     error: str | None = None
     caveats: list = field(default_factory=list)
@@ -1002,16 +1051,32 @@ def screen_by_docking(receptor: Path, library: list, *, target: str = "?",
         run.error = val.get("reason")
         return run
 
-    scores = _dock_smiles([d["smiles"] for d in library], receptor, autobox,
-                          jobs=jobs,
-                          exhaustiveness=exhaustiveness, seed=seed,
-                          score_fn=score_fn, box=box, cpu=cpu)
-    scored = [{"drug": d.get("name") or "?", "smiles": d["smiles"],
-               "score": s}
-              for d, s in zip(library, scores) if s is not None]
+    poses = _dock_smiles([d["smiles"] for d in library], receptor, autobox,
+                         jobs=jobs, detailed=True,
+                         exhaustiveness=exhaustiveness, seed=seed,
+                         score_fn=score_fn, box=box, cpu=cpu)
+    scored = []
+    for d, q in zip(library, poses):
+        if q is None or q.affinity is None:
+            continue
+        row = {"drug": d.get("name") or "?", "smiles": d["smiles"],
+               "score": q.affinity}
+        # Only present when the engine produced them, so a smina run
+        # does not carry empty CNN columns that look like a measurement
+        # of zero.
+        if q.cnn_score is not None:
+            row["cnn_score"] = q.cnn_score
+        if q.cnn_affinity is not None:
+            row["cnn_affinity"] = q.cnn_affinity
+        if q.engine and q.engine != "?":
+            row["engine"] = q.engine
+        scored.append(row)
     scored.sort(key=lambda h: h["score"])
     run.n_docked = len(scored)
     run.n_failed = len(library) - len(scored)
+    run.auc_by_metric = val.get("auc_by_metric")
+    if val.get("metric_note"):
+        run.caveats.append(val["metric_note"])
     run.hits = scored[:top_n]
 
     run.caveats.append(
