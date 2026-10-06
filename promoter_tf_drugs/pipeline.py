@@ -859,10 +859,23 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                                   f"no factor had enough curated targets "
                                   f"measured in {activity_tissue}"))
         elif tf_activity:
+            # Name only what is actually missing. The fixed string here
+            # listed both flags, so a run that passed --regulon-file was
+            # told to pass --regulon-file, which sends you to check the
+            # one thing that was already right.
+            missing = []
+            if not signed_regulons:
+                missing.append("a regulon table (--regulon-file, or put "
+                               "CollecTRI/TRRUST in data/)")
+            if not activity_tissue:
+                missing.append("--activity-tissue")
             ledger.record(
                 "tf_activity", requested=True, ok=False, yielded=0,
-                detail=("--tf-activity needs --regulon-file and "
-                        "--activity-tissue; motif scores are unchecked"))
+                detail=("--tf-activity needs " + " and ".join(missing)
+                        + "; motif scores are unchecked"
+                        if missing else
+                        "--tf-activity found no testable factor; motif "
+                        "scores are unchecked"))
 
         # ---- which drugs change how much of the factor EXISTS?
         # Everything else here acts on a factor's activity, which needs it
@@ -955,7 +968,11 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
 
         # ------------------ 8d. empirical: did any drug actually move this gene?
         lincs = {}
-        if (use_lincs or lincs_file) and not demo:
+        # Supplying any LINCS input enables the step. `lincs_gmt` used
+        # to be the exception: the files were loaded and the step
+        # never ran, so a run with --lincs-gmt reported no LINCS row
+        # at all - not even that it had been asked for.
+        if (use_lincs or lincs_file or lincs_gmt) and not demo:
             sig_hits = _optional(
                 "LINCS signature query",
                 lambda: (sig_mod.load_signature_table(

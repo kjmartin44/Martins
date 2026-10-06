@@ -360,6 +360,17 @@ class Route:
     source: str                  # which module produced this
     score: float = 0.0
     notes: list = field(default_factory=list)
+    # `approved` above is what the SOURCE claims. Ten collectors hardcode
+    # it to True, so on its own it means "this came from a drug table",
+    # not "this is an approved drug".
+    #
+    # This is the checked version: True when the name is in a source of
+    # approved drugs on this machine, False when such a source was read
+    # and the name is absent, None when there was nothing to check
+    # against. None is not False - with no drug table on disk every route
+    # is unverified, and reading that as "not approved" would empty the
+    # report rather than correct it.
+    approval_verified: bool | None = None
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -376,6 +387,74 @@ def _score(r: Route) -> float:
 
 
 # ------------------------------------------------------------- collectors
+_APPROVED_NAMES: set | None = None
+# Whether a real drug LIBRARY was read, as opposed to only the curated
+# tables this package ships. It decides whether a miss means anything:
+# the curated tables hold a few hundred names, so a drug absent from them
+# is usually just uncurated. Vemurafenib is approved and is not in them.
+_APPROVED_FROM_LIBRARY = False
+
+
+def approved_name_set() -> set | None:
+    """Lowercased salt-free names of drugs known to be approved, or None.
+
+    Built once from whatever is on disk, most to least complete: a merged
+    local drug table, then the curated indication and drug-class tables
+    this package ships. None when none of them is available, which must
+    stay distinguishable from an empty set.
+    """
+    global _APPROVED_NAMES, _APPROVED_FROM_LIBRARY
+    if _APPROVED_NAMES is not None:
+        return _APPROVED_NAMES or None
+
+    from .congeners import salt_free_name
+    names: set = set()
+    try:
+        from . import localdrugs as _ld
+        rows = _ld.library()
+        for row in rows:
+            n = salt_free_name((row.get("name") or "").lower())
+            if n:
+                names.add(n)
+        _APPROVED_FROM_LIBRARY = bool(rows)
+    except Exception:                                       # noqa: BLE001
+        pass
+    try:
+        from . import indications as _ind
+        names.update(salt_free_name(k.lower()) for k in _ind.CURATED)
+    except Exception:                                       # noqa: BLE001
+        pass
+    # NOT systemic.CLASSES. That is a burden table, and it deliberately
+    # contains investigational and tool compounds - CGP-60474, AT-7519,
+    # ALW-II-38-3 - because their PHARMACOLOGY is what the burden claim is
+    # about. Reading it as a list of approved drugs made every one of them
+    # verify as approved, which is the opposite of what this function is
+    # for and exactly the confusion it was added to end.
+    names.discard("")
+    _APPROVED_NAMES = names
+    return names or None
+
+
+def verify_approval(drug: str) -> bool | None:
+    """Is this name in a source of approved drugs on this machine?
+
+    None when nothing was available to check against. A tool compound
+    like CGP-60474 and an approved drug nobody curated look identical to
+    this function, so a False means "not in the sources read", never
+    "proven unapproved".
+    """
+    pool = approved_name_set()
+    if pool is None:
+        return None
+    from .congeners import salt_free_name
+    if salt_free_name((drug or "").lower()) in pool:
+        return True
+    # A miss is only informative against a real library. The curated
+    # tables alone are a few hundred names, so a miss there says the drug
+    # is uncurated and nothing about its approval.
+    return False if _APPROVED_FROM_LIBRARY else None
+
+
 def from_direct(direct_hits: list[dict]) -> list[Route]:
     out = []
     for t in direct_hits:
@@ -980,6 +1059,9 @@ def build(result_block: dict, *, goal: str = "up",
 
     for r in routes:
         r.score = _score(r)
+        # One place rather than eleven, so a new collector cannot forget.
+        if r.approval_verified is None:
+            r.approval_verified = verify_approval(r.drug)
 
     # Tier first, always. A weak tier-1 route beats a brilliant tier-5 one.
     # Within a tier, score alone: directness is already priced into the score,

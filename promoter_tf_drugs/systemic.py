@@ -128,12 +128,88 @@ CLASSES: tuple[SystemicClass, ...] = (
         "kills dividing cells wherever it reaches them; myelosuppression and "
         "mucositis are on-mechanism, not off-target",
         frozenset({
+            # Anthracyclines and the anthracenedione. Mitoxantrone was
+            # absent and is one of the compounds that crowds a real
+            # shortlist through LINCS abundance signatures.
             "doxorubicin", "daunorubicin", "epirubicin", "idarubicin",
-            "paclitaxel", "docetaxel", "vincristine", "vinblastine",
-            "etoposide", "cisplatin", "carboplatin", "oxaliplatin",
-            "methotrexate", "cyclophosphamide", "ifosfamide", "fluorouracil",
-            "gemcitabine", "cytarabine", "dactinomycin", "bleomycin",
-            "mitomycin", "plicamycin", "mithramycin",
+            "mitoxantrone",
+            # Tubulin
+            "paclitaxel", "docetaxel", "cabazitaxel", "vincristine",
+            "vinblastine", "vinorelbine", "vindesine", "eribulin",
+            "ixabepilone",
+            # Topoisomerase
+            "etoposide", "topotecan", "irinotecan",
+            # Platinums
+            "cisplatin", "carboplatin", "oxaliplatin",
+            # Antimetabolites
+            "methotrexate", "pralatrexate", "raltitrexed", "pemetrexed",
+            "fluorouracil", "capecitabine", "gemcitabine", "cytarabine",
+            "cladribine", "fludarabine", "clofarabine", "nelarabine",
+            "mercaptopurine", "thioguanine", "hydroxyurea",
+            "hydroxycarbamide",
+            # Alkylating agents
+            "cyclophosphamide", "ifosfamide", "melphalan", "busulfan",
+            "chlorambucil", "bendamustine", "carmustine", "lomustine",
+            "dacarbazine", "temozolomide", "procarbazine", "thiotepa",
+            "streptozocin",
+            # Antitumour antibiotics and other DNA-directed agents
+            "dactinomycin", "bleomycin", "mitomycin", "plicamycin",
+            "mithramycin", "trabectedin",
+            # Proteasome inhibitors: not classical cytotoxics, but the
+            # same on-mechanism marrow toxicity puts them here rather
+            # than with the kinase inhibitors.
+            "bortezomib", "carfilzomib", "ixazomib",
+            # Other
+            "arsenic trioxide", "asparaginase",
+        })),
+    SystemicClass(
+        "antineoplastic kinase inhibitor", 0.80,
+        "dosed to stop cells dividing, so rash, diarrhoea, myelosuppression "
+        "and hepatotoxicity are on-mechanism; and because proliferation "
+        "signalling runs through every tissue, an inhibitor moves the "
+        "abundance of a great many transcription factors at once - which is "
+        "why these crowd an expression-signature shortlist without being "
+        "evidence of a route to any one gene",
+        frozenset({
+            # BCR-ABL
+            "imatinib", "dasatinib", "nilotinib", "bosutinib", "ponatinib",
+            # EGFR and HER2
+            "erlotinib", "gefitinib", "afatinib", "osimertinib",
+            "dacomitinib", "lapatinib", "neratinib", "tucatinib",
+            # ALK and ROS1
+            "crizotinib", "ceritinib", "alectinib", "brigatinib",
+            "lorlatinib",
+            # BRAF and MEK
+            "vemurafenib", "dabrafenib", "encorafenib", "trametinib",
+            "cobimetinib", "binimetinib", "selumetinib",
+            # VEGFR and multi-kinase
+            "sunitinib", "sorafenib", "pazopanib", "axitinib",
+            "regorafenib", "lenvatinib", "cabozantinib", "vandetanib",
+            "tivozanib",
+            # BTK
+            "ibrutinib", "acalabrutinib", "zanubrutinib",
+            # CDK4/6
+            "palbociclib", "ribociclib", "abemaciclib",
+            # PI3K
+            "idelalisib", "duvelisib", "alpelisib", "copanlisib",
+            # FLT3, KIT, RET, TRK, FGFR
+            "midostaurin", "gilteritinib", "quizartinib", "ripretinib",
+            "avapritinib", "selpercatinib", "pralsetinib", "entrectinib",
+            "larotrectinib", "pemigatinib", "erdafitinib", "infigratinib",
+            # JAK, in its oncology indications
+            "ruxolitinib", "fedratinib",
+            # Investigational and tool kinase inhibitors. These dominate
+            # the LINCS perturbation library and therefore these
+            # shortlists, and every name below appeared in a real run.
+            # Membership is a claim about PHARMACOLOGY, not approval -
+            # whether a compound is a drug at all is what
+            # `catalogue.verify_approval` answers, separately.
+            "dinaciclib", "seliciclib", "roscovitine", "alvocidib",
+            "flavopiridol", "saracatinib", "bms-387032", "sns-032",
+            "at-7519", "cgp-60474", "pd-0325901", "alw-ii-38-3",
+            "as-605240", "gsk-1059615", "jnk-9l", "raf265",
+            "nvp-bez235", "bi-2536", "tozasertib", "danusertib",
+            "dorsomorphin",
         })),
     SystemicClass(
         "broad immunosuppressant", 0.85,
@@ -156,8 +232,19 @@ CLASSES: tuple[SystemicClass, ...] = (
 
 # Built once. Members are already lowercase and salt-free by construction.
 _INDEX: dict[str, SystemicClass] = {m: c for c in CLASSES for m in c.members}
+# The same table keyed without spaces or hyphens, so a code name
+# written "RAF 265" in one source and "RAF265" in another resolves
+# to the same class instead of silently missing.
+_COMPACT: dict[str, SystemicClass] = {
+    m.replace(" ", "").replace("-", ""): c
+    for c in CLASSES for m in c.members}
 
 BURDEN_LEVELS = ("low", "moderate", "high", "prohibitive")
+
+
+def _compact(name: str) -> str:
+    """A name with spaces and hyphens removed, for code-name matching."""
+    return name.replace(" ", "").replace("-", "")
 
 
 def classify(drug_name: str) -> SystemicClass | None:
@@ -173,10 +260,26 @@ def classify(drug_name: str) -> SystemicClass | None:
     hit = _INDEX.get(name)
     if hit:
         return hit
+
+    # Code names are spelled inconsistently across sources: LINCS writes
+    # "RAF 265" where ChEMBL writes "RAF265", and the head-token fallback
+    # below is wrong for them - it would look up "raf" and miss, because
+    # for a code name the number IS part of the identity. Compare with
+    # spaces and hyphens removed before falling back.
+    compact = _compact(name)
+    hit = _COMPACT.get(compact)
+    if hit:
+        return hit
+
     # Multi-word brand-ish names: fall back to the head token, which is the
-    # active moiety ("Fluticasone Propionate HFA" -> "fluticasone").
-    head = name.split()[0] if name.split() else ""
-    return _INDEX.get(head)
+    # active moiety ("Fluticasone Propionate HFA" -> "fluticasone"). Only
+    # when the head is a word rather than a code stem, so "raf" cannot
+    # match something it is merely a prefix of.
+    parts = name.split()
+    head = parts[0] if parts else ""
+    if len(parts) > 1 and not any(ch.isdigit() for ch in name):
+        return _INDEX.get(head)
+    return None
 
 
 @dataclass

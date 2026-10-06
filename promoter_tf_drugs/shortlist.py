@@ -36,6 +36,8 @@ Filters compose, so a preset is a starting point you then adjust.
 
 from __future__ import annotations
 
+from . import systemic as sys_mod
+
 import argparse
 import json
 import sys
@@ -102,6 +104,8 @@ def enrich_rows(result: dict) -> list[dict]:
                   if c.get("previously_linked")}
         celltype = ((block.get("cell_type") or {}).get("tfs") or {})
         verdict = (block.get("evidence_verdict") or {}).get("level")
+        deps = {k.upper(): v
+                for k, v in (block.get("dependencies") or {}).items()}
 
         for r in (block.get("all_routes") or {}).get("routes", []):
             g = grades.get(r["drug"].lower(), {})
@@ -125,6 +129,26 @@ def enrich_rows(result: dict) -> list[dict]:
             # delivery.expression_overlap's early return. Zero would read as
             # "expressed nowhere" and sail through a breadth filter.
             row["_tf_tissues"] = (celltype.get(tf) or {}).get("n_tf")
+
+            # How much of the patient this route moves, beyond the gene.
+            # Computed here rather than in a predicate so every filter
+            # stays a pure (row, value) test, and so the level is
+            # available to the renderer whether or not it is filtered on.
+            burden = sys_mod.clinical_burden(
+                r["drug"], notes=row["_notes"], target=tf)
+            row["burden"] = burden.level
+            row["_burden_score"] = burden.score
+            row["_burden_assessed"] = burden.assessed
+            row["drug_class"] = burden.drug_class
+            row["_burden_reasons"] = burden.reasons
+
+            # What knocking the factor out does to a cell. A factor no
+            # line can live without is a poor chronic target whatever the
+            # drug looks like. Absent stays None: a factor DepMap never
+            # scored has not been shown to be safe.
+            dep = deps.get((tf or "").upper()) or {}
+            row["_dependency_burden"] = dep.get("burden")
+            row["dependency"] = dep.get("verdict")
             out.append(row)
 
     return _dedupe_across_windows(out)
@@ -199,6 +223,87 @@ def _p_require_chip(row, v):
                 and not row.get("chip_peaks"))
 
 
+def _p_max_burden(row: dict, value) -> bool:
+    """Drop routes whose clinical burden exceeds `value`.
+
+    Burden is how much of the patient moves beyond the target gene:
+    cytotoxic chemotherapy is 0.95, a glucocorticoid 0.8, a selective
+    kinase inhibitor far less. Ordered levels so a preset can say
+    "moderate" rather than carry a number.
+
+    An UNASSESSED drug passes. The class table is hand-maintained and
+    incomplete, so membership is evidence of burden and non-membership is
+    not evidence of its absence - dropping an unlisted drug would select
+    for obscurity, which is the same trap the regulon count has.
+    """
+    # Taken from systemic.BURDEN_LEVELS rather than retyped, so the two
+    # cannot drift apart - an unknown level here would silently sort to
+    # the bottom and pass every threshold.
+    order = {name: i for i, name in enumerate(sys_mod.BURDEN_LEVELS)}
+    if not row.get("_burden_assessed"):
+        return True
+    level = row.get("burden") or "low"
+    if level not in order:
+        return True
+    have = order[level]
+    want = order.get(value) if isinstance(value, str) else None
+    if isinstance(value, str) and want is None:
+        raise ValueError(
+            f"unknown burden level {value!r}; known levels are "
+            f"{', '.join(sys_mod.BURDEN_LEVELS)}")
+    if want is None:
+        return (row.get("_burden_score") or 0.0) <= float(value)
+    return have <= want
+
+
+def _p_exclude_drug_classes(row: dict, value) -> bool:
+    """Drop routes whose drug belongs to one of these systemic classes.
+
+    Named explicitly rather than folded into `max_burden`, because the
+    reason to exclude cytotoxics from a chronic indication is not that
+    their burden score is high - it is that an antiproliferative moves
+    almost every factor's abundance, so the EVIDENCE that it acts on
+    yours is weak in a way the score does not express.
+    """
+    bad = {str(v).strip().lower() for v in (value or [])}
+    cls = (row.get("drug_class") or "").strip().lower()
+    return not (cls and any(b in cls for b in bad))
+
+
+def _p_max_dependency_burden(row: dict, value) -> bool:
+    """Drop routes acting on a factor cells cannot live without.
+
+    DepMap's Chronos scale, rescaled so higher means more collateral.
+    A factor essential in nearly every line is a poor chronic target: a
+    drug that strongly inhibits it is likely cytotoxic rather than
+    selectively regulatory.
+
+    Unscored factors pass. Absent from the DepMap release is not the same
+    as safe, and this must not quietly prefer the unmeasured.
+    """
+    b = row.get("_dependency_burden")
+    return b is None or float(b) <= float(value)
+
+
+def _p_require_verified_approval(row: dict, value) -> bool:
+    """Keep only drugs confirmed approved against a source on this machine.
+
+    `require_approved` tests what the SOURCE claimed, and ten of the route
+    collectors hardcode that to True - so it passes research tool
+    compounds out of the LINCS perturbation library. This tests the
+    checked field instead.
+
+    A row whose approval could not be checked at all is kept, because
+    with no drug table on disk that is every row, and a filter that
+    empties itself on a missing file teaches nothing. The renderer marks
+    them, and `--require-verified-approval` with a merged library on disk
+    is what actually narrows to approved drugs.
+    """
+    if not value:
+        return True
+    return row.get("approval_verified") is not False
+
+
 PREDICATES = {
     "max_tier": _p_max_tier,
     "min_tier": _p_min_tier,
@@ -215,6 +320,10 @@ PREDICATES = {
     "exclude_black_box": _p_exclude_black_box,
     "exclude_conflicts": _p_exclude_conflicts,
     "max_regulon": _p_max_regulon,
+    "max_burden": _p_max_burden,
+    "exclude_drug_classes": _p_exclude_drug_classes,
+    "max_dependency_burden": _p_max_dependency_burden,
+    "require_verified_approval": _p_require_verified_approval,
 }
 
 

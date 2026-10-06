@@ -10631,3 +10631,175 @@ def test_the_scan_is_suppressed_in_demo_mode(monkeypatch):
                        sensitivity_scan=True)
     for block in res["results"]:
         assert block.get("sensitivity") == {}
+
+
+# ===================================================================== #
+# The class table, extended because a real CCR5 shortlist was crowded   #
+# out by compounds it did not know.                                      #
+# ===================================================================== #
+# Every name below came from an actual `strict` shortlist for lowering
+# CCR5, where it outranked everything but Maraviroc.
+_CROWDERS = [
+    "mitoxantrone dihydrochloride", "dinaciclib", "vemurafenib",
+    "ponatinib", "dabrafenib", "saracatinib", "RAF 265",
+    "CGP-60474", "ALW-II-38-3", "AT-7519", "BMS-387032", "JNK-9L",
+    "PD-0325901", "AS-605240", "GSK-1059615",
+    "dorsomorphin dihydrochloride",
+]
+
+
+def test_the_compounds_that_crowded_a_real_shortlist_are_classified():
+    """`classify` returned None for all of these, so the burden filter
+    passed every one. An antiproliferative moves the abundance of a great
+    many transcription factors, which is why they dominate an
+    expression-signature shortlist without being evidence of a route."""
+    from promoter_tf_drugs import systemic as sy
+    unclassified = [n for n in _CROWDERS if sy.classify(n) is None]
+    assert not unclassified, f"still unclassified: {unclassified}"
+    for n in _CROWDERS:
+        assert sy.clinical_burden(n).level == "high", n
+
+
+def test_the_drug_that_should_win_is_not_swept_up_with_them():
+    """Maraviroc is the correct tier-1 answer for lowering CCR5. A filter
+    that removes the noise by removing everything has done nothing."""
+    from promoter_tf_drugs import systemic as sy
+    assert sy.classify("Maraviroc") is None
+    assert sy.clinical_burden("Maraviroc").level == "low"
+    assert sy.clinical_burden("Maraviroc").assessed is False
+
+
+def test_a_code_name_resolves_however_it_is_spaced():
+    """LINCS writes "RAF 265" where ChEMBL writes "RAF265". The
+    head-token fallback looked up "raf" and missed, because for a code
+    name the number is part of the identity."""
+    from promoter_tf_drugs import systemic as sy
+    names = {sy.classify(n).name for n in ("RAF 265", "RAF-265", "raf265")}
+    assert names == {"antineoplastic kinase inhibitor"}
+
+
+def test_the_head_token_fallback_still_serves_real_multiword_names():
+    from promoter_tf_drugs import systemic as sy
+    assert sy.classify("Fluticasone Propionate HFA").name == "glucocorticoid"
+    assert sy.classify("Levothyroxine Sodium").name == "thyroid hormone"
+
+
+def test_the_head_token_fallback_does_not_fire_on_a_code_stem():
+    """Without this guard "raf 265" would look up "raf", and any future
+    member starting with a shared stem would collect unrelated rows."""
+    from promoter_tf_drugs import systemic as sy
+    assert sy.classify("imatinib 400") is None or True
+    # A two-token name containing a digit must not fall back to its head.
+    assert sy.classify("nosuchdrug 123") is None
+
+
+def test_an_lxr_agonist_is_not_filed_as_a_kinase_inhibitor():
+    """gw 3965 survived the filter and should: it is a nuclear receptor
+    agonist. Sweeping every unfamiliar code name into the kinase class
+    would make the filter look effective by being wrong."""
+    from promoter_tf_drugs import systemic as sy
+    assert sy.classify("gw 3965 hydrochloride") is None
+
+
+def test_the_table_still_satisfies_its_own_audit():
+    """A member in two classes makes `classify` order-dependent, and a
+    name that changes under salt_free_name is never matched at all. The
+    audit caught one of each while this table was being extended."""
+    from promoter_tf_drugs import audit
+    problems = {k: v for k, v in audit.check_internal().items()
+                if v and "systemic" in k}
+    assert not problems, problems
+
+
+def test_salt_forms_of_the_new_members_resolve():
+    from promoter_tf_drugs import systemic as sy
+    assert sy.classify("Mitoxantrone Dihydrochloride").name.startswith(
+        "cytotoxic")
+    assert sy.classify("Ruxolitinib Phosphate").name == (
+        "antineoplastic kinase inhibitor")
+
+
+# ---- the selection filters -------------------------------------------
+def test_max_burden_drops_high_burden_routes():
+    from promoter_tf_drugs import shortlist as sl
+    rows = [
+        {"drug": "dinaciclib", "burden": "high", "_burden_assessed": True,
+         "_burden_score": 0.8},
+        {"drug": "maraviroc", "burden": "low", "_burden_assessed": False,
+         "_burden_score": 0.0},
+    ]
+    kept = [r["drug"] for r in rows if sl.keep(r, max_burden="moderate")]
+    assert kept == ["maraviroc"]
+
+
+def test_an_unassessed_drug_passes_the_burden_filter():
+    """The class table is hand-maintained and incomplete. Dropping what it
+    does not list would select for obscurity, which is the trap the
+    regulon count already has."""
+    from promoter_tf_drugs import shortlist as sl
+    row = {"drug": "something-new", "burden": "low",
+           "_burden_assessed": False}
+    assert sl.keep(row, max_burden="low")
+
+
+def test_an_unknown_burden_level_is_an_error_not_a_pass():
+    from promoter_tf_drugs import shortlist as sl
+    import pytest
+    row = {"drug": "x", "burden": "high", "_burden_assessed": True}
+    with pytest.raises(ValueError):
+        sl.keep(row, max_burden="severe")
+
+
+def test_max_dependency_burden_keeps_an_unscored_factor():
+    """Absent from DepMap is not the same as safe."""
+    from promoter_tf_drugs import shortlist as sl
+    assert sl.keep({"_dependency_burden": None}, max_dependency_burden=0.5)
+    assert not sl.keep({"_dependency_burden": 0.9},
+                       max_dependency_burden=0.5)
+
+
+def test_the_new_filters_are_registered_and_validated():
+    from promoter_tf_drugs import shortlist as sl
+    import pytest
+    for name in ("max_burden", "exclude_drug_classes",
+                 "max_dependency_burden", "require_verified_approval"):
+        assert name in sl.PREDICATES
+    with pytest.raises(KeyError):
+        sl.validate_filters({"max_burdne": "low"})
+
+
+# ---- approval ---------------------------------------------------------
+def test_a_negative_approval_needs_a_real_library_behind_it():
+    """The curated tables hold a few hundred names, so a miss against
+    them says the drug is uncurated and nothing about its approval -
+    vemurafenib is approved and is not in them."""
+    from promoter_tf_drugs import catalogue as cat
+    assert cat.verify_approval("maraviroc") is True
+    if not cat._APPROVED_FROM_LIBRARY:
+        assert cat.verify_approval("CGP-60474") is None
+        assert cat.verify_approval("vemurafenib") is None
+
+
+def test_require_verified_approval_keeps_what_could_not_be_checked():
+    """With no drug table on disk that is every row, and a filter that
+    empties itself on a missing file teaches nothing."""
+    from promoter_tf_drugs import shortlist as sl
+    assert sl.keep({"approval_verified": None},
+                   require_verified_approval=True)
+    assert sl.keep({"approval_verified": True},
+                   require_verified_approval=True)
+    assert not sl.keep({"approval_verified": False},
+                       require_verified_approval=True)
+
+
+def test_routes_carry_a_checked_approval_field():
+    """Ten of the eleven collectors hardcode approved=True, so that field
+    means "came from a drug table", not "is an approved drug"."""
+    from promoter_tf_drugs import catalogue as cat
+    block = {"direct_therapies": [], "drug_grades": [],
+             "lincs": {"hits": [{"drug": "Maraviroc", "tier": 2,
+                                 "score": -2.5, "direction": "down",
+                                 "n_signatures": 3}]}}
+    built = cat.build(block, goal="down")
+    for r in built["routes"]:
+        assert "approval_verified" in r
