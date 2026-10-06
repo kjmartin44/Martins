@@ -12257,3 +12257,65 @@ def test_a_chip_regulon_is_not_reported_as_curated():
     # A file with neither marker is unknown, not quietly curated.
     (d / "bare.tsv").write_text("A\tB\n" * 20, encoding="utf-8")
     assert r.describe_source(d / "bare.tsv")[0] == "unknown"
+
+
+# ===================================================================== #
+# Docking several compounds at once must not change the answers.        #
+# ===================================================================== #
+def test_parallel_docking_preserves_order_and_scores():
+    """A speed-up that quietly reordered the results would attach every
+    score to the wrong drug, and nothing downstream could detect it: the
+    numbers would all still be plausible.
+
+    Uses a score_fn with a deliberately uneven delay, so the completion
+    order is guaranteed to differ from the input order.
+    """
+    import pathlib
+    import time
+    from promoter_tf_drugs import docking as dk
+
+    smiles = [f"C{'C' * i}O" for i in range(12)]
+
+    def score(smi):
+        # Later compounds finish first, so completion order is the
+        # reverse of input order.
+        time.sleep(0.02 * (len(smiles) - smiles.index(smi)))
+        return -float(len(smi))
+
+    seq = dk._dock_smiles(smiles, pathlib.Path("r.pdb"), None,
+                          exhaustiveness=1, seed=0, score_fn=score, jobs=1)
+    par = dk._dock_smiles(smiles, pathlib.Path("r.pdb"), None,
+                          exhaustiveness=1, seed=0, score_fn=score, jobs=6)
+    assert par == seq
+    assert par == [-float(len(s)) for s in smiles]
+
+
+def test_a_failure_in_one_parallel_job_does_not_shift_the_others():
+    """None has to stay at the index of the compound that failed. If a
+    failure dropped out of the list instead, every score after it would
+    belong to a different drug."""
+    import pathlib
+    from promoter_tf_drugs import docking as dk
+
+    smiles = ["CCO", "BAD", "CCCO", "BAD", "CCCCO"]
+
+    def score(smi):
+        if smi == "BAD":
+            raise RuntimeError("embedding failed")
+        return -float(len(smi))
+
+    for jobs in (1, 4):
+        got = dk._dock_smiles(smiles, pathlib.Path("r.pdb"), None,
+                              exhaustiveness=1, seed=0, score_fn=score,
+                              jobs=jobs)
+        assert got == [-3.0, None, -4.0, None, -5.0], (jobs, got)
+
+
+def test_jobs_defaults_to_one_so_nothing_changes_unasked():
+    """Concurrency is opt-in: a caller that never heard of --jobs gets
+    exactly the behaviour it had."""
+    import inspect
+    from promoter_tf_drugs import docking as dk
+    for fn in (dk._dock_smiles, dk.validate_pocket, dk.screen_by_docking,
+               dk.dock_screen_for_target):
+        assert inspect.signature(fn).parameters["jobs"].default == 1, fn
