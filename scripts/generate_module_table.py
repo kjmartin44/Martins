@@ -22,8 +22,8 @@ ROOT = Path(__file__).resolve().parent.parent
 PKG = ROOT / "promoter_tf_drugs"
 DOC = ROOT / "docs" / "architecture.md"
 
-START = "| Module | Lines | Purpose |"
-END_MARKER = "Line counts are indicative"
+START = "| Module | Purpose |"
+END_MARKER = "The descriptions come from the modules themselves."
 
 SKIP = {"__init__", "__main__"}
 
@@ -44,10 +44,18 @@ def rows() -> list[tuple[str, int, str]]:
 
 
 def table() -> str:
-    lines = [START, "| --- | --- | --- |"]
-    for name, n, purpose in rows():
+    """The table, without line counts.
+
+    Counts were in it, and the staleness check then fired on every edit
+    to any module. A check that goes red for a reason you do not care
+    about trains you to regenerate without reading, which is worse than
+    not having it. The table is a map of what exists, so it changes when
+    a module or its stated purpose does.
+    """
+    lines = [START, "| --- | --- |"]
+    for name, _lines, purpose in rows():
         # A pipe inside a description would break the table.
-        lines.append(f"| `{name}` | {n} | {purpose.replace('|', '/')} |")
+        lines.append(f"| `{name}` | {purpose.replace('|', '/')} |")
     return "\n".join(lines)
 
 

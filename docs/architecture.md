@@ -180,69 +180,68 @@ across one. `catalogue.TIERS` is the definition.
 
 Generated from each module's own first docstring line.
 
-| Module | Lines | Purpose |
-| --- | --- | --- |
-| `abundance.py` | 325 | Drugs that change how much of the factor exists, not what it does. |
-| `agonism.py` | 488 | Predict the *functional direction* of a drug at a receptor from its structure. |
-| `analogs.py` | 210 | Approved drugs that resemble a known modulator but are not annotated at it. |
-| `annotate.py` | 199 | Decide which of the motif-matched TFs are plausible *activators*. |
-| `audit.py` | 343 | Are the hand-curated tables still true? |
-| `catalogue.py` | 1277 | Every route that acts on your gene, in one table, on one scale. |
-| `cellcycle.py` | 247 | Cell-cycle phase dependence of TF activity — a separate axis from everything else. |
-| `chipregulon.py` | 419 | Regulons built from ChIP peaks, for the factors curation never reached. |
-| `cli.py` | 411 | Command-line interface. |
-| `compensation.py` | 229 | You may not need to raise your gene at all. |
-| `congeners.py` | 159 | Collapse salt forms so the tables show distinct chemistry. |
-| `corpora.py` | 415 | Other perturbation corpora, and what agreement between them is worth. |
-| `delivery.py` | 791 | Does the drug reach the cells that express your gene? |
-| `demo_data.py` | 228 | Self-contained fixtures so the pipeline runs with zero network access. |
-| `depmap.py` | 433 | What happens to a cell when a factor is removed, measured not curated. |
-| `direct.py` | 230 | Drugs that act on the target gene directly, bypassing transcription factors. |
-| `discovery.py` | 516 | Find interventions that plausibly BEAT what already exists for this gene. |
-| `docking.py` | 2717 | Structure-based prediction of functional direction, done the way that can |
-| `drug_scoring.py` | 454 | Grade each TF/drug pair by combining TF-level confidence with drug quality. |
-| `drugs.py` | 492 | TF -> approved drug lookup, filtered to pharmacology that moves the TF in |
-| `eqtl.py` | 266 | Trans-eQTL evidence: does variation in the factor actually move your gene? |
-| `evidence.py` | 341 | Orthogonal evidence that a predicted site is real. |
-| `explain.py` | 289 | Everything the pipeline knows about one compound, in one place. |
-| `genes.py` | 564 | Resolve a gene symbol to a transcription start site and pull the promoter. |
-| `genetics.py` | 212 | Human genetic evidence, via eQTLs — and what GWAS/PheWAS can and cannot tell you. |
-| `http.py` | 255 | Tiny cached HTTP client. Stdlib only, so the package needs only numpy. |
-| `indications.py` | 397 | What each drug actually is, and what it is approved to treat. |
-| `liabilities.py` | 229 | Structural liabilities: what makes a predicted hit not worth believing. |
-| `ligands.py` | 306 | Change the natural ligand, not the receptor. |
-| `localannot.py` | 378 | Gene annotation and genetic evidence from files, not web APIs. |
-| `localdrugs.py` | 971 | Approved drugs and their known targets, from a file instead of an API. |
-| `localpotency.py` | 632 | Measured binding potency from a file, not from the ChEMBL API. |
-| `modalities.py` | 330 | Design a direct modality for YOUR gene, rather than looking up existing ones. |
-| `modulators.py` | 301 | Orthosteric agonists vs allosteric modulators: a comparison, not a ranking. |
-| `motifs.py` | 296 | Load TF binding motifs and scan a promoter with them. |
-| `neighbours.py` | 286 | What else lives in the promoter window you just scanned? |
-| `network.py` | 366 | Multi-hop upstream search: promoter -> TF -> kinase -> receptor -> drug. |
-| `orangebook.py` | 324 | The FDA's 20,000 approved products, used for what they actually add. |
-| `outcome.py` | 181 | From "the drug binds the receptor" to "my gene goes up": the chain, explicitly. |
-| `panel.py` | 1201 | Compare several candidate genes and narrow to the cleanest route. |
-| `paralogs.py` | 229 | How many close relatives share the pocket you are trying to hit? |
-| `pipeline.py` | 1493 | Orchestration: gene -> promoter -> motifs -> activators -> approved drugs. |
-| `posttranscriptional.py` | 229 | Raising a gene's output after transcription has already happened. |
-| `predictions.py` | 456 | The headline answer: which medications the model predicts, and why. |
-| `promoterdna.py` | 342 | Small molecules aimed at the promoter DNA rather than at a protein. |
-| `provenance.py` | 233 | Did each evidence source actually produce evidence? |
-| `pwm.py` | 161 | Position-weight-matrix mathematics. |
-| `reactivation.py` | 247 | Reactivating a silenced allele, which is a different problem from a low gene. |
-| `regulon.py` | 252 | How many genes does this TF control? The specificity that actually matters. |
-| `report.py` | 3200 | Turning a finished run into something a person reads. |
-| `screening.py` | 1035 | Screen the whole approved-drug library against a receptor. |
-| `screens.py` | 294 | Design the experiment that settles what this whole package only predicts. |
-| `sensitivity.py` | 631 | Which approved drugs behave as though they act on your factor. |
-| `shortlist.py` | 575 | Narrow an existing results.json to a shortlist, without re-running anything. |
-| `signatures.py` | 575 | LINCS L1000 transcriptomic signatures — the only empirical link in the package. |
-| `stabilizers.py` | 448 | Locking a transcription factor into an active state — without a ligand pocket. |
-| `systemic.py` | 360 | Drugs and receptors whose action is systemic by design, not by accident. |
-| `tfactivity.py` | 969 | Which factors are demonstrably active, inferred from their targets. |
-| `validation.py` | 173 | Declarative argument checking for the entry points. |
-| `wsldock.py` | 324 | Run a Linux docking binary from Windows, through WSL. |
+| Module | Purpose |
+| --- | --- |
+| `abundance.py` | Drugs that change how much of the factor exists, not what it does. |
+| `agonism.py` | Predict the *functional direction* of a drug at a receptor from its structure. |
+| `analogs.py` | Approved drugs that resemble a known modulator but are not annotated at it. |
+| `annotate.py` | Decide which of the motif-matched TFs are plausible *activators*. |
+| `audit.py` | Are the hand-curated tables still true? |
+| `catalogue.py` | Every route that acts on your gene, in one table, on one scale. |
+| `cellcycle.py` | Cell-cycle phase dependence of TF activity — a separate axis from everything else. |
+| `chipregulon.py` | Regulons built from ChIP peaks, for the factors curation never reached. |
+| `cli.py` | Command-line interface. |
+| `compensation.py` | You may not need to raise your gene at all. |
+| `congeners.py` | Collapse salt forms so the tables show distinct chemistry. |
+| `corpora.py` | Other perturbation corpora, and what agreement between them is worth. |
+| `delivery.py` | Does the drug reach the cells that express your gene? |
+| `demo_data.py` | Self-contained fixtures so the pipeline runs with zero network access. |
+| `depmap.py` | What happens to a cell when a factor is removed, measured not curated. |
+| `direct.py` | Drugs that act on the target gene directly, bypassing transcription factors. |
+| `discovery.py` | Find interventions that plausibly BEAT what already exists for this gene. |
+| `docking.py` | Structure-based prediction of functional direction, done the way that can |
+| `drug_scoring.py` | Grade each TF/drug pair by combining TF-level confidence with drug quality. |
+| `drugs.py` | TF -> approved drug lookup, filtered to pharmacology that moves the TF in |
+| `eqtl.py` | Trans-eQTL evidence: does variation in the factor actually move your gene? |
+| `evidence.py` | Orthogonal evidence that a predicted site is real. |
+| `explain.py` | Everything the pipeline knows about one compound, in one place. |
+| `genes.py` | Resolve a gene symbol to a transcription start site and pull the promoter. |
+| `genetics.py` | Human genetic evidence, via eQTLs — and what GWAS/PheWAS can and cannot tell you. |
+| `http.py` | Tiny cached HTTP client. Stdlib only, so the package needs only numpy. |
+| `indications.py` | What each drug actually is, and what it is approved to treat. |
+| `liabilities.py` | Structural liabilities: what makes a predicted hit not worth believing. |
+| `ligands.py` | Change the natural ligand, not the receptor. |
+| `localannot.py` | Gene annotation and genetic evidence from files, not web APIs. |
+| `localdrugs.py` | Approved drugs and their known targets, from a file instead of an API. |
+| `localpotency.py` | Measured binding potency from a file, not from the ChEMBL API. |
+| `modalities.py` | Design a direct modality for YOUR gene, rather than looking up existing ones. |
+| `modulators.py` | Orthosteric agonists vs allosteric modulators: a comparison, not a ranking. |
+| `motifs.py` | Load TF binding motifs and scan a promoter with them. |
+| `neighbours.py` | What else lives in the promoter window you just scanned? |
+| `network.py` | Multi-hop upstream search: promoter -> TF -> kinase -> receptor -> drug. |
+| `orangebook.py` | The FDA's 20,000 approved products, used for what they actually add. |
+| `outcome.py` | From "the drug binds the receptor" to "my gene goes up": the chain, explicitly. |
+| `panel.py` | Compare several candidate genes and narrow to the cleanest route. |
+| `paralogs.py` | How many close relatives share the pocket you are trying to hit? |
+| `pipeline.py` | Orchestration: gene -> promoter -> motifs -> activators -> approved drugs. |
+| `posttranscriptional.py` | Raising a gene's output after transcription has already happened. |
+| `predictions.py` | The headline answer: which medications the model predicts, and why. |
+| `promoterdna.py` | Small molecules aimed at the promoter DNA rather than at a protein. |
+| `provenance.py` | Did each evidence source actually produce evidence? |
+| `pwm.py` | Position-weight-matrix mathematics. |
+| `reactivation.py` | Reactivating a silenced allele, which is a different problem from a low gene. |
+| `regulon.py` | How many genes does this TF control? The specificity that actually matters. |
+| `report.py` | Turning a finished run into something a person reads. |
+| `screening.py` | Screen the whole approved-drug library against a receptor. |
+| `screens.py` | Design the experiment that settles what this whole package only predicts. |
+| `sensitivity.py` | Which approved drugs behave as though they act on your factor. |
+| `shortlist.py` | Narrow an existing results.json to a shortlist, without re-running anything. |
+| `signatures.py` | LINCS L1000 transcriptomic signatures — the only empirical link in the package. |
+| `stabilizers.py` | Locking a transcription factor into an active state — without a ligand pocket. |
+| `systemic.py` | Drugs and receptors whose action is systemic by design, not by accident. |
+| `tfactivity.py` | Which factors are demonstrably active, inferred from their targets. |
+| `validation.py` | Declarative argument checking for the entry points. |
+| `wsldock.py` | Run a Linux docking binary from Windows, through WSL. |
 
-Line counts are indicative and go stale; the descriptions come from the
-modules themselves and `docs/development.md` explains how to regenerate
-this table.
+The descriptions come from the modules themselves. `docs/development.md`
+explains how to regenerate this table, and a test fails when it is stale.
