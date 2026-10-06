@@ -388,11 +388,18 @@ def run_funnel(rows: list, stages: list) -> tuple[list, list]:
         n_unassessable = sum(
             1 for r in kept if checks and not all(c(r) for c in checks))
 
-        # Redundancy with what comes after: rows this stage removed that no
-        # LATER stage would have removed anyway.
+        # Redundancy with what comes after: pairs this stage removed that
+        # no LATER stage would have removed anyway.
+        #
+        # Counted in PAIRS, like n_removed. Counting rows here while
+        # n_removed counted pairs let unique exceed removed - CCR5's
+        # burden stage reported 133 unique out of 124 removed - because a
+        # drug reaching one gene through three factors is one pair and
+        # three rows.
         later = stages[i + 1:]
-        unique = sum(1 for r in removed
-                     if all(_passes(r, s2) for s2 in later))
+        survives_later = [r for r in removed
+                          if all(_passes(r, s2) for s2 in later)]
+        unique = sum(len(v) for v in _pairs(survives_later).values())
 
         before, after = _pairs(current), _pairs(kept)
         lost = sorted(g for g in before if not after.get(g))

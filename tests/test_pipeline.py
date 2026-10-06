@@ -12924,3 +12924,60 @@ def test_negated_flags_keep_their_sense():
     assert flipped["grade_drugs"] is False
     assert flipped["approved_only"] is False
     assert flipped["mask_repeats"] is False
+
+
+def test_unique_kills_cannot_exceed_removals():
+    """CCR5's clinical-burden stage reported 124 removed and 133 unique.
+    Unique is the subset of the removed that no later stage would have
+    caught anyway, so it cannot be larger.
+
+    Units: n_removed counted distinct (moiety, target) pairs, which is
+    what the table says it reports, and unique counted rows. A drug
+    reaching one gene through three factors is one pair and three rows.
+    """
+    from promoter_tf_drugs import panel as pnl
+    rows = []
+    for i in range(6):
+        # One drug, one gene, three different factors: one pair, three
+        # rows. This is the shape that broke the comparison.
+        for tf in ("TF1", "TF2", "TF3"):
+            rows.append({"gene": "G", "drug": f"Drug{i}", "acts_on": tf,
+                         "tier": 3, "score": 50.0,
+                         "_burden_level": "prohibitive",
+                         "_regulon_size": 10_000})
+    stages = [
+        pnl.Stage(name="burden", axis="clinical burden",
+                  filters={"max_burden": "low"}, why="w"),
+        pnl.Stage(name="regulon", axis="regulon breadth",
+                  filters={"max_regulon": 500}, why="w"),
+    ]
+    _, results = pnl.run_funnel(rows, stages)
+    for st in results:
+        assert st.n_unique_kills <= st.n_removed, (
+            f"{st.name}: {st.n_unique_kills} unique of "
+            f"{st.n_removed} removed")
+
+
+def test_the_funnel_counts_reconcile():
+    """Every stage's in must equal removed plus remaining, and each
+    stage's in must be the previous stage's remaining - which catches a
+    stage filtering a stale list."""
+    from promoter_tf_drugs import panel as pnl
+    rows = [{"gene": "G", "drug": f"D{i}", "acts_on": f"T{i % 4}",
+             "tier": 3, "score": 50.0,
+             "_burden_level": "prohibitive" if i % 2 else "low",
+             "_regulon_size": 9_000 if i % 3 else 50}
+            for i in range(24)]
+    stages = [
+        pnl.Stage(name="a", axis="clinical burden",
+                  filters={"max_burden": "moderate"}, why="w"),
+        pnl.Stage(name="b", axis="regulon breadth",
+                  filters={"max_regulon": 500}, why="w"),
+    ]
+    _, results = pnl.run_funnel(rows, stages)
+    prev = None
+    for st in results:
+        assert st.n_in == st.n_removed + st.n_remaining, st.name
+        if prev is not None:
+            assert st.n_in == prev, f"{st.name} filtered a stale list"
+        prev = st.n_remaining
