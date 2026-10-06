@@ -12802,3 +12802,44 @@ def test_a_failed_source_bullet_is_never_bare():
     line = next(ln for ln in report.splitlines()
                 if ln.startswith("- **tf_activity**"))
     assert len(line.split("—", 1)[1].strip()) > 20, line
+
+
+def test_the_winners_curse_margin_never_crosses_a_tier():
+    """The CCR5 panel reported "Its margin over Calcitriol is -5.7
+    points, which is not separable from noise". Maraviroc is tier 1 at
+    60.0; Calcitriol is tier 3 at 65.7. Rows sort by tier first, so the
+    runner-up came from a different tier and the subtraction went
+    negative.
+
+    Scores are comparable within a tier, not across them - the report
+    says so itself - and being the only route at the strongest tier is
+    the opposite of a tie.
+    """
+    from promoter_tf_drugs import panel as pnl
+    rows = [
+        {"gene": "G", "tier": 1, "drug": "Top", "score": 60.0,
+         "acts_on": "X", "grade": None},
+        {"gene": "G", "tier": 3, "drug": "Lower", "score": 65.7,
+         "acts_on": "Y", "grade": "B"},
+        {"gene": "G", "tier": 3, "drug": "Lower2", "score": 64.0,
+         "acts_on": "Z", "grade": "B"},
+    ]
+    text = pnl.markdown_report(
+        pnl.Panel(genes=[]), {}, rows, [], {})
+    assert "-5.7" not in text
+    assert "only route at tier 1" in text, text[-900:]
+    assert "not separable from noise" not in text
+
+
+def test_a_same_tier_runner_up_still_gets_a_margin():
+    from promoter_tf_drugs import panel as pnl
+    rows = [
+        {"gene": "G", "tier": 3, "drug": "A", "score": 65.7,
+         "acts_on": "X", "grade": "B"},
+        {"gene": "G", "tier": 3, "drug": "B", "score": 65.0,
+         "acts_on": "Y", "grade": "B"},
+    ]
+    text = pnl.markdown_report(
+        pnl.Panel(genes=[]), {}, rows, [], {})
+    assert "not separable from noise" in text, text[-900:]
+    assert "tier 3" in text

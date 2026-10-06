@@ -750,8 +750,7 @@ def markdown_report(panel: Panel, merged: dict, rows: list, stages: list,
                      f"{burden} | {other} | {r['score']} |")
         L.append("")
         if len(cand_rows) >= 2:
-            top, runner = cand_rows[0], cand_rows[1]
-            margin = round(top["score"] - runner["score"], 2)
+            top = cand_rows[0]
             n_cmp = stages[0].n_in if stages else len(rows)
             L.append(f"**About the top row.** It is the maximum over ~{n_cmp} "
                      f"candidate pairs across {len(genes)} gene(s). You are "
@@ -760,12 +759,32 @@ def markdown_report(panel: Panel, merged: dict, rows: list, stages: list,
                      f"inflated it — and the more genes you compare, the more "
                      f"that is true.")
             L.append("")
-            if margin < 1.5:
-                L.append(f"Its margin over {runner['drug']} is {margin} "
-                         f"points, which is **not separable from noise**. "
-                         f"Treat the top few as a tied set, not a ranking.")
+            # The runner-up has to be at the SAME tier. Rows are ordered
+            # by tier first, so taking cand_rows[1] reached into a weaker
+            # tier and subtracted scores that do not share a scale - it
+            # reported a NEGATIVE margin for CCR5 and called it a tie,
+            # when being the only route at the strongest tier is the
+            # opposite of a tie.
+            peers = [r for r in cand_rows if r["tier"] == top["tier"]]
+            if len(peers) >= 2:
+                runner = peers[1]
+                margin = round(top["score"] - runner["score"], 2)
+                if margin < 1.5:
+                    L.append(f"Its margin over {runner['drug']}, the next "
+                             f"route at tier {top['tier']}, is {margin} "
+                             f"points, which is **not separable from "
+                             f"noise**. Treat the top few as a tied set, "
+                             f"not a ranking.")
+                else:
+                    L.append(f"Margin over {runner['drug']}, the next route "
+                             f"at tier {top['tier']}: {margin} points.")
             else:
-                L.append(f"Margin over {runner['drug']}: {margin} points.")
+                L.append(f"It is the **only route at tier {top['tier']}**, "
+                         f"and everything below it rests on weaker "
+                         f"evidence. There is no like-for-like runner-up to "
+                         f"measure a margin against: scores are comparable "
+                         f"within a tier, not across them, so the gap to "
+                         f"the next row is not a quantity worth reporting.")
             L.append("")
     else:
         L.append("## Nothing survived")
