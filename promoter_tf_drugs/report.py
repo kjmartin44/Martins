@@ -672,9 +672,10 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
             L.append("")
         failed = [s for s in srcs.values() if s["state"] == "FAILED"]
         if failed:
-            L.append("**A failed source is not a negative result.** These were "
-                     "requested and did not deliver, so nothing below rests on "
-                     "them:")
+            L.append("**These tests could not be completed.** Asking and "
+                     "getting no answer is not the same as asking and "
+                     "being told no, so nothing below rests on them. "
+                     "What each one would have told you:")
             L.append("")
             for s in failed:
                 # The source's own detail when no impact is written for
@@ -3154,13 +3155,23 @@ def write_outputs(result: dict, outdir: str | Path, *, top_n: int = 25) -> list[
     cols = ["symbol", "name", "role", "nuclear_receptor", "n_sites", "best_rel_score",
             "best_score_bits", "best_site_tss_offset", "best_site_sequence",
             "matrix_id", "chip_peaks", "score", "n_drugs", "drugs"]
-    lines = ["\t".join(cols)]
+    # csv.writer rather than "\t".join: names come from external tables
+    # and APIs, and one carrying a tab or a newline used to split the row
+    # and shift every column after it, silently. QUOTE_MINIMAL quotes
+    # only the fields that need it, so an ordinary file is unchanged.
+    import csv
+    import io
+
+    buf = io.StringIO()
+    w = csv.writer(buf, delimiter="\t", lineterminator="\n",
+                   quoting=csv.QUOTE_MINIMAL)
+    w.writerow(cols)
     for res in result["results"]:
         for t in res["tfs"]:
             names = "; ".join(d["name"] for d in t["drugs"])
             row = [t.get(c) for c in cols[:-2]] + [len(t["drugs"]), names]
-            lines.append("\t".join("" if v is None else str(v) for v in row))
-    p.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            w.writerow(["" if v is None else str(v) for v in row])
+    p.write_text(buf.getvalue(), encoding="utf-8")
     written.append(p)
 
     # BED of predicted sites, for genome-browser inspection.
@@ -3178,9 +3189,15 @@ def write_outputs(result: dict, outdir: str | Path, *, top_n: int = 25) -> list[
                 ge = prom["end"] - h["start"]
                 strand = {"+": "-", "-": "+"}.get(strand, strand)
             score = max(0, min(1000, int(h["rel_score"] * 1000)))
+            # BED forbids whitespace in the name field and cannot be
+            # quoted, so this is sanitised rather than escaped - lossy
+            # by necessity. A motif name with a space in it would
+            # otherwise be read as the start of the score column.
+            name = f"{h['motif_name']}|{h['matrix_id']}"
+            name = "_".join(str(name).split()) or "site"
             lines.append("\t".join([
                 f"chr{prom['chrom']}", str(gs), str(ge),
-                f"{h['motif_name']}|{h['matrix_id']}", str(score), strand,
+                name, str(score), strand,
             ]))
     p.write_text("\n".join(lines) + "\n", encoding="utf-8")
     written.append(p)

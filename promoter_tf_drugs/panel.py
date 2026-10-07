@@ -710,7 +710,13 @@ def markdown_report(panel: Panel, merged: dict, rows: list, stages: list,
             L.append(f"- **Genes eliminated here: {', '.join(s.genes_lost)}** "
                      f"— this is where those candidates ran out of routes.")
         if s.removed_examples:
-            L.append(f"- e.g. {'; '.join(s.removed_examples[:3])}")
+            # Labelled, because the bullet above it is about rows that
+            # SURVIVED unjudged and this one is about rows that were
+            # judged and dropped. A bare "e.g." between them reads as
+            # examples of the sentence before it, which is the opposite
+            # set - and it has been read that way.
+            L.append(f"- Removed here, for example: "
+                     f"{'; '.join(s.removed_examples[:3])}")
         L.append("")
 
     # ------------------------------------------- 5. gene x stage survival

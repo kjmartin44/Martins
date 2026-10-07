@@ -13414,3 +13414,377 @@ def test_both_commands_can_turn_progress_off():
         assert "--quiet" in flags, mod.__name__
         args = mod.build_parser().parse_args(base + ["--quiet"])
         assert args.quiet is True
+
+
+def test_a_missing_optional_file_is_reported_once_not_per_lookup(caplog):
+    """The Orange Book notice printed once per drug. `load` returns early
+    only when it SUCCEEDED - the guard is `if _PRODUCTS:` and a file that
+    is not there leaves that empty - so every lookup re-resolved the path
+    and logged again. A real run printed it hundreds of times, which
+    buries the log and reads like a recurring fault rather than a file
+    that is simply absent."""
+    import logging
+    from promoter_tf_drugs import orangebook as ob
+    ob.reset()
+    with caplog.at_level(logging.INFO,
+                         logger="promoter_tf_drugs.orangebook"):
+        for name in ("aspirin", "ibuprofen", "maraviroc") * 30:
+            ob.lookup(name)
+    said = sum(1 for r in caplog.records
+               if "no Orange Book on disk" in r.getMessage())
+    assert said == 1, f"logged {said} times for 90 lookups"
+    ob.reset()
+
+
+def test_a_file_appearing_after_a_miss_is_still_found(tmp_path):
+    """The once-only notice must suppress the LOGGING, not the lookup.
+    A guard that skipped the lookup made a file dropped into place after
+    an earlier miss invisible for the rest of the process - which broke
+    ten tests that write a file and then read it."""
+    from promoter_tf_drugs import orangebook as ob
+    ob.reset()
+    assert ob.load() == 0                      # absent, reported once
+
+    header = ("Ingredient~DF;Route~Trade_Name~Applicant~Strength~"
+              "Appl_Type~Appl_No~Product_No~TE_Code~Approval_Date~RLD~"
+              "RS~Type~Applicant_Full_Name")
+    row = ("ASPIRIN~TABLET;ORAL~SOMEBRAND~CO~325MG~N~000001~001~~"
+           "Jan 1, 1990~No~No~RX~CO")
+    f = tmp_path / "products.txt"
+    f.write_text(header + "\n" + row + "\n", encoding="utf-8")
+    # Found now, rather than short-circuited by the earlier absence.
+    assert ob.load(str(f)) > 0
+    ob.reset()
+
+
+def test_the_missing_file_notice_is_a_whole_sentence(caplog):
+    """It logged SOURCE.splitlines()[0], which ends mid-clause on
+    "Approved Drug Products with Therapeutic Equivalence" and stops.
+    Logging once means it can afford to finish."""
+    import logging
+    from promoter_tf_drugs import orangebook as ob
+    ob.reset()
+    with caplog.at_level(logging.INFO,
+                         logger="promoter_tf_drugs.orangebook"):
+        ob.load()
+    msg = " ".join(r.getMessage() for r in caplog.records)
+    assert "not the same as every row being systemic" in msg
+    assert "fda.gov" in msg, "the notice should say where to get it"
+    ob.reset()
+
+
+# ===================================================================== #
+# Exported tables must survive the characters real names contain.       #
+# ===================================================================== #
+def test_a_tab_in_a_name_does_not_shift_every_column(tmp_path):
+    """The export joined fields with a tab and wrote them. Names come
+    from external tables and APIs and some carry a tab or a newline, so
+    a row split and every column after it shifted - silently. Three rows
+    became five lines with four, five, two and three fields."""
+    import csv
+    import io
+    from promoter_tf_drugs import pipeline as pl, report as rep
+
+    res = pl.run("DEMOGENE", demo=True)
+    tfs = res["results"][0]["tfs"]
+    tfs[0]["name"] = "has\ta tab"
+    tfs[1]["name"] = "has\na newline"
+    if tfs[2].get("drugs"):
+        tfs[2]["drugs"][0]["name"] = "drug\twith tab"
+
+    rep.write_outputs(res, tmp_path)
+    text = (tmp_path / "tf_summary.tsv").read_text(encoding="utf-8")
+    rows = list(csv.reader(io.StringIO(text), delimiter="\t"))
+
+    widths = {len(r) for r in rows}
+    assert len(widths) == 1, f"ragged table: {widths}"
+    assert len(rows) == len(tfs) + 1, "a row split into two lines"
+    flat = [c for r in rows for c in r]
+    assert "has\ta tab" in flat, "the tab was lost or split the row"
+    assert "has\na newline" in flat
+
+
+def test_an_ordinary_table_is_not_quoted_needlessly(tmp_path):
+    """QUOTE_MINIMAL: a file with nothing to escape should look exactly
+    as it did before, or every downstream reader sees a change it did
+    not ask for."""
+    from promoter_tf_drugs import pipeline as pl, report as rep
+    res = pl.run("DEMOGENE", demo=True)
+    rep.write_outputs(res, tmp_path)
+    text = (tmp_path / "tf_summary.tsv").read_text(encoding="utf-8")
+    assert '"' not in text, "quoted a field that needed no quoting"
+
+
+def test_the_bed_name_field_never_contains_whitespace(tmp_path):
+    """BED cannot be quoted - the format forbids whitespace in the name
+    field, and a browser would read a space as the start of the score
+    column. So it is sanitised, which is lossy by necessity."""
+    from promoter_tf_drugs import pipeline as pl, report as rep
+    res = pl.run("DEMOGENE", demo=True)
+    res["results"][0]["hits"][0]["motif_name"] = "spaced motif name"
+    rep.write_outputs(res, tmp_path)
+    rows = [l for l in (tmp_path / "sites.bed").read_text().splitlines()
+            if l and not l.startswith("track")]
+    assert rows
+    for line in rows:
+        fields = line.split("\t")
+        assert len(fields) == 6, f"{len(fields)} columns: {line!r}"
+        assert " " not in fields[3], f"whitespace in the name: {fields[3]!r}"
+    assert any("spaced_motif_name" in r for r in rows)
+
+
+# ===================================================================== #
+# What produced a result, and whether a reader understands it.          #
+# ===================================================================== #
+def test_a_result_records_what_produced_it():
+    """The query block says what the run was ASKED to do. This says what
+    actually ran: which version, when, and which bytes were behind each
+    file argument. A run from six months ago against a since-replaced
+    ReMap file is otherwise indistinguishable from one against the
+    current one."""
+    from promoter_tf_drugs import pipeline as pl, provenance as prov
+    res = pl.run("DEMOGENE", demo=True)
+    pv = res["provenance"]
+    assert pv["schema"] == prov.RESULT_SCHEMA
+    assert pv["package_version"]
+    assert pv["created"].endswith("+00:00"), "timestamps are UTC"
+    assert pv["python"]
+
+
+def test_only_the_files_actually_given_are_recorded(tmp_path):
+    """An argument that was not given must not appear as an input. The
+    query block already says it was absent; repeating it here would
+    imply a file was read."""
+    from promoter_tf_drugs import pipeline as pl
+    f = tmp_path / "motifs.txt"
+    f.write_text(">MA0001.1\tTEST\nA [ 1 2 ]\nC [ 1 2 ]\nG [ 1 2 ]\n"
+                 "T [ 1 2 ]\n", encoding="utf-8")
+    res = pl.run("DEMOGENE", demo=True, pfm_file=str(f))
+    inputs = res["provenance"]["inputs"]
+    assert "pfm_file" in inputs
+    assert "chip_bed" not in inputs, "recorded a file that was never given"
+    assert inputs["pfm_file"]["sha256"], "a small file should be hashed"
+    assert inputs["pfm_file"]["bytes"] == f.stat().st_size
+
+
+def test_a_file_too_large_to_hash_says_so(tmp_path, monkeypatch):
+    """A missing hash with no explanation reads like a file nobody
+    looked at, which is a different claim from one too large to bother
+    with."""
+    from promoter_tf_drugs import provenance as prov
+    f = tmp_path / "big.bin"
+    f.write_bytes(b"x" * 4096)
+    monkeypatch.setattr(prov, "HASH_LIMIT_BYTES", 1024)
+    got = prov.describe_input(f)
+    assert got["sha256"] is None
+    assert "over the" in got["hash_skipped"]
+    assert got["bytes"] == 4096
+
+
+def test_an_unreadable_input_is_recorded_as_an_error_not_a_blank():
+    from promoter_tf_drugs import provenance as prov
+    got = prov.describe_input("definitely/not/here.tsv")
+    assert "error" in got
+    assert "sha256" not in got
+
+
+def test_a_newer_result_warns_rather_than_being_read_blind(capsys):
+    """shortlist and explain read a file some other run wrote. A field
+    whose meaning changed would be read with the old meaning and nothing
+    would say so."""
+    from promoter_tf_drugs import shortlist as sl, explain as ex
+    newer = {"provenance": {"schema": 99, "package_version": "9.9.9"}}
+    for mod, name in ((sl, "shortlist"), (ex, "explain")):
+        assert mod.check_schema(newer, name)
+    out = capsys.readouterr().err
+    assert "schema 99" in out and "9.9.9" in out
+
+
+def test_a_result_this_version_wrote_is_read_without_a_warning(capsys):
+    """And one with no schema at all predates the field, so warning
+    about it every time would train the warning away."""
+    from promoter_tf_drugs import pipeline as pl, shortlist as sl
+    res = pl.run("DEMOGENE", demo=True)
+    capsys.readouterr()
+    assert sl.check_schema(res, "shortlist") is None
+    assert sl.check_schema({}, "shortlist") is None
+    assert capsys.readouterr().err == ""
+
+
+def test_windows_launchers_keep_crlf_line_endings():
+    """.gitattributes says `*.bat text eol=crlf` and gives the reason:
+    cmd.exe mis-parses an LF-only batch file.
+
+    Not theoretical. Four launchers rewritten with Unix endings made
+    `set /p` read a value that `if exist` then could not find, so a
+    valid path was reported missing and a rejected preset was accepted.
+    The logic was right; the bytes were wrong.
+    """
+    import pathlib
+    root = pathlib.Path(__file__).resolve().parent.parent
+    bad = []
+    for f in sorted(root.glob("scripts/*.bat")):
+        data = f.read_bytes()
+        if not data:
+            continue
+        bare = data.replace(b"\r\n", b"").count(b"\n")
+        if bare:
+            bad.append(f"{f.name}: {bare} line(s) without CR")
+    assert not bad, "batch files with Unix line endings: " + "; ".join(bad)
+
+
+def test_every_launcher_prefers_the_local_environment():
+    """Otherwise the script runs against whatever `python` is first on
+    PATH, which on a machine with several installs is rarely the one the
+    package was installed into - and the failure then reads as a broken
+    package rather than the wrong interpreter."""
+    import pathlib
+    root = pathlib.Path(__file__).resolve().parent.parent
+    bad = []
+    for f in sorted(root.glob("scripts/*.bat")):
+        text = f.read_text(encoding="utf-8", errors="replace")
+        if "python" not in text.lower():
+            continue
+        if r".venv\Scripts\python.exe" not in text:
+            bad.append(f.name)
+    assert not bad, "launchers that ignore a local venv: " + ", ".join(bad)
+
+
+def test_downloads_fail_loudly_rather_than_saving_the_error_page():
+    """`curl -L` without -f saves a 404 page under the name of the file
+    you wanted, and the next run reads an HTML apology as data."""
+    import pathlib
+    import re
+    root = pathlib.Path(__file__).resolve().parent.parent
+    bad = []
+    for f in sorted(root.glob("scripts/*.bat")):
+        text = f.read_text(encoding="utf-8", errors="replace")
+        for m in re.finditer(r"curl\.exe\s+(-\S+)", text):
+            if "f" not in m.group(1):
+                bad.append(f"{f.name}: curl {m.group(1)} has no -f")
+    assert not bad, "; ".join(bad)
+
+
+def test_the_removed_examples_say_they_were_removed():
+    """Two adjacent bullets describe opposite sets: one counts rows that
+    SURVIVED because nothing could judge them, the next lists rows the
+    stage REMOVED. A bare "e.g." between them reads as examples of the
+    sentence before it, and was read that way."""
+    from promoter_tf_drugs import panel as pnl
+    rows = [{"gene": "G", "drug": f"D{i}", "acts_on": "T",
+             "tier": 3, "score": 50.0,
+             "_burden": "prohibitive" if i < 3 else "low",
+             "_burden_assessed": i < 3,
+             "_regulon_size": None}
+            for i in range(8)]
+    stages = [pnl.Stage(name="burden", axis="clinical burden",
+                        filters={"max_burden": "moderate"}, why="w")]
+    _, results = pnl.run_funnel(rows, stages)
+    text = pnl.markdown_report(pnl.Panel(genes=[]), {}, rows, results, {})
+    assert "Removed here, for example:" in text
+    # The two statements must not be adjacent without a label between.
+    assert "- e.g. " not in text, "an unlabelled example list is ambiguous"
+
+
+# ===================================================================== #
+# A failed CTD lookup must not read as "nobody has tried this".         #
+# ===================================================================== #
+def test_a_failed_ctd_lookup_is_not_a_novelty_claim():
+    """`ctd_expression_links` returned {} when the request failed, which
+    is the value it also returns when CTD answers and knows of nothing.
+    The novelty check then found the candidate absent from an empty
+    mapping and reported previously_linked: False - rendered as a bold
+    "no", a claim that nothing in the literature links the compound to
+    the gene.
+
+    The function's own docstring calls under-calling a link "the one
+    genuinely embarrassing failure mode"."""
+    from promoter_tf_drugs import discovery as disc
+    linked, why = disc.check_novelty("aspirin", None)
+    assert linked is False
+    assert why and "failed" in why, "a failed lookup must say so"
+    # Searched and empty is a different fact, and stays silent.
+    assert disc.check_novelty("aspirin", {}) == (False, None)
+
+
+def test_a_failed_lookup_returns_none_not_an_empty_answer(monkeypatch):
+    from promoter_tf_drugs import discovery as disc
+    from promoter_tf_drugs.http import HttpError
+
+    class _Boom:
+        def get(self, *a, **k):
+            raise HttpError("502 from CTD")
+
+    assert disc.ctd_expression_links(_Boom(), "CCR5") is None
+
+
+def test_the_ledger_says_which_kind_of_nothing_ctd_returned():
+    """"none returned" covered both a lookup that failed and one that
+    succeeded and found nothing. Only the second supports calling
+    anything novel."""
+    from promoter_tf_drugs import discovery as disc
+
+    found = disc.ctd_ledger_detail(153, 39, assessed=True)
+    searched = disc.ctd_ledger_detail(0, 0, assessed=True)
+    failed = disc.ctd_ledger_detail(0, 0, assessed=False)
+
+    assert "153 chemical(s)" in found and "39 move it" in found
+    # The two kinds of nothing must not read the same.
+    assert searched != failed
+    assert "searched" in searched and "holds no" in searched
+    assert "failed" in failed
+    assert "absence of a retrieved link is not absence of a link" in failed
+
+
+def test_a_candidate_records_whether_novelty_could_be_assessed():
+    from promoter_tf_drugs import discovery as disc
+    c = disc.Candidate(name="x", route="direct", tf_symbol=None,
+                       axes=disc.Axes(0.5, 0.5, 0.5))
+    assert c.novelty_assessed is True, "assessed unless shown otherwise"
+    assert "novelty_assessed" in c.to_dict()
+
+
+def test_an_incomplete_test_is_not_described_as_a_failure(capsys):
+    """"requested source(s) failed: promoter_dna, product_screen" names
+    the module and tells the reader nothing. They cannot tell whether
+    something broke, whether the answer was no, or what they have lost -
+    and those are three different things."""
+    from promoter_tf_drugs import provenance as prov
+    led = prov.Ledger()
+    led.record("promoter_dna", requested=True, ok=False, yielded=0,
+               detail="no sequence features scanned")
+    v = prov.verdict(led)
+    joined = " ".join(v.get("reasons") or []) + " " + (v.get("headline") or "")
+    assert "could not be completed" in joined
+    assert "not the same as" in joined, (
+        "an unanswered question must not read as a negative answer")
+
+
+def test_every_impact_explains_what_was_lost_in_plain_words():
+    """The impacts were written for somebody who already knew what the
+    module did. Each should now be a sentence a reader can act on."""
+    from promoter_tf_drugs import provenance as prov
+    for name, text in prov.IMPACT.items():
+        assert len(text) > 60, f"{name}: too terse to be useful"
+        assert text[0].isupper(), f"{name}: not a sentence"
+        assert text.rstrip().endswith("."), f"{name}: not a sentence"
+        # No bare module names standing in for an explanation.
+        assert name not in text.lower().split(), f"{name}: names itself"
+
+
+def test_the_promoter_dna_impact_says_what_a_null_result_means():
+    """The specific thing a reader asked about: what it means when the
+    promoter has no feature that beats its own shuffled composition."""
+    from promoter_tf_drugs import provenance as prov
+    text = prov.IMPACT["promoter_dna"]
+    assert "no specific handle" in text
+    assert "base composition" in text
+
+
+def test_the_product_screen_impact_does_not_imply_the_gene_is_specific():
+    """A low ligand count means few people assayed it, not that the
+    protein is hard to bind - the same trap the regulon axis guards
+    against with `understudied`."""
+    from promoter_tf_drugs import provenance as prov
+    text = prov.IMPACT["product_screen"].lower()
+    assert "absent" in text and "ruled out" in text

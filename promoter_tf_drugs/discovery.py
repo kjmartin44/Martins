@@ -84,6 +84,10 @@ class Candidate:
     tf_symbol: str | None
     axes: Axes
     previously_linked: bool = False
+    # Whether the question could be asked at all. False means the CTD
+    # lookup failed, so `previously_linked: False` is "unknown" rather
+    # than "nobody has tried this".
+    novelty_assessed: bool = True
     link_source: str | None = None
     wins_on: list = field(default_factory=list)
     loses_on: list = field(default_factory=list)
@@ -145,16 +149,25 @@ def axes_from_direct(therapy) -> Axes:
 
 
 # ------------------------------------------------------------- novelty test
-def ctd_expression_links(client: Client, gene: str) -> dict[str, list[str]]:
-    """{chemical_name_lower: [actions]} for curated expression effects on gene."""
+def ctd_expression_links(client: Client, gene: str
+                         ) -> dict[str, list[str]] | None:
+    """{chemical_name_lower: [actions]} for curated expression effects.
+
+    `None` when the lookup could not be made, `{}` when it was made and
+    CTD knows of nothing. Those are different facts and the difference
+    decides whether this package may call a candidate novel: an empty
+    mapping says the literature was searched, and `None` says it was
+    not.
+    """
     try:
         res = client.get(CTD_BATCH, {
             "inputType": "gene", "inputTerms": gene.upper(),
             "report": "cgixns", "format": "json", "actionTypes": "ANY",
         })
     except HttpError as exc:
-        log.warning("CTD lookup failed for %s: %s", gene, exc)
-        return {}
+        log.warning("CTD lookup failed for %s: %s - novelty cannot be "
+                    "assessed for this run", gene, exc)
+        return None
 
     links: dict[str, list[str]] = {}
     rows = res if isinstance(res, list) else res.get("data", []) or []
@@ -316,14 +329,21 @@ def summarise_links(links: dict, goal: str, candidate_names: set) -> dict:
     }
 
 
-def check_novelty(candidate_name: str, links: dict) -> tuple[bool, str | None]:
+def check_novelty(candidate_name: str, links: dict | None
+                  ) -> tuple[bool, str | None]:
     """(previously_linked, description). Substring match, deliberately generous.
 
     Over-calling a link as known is the safe error: it demotes a candidate you
     might have chased. Under-calling it means presenting a known relationship
     as a discovery, which is the one genuinely embarrassing failure mode.
+
+    `links is None` means the lookup failed, and the description then
+    says so rather than leaving a bare False that reads as "nobody has
+    tried this". Use `novelty_assessed` to tell the two apart.
     """
     name = candidate_name.strip().lower()
+    if links is None:
+        return False, "not checked: the CTD lookup failed for this run"
     if not name or not links:
         return False, None
     if name in links:
@@ -463,7 +483,9 @@ def discover(client: Client, gene: str, grades, tf_results, direct_hits,
             name=g.drug_name, route="via TF", tf_symbol=g.tf_symbol,
             axes=axes_from_grade(g, by_symbol.get(g.tf_symbol),
                                  _O(o) if o else None))
-        c.previously_linked, c.link_source = check_novelty(g.drug_name, links)
+        c.previously_linked, c.link_source = check_novelty(g.drug_name,
+                                                           links)
+        c.novelty_assessed = links is not None
         candidates.append(c)
 
     # Standard of care: the per-axis best across every established option.
@@ -511,6 +533,31 @@ def discover(client: Client, gene: str, grades, tf_results, direct_hits,
             "novel_but_dominated": len(novel_dominated),
             "novel_no_advantage": len(novel_no_win),
         },
-        "ctd_links_found": len(links),
+        "ctd_links_found": len(links or {}),
+        # Whether the literature was searched at all. Without this a
+        # failed lookup and a genuinely empty answer both arrive as
+        # zero, and every candidate then reads as novel.
+        "ctd_assessed": links is not None,
         "all_candidates": [c.to_dict() for c in candidates],
     }
+
+
+def ctd_ledger_detail(n_links: int, n_wanted: int, assessed: bool) -> str:
+    """What the evidence ledger should say about the CTD lookup.
+
+    Three outcomes, and two of them used to share a sentence. "No
+    curated effects returned" covered both a search that found nothing
+    and a request that never completed, and only the first of those
+    lets anything downstream be called novel.
+
+    A function rather than three branches inside `run`, so the wording
+    can be tested without a network round trip.
+    """
+    if n_links:
+        return (f"{n_links} chemical(s) with curated expression effects "
+                f"on this gene; {n_wanted} move it the way you want")
+    if assessed:
+        return ("CTD was searched and holds no curated expression effect "
+                "for this gene")
+    return ("the CTD lookup failed, so nothing here is known to be novel "
+            "- absence of a retrieved link is not absence of a link")

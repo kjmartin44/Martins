@@ -96,6 +96,11 @@ SYSTEMIC_ROUTES = frozenset({
 _PRODUCTS: dict = {}
 _LOADED: str | None = None
 
+# Whether the absence of the file has already been reported. `load` is
+# called once per drug through `lookup`, and without this the same
+# notice is logged hundreds of times in one run.
+_ABSENT_REPORTED = False
+
 
 def resolve(explicit=None) -> str | None:
     for c in ([explicit] if explicit else list(DEFAULT_PATHS)):
@@ -126,19 +131,44 @@ def _rows(path: Path):
         yield from csv.DictReader(fh, delimiter="~")
 
 
+def reset() -> None:
+    """Forget what was loaded, and that the file was found missing.
+
+    For tests, and for a process that drops a file into place and wants
+    the next lookup to find it.
+    """
+    global _PRODUCTS, _LOADED, _ABSENT_REPORTED
+    _PRODUCTS = {}
+    _LOADED = None
+    _ABSENT_REPORTED = False
+
+
 def load(path=None) -> int:
     """Collapse the product table onto distinct active ingredients.
 
     Idempotent. Returns the number of ingredients, not products, because
     the collapse is the point.
     """
-    global _PRODUCTS, _LOADED
+    global _PRODUCTS, _LOADED, _ABSENT_REPORTED
     if _PRODUCTS:
         return len(_PRODUCTS)
+    # The lookup itself always runs: a file that appears after an earlier
+    # miss - dropped into data/ mid-session, or written by a test - must
+    # still be found. It is a handful of is_file() calls, so repeating it
+    # costs nothing worth saving.
+    #
+    # Only the NOTICE is said once. `load` runs once per drug through
+    # `lookup`, and a real run printed this line hundreds of times, which
+    # buries the rest of the log and reads like a recurring fault rather
+    # than a file that is simply absent.
     p = resolve(path)
     if not p:
-        log.info("no Orange Book on disk; route of administration is "
-                 "unavailable. %s", SOURCE.splitlines()[0])
+        if not _ABSENT_REPORTED:
+            _ABSENT_REPORTED = True
+            log.info("no Orange Book on disk, so route of administration "
+                     "is unknown for every row - which is not the same as "
+                     "every row being systemic. To add it: %s",
+                     " ".join(SOURCE.split()))
         return 0
 
     n_products = 0

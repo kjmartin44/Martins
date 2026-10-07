@@ -2409,6 +2409,33 @@ def _report(res: dict, top: int = 25) -> None:
         print(f"  - {c}")
 
 
+def _write_refusal(out_path, target: str, uniprot: str | None,
+                   error: str) -> None:
+    """Record a refusal that happened before any screen could run.
+
+    A refusal is a result: it says the scores for this target would
+    carry no information, and that is different from the target never
+    having been tried. Without this the two are indistinguishable in a
+    directory of outputs.
+    """
+    if not out_path:
+        return
+    import json as _json
+
+    payload = {
+        "target": target, "uniprot": uniprot, "usable": False,
+        "n_docked": 0, "n_failed": 0, "hits": [],
+        "error": error, "refused_before_screening": True,
+    }
+    try:
+        Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(out_path).write_text(_json.dumps(payload, indent=2),
+                                  encoding="utf-8")
+        print(f"Recorded the refusal in {out_path}")
+    except OSError as exc:                                  # noqa: BLE001
+        log.warning("could not record the refusal: %s", exc)
+
+
 def main(argv=None) -> int:
     import argparse
     import json as _json
@@ -2631,8 +2658,10 @@ def main(argv=None) -> int:
             ann_mod.annotate_tfs(client, [args.gene]) or {}).get(args.gene)
         uniprot = (info or {}).get("uniprot")   # a dict KEY, not an attribute
         if not uniprot:
-            print(f"Could not resolve {args.gene} to a UniProt accession. "
-                  f"Pass --uniprot explicitly.")
+            msg = (f"could not resolve {args.gene} to a UniProt "
+                   f"accession, so there was nothing to dock against")
+            print(msg + ". Pass --uniprot explicitly.")
+            _write_refusal(args.out, symbol, None, msg)
             return 1
 
     print(f"Receptor  : {symbol} ({uniprot})")
@@ -2682,10 +2711,12 @@ def main(argv=None) -> int:
             actives.extend(agonism.fetch_actives(client, tid))
     print(f"Known ligands for validation: {len(actives)}")
     if len(actives) < MIN_VALIDATION_ACTIVES:
-        print(f"\nRefused: {len(actives)} measured ligand(s) is below the "
-              f"{MIN_VALIDATION_ACTIVES} needed to check whether docking "
-              f"into this pocket works at all. An unvalidated dock produces "
-              f"confident nonsense, so nothing is reported.")
+        msg = (f"{len(actives)} measured ligand(s) for {symbol}, below the "
+               f"{MIN_VALIDATION_ACTIVES} needed to check whether docking "
+               f"into this pocket works at all. An unvalidated dock "
+               f"produces confident nonsense, so nothing is reported")
+        print(f"\nRefused: {msg}.")
+        _write_refusal(args.out, symbol, uniprot, msg)
         return 1
 
     # The gate is sampled, so the estimate has to use the capped

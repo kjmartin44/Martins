@@ -29,6 +29,7 @@ absent section is never mistaken for a broken one.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
 
 # Each source names the flag that turns it on, so a "not requested" line tells
@@ -48,44 +49,69 @@ FLAGS = {
 # What you lose when a source is unavailable. Stated per source because
 # "degraded" on its own does not tell anyone whether to rerun.
 IMPACT = {
-    "chip": "TF ranking rests on sequence alone; motif hits are not confirmed "
-            "as bound. This is the single largest loss of evidence in the run.",
-    "expression": "Factors are not checked for co-expression with your gene, "
-                  "so a regulator absent from your tissue can still rank top.",
-    "lincs": "No L1000 signature for this gene. CTD may still carry measured "
-             "expression effects — check that row before concluding nothing "
-             "was ever measured.",
-    "ctd": "No curated chemical-gene expression effects, so the report loses "
-           "its literature-derived empirical evidence as well as its "
-           "novelty check.",
-    "genetics": "No human causal evidence for the TF-to-gene link.",
-    "regulon": "Transcriptional specificity falls back to coarse bundled "
-               "tiers, so a global regulator may not be penalised enough.",
-    "upstream": "TFs with no direct pharmacology return no route at all.",
-    "screen": "No untested drug/receptor pairs are surfaced.",
-    "direction_model": "Agonist-vs-antagonist was taken from the database annotation alone, with no independent structural check "
-                        "— so a mislabelled action_type passes through unchallenged.",
-    "tf_activity": "Motif hits are unchecked against whether the factor is "
-                   "actually active. A site in a promoter is a sequence "
-                   "match; without this there is nothing saying the factor "
-                   "that matches it does anything in your cells.",
-    "docking": "No structural check on whether a compound can occupy the "
-               "pocket. Routes rest on annotation alone.",
-    "product_screen": "The gene's own protein was not screened, so any "
-                      "compound acting on the product rather than on its "
-                      "transcription is absent rather than ruled out.",
-    "promoter_dna": "The promoter sequence was not examined for features a "
-                    "small molecule could bind directly, so DNA-directed "
-                    "agents are absent rather than excluded.",
-    "factor_abundance": "No check on whether a compound changes the "
-                        "factor's own transcript, which is the one "
-                        "mechanism here that a western blot would see.",
-    "trans_eqtl": "No human genetic evidence that variation in a factor "
-                  "moves this gene, so the factor-to-gene link rests on "
-                  "annotation.",
+    "chip": "Nothing measured whether these factors actually sit on this "
+            "promoter, so the ranking rests on sequence resemblance "
+            "alone. This is the single largest loss of evidence in a "
+            "run - most of a motif hit list is chance.",
+    "expression": "Factors were not checked for being switched on in the "
+                  "same tissue as your gene, so a regulator that is "
+                  "absent from your cells can still rank at the top.",
+    "lincs": "No measured transcriptional response for this gene, so no "
+             "row here is backed by a compound having actually moved it "
+             "in an experiment. Check the CTD row before concluding "
+             "nothing was ever measured.",
+    "ctd": "The curated literature on chemicals that change this gene's "
+           "expression could not be read. Two consequences: the report "
+           "loses its only literature-derived evidence, and nothing can "
+           "be called novel, because a link that was not retrieved is "
+           "not a link that does not exist.",
+    "genetics": "No human genetic evidence that the factor-to-gene link "
+                "is real, so the connection rests on annotation.",
+    "regulon": "How many genes each factor controls is unknown, so a "
+               "factor that runs half the transcriptome is not being "
+               "penalised for it and may rank alongside a specific one.",
+    "upstream": "Factors with no drug acting on them directly return no "
+                "route at all, so a reachable target two steps away is "
+                "simply missing rather than rejected.",
+    "screen": "No search for untested drug and receptor pairs, so "
+              "anything not already annotated is absent rather than "
+              "ruled out.",
+    "direction_model": "Whether each drug activates or blocks its target "
+                       "was taken from the database label alone, with no "
+                       "independent structural check - so a mislabelled "
+                       "entry passes through, and direction is what "
+                       "decides which way your gene moves.",
+    "tf_activity": "Nothing checked whether these factors are actually "
+                   "DOING anything in your cells. A motif match says a "
+                   "sequence resembles a binding site; this is the step "
+                   "that would have asked whether the factor that "
+                   "matches it is active.",
+    "docking": "No structure was examined, so no row is supported by a "
+               "compound physically fitting a pocket. Everything here "
+               "rests on what databases say rather than on shape.",
+    "product_screen": "The gene's own protein was not screened for "
+                      "binders. A compound that acts on the protein "
+                      "rather than on its transcription is absent "
+                      "rather than ruled out - and that is often the "
+                      "shortest route to changing what the gene DOES.",
+    "promoter_dna": "The promoter sequence was not examined for "
+                    "features a small molecule could bind directly, so "
+                    "DNA-directed agents are absent rather than "
+                    "excluded. Where this does run and finds nothing, it "
+                    "means a molecule aimed at such a feature would have "
+                    "no specific handle on this promoter - the same "
+                    "feature occurs at the same density in any sequence "
+                    "of that base composition.",
+    "factor_abundance": "No check on whether a compound changes how MUCH "
+                        "of the factor exists, as against what it does. "
+                        "That is the one mechanism here a western blot "
+                        "would see.",
+    "trans_eqtl": "No human genetic evidence that natural variation in a "
+                  "factor moves this gene, so the factor-to-gene step "
+                  "rests on annotation rather than on people.",
     "activity_drugs": "No compound was tested against inferred factor "
-                      "activity, so the activity calls generate no routes "
-                      "of their own.",
+                      "activity, so that evidence generates no routes of "
+                      "its own.",
 }
 
 
@@ -205,7 +231,10 @@ def verdict(ledger: Ledger, scan_quality: dict | None = None) -> dict:
         reasons.append("no source of measured evidence is available "
                        "(ChIP, LINCS, genetics all absent or failed)")
     if failed:
-        reasons.append("requested source(s) failed: " + ", ".join(failed))
+        reasons.append("these tests could not be completed: "
+                       + ", ".join(failed)
+                       + " — which is not the same as their having "
+                         "returned a negative result")
 
     have = ledger.empirical_names()
     if scan_bad and n_emp == 0:
@@ -231,3 +260,91 @@ def verdict(ledger: Ledger, scan_quality: dict | None = None) -> dict:
             "empirical_available": have,
             "scan_verdict": scan_verdict,
             "false_discovery_proportion": fdp}
+
+
+# ===================================================================== #
+# What produced this result.                                            #
+# ===================================================================== #
+# The result schema's version. Bump it when the shape changes in a way
+# that something reading an older result would get wrong - a renamed
+# field, a changed unit, a different meaning for the same key. Adding a
+# key is not such a change.
+RESULT_SCHEMA = 1
+
+# Above this, a file's contents are not hashed. The ReMap BED is 1.4 GB
+# and the full BindingDB release is 8.6 GB, and hashing either on every
+# run costs real time for a number that is almost never compared.
+HASH_LIMIT_BYTES = 64 * 1024 * 1024
+
+
+def describe_input(path) -> dict:
+    """Identify one input file: size, modification time, and a hash.
+
+    The hash is skipped above `HASH_LIMIT_BYTES`, and the record says
+    so. A missing hash with no explanation reads like a file nobody
+    looked at, which is a different claim from one too large to bother
+    with.
+    """
+    import datetime as _dt
+    import hashlib
+
+    p = Path(path)
+    out: dict = {"path": str(path)}
+    try:
+        st = p.stat()
+    except OSError as exc:
+        out["error"] = f"{type(exc).__name__}: {exc}"
+        return out
+
+    out["bytes"] = st.st_size
+    out["modified"] = _dt.datetime.fromtimestamp(
+        st.st_mtime, _dt.timezone.utc).isoformat(timespec="seconds")
+
+    if st.st_size > HASH_LIMIT_BYTES:
+        out["sha256"] = None
+        out["hash_skipped"] = (
+            f"{st.st_size / 1048576:.0f} MB is over the "
+            f"{HASH_LIMIT_BYTES // 1048576} MB limit, so size and "
+            f"modification time identify it here")
+        return out
+
+    try:
+        h = hashlib.sha256()
+        with open(p, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+                h.update(chunk)
+        out["sha256"] = h.hexdigest()
+    except OSError as exc:
+        out["sha256"] = None
+        out["hash_skipped"] = f"unreadable: {type(exc).__name__}"
+    return out
+
+
+def run_provenance(inputs: dict | None = None) -> dict:
+    """Package version, when it ran, and which files it read.
+
+    `inputs` maps an argument name to the path it was given. Arguments
+    that were not given are left out rather than recorded as null: the
+    absence of a file is already in the query block, and repeating it
+    here as an input would imply one was read.
+    """
+    import datetime as _dt
+    import platform
+    import sys
+
+    from . import __version__
+
+    described = {}
+    for name, path in (inputs or {}).items():
+        if path:
+            described[name] = describe_input(path)
+
+    return {
+        "schema": RESULT_SCHEMA,
+        "package_version": __version__,
+        "created": _dt.datetime.now(_dt.timezone.utc).isoformat(
+            timespec="seconds"),
+        "python": sys.version.split()[0],
+        "platform": platform.platform(),
+        "inputs": described,
+    }

@@ -265,6 +265,14 @@ RUN_SPECS: dict = {
 }
 
 
+# The arguments that name a file. Recorded in the result's provenance
+# with size, modification time and - when the file is small enough to be
+# worth hashing - its sha256, so a saved result says which bytes it read
+# and not only which path it was pointed at.
+RUN_FILE_ARGS = tuple(
+    name for name, spec in RUN_SPECS.items() if spec.kind == "path")
+
+
 def query_block(args: dict, **derived) -> dict:
     """What the run was asked to do, and what it worked out from that.
 
@@ -1367,13 +1375,15 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             if not demo:
                 n_ctd = improvements.get("ctd_links_found") or 0
                 rl = (improvements.get("reported_links") or {}).get("counts") or {}
+                # Three outcomes, two of which used to share a
+                # sentence. The wording lives in discovery so it can be
+                # tested without a network round trip.
+                assessed = improvements.get("ctd_assessed", True)
+                ctd_detail = discovery.ctd_ledger_detail(
+                    n_ctd, rl.get("wanted", 0), assessed)
                 ledger.record(
-                    "ctd", requested=True, ok=bool(n_ctd), yielded=n_ctd,
-                    detail=(f"{n_ctd} chemical(s) with curated expression "
-                            f"effects on this gene; {rl.get('wanted', 0)} move "
-                            f"it the way you want" if n_ctd else
-                            "no curated chemical-gene expression effects "
-                            "returned for this gene"))
+                    "ctd", requested=True, ok=bool(n_ctd) or assessed,
+                    yielded=n_ctd, detail=ctd_detail)
 
         # Saturation check: when every surviving route comes from one or
         # two receptor families, that is the signature of the attrition
@@ -1503,6 +1513,11 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         "evidence_verdict": prov_mod.verdict(
             ledger, (outputs[0] or {}).get("scan_quality") if outputs else None),
         "query": query_block(_args, n_motifs=len(motif_set)),
+        # What produced this, as against what it was asked for. A run
+        # from six months ago against a since-replaced ReMap file is
+        # otherwise indistinguishable from one against the current one.
+        "provenance": prov_mod.run_provenance({
+            name: _args.get(name) for name in RUN_FILE_ARGS}),
         "results": outputs,
         "weights": WEIGHTS,
         "drug_weights": drug_scoring.DRUG_WEIGHTS,
