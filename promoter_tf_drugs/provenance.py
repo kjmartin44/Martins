@@ -126,11 +126,27 @@ class Source:
 
     @property
     def state(self) -> str:
+        """One of: not requested, FAILED, empty, ok.
+
+        `empty` is the state the review asked for and the one most
+        easily lost: the source was reached, it answered, and the answer
+        was nothing. That is a measurement and it is not a find, and
+        reporting it as plain `ok` puts it in the same column as a
+        source that returned a hundred records.
+
+        It remains `ok` for every decision that turns on the source
+        having worked - `usable` and `empirical_sources_ok` both read
+        `self.ok`, not this - because a measured nothing outranks a
+        lookup that broke, which is the distinction the whole ledger
+        exists to keep.
+        """
         if not self.requested:
             return "not requested"
-        if self.ok:
-            return "ok"
-        return "FAILED"
+        if not self.ok:
+            return "FAILED"
+        if not self.yielded:
+            return "empty"
+        return "ok"
 
     @property
     def usable(self) -> bool:

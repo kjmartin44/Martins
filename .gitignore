@@ -36,6 +36,14 @@ Thumbs.db
 /data/jaspar2024.txt
 /data/trrust.tsv
 /data/rna_tissue_consensus.tsv
+# Dosage tolerance: gnomAD constraint (91 MB, over the 100 MB GitHub
+# limit once a release grows) and the ClinGen curation list, which is
+# re-dated weekly upstream.
+/data/gnomad*.tsv
+/data/gnomad*.txt
+/data/gnomad_constraint.tsv
+/data/ClinGen_gene_curation_list_*.tsv
+/data/clingen_dosage.tsv
 /data/*.bed
 /data/*.bed.gz
 /data/*_median_tpm.gct*

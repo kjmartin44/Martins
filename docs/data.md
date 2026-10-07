@@ -2,6 +2,12 @@
 
 [Documentation index](index.md)
 
+This describes the **format** of each input and output: what the loaders
+require of a file's columns, the coordinate conventions, and the cache.
+For where to **obtain** each table, see [Getting the analysis
+tables](datasets.md), and for operating without a network see [Running
+with no network](offline.md).
+
 ## Reference inputs
 
 | Input | Format and behavior |

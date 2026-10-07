@@ -43,13 +43,35 @@ class HttpError(RuntimeError):
 
 class Client:
     def __init__(self, cache_dir: Path | str = DEFAULT_CACHE, ttl_days: float = 30,
-                 offline: bool = False, min_interval: float = 0.15):
+                 offline: bool = False, min_interval: float = 0.15,
+                 max_requests: int | None = None):
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.ttl = ttl_days * 86400
         self.offline = offline
         self.min_interval = min_interval
         self._last_call = 0.0
+        # How many requests this run may send, or None for no ceiling.
+        #
+        # It counts requests that LEAVE. A cache hit is free and stays
+        # free, or a resumed run would behave differently from a fresh
+        # one for no reason the caller could see. Retries of one logical
+        # request count once: the quantity a caller can reason about is
+        # how many distinct questions were asked, not how many packets
+        # the answer took.
+        #
+        # Running out raises HttpError - the same exception a dead host
+        # raises - so every `_optional` and `except HttpError` path
+        # degrades exactly as it already does for an outage, and the
+        # budget introduces no new failure mode. `refused` is what makes
+        # that honest: a ceiling that silently truncates evidence is
+        # worse than no ceiling, because the report would show failed
+        # sources with nothing to say the caller caused it.
+        if max_requests is not None and max_requests < 1:
+            raise ValueError("max_requests must be at least 1")
+        self.max_requests = max_requests
+        self.requests_made = 0
+        self.requests_refused = 0
         # Hosts that have already exhausted their retries this run. Patience
         # is the right response to a BUSY service and the wrong one to a
         # DEAD service: six jittered attempts span ~34s, which rides out an
@@ -146,6 +168,16 @@ class Client:
                 "Run once with network access, or use --demo."
             )
 
+        if self.max_requests is not None \
+                and self.requests_made >= self.max_requests:
+            self.requests_refused += 1
+            raise HttpError(
+                f"request budget of {self.max_requests} spent; not "
+                f"fetching {url}. Raise --max-requests, or rerun - "
+                f"everything already fetched is cached, so a second run "
+                f"resumes rather than repeating.")
+        self.requests_made += 1
+
         hdrs = {"User-Agent": USER_AGENT, "Accept": "application/json"}
         if body is not None:
             hdrs["Content-Type"] = "application/json"
@@ -224,6 +256,18 @@ class Client:
                 host, retries, reason, sum(min(RETRY_CAP, 2.0 ** a)
                                            for a in range(retries - 1)))
         raise HttpError(f"request failed after {retries} attempts: {url} ({last_exc})")
+
+    def spend(self) -> dict:
+        """What this run cost, and whether the ceiling bound it.
+
+        `refused` above zero means evidence is missing because of the
+        budget rather than because a source had nothing - a distinction
+        the report has to draw, since the two look identical in every
+        table underneath it.
+        """
+        return {"requests": self.requests_made,
+                "refused": self.requests_refused,
+                "budget": self.max_requests}
 
     def get(self, url: str, params: dict | None = None, **kw):
         if params:

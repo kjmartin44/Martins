@@ -193,7 +193,9 @@ Generated from each module's own first docstring line.
 | `cli.py` | Command-line interface. |
 | `compensation.py` | You may not need to raise your gene at all. |
 | `congeners.py` | Collapse salt forms so the tables show distinct chemistry. |
+| `constraint.py` | How much dosage this gene tolerates, in either direction. |
 | `corpora.py` | Other perturbation corpora, and what agreement between them is worth. |
+| `datasets.py` | Every table the analysis can read: where it comes from, and whether you have it. |
 | `delivery.py` | Does the drug reach the cells that express your gene? |
 | `demo_data.py` | Self-contained fixtures so the pipeline runs with zero network access. |
 | `depmap.py` | What happens to a cell when a factor is removed, measured not curated. |
@@ -214,6 +216,7 @@ Generated from each module's own first docstring line.
 | `localannot.py` | Gene annotation and genetic evidence from files, not web APIs. |
 | `localdrugs.py` | Approved drugs and their known targets, from a file instead of an API. |
 | `localpotency.py` | Measured binding potency from a file, not from the ChEMBL API. |
+| `magnitude.py` | How much the gene has to move, and which routes have ever been measured. |
 | `modalities.py` | Design a direct modality for YOUR gene, rather than looking up existing ones. |
 | `modulators.py` | Orthosteric agonists vs allosteric modulators: a comparison, not a ranking. |
 | `motifs.py` | Load TF binding motifs and scan a promoter with them. |

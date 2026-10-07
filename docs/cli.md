@@ -35,7 +35,12 @@ usage: promoter-tf-drugs [-h] --gene GENE [--out OUT] [--top TOP]
                          [--tf-weight TF_WEIGHT] [--chip-bed CHIP_BED]
                          [--chip-api] [--include-investigational] [--no-dgidb]
                          [--find-analogs] [--no-opentargets] [--demo]
-                         [--offline] [--cache-dir CACHE_DIR] [--quiet] [-v]
+                         [--offline] [--cache-dir CACHE_DIR]
+                         [--max-requests N]
+                         [--scenario {haploinsufficiency,hypomorph,toxic_gain,null,silenced_allele,modifier}]
+                         [--broken-allele-makes {null,truncated,unknown}]
+                         [--target-fraction TARGET_FRACTION]
+                         [--condition CONDITION] [--quiet] [-v]
 
 Find a gene's promoter, the TFs predicted to bind it, and approved drugs that
 push those TFs in whichever direction moves your target gene (--direction
@@ -275,6 +280,35 @@ options:
   --offline             fail rather than hit the network; use cached responses
                         only (default: False)
   --cache-dir CACHE_DIR
+  --max-requests N      stop issuing network requests after N of them in EACH
+                        analysis. The panel runs one analysis per gene, so a
+                        five-gene panel may send five times this. Cached
+                        responses are free and do not count, so a rerun
+                        resumes rather than repeating. A source cut off by the
+                        ceiling is reported as failed, never as empty, and the
+                        report says the budget was the reason (default: None)
+  --scenario {haploinsufficiency,hypomorph,toxic_gain,null,silenced_allele,modifier}
+                        the shape of the dosage problem, which fixes what
+                        counts as enough. haploinsufficiency: one allele dead,
+                        raise the other. hypomorph: both weak. toxic_gain:
+                        lower a harmful product. null: no working product -
+                        says plainly that transcription cannot help.
+                        silenced_allele: an intact copy switched off.
+                        modifier: no mutation, moving a normal gene because
+                        moving it helps. Declared, never inferred - nothing
+                        here can read a variant (default: None)
+  --broken-allele-makes {null,truncated,unknown}
+                        what the broken copy produces. Raising transcription
+                        raises BOTH copies, so a truncated product is
+                        amplified alongside the working one (default: unknown)
+                        (default: unknown)
+  --target-fraction TARGET_FRACTION
+                        for a lowering plan, the share of the current level
+                        you want left. 0.5 is a halving (default: 0.5)
+                        (default: 0.5)
+  --condition CONDITION
+                        the condition being treated, for a gene with no
+                        mutation in it (default: None)
   --quiet               no progress checkpoints. They go to stderr, so they do
                         not touch a piped report; this is for when stderr
                         itself is being read (default: False)
@@ -329,7 +363,11 @@ usage: promoter-tf-drugs.panel [-h] [--genes GENES] [--gene-file GENE_FILE]
                                [--chip-api] [--include-investigational]
                                [--no-dgidb] [--find-analogs]
                                [--no-opentargets] [--demo] [--offline]
-                               [--cache-dir CACHE_DIR] [--quiet] [-v]
+                               [--cache-dir CACHE_DIR] [--max-requests N]
+                               [--scenario {haploinsufficiency,hypomorph,toxic_gain,null,silenced_allele,modifier}]
+                               [--broken-allele-makes {null,truncated,unknown}]
+                               [--target-fraction TARGET_FRACTION]
+                               [--condition CONDITION] [--quiet] [-v]
 
 Compare several CANDIDATE genes and narrow to the route with the least
 collateral effect. The genes are treated as alternatives, so a drug recurring
@@ -587,6 +625,33 @@ options:
   --offline             fail rather than hit the network; use cached responses
                         only
   --cache-dir CACHE_DIR
+  --max-requests N      stop issuing network requests after N of them in EACH
+                        analysis. The panel runs one analysis per gene, so a
+                        five-gene panel may send five times this. Cached
+                        responses are free and do not count, so a rerun
+                        resumes rather than repeating. A source cut off by the
+                        ceiling is reported as failed, never as empty, and the
+                        report says the budget was the reason
+  --scenario {haploinsufficiency,hypomorph,toxic_gain,null,silenced_allele,modifier}
+                        the shape of the dosage problem, which fixes what
+                        counts as enough. haploinsufficiency: one allele dead,
+                        raise the other. hypomorph: both weak. toxic_gain:
+                        lower a harmful product. null: no working product -
+                        says plainly that transcription cannot help.
+                        silenced_allele: an intact copy switched off.
+                        modifier: no mutation, moving a normal gene because
+                        moving it helps. Declared, never inferred - nothing
+                        here can read a variant
+  --broken-allele-makes {null,truncated,unknown}
+                        what the broken copy produces. Raising transcription
+                        raises BOTH copies, so a truncated product is
+                        amplified alongside the working one (default: unknown)
+  --target-fraction TARGET_FRACTION
+                        for a lowering plan, the share of the current level
+                        you want left. 0.5 is a halving (default: 0.5)
+  --condition CONDITION
+                        the condition being treated, for a gene with no
+                        mutation in it
   --quiet               no progress checkpoints. They go to stderr, so they do
                         not touch a piped report; this is for when stderr
                         itself is being read

@@ -642,6 +642,48 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                  "hand-entered drug table. Not usable for real conclusions.")
         L.append("")
 
+    # ------------------------------------------------ what has to happen?
+    # Above every table, because the ranking cannot tell you whether the
+    # plan needs a doubling or a halving - and in two scenarios whether
+    # anything below can work at all.
+    req = result.get("requirement") or {}
+    dose = result.get("dosage") or {}
+    if req or (dose and dose.get("assessed")):
+        L.append("## What would have to happen")
+        L.append("")
+        if req.get("summary"):
+            if req.get("feasible") is False:
+                L.append("> ⛔ **Changing transcription cannot address "
+                         "this.** The routes below are context, not "
+                         "candidates.")
+                L.append("")
+            L.append(req["summary"])
+            L.append("")
+        if dose.get("summary") and dose.get("assessed"):
+            L.append(dose["summary"])
+            L.append("")
+            # Which release said so. gnomAD v2.1.1 and v4.1 give
+            # different numbers for the same gene and ClinGen is
+            # re-dated weekly, so the verdict above is only comparable
+            # between runs that name their sources.
+            cite = []
+            for src in dose.get("sources") or []:
+                rel = src.get("release")
+                cite.append(f"{src['name']} "
+                            + (f"{rel}" if rel
+                               else "(release not stated in the file)"))
+            if cite:
+                L.append(f"*Read from {'; '.join(cite)}.*")
+                L.append("")
+        elif dose and not dose.get("assessed"):
+            # Nothing came back. Printing the requirement with no
+            # dosage line beside it reads as though the question was
+            # asked and the answer was reassuring. constraint.assess
+            # already writes the correct sentence; it was never shown.
+            for note in dose.get("notes") or []:
+                L.append(note)
+                L.append("")
+
     # -------------------------------------------- can this run be read at all?
     # Printed before any ranking. A reader who sees only the tables below
     # cannot tell a measured negative from a lookup that broke, and every
@@ -651,6 +693,20 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
     if ev or srcs:
         L.append("## Evidence available in this run")
         L.append("")
+        # Before the table, not after it. If the caller capped the run
+        # and the cap bound, every FAILED row below has an explanation
+        # that has nothing to do with the sources - and a reader who
+        # meets the table first has already drawn the wrong conclusion.
+        spend = result.get("spend") or {}
+        if spend.get("refused"):
+            L.append(f"> ⚠ **The request budget bound this run.** "
+                     f"{spend['refused']} request(s) were not sent after "
+                     f"the ceiling of {spend['budget']} was reached, so "
+                     f"some sources below failed because they were never "
+                     f"asked. Rerun with a larger `--max-requests`, or "
+                     f"without one: everything already fetched is cached, "
+                     f"so the second run resumes rather than repeating.")
+            L.append("")
         badge = {"not interpretable": "⛔ NOT INTERPRETABLE",
                  "degraded": "⚠ DEGRADED",
                  "interpretable": "✓ INTERPRETABLE"}.get(ev.get("level"), "")
@@ -665,7 +721,13 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
             L.append("| Source | State | What it returned |")
             L.append("|---|---|---|")
             for name, s in srcs.items():
-                state = {"ok": "ok", "FAILED": "**FAILED**",
+                # "empty" is marked rather than left to the detail
+                # column: a reader scanning this table for `ok` would
+                # otherwise count a source that answered "nothing" as
+                # one that delivered.
+                state = {"ok": "ok",
+                         "empty": "ok, nothing found",
+                         "FAILED": "**FAILED**",
                          "not requested": "not requested"}.get(s["state"],
                                                                s["state"])
                 L.append(f"| {name} | {state} | {s['detail']} |")

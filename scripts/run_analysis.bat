@@ -52,7 +52,7 @@ if "!GENE!"=="" (
 REM Letters, digits, hyphen and underscore. Anything else is a typo, or
 REM an attempt to put a second command on the line - and the value is
 REM used in an output path below.
-echo !GENE!| findstr /r /c:"^[A-Za-z0-9_-][A-Za-z0-9_-]*$" >nul
+echo "!GENE!"| findstr /r /c:"^\"[A-Za-z0-9_-][A-Za-z0-9_-]*\"$" >nul
 if errorlevel 1 (
     echo "!GENE!" is not a gene symbol.
     pause

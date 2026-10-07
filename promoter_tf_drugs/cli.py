@@ -284,6 +284,43 @@ def add_analysis_args(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
     p.add_argument("--offline", action="store_true",
                    help="fail rather than hit the network; use cached responses only")
     p.add_argument("--cache-dir")
+    p.add_argument("--max-requests", type=int, metavar="N",
+                   help="stop issuing network requests after N of them in "
+                        "EACH analysis. The panel runs one analysis per "
+                        "gene, so a five-gene panel may send five times "
+                        "this. Cached responses are free and do not count, "
+                        "so a rerun resumes rather than repeating. A source "
+                        "cut off by the ceiling is reported as failed, "
+                        "never as empty, and the report says the budget "
+                        "was the reason")
+    p.add_argument("--scenario",
+                   choices=["haploinsufficiency", "hypomorph",
+                            "toxic_gain", "null", "silenced_allele",
+                            "modifier"],
+                   help="the shape of the dosage problem, which fixes "
+                        "what counts as enough. haploinsufficiency: one "
+                        "allele dead, raise the other. hypomorph: both "
+                        "weak. toxic_gain: lower a harmful product. "
+                        "null: no working product - says plainly that "
+                        "transcription cannot help. silenced_allele: an "
+                        "intact copy switched off. modifier: no "
+                        "mutation, moving a normal gene because moving "
+                        "it helps. Declared, never inferred - nothing "
+                        "here can read a variant")
+    p.add_argument("--broken-allele-makes",
+                   choices=["null", "truncated", "unknown"],
+                   default="unknown",
+                   help="what the broken copy produces. Raising "
+                        "transcription raises BOTH copies, so a "
+                        "truncated product is amplified alongside the "
+                        "working one (default: unknown)")
+    p.add_argument("--target-fraction", type=float, default=0.5,
+                   help="for a lowering plan, the share of the current "
+                        "level you want left. 0.5 is a halving "
+                        "(default: 0.5)")
+    p.add_argument("--condition",
+                   help="the condition being treated, for a gene with no "
+                        "mutation in it")
     p.add_argument("--quiet", action="store_true",
                    help="no progress checkpoints. They go to stderr, so "
                         "they do not touch a piped report; this is for "

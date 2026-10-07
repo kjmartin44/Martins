@@ -33,6 +33,8 @@ from . import (annotate, catalogue as cat_mod, cellcycle, congeners as cong_mod,
                stabilizers as stab_mod)
 from . import validation as _validation
 from . import progress as _progress
+from . import magnitude as mag_mod
+from . import constraint as con_mod
 from .http import Client
 
 log = logging.getLogger(__name__)
@@ -260,8 +262,32 @@ RUN_SPECS: dict = {
     "demo": _FLAG,
     "offline": _FLAG,
     "cache_dir": _V("str", optional=True),
+    "max_requests": _V("int", optional=True, minimum=1),
     "min_ic": _V("float", minimum=0,
                  why="information content floor for a motif."),
+    "scenario": _V("str", optional=True,
+                   choices=("haploinsufficiency", "hypomorph",
+                            "toxic_gain", "null", "silenced_allele",
+                            "modifier"),
+                   why="the shape of the dosage problem. It fixes what "
+                       "counts as enough, and for two of them says that "
+                       "changing transcription cannot help at all. "
+                       "Declared rather than inferred: nothing here can "
+                       "read a variant."),
+    "broken_allele_makes": _V("str",
+                              choices=("null", "truncated", "unknown"),
+                              why="what the broken copy produces. "
+                                  "Raising transcription raises both "
+                                  "copies, so a truncated product is "
+                                  "amplified alongside the working one."),
+    "target_fraction": _V("float", minimum=0, maximum=1,
+                          exclusive_min=True,
+                          why="for a lowering plan, the share of the "
+                              "current level you want left. 0.5 is a "
+                              "halving."),
+    "condition": _V("str", optional=True,
+                    why="the condition being treated, for a gene with no "
+                        "mutation in it."),
 }
 
 
@@ -336,7 +362,12 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         use_opentargets: bool = True,
         find_analogs: bool = False,
         demo: bool = False, offline: bool = False,
-        cache_dir: str | None = None, min_ic: float = 6.0) -> dict:
+        cache_dir: str | None = None, min_ic: float = 6.0,
+        max_requests: int | None = None,
+        scenario: str | None = None,
+        broken_allele_makes: str = "unknown",
+        target_fraction: float = 0.5,
+        condition: str | None = None) -> dict:
     """Run the full pipeline and return a JSON-serialisable result dict."""
     # locals() here is exactly the arguments, before anything else is
     # bound. Every one is checked against RUN_SPECS, so an annotation
@@ -354,8 +385,9 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
     if upstream + downstream == 0:
         raise ValueError(
             "upstream and downstream must define a non-empty window")
-    client = (Client(cache_dir=cache_dir, offline=offline or demo)
-              if cache_dir else Client(offline=offline or demo))
+    _ckw = {"offline": offline or demo, "max_requests": max_requests}
+    client = Client(cache_dir=cache_dir, **_ckw) if cache_dir \
+        else Client(**_ckw)
     _progress.start(f"{gene}: {'raising' if goal == 'up' else 'lowering'}"
                     + (", demo data" if demo else "")
                     + (", offline" if offline and not demo else ""))
@@ -1506,6 +1538,37 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
     tss_overlap = nbr_mod.window_overlap(
         [o["promoter"] for o in outputs]) if len(outputs) > 1 else []
 
+    # The requirement, when a mechanism was declared, and what the
+    # population says about this gene's tolerance of a dose change.
+    _requirement = None
+    if scenario:
+        try:
+            _ask = mag_mod.ask_for(
+                scenario, gene, broken_allele_makes=broken_allele_makes,
+                target_fraction=target_fraction, goal=goal,
+                condition=condition or "")
+            _routes = [r for o in outputs
+                       for r in ((o.get("all_routes") or {}).get("routes")
+                                 or [])]
+            _effects = mag_mod.measured_effects(_routes, gene)
+            _requirement = {
+                **_ask.to_dict(),
+                "effects": _effects,
+                "summary": mag_mod.summarise(_ask, _effects),
+            }
+        except Exception as exc:                            # noqa: BLE001
+            log.warning("requirement not computed: %s", str(exc)[:120])
+
+    def _assess_dosage() -> dict:
+        c = con_mod.assess(gene)
+        return {**c.to_dict(),
+                "summary": con_mod.summarise(
+                    c, goal,
+                    one_allele_lost=scenario == "haploinsufficiency",
+                    broken_allele_makes=broken_allele_makes)}
+
+    _dosage = _optional("dosage constraint", _assess_dosage, None)
+
     _result = {
         "direct_therapies": [t.to_dict() for t in direct_hits],
         "tss_window_overlap": tss_overlap,
@@ -1513,9 +1576,19 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         "evidence_verdict": prov_mod.verdict(
             ledger, (outputs[0] or {}).get("scan_quality") if outputs else None),
         "query": query_block(_args, n_motifs=len(motif_set)),
+        # How much the gene has to move, and whether its dose is under
+        # selection. Both are about the GENE rather than about any
+        # route, so they sit beside the query rather than in a block.
+        "requirement": _requirement,
+        "dosage": _dosage,
         # What produced this, as against what it was asked for. A run
         # from six months ago against a since-replaced ReMap file is
         # otherwise indistinguishable from one against the current one.
+        # What the run cost, and whether a ceiling bound it. `refused`
+        # above zero means evidence is missing because the caller
+        # capped it, not because a source had nothing - and every table
+        # below looks the same either way.
+        "spend": client.spend(),
         "provenance": prov_mod.run_provenance({
             name: _args.get(name) for name in RUN_FILE_ARGS}),
         "results": outputs,

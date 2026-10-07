@@ -8,17 +8,21 @@ everything under the headings below is still outstanding.
 
 ## Highest priority
 
-1. **Record stage status and provenance in results.** Optional-stage exceptions
-   often become empty lists or dictionaries through `_optional`. Add a structured
-   status per stage that distinguishes disabled, unavailable, empty, and complete.
-   Record package version, inputs and hashes, source releases, parameters, and
-   timestamps. This would make partial analyses and cached runs easier to audit.
-2. **Align advertised evidence with implemented queries.** The main pipeline
-   counts genes from `--signature-file` but does not invoke connectivity search.
-   Genetics includes lookup guidance rather than completed regulatory validation.
-   Implement those paths with fixtures and service tests if they are needed.
-   The CLI help and new guides now state the signature behavior explicitly.
-3. **Audit curated biological claims and scoring.** Source-specific approval
+1. **Record the source release each lookup answered from.** Most of this item
+   is done. Stages report four states (not requested, FAILED, empty, ok); the
+   result carries the package version, a timestamp, every argument and a hash
+   of every input file; and the two dosage tables now record their release in
+   the result and in the report, read from the file rather than configured -
+   gnomAD from its filename, falling back to the column spelling, and ClinGen
+   from the date on its header. Where a file does not state a release the field
+   says so instead of guessing, because a wrong release is worse than none.
+
+   What remains is the networked sources. A ChEMBL or Open Targets response
+   carries no version, so two runs a year apart are still indistinguishable in
+   the saved result even though the underlying data moved. That needs either a
+   per-service version endpoint where one exists or a recorded request date per
+   source, and it is a larger change than the local files were.
+2. **Audit curated biological claims and scoring.** Source-specific approval
    filters, tissue rules, clinical comparison labels, and outcome “probabilities”
    need a documented evidence trail and independent benchmarks. Successful
    software tests cannot establish scientific validity.
@@ -31,22 +35,48 @@ everything under the headings below is still outstanding.
   The test module is still one file covering every domain.
 - Add a versioned result schema and transcript identifiers to multi-promoter TSV
   rows. Treat schema changes as compatibility changes for shortlist and explain.
-- Add input and output validation for helper CLIs and quoted TSV fields. Current
-  export joins values directly; embedded tabs or newlines can break columns.
-- Add explicit dataset provenance, hashes, and redistribution terms. The included
-  HPA file is a lookup, not expression evidence, and should eventually be renamed
-  or replaced through a deliberate data-maintenance change.
+- Add input validation to the remaining helper CLIs. The exported tables and
+  the Windows launchers are done. TSV is written through `csv.writer`, so a
+  name containing a tab or a newline no longer splits the row, and the BED
+  name field is sanitised because that format cannot be quoted at all. Every
+  launcher prompt now validates, and the validation itself was the hole —
+  see below.
+- Rename the bundled HPA lookup, and decide the redistribution question.
+  Provenance and hashes are done: the result carries the package version, a
+  UTC timestamp and, for every file argument, its size, modification time and
+  sha256, plus the release for the two dosage tables. `datasets.py` is the
+  inventory of all twenty-four tables with their sources, and the data guide
+  states that this repository ships none of them and that a derived table
+  inherits from its inputs.
+
+  What is left needs a person rather than code. The terms are not uniform
+  across these sources and change between releases, so a written inventory
+  of them would need checking and re-checking — and a licence stated wrongly
+  is acted on, where one left unstated is looked up. And `data/hpa.tsv` is
+  still named as though it were expression evidence when it is a tissue
+  lookup; renaming it is a deliberate data-maintenance change, not a
+  refactor.
 - Choose a software license before distributing a public release. No project
   license was present during this review; selecting one requires the owner's
   decision and is not inferred from the dependency licenses.
-- Harden Windows launchers: prefer the local environment, quote and validate
-  inputs, check download HTTP status, and validate file content instead of size.
-- Add periodic opt-in service contract checks, bounded request budgets, and clear
-  progress reporting. Some live analyses issue many sequential annotation and
-  pharmacology requests. Cached responses help but do not eliminate that cost.
-- Investigate the CTD HTTP 302 failures observed in all three requested live
-  checks. Until that source works, absence of a retrieved link cannot support a
-  novelty claim. See the [validation record](validation.md).
+
+- Add periodic opt-in service contract checks. The other two parts of this
+  item are done. Progress reporting prints a checkpoint per stage with
+  elapsed time and what it found, and `--max-requests N` caps how many
+  requests a run may send. The budget counts requests that leave rather
+  than lookups, so a cache hit stays free and a rerun resumes; retries of
+  one request count once; and running out raises `HttpError`, the same
+  exception a dead host raises, so every `_optional` path degrades as it
+  already does for an outage rather than meeting a new failure mode. The
+  report says when the ceiling bound the run, above the evidence table
+  rather than below it — a cap that silently truncates evidence is worse
+  than no cap, because every table underneath looks identical whether a
+  source had nothing to say or was never asked.
+
+  What is left is the service contract check: nothing verifies that a
+  response still has the shape the parser expects, so a renamed field
+  degrades into an empty result rather than an error.
+
 
 ## Done since this review was written
 
@@ -89,6 +119,148 @@ now derive the arguments from `run`'s own signature.
 **Static guards for three bug classes**, each checked by reintroducing the
 bug: a local read before assignment, a CLI flag parsed but never read, and a
 documented command using a flag its parser does not accept.
+
+## Done in this round
+
+**The result now says what produced it.** The query block records all
+fifty-eight arguments rather than twenty-four, and a `provenance` block
+carries the package version, a UTC timestamp, the Python version and,
+for every file argument, its size, modification time and sha256. Hashes
+are skipped above 64 MB - the ReMap BED is 1.4 GB - and the record says
+so, because a blank reads like a file nobody looked at. The result also
+carries a schema version, and `shortlist` and `explain` warn when they
+are handed a file written by a newer package instead of reading it
+blind.
+
+**A failed CTD lookup no longer reads as a novelty claim.** The outage
+in the validation record is gone - the endpoint returns 200 and 153
+curated chemicals for CCR5 - but checking it exposed something worse
+than an outage. `ctd_expression_links` returned `{}` when the request
+failed, which is the value it also returns when CTD answers and knows of
+nothing, so every candidate came back `previously_linked: False` and the
+report printed a bold "no". The function's own docstring calls that "the
+one genuinely embarrassing failure mode". Failure now returns `None`,
+and the ledger distinguishes a search that found nothing from one that
+never happened.
+
+**Advertised evidence matches the queries.** `--signature-file` says in
+its own help that it does not run a connectivity search, and the
+trans-eQTL lookup that used to be described as advice is now performed.
+
+**Windows launchers meet all four criteria** - local environment
+preferred, `curl -fL` so an HTTP error cannot be saved under the name of
+the file you wanted, content checks rather than size, and validated
+input. Writing them turned up a bug of its own: four were saved with
+Unix line endings, which `.gitattributes` forbids for exactly the reason
+that bit - `cmd.exe` mis-parses an LF-only batch file, and a valid path
+was reported missing while an invalid preset was accepted.
+
+**Reports say what an incomplete test cost, in plain words.** "requested
+source(s) failed: promoter_dna" named a module and told the reader
+nothing. Every one of the fifteen sources now has a sentence a person
+can act on, and the heading says these are tests that could not be
+completed - which is not the same as their having returned a negative
+result.
+
+**A run says what it is doing while it does it.** One checkpoint per
+stage, to stderr so a piped report is untouched, with elapsed time and
+what the stage found rather than what it was about to try.
+
+**How much the gene has to move is now stated.** `magnitude.py` takes
+the shape of the problem - haploinsufficiency, a hypomorph, a toxic
+gain, a null, a silenced allele, or a gene with no mutation at all - and
+turns it into a requirement. Two of those shapes cannot be solved by
+anything this package ranks, and the report says so above the tables
+rather than offering two hundred routes for a problem none of them
+addresses. `constraint.py` adds the companion question, from gnomAD and
+ClinGen: is this gene's dose under selection, and is too much of it
+independently harmful.
+
+## Found by running it, not by reading it
+
+None of these was in the review. Each has a regression test.
+
+- The docking screen could not reach its own binary: `_docking_binary`
+  returns a WSL path and two call sites handed it to a Windows
+  subprocess, which the caller caught at DEBUG and recorded as `None` -
+  so a whole library would have scored nothing and reported an empty
+  screen rather than a broken one.
+- Pocket selection chose a sulfated tyrosine in a ten-model NMR peptide
+  over a maraviroc-bound crystal structure, for three independent
+  reasons.
+- The panel parsed thirty-six of fifty-seven arguments and forwarded
+  none of them, recording `use_genetics: False` after being asked for
+  `True`.
+- The panel compared the top route against a runner-up from a different
+  evidence tier and reported the resulting negative margin as a tie.
+- The funnel counted removals in drug/target pairs and unique kills in
+  rows, so a stage could report more unique kills than kills.
+- An evidence source that failed printed a bullet with nothing after the
+  dash, because the impact table covered seven of fourteen sources.
+- The Orange Book notice printed once per drug rather than once per run.
+- A refusal that happened before the screen started wrote no file, so a
+  target that was tried and refused looked identical to one never tried.
+- The launcher's own input check was the injection it was meant to
+  prevent. `echo !GENE!| findstr /r /c:"..."` does not protect the
+  pipeline: with a gene of `CCR5 & del *` the line runs as `echo CCR5`
+  and then `del *| findstr ...`, so findstr reads del's output,
+  errorlevel comes back 0, and the value is accepted **because** it
+  contained a separator. Delayed expansion does not cover a pipeline;
+  quoting the echoed value and the pattern does. Four checks across two
+  launchers, and the gene is the one that matters — both take it from
+  `%~1`, so it can arrive from a shortcut or a dropped file.
+- ClinGen dosage curation loaded zero genes from the real file. The
+  loader dropped every line starting with `#` before looking for a
+  header, and in the real file the header *is* a `#` line. So the header
+  was discarded, the first gene was read as one, no column matched, and
+  it returned `{}` for all 1,532 curated genes without a word. The
+  fixture it was tested against had been written to match the parser
+  rather than the file.
+- ClinGen's score was read as a severity scale. Two of its values are
+  category codes above the grade's range: `40` means "dosage sensitivity
+  unlikely" and `v >= 2` made it True, so the thirty-five genes most
+  confidently curated as *insensitive* were reported as
+  haploinsufficient — PCSK9 among them, which is the README's own worked
+  example. And `0` means "no evidence available", 1,306 genes, which was
+  read as a measured negative. Both errors ran the same way: turning an
+  absence into a statement.
+- gnomAD was read one transcript at a time and the lowest LOEUF kept.
+  That is a minimum over about a dozen draws per gene, so it lands below
+  the typical one and every multi-transcript gene drifts toward
+  "constrained". 9,207 of 18,204 genes differ from their MANE Select
+  value, 922 by more than 0.2 LOEUF — wider than the gap between this
+  package's own sensitive and tolerant lines, so it changed verdicts and
+  not just numbers.
+- Where gnomAD and ClinGen disagree, only one was reported. 44 genes are
+  curated haploinsufficient while carrying about as many loss-of-function
+  variants as chance predicts, and the reason is usually informative:
+  late onset, incomplete penetrance, or a phenotype that is not harmful.
+  PCSK9 is the clean example — its loss has a phenotype, which is what
+  ClinGen records, but the phenotype is low LDL, so selection never
+  removed the carriers.
+- `run_everything.bat` could not reach the newest work. It never passed
+  `--scenario`, so the requirement section was never computed, and it
+  downloaded neither gnomAD nor ClinGen, so dosage was never assessed.
+  Every command it issued parsed and every flag was accepted — the batch
+  file was correct and simply predated the feature, which is the failure
+  mode a launcher has that a library does not.
+- A workup merged the previous workup's factor docking into this one.
+  The launcher clears `product.json` and `factors.txt` before each run
+  and not the per-factor results, which are named `<FACTOR>.json`. The
+  set of factors changes with the scan and `merge_docking.py` globs the
+  directory, so a stale `STAT3.json` joins today's `SP1` and `NFKB1` and
+  reaches the analysis as one result. It matters because a docking run
+  does not mean the same thing every time: the conformation is derived
+  from the direction and the factor's role, so lowering a gene through
+  an activator docks that activator's INACTIVE pocket, and a previous
+  `up` run leaves a screen of the opposite pocket under exactly the
+  filename a `down` run would write. Found by noticing two results in an
+  output directory dated three hours before the run writing beside them.
+- Nothing in a docking result said what the run had been asked for, so
+  the above was undetectable after the fact. A result recorded its
+  target, its pocket and whether the conformation could be read, but not
+  which conformation was REQUESTED and not when the run happened.
+
 
 ## Changes completed in this update
 

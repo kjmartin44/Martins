@@ -13788,3 +13788,1017 @@ def test_the_product_screen_impact_does_not_imply_the_gene_is_specific():
     from promoter_tf_drugs import provenance as prov
     text = prov.IMPACT["product_screen"].lower()
     assert "absent" in text and "ruled out" in text
+
+
+# ===================================================================== #
+# Dosage: is there room to move this gene, and is moving it safe?       #
+# ===================================================================== #
+def test_dosage_not_assessed_is_not_dosage_tolerated():
+    """No constraint file on disk is a missing file, not a finding that
+    the gene tolerates any dose."""
+    from promoter_tf_drugs import constraint as con
+    con.reset_cache()
+    c = con.assess("NOSUCHGENE12345")
+    assert c.assessed is False
+    assert c.dosage == "unknown"
+    assert any("not a finding" in n for n in c.notes), c.notes
+
+
+def test_raising_one_allele_warns_that_it_raises_both():
+    """The strategy is to raise the working copy. Nothing in this
+    package acts on one copy, so a drug at the promoter raises the
+    broken one too - and whether that matters depends on what the broken
+    one makes."""
+    from promoter_tf_drugs import constraint as con
+    c = con.Constraint(symbol="X", assessed=False)
+
+    truncated = con.headroom_note(c, "up", one_allele_lost=True,
+                                  broken_allele_makes="truncated")
+    assert "not allele-specific" in truncated
+    assert "worse than no treatment" in truncated
+
+    null = con.headroom_note(c, "up", one_allele_lost=True,
+                             broken_allele_makes="null")
+    assert "harmless" in null
+    assert "worse than no treatment" not in null
+
+    unknown = con.headroom_note(c, "up", one_allele_lost=True,
+                                broken_allele_makes="unknown")
+    assert "--has-ptc" in unknown, "it should say how to settle it"
+
+
+def test_restoring_the_normal_level_is_not_overshooting_it():
+    """Going from half to whole is a dose every healthy carrier
+    demonstrates is tolerated. Going above whole is not, and
+    triplosensitivity speaks to the second."""
+    from promoter_tf_drugs import constraint as con
+    c = con.Constraint(symbol="X", assessed=True, dosage="sensitive",
+                       triplosensitive=True)
+    note = con.headroom_note(c, "up", one_allele_lost=True,
+                             broken_allele_makes="null")
+    assert "do not overshoot" in note.lower()
+    assert "every healthy carrier" in note
+
+
+def test_lof_tolerant_does_not_mean_the_gene_is_unimportant():
+    """A recessive condition is invisible to population constraint:
+    carriers are healthy, so selection never saw the phenotype. Reading
+    "tolerant" as "unimportant" would be backwards for exactly the
+    conditions this serves."""
+    from promoter_tf_drugs import constraint as con
+    con.reset_cache()
+    c = con.Constraint(symbol="X", assessed=True, loeuf=1.4)
+    # Drive the interpretation the way assess() would.
+    c.dosage = "tolerant"
+    note = con.headroom_note(c, "up")
+    assert "recessive" in note.lower()
+
+
+def test_a_recessive_clingen_score_is_not_a_dosage_statement(tmp_path):
+    """ClinGen uses 30 for autosomal recessive. Read as a number it
+    would outrank every real score."""
+    from promoter_tf_drugs import constraint as con
+    f = tmp_path / "clingen_dosage.tsv"
+    f.write_text(
+        "Gene Symbol\tHaploinsufficiency Score\tTriplosensitivity Score\n"
+        "RECESS\t30\t0\n"
+        "REALHI\t3\t0\n", encoding="utf-8")
+    con.reset_cache()
+    got = con.load_clingen(str(f))
+    assert got["RECESS"][0] is None, "30 means recessive, not a score"
+    assert got["REALHI"][0] is True
+    con.reset_cache()
+
+
+def test_clingen_header_is_itself_a_comment_line(tmp_path):
+    """The real file is five '#' lines and then a '#' HEADER line.
+
+    Dropping every '#' line before looking for a header threw the header
+    away, read the first gene as one, matched no column and returned {}
+    for all 1,532 curated genes - silently, so a module whose job is to
+    separate "not assessed" from "tolerant" reported the first as the
+    second.
+    """
+    from promoter_tf_drugs import constraint as con
+    f = tmp_path / "clingen_dosage.tsv"
+    f.write_text(
+        "#ClinGen Gene Curation Results\n"
+        "#07 Oct,2026\n"
+        "#Genomic Locations are reported on GRCh38\n"
+        "#Gene Symbol\tGene ID\tcytoBand\tHaploinsufficiency Score"
+        "\tTriplosensitivity Score\n"
+        "REALHI\t111\t1p1\t3\t0\n", encoding="utf-8")
+    con.reset_cache()
+    got = con.load_clingen(str(f))
+    assert got, "the header is a '#' line and must still be found"
+    assert got["REALHI"][0] is True
+    con.reset_cache()
+
+
+def test_clingen_no_evidence_available_is_not_a_measured_negative(tmp_path):
+    """Score 0 is the file saying nobody has assessed the gene.
+
+    It is the single most common value in the release - 1,306 genes -
+    and reading it as False manufactures a finding out of an absence,
+    which is the one thing this package exists not to do.
+    """
+    from promoter_tf_drugs import constraint as con
+    f = tmp_path / "clingen_dosage.tsv"
+    f.write_text(
+        "#Gene Symbol\tHaploinsufficiency Score\tTriplosensitivity Score\n"
+        "NOEVID\t0\t0\n"
+        "NOTYET\tNot yet evaluated\tNot yet evaluated\n",
+        encoding="utf-8")
+    con.reset_cache()
+    got = con.load_clingen(str(f))
+    assert got["NOEVID"] == (None, None), "0 is 'no evidence available'"
+    assert got["NOTYET"] == (None, None)
+    con.reset_cache()
+
+
+def test_clingen_forty_means_unlikely_not_maximally_likely(tmp_path):
+    """40 is 'Dosage sensitivity unlikely' - a category code sitting
+    above the evidence grade, not the top of it.
+
+    Tested with `v >= 2` it came back True, so the genes ClinGen is most
+    confident are insensitive were reported as haploinsufficient. PCSK9
+    is one of them, scored 40, and the package was printing the exact
+    opposite of the curation.
+    """
+    from promoter_tf_drugs import constraint as con
+    f = tmp_path / "clingen_dosage.tsv"
+    f.write_text(
+        "#Gene Symbol\tHaploinsufficiency Score\tTriplosensitivity Score\n"
+        "UNLIKELY\t40\t0\n"
+        "SUFFICIENT\t3\t0\n", encoding="utf-8")
+    con.reset_cache()
+    got = con.load_clingen(str(f))
+    assert got["UNLIKELY"][0] is False, "40 is a negative, not the top score"
+    assert got["SUFFICIENT"][0] is True
+    con.reset_cache()
+
+
+def test_gnomad_speaks_for_a_gene_through_its_mane_transcript(tmp_path):
+    """One row per transcript, about twelve per gene.
+
+    Keeping the lowest LOEUF is a minimum over a dozen draws, so it
+    lands below the typical one and every multi-transcript gene drifts
+    toward "constrained". On the real release 9,207 of 18,204 genes get
+    a different value that way than from MANE Select, 922 of them by
+    more than 0.2 - wider than the gap between LOEUF_SENSITIVE and
+    LOEUF_TOLERANT, so it changes the verdict and not just the number.
+    """
+    from promoter_tf_drugs import constraint as con
+    f = tmp_path / "gnomad_constraint.tsv"
+    f.write_text(
+        "gene\ttranscript\tcanonical\tmane_select\tlof.pLI"
+        "\tlof.oe_ci.upper\n"
+        "G1\tENST1\tfalse\tfalse\t0.1\t0.05\n"     # lowest, but minor
+        "G1\tENST2\ttrue\ttrue\t0.2\t1.40\n"        # MANE Select
+        "G1\tENST3\tfalse\tfalse\t0.3\t0.90\n",
+        encoding="utf-8")
+    con.reset_cache()
+    got = con.load_gnomad(str(f))
+    assert got["G1"] == (0.2, 1.40), "MANE Select speaks for the gene"
+    con.reset_cache()
+
+
+def test_gnomad_falls_back_to_canonical_then_to_most_constrained(tmp_path):
+    """644 genes carry no MANE flag. Canonical is gnomAD's own fallback,
+    and only with neither does the old minimum rule apply."""
+    from promoter_tf_drugs import constraint as con
+    f = tmp_path / "gnomad_constraint.tsv"
+    f.write_text(
+        "gene\ttranscript\tcanonical\tmane_select\tlof.pLI"
+        "\tlof.oe_ci.upper\n"
+        "NOMANE\tENST1\tfalse\tfalse\t0.1\t0.05\n"
+        "NOMANE\tENST2\ttrue\tfalse\t0.2\t1.40\n"
+        "NEITHER\tENST3\tfalse\tfalse\t0.3\t0.90\n"
+        "NEITHER\tENST4\tfalse\tfalse\t0.4\t0.40\n",
+        encoding="utf-8")
+    con.reset_cache()
+    got = con.load_gnomad(str(f))
+    assert got["NOMANE"] == (0.2, 1.40), "canonical when there is no MANE"
+    assert got["NEITHER"] == (0.4, 0.40), "with neither flag, most constrained"
+    con.reset_cache()
+
+
+def test_a_curated_phenotype_selection_never_saw_is_reported_as_a_conflict(
+        tmp_path):
+    """ClinGen won outright and gnomAD was never mentioned.
+
+    44 genes are curated haploinsufficient while carrying about as many
+    loss-of-function variants as chance predicts. A reader shown only
+    "dosage: sensitive" cannot tell that the population says otherwise,
+    and the reason it does is usually informative - late onset,
+    incomplete penetrance, or a phenotype that is not harmful.
+    """
+    from promoter_tf_drugs import constraint as con
+    cg = tmp_path / "clingen_dosage.tsv"
+    cg.write_text(
+        "#Gene Symbol\tHaploinsufficiency Score\tTriplosensitivity Score\n"
+        "CONFLICT\t3\t0\n", encoding="utf-8")
+    gn = tmp_path / "gnomad_constraint.tsv"
+    gn.write_text(
+        "gene\tmane_select\tlof.pLI\tlof.oe_ci.upper\n"
+        "CONFLICT\ttrue\t0.05\t1.30\n", encoding="utf-8")
+    con.reset_cache()
+    c = con.assess("CONFLICT", gnomad_path=str(gn), clingen_path=str(cg))
+    assert c.dosage == "sensitive"
+    joined = " ".join(c.notes)
+    assert "disagree" in joined, c.notes
+    assert "1.30" in joined, "it should show the number it disagrees with"
+    con.reset_cache()
+
+
+def test_a_constraint_number_carries_the_release_it_came_from(tmp_path):
+    """gnomAD v2.1.1 and v4.1 disagree about the same gene.
+
+    Different cohort, different transcript set, LOEUF recomputed - so a
+    pLI without a release is a number two runs cannot be compared on.
+    Neither file has to be configured: gnomAD puts its version in the
+    filename and ClinGen dates itself on a comment line.
+    """
+    from promoter_tf_drugs import constraint as con
+    gn = tmp_path / "gnomad.v4.1.constraint_metrics.tsv"
+    gn.write_text(
+        "gene\tmane_select\tlof.pLI\tlof.oe_ci.upper\n"
+        "G\ttrue\t0.9\t0.30\n", encoding="utf-8")
+    cg = tmp_path / "ClinGen_gene_curation_list_GRCh38.tsv"
+    cg.write_text(
+        "#ClinGen Gene Curation Results\n"
+        "#07 Oct,2026\n"
+        "#Gene Symbol\tHaploinsufficiency Score\tTriplosensitivity Score\n"
+        "G\t3\t0\n", encoding="utf-8")
+    con.reset_cache()
+    c = con.assess("G", gnomad_path=str(gn), clingen_path=str(cg))
+    by_name = {s["name"]: s for s in c.sources}
+    assert by_name["gnomAD constraint"]["release"] == "v4.1"
+    assert by_name["gnomAD constraint"]["release_from"] == "filename"
+    assert by_name["ClinGen dosage curation"]["release"] == "07 Oct,2026"
+    assert by_name["ClinGen dosage curation"]["release_from"] == "file header"
+    con.reset_cache()
+
+
+def test_an_unstated_release_is_recorded_as_unstated_not_guessed(tmp_path):
+    """A wrong release is worse than none, because the whole point of
+    the field is to make two runs comparable.
+
+    With no version in the name the column spelling still separates the
+    generations - v4 nests its fields, v2 flattens them - and that is
+    reported as coming from the column names, not from the file.
+    """
+    from promoter_tf_drugs import constraint as con
+    gn = tmp_path / "constraint.tsv"
+    gn.write_text("gene\tmane_select\tpLI\toe_lof_upper\n"
+                  "G\ttrue\t0.9\t0.30\n", encoding="utf-8")
+    cg = tmp_path / "clingen_dosage.tsv"
+    cg.write_text(
+        "#Gene Symbol\tHaploinsufficiency Score\tTriplosensitivity Score\n"
+        "G\t3\t0\n", encoding="utf-8")
+    con.reset_cache()
+    c = con.assess("G", gnomad_path=str(gn), clingen_path=str(cg))
+    by_name = {s["name"]: s for s in c.sources}
+    assert by_name["gnomAD constraint"]["release"] == "v2 series"
+    assert by_name["gnomAD constraint"]["release_from"] == "column names"
+    assert by_name["ClinGen dosage curation"]["release"] is None, \
+        "the file does not date itself, so nothing should be invented"
+    con.reset_cache()
+
+
+def test_a_requirement_without_a_dosage_answer_says_so():
+    """A requirement printed with no dosage line beside it reads as
+    though the question was asked and the answer was reassuring.
+
+    The sentence already existed in `notes`; the report just never
+    rendered it, because it only printed the paragraph when `assessed`
+    was true.
+    """
+    from promoter_tf_drugs import report as rep
+    result = {
+        "query": {"gene": "G", "direction": "up", "demo": False},
+        "requirement": {"summary": "**G has to do: about 2x.**",
+                        "feasible": True},
+        "dosage": {"assessed": False, "dosage": "unknown", "summary": "",
+                   "notes": ["dosage was not assessed: no gnomAD constraint "
+                             "or ClinGen curation on disk for this gene. "
+                             "That is a missing file, not a finding that "
+                             "the gene tolerates any dose."],
+                   "sources": []},
+        "results": [],
+    }
+    md = rep.markdown_report(result)
+    assert "What would have to happen" in md
+    assert "not a finding" in md, "silence reads as reassurance"
+
+
+# ===================================================================== #
+# A ceiling on what one run may spend.                                  #
+# ===================================================================== #
+def _fake_ok(calls):
+    """A urlopen that records every call and always answers."""
+    def fake(req, timeout=None):
+        calls.append(req.full_url)
+
+        class R:
+            headers = {}
+            def read(self): return b'{"ok": true}'
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+        return R()
+    return fake
+
+
+def _with_fake_urlopen(fake, fn):
+    import urllib.request
+    orig = urllib.request.urlopen
+    urllib.request.urlopen = fake
+    try:
+        return fn()
+    finally:
+        urllib.request.urlopen = orig
+
+
+def test_a_cache_hit_does_not_spend_budget(tmp_path):
+    """The ceiling counts requests that LEAVE.
+
+    Charging a cached answer would make a resumed run behave differently
+    from a fresh one for no reason the caller could see, which is the
+    opposite of what caching is for.
+    """
+    from promoter_tf_drugs.http import Client
+    c = Client(cache_dir=tmp_path / "cache", offline=False, max_requests=1)
+    calls = []
+    out = _with_fake_urlopen(
+        _fake_ok(calls), lambda: c.get("https://example.org/a"))
+    assert out == {"ok": True}
+    assert c.spend() == {"requests": 1, "refused": 0, "budget": 1}
+
+    # Same URL again: served from cache, so it neither calls out nor
+    # spends - even though the budget is already exhausted.
+    again = _with_fake_urlopen(
+        _fake_ok(calls), lambda: c.get("https://example.org/a"))
+    assert again == {"ok": True}
+    assert len(calls) == 1, "the second call must not reach the network"
+    assert c.spend()["requests"] == 1
+    assert c.spend()["refused"] == 0
+
+
+def test_retries_of_one_request_spend_one(tmp_path):
+    """The quantity a caller can reason about is how many distinct
+    questions were asked, not how many packets an answer took."""
+    import urllib.error
+    from promoter_tf_drugs.http import Client
+    c = Client(cache_dir=tmp_path / "cache", offline=False,
+               min_interval=0, max_requests=2)
+    calls = []
+
+    def fake(req, timeout=None):
+        calls.append(req.full_url)
+        if len(calls) < 3:
+            raise urllib.error.HTTPError(req.full_url, 500, "boom", {}, None)
+
+        class R:
+            headers = {}
+            def read(self): return b'{"ok": true}'
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+        return R()
+
+    out = _with_fake_urlopen(fake, lambda: c.get("https://example.org/a"))
+    assert out == {"ok": True}
+    assert len(calls) == 3, "three attempts"
+    assert c.spend()["requests"] == 1, "one logical request"
+
+
+def test_an_exhausted_budget_fails_the_way_a_dead_host_does(tmp_path):
+    """HttpError, so every `_optional` and `except HttpError` path
+    degrades exactly as it already does for an outage.
+
+    A budget that introduced a new exception type would need every
+    caller changed, and the ones that were missed would abort a run
+    that an outage would only have degraded.
+    """
+    import pytest
+    from promoter_tf_drugs.http import Client, HttpError
+    c = Client(cache_dir=tmp_path / "cache", offline=False, max_requests=1)
+    calls = []
+    _with_fake_urlopen(_fake_ok(calls), lambda: c.get("https://example.org/a"))
+
+    with pytest.raises(HttpError) as exc:
+        _with_fake_urlopen(_fake_ok(calls),
+                           lambda: c.get("https://example.org/b"))
+    assert "budget" in str(exc.value)
+    assert len(calls) == 1, "the refused request must not reach the network"
+    assert c.spend() == {"requests": 1, "refused": 1, "budget": 1}
+
+
+def test_no_budget_means_no_ceiling(tmp_path):
+    """The default must not change behaviour for anyone."""
+    from promoter_tf_drugs.http import Client
+    c = Client(cache_dir=tmp_path / "cache", offline=False)
+    assert c.max_requests is None
+    calls = []
+    for i in range(5):
+        _with_fake_urlopen(_fake_ok(calls),
+                           lambda i=i: c.get(f"https://example.org/{i}"))
+    assert c.spend() == {"requests": 5, "refused": 0, "budget": None}
+
+
+def test_a_budget_below_one_is_refused(tmp_path):
+    """Zero would mean "make no requests", which is what --offline says
+    clearly and this would say by accident."""
+    import pytest
+    from promoter_tf_drugs.http import Client
+    with pytest.raises(ValueError):
+        Client(cache_dir=tmp_path / "cache", max_requests=0)
+
+
+def test_the_report_says_when_the_budget_bound_the_run():
+    """A ceiling that silently truncates evidence is worse than no
+    ceiling: every table below looks the same whether a source had
+    nothing to say or was never asked."""
+    from promoter_tf_drugs import report as rep
+    result = {
+        "query": {"gene": "G", "direction": "up", "demo": False},
+        "spend": {"requests": 50, "refused": 7, "budget": 50},
+        "evidence_sources": {"sources": {
+            "chip": {"name": "chip", "state": "FAILED", "requested": True,
+                     "ok": False, "yielded": 0,
+                     "detail": "no response"}}},
+        "evidence_verdict": {"level": "degraded", "headline": "x",
+                             "reasons": []},
+        "results": [],
+    }
+    md = rep.markdown_report(result)
+    assert "request budget bound this run" in md
+    # Before the table, or a reader has already drawn the wrong
+    # conclusion by the time they reach the explanation.
+    assert md.index("request budget bound") < md.index("| Source |")
+
+
+def test_the_budget_is_per_analysis_and_the_help_says_so():
+    """The panel builds a fresh client per gene, so the ceiling applies
+    to each run rather than to the command.
+
+    A flag that means one thing in one command and another in the next
+    is a trap, and this one cannot be made panel-wide without threading
+    a shared client through `pipeline.run`. So it stays per analysis and
+    the help is explicit about it.
+    """
+    from promoter_tf_drugs import cli
+    p = cli.build_parser()
+    help_text = next(a.help for a in p._actions
+                     if "--max-requests" in a.option_strings)
+    assert "EACH analysis" in help_text
+    assert "five times" in help_text, "say what a panel costs"
+
+
+# ===================================================================== #
+# The inventory of analysis tables.                                     #
+# ===================================================================== #
+def test_every_default_path_constant_is_claimed_by_the_registry():
+    """A table added to a loader and forgotten here is invisible.
+
+    The registry exists so somebody can ask "have I got everything?",
+    and an entry that silently stops covering a source answers that
+    question wrongly - which is worse than not answering it. So this
+    walks the package for `DEFAULT_*_PATHS` constants and insists each
+    one is reachable from `registry()`.
+    """
+    import ast as _ast
+    import re
+    from pathlib import Path
+    from promoter_tf_drugs import datasets
+
+    claimed = {str(p) for d in datasets.registry() for p in d.paths}
+    pkg = Path(datasets.__file__).parent
+
+    unclaimed = []
+    for py in sorted(pkg.glob("*.py")):
+        if py.name == "datasets.py":
+            continue
+        tree = _ast.parse(py.read_text(encoding="utf-8"))
+        for node in tree.body:
+            if not isinstance(node, _ast.Assign):
+                continue
+            for t in node.targets:
+                if not isinstance(t, _ast.Name):
+                    continue
+                if not re.match(r"DEFAULT_.*PATHS?$", t.id):
+                    continue
+                try:
+                    val = _ast.literal_eval(node.value)
+                except Exception:
+                    continue
+
+                def flat(v):
+                    if isinstance(v, str):
+                        yield v
+                    elif isinstance(v, dict):
+                        for vv in v.values():
+                            yield from flat(vv)
+                    elif isinstance(v, (list, tuple)):
+                        for vv in v:
+                            yield from flat(vv)
+                for path in flat(val):
+                    if path not in claimed:
+                        unclaimed.append(f"{py.name}:{t.id} -> {path}")
+
+    assert not unclaimed, (
+        "these accepted filenames are in no registry entry, so "
+        "`datasets` would report the table missing while a run reads "
+        "it: " + "; ".join(unclaimed))
+
+
+def test_the_registry_imports_paths_rather_than_restating_them():
+    """A second copy of a path list goes wrong within one release.
+
+    Checked by substance rather than by reading the source: the entry
+    for a source must hold exactly what its loader searches for.
+    """
+    from promoter_tf_drugs import datasets, sensitivity, constraint
+    by_key = {d.key: d for d in datasets.registry()}
+    assert by_key["prism"].paths == tuple(sensitivity.DEFAULT_PRISM_PATHS)
+    assert by_key["gnomad"].paths == tuple(constraint.DEFAULT_GNOMAD_PATHS)
+
+
+def test_a_dict_shaped_path_constant_is_flattened():
+    """`signatures.DEFAULT_GMT_PATHS` is keyed by direction, with a list
+    under each. Treating it as a flat sequence yields dicts, not paths,
+    and the survey raised rather than reporting."""
+    from promoter_tf_drugs import datasets
+    by_key = {d.key: d for d in datasets.registry()}
+    paths = by_key["lincs_gmt"].paths
+    assert paths, "the GMT entry resolved to nothing"
+    assert all(isinstance(p, str) for p in paths), paths
+    assert any("up" in p for p in paths) and any("down" in p for p in paths)
+
+
+def test_a_present_but_unreadable_table_is_reported_not_passed(tmp_path,
+                                                               monkeypatch):
+    """Present and unparseable is worse news than absent, so it must not
+    look the same as a clean row."""
+    from promoter_tf_drugs import datasets
+
+    bad = tmp_path / "jaspar2024.txt"
+    bad.write_text("this is not a position frequency matrix\n",
+                   encoding="utf-8")
+
+    def one_broken():
+        return (datasets.Dataset(
+            key="motifs", title="t", buys="b", supply=datasets.FLAG,
+            paths=(str(bad),),
+            counter=lambda p: (_ for _ in ()).throw(ValueError("nope"))),)
+
+    monkeypatch.setattr(datasets, "registry", one_broken)
+    row = datasets.survey(count=True)[0]
+    assert row["present"] is True
+    assert row["records"] is None
+    assert "ValueError" in (row["error"] or "")
+
+
+def test_counting_is_off_by_default():
+    """Several of these tables are gigabytes. A bare inventory must not
+    parse them."""
+    from pathlib import Path
+    from promoter_tf_drugs import datasets
+    called = []
+
+    def one():
+        return (datasets.Dataset(
+            key="k", title="t", buys="b", supply=datasets.AUTO,
+            paths=(str(Path(datasets.__file__)),),
+            counter=lambda p: called.append(p) or 1),)
+
+    import unittest.mock as mock
+    with mock.patch.object(datasets, "registry", one):
+        rows = datasets.survey()
+    assert rows[0]["present"] is True
+    assert rows[0]["records"] is None
+    assert not called, "survey() parsed a file without being asked to"
+
+
+def test_the_data_guide_matches_the_registry():
+    """docs/datasets.md is generated.
+
+    A hand edit, or a table added to the registry without regenerating,
+    leaves the guide claiming something the code does not do - and a
+    data guide that is wrong sends someone to download the wrong file.
+    """
+    import subprocess
+    import sys
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    pr = subprocess.run(
+        [sys.executable, "-X", "utf8",
+         str(root / "scripts" / "generate_data_docs.py"), "--check"],
+        cwd=root, capture_output=True, text=True, encoding="utf-8")
+    assert pr.returncode == 0, (
+        "docs/datasets.md is stale - regenerate with "
+        "`python scripts/generate_data_docs.py`. "
+        + (pr.stderr or pr.stdout or ""))
+
+
+def test_the_data_guide_names_every_table():
+    """The guide's job is completeness, so an entry silently dropped
+    from the render is the one failure that matters."""
+    from pathlib import Path
+    from promoter_tf_drugs import datasets
+    guide = (Path(__file__).resolve().parents[1]
+             / "docs" / "datasets.md").read_text(encoding="utf-8")
+    for ds in datasets.registry():
+        assert f"### {ds.title}" in guide, f"{ds.key} is missing a section"
+        assert f"`{ds.key}`" in guide, f"{ds.key} has no inventory key"
+        for path in ds.paths:
+            assert f"`{path}`" in guide, f"{ds.key}: {path} not listed"
+
+
+def test_no_registry_table_is_committed_to_the_repository():
+    """The data guide tells people the repository ships none of these.
+
+    That is a claim about what is in git, and I made it once without
+    checking - `data/hpa.tsv` is tracked, so "data/ is ignored" was
+    wrong. This asserts the narrower claim the guide now makes: no
+    accepted filename for any registry table is tracked.
+    """
+    import subprocess
+    from pathlib import Path
+    from promoter_tf_drugs import datasets
+    root = Path(__file__).resolve().parents[1]
+    pr = subprocess.run(["git", "ls-files", "data/"], cwd=root,
+                        capture_output=True, text=True)
+    if pr.returncode != 0:
+        import pytest
+        pytest.skip("not a git checkout")
+    tracked = {line.strip() for line in pr.stdout.splitlines() if line.strip()}
+    claimed = {p for d in datasets.registry() for p in d.paths}
+    shipped = sorted(tracked & claimed)
+    assert not shipped, (
+        "the data guide says the repository ships none of these tables, "
+        f"but these are tracked: {shipped}. Either untrack them or "
+        "correct docs/datasets.md.")
+
+
+def test_every_table_can_be_counted():
+    """The large downloads are the ones most likely to have truncated,
+    so a check that skips them is absent where it is most wanted."""
+    from promoter_tf_drugs import datasets
+    uncounted = [d.key for d in datasets.registry() if d.counter is None]
+    assert not uncounted, (
+        "these tables cannot be checked at all: " + ", ".join(uncounted))
+
+
+def test_a_line_count_is_not_reported_as_a_parse(tmp_path, capsys):
+    """"879 motifs" came from the motif parser and proves the file is a
+    PFM file. A line count proves the stream opened and ran to the end.
+
+    Printing both as "record(s)" makes the weaker check look like the
+    stronger one, which is the conflation this package spends its time
+    avoiding everywhere else.
+    """
+    from promoter_tf_drugs import datasets
+
+    f = tmp_path / "thing.txt"
+    f.write_text("a\nb\nc\n", encoding="utf-8")
+
+    def two():
+        return (
+            datasets.Dataset(key="parsed", title="Parsed", buys="b",
+                             supply=datasets.AUTO, paths=(str(f),),
+                             counter=lambda p: 879, unit="motif"),
+            datasets.Dataset(key="scanned", title="Scanned", buys="b",
+                             supply=datasets.AUTO, paths=(str(f),),
+                             counter=datasets._count_lines),
+        )
+
+    import unittest.mock as mock
+    with mock.patch.object(datasets, "registry", two):
+        rc = datasets.main(["--count"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "879 motif(s)" in out
+    assert "3 line(s), not parsed" in out, out
+    assert "record(s)" not in out, "the generic word hides the difference"
+
+
+def test_a_docking_result_records_the_conformation_it_was_asked_for():
+    """Per-factor results are named <FACTOR>.json and a merge globs the
+    directory, so one run's answer can sit beside another's.
+
+    That would be harmless if a docking run meant the same thing every
+    time. It does not: the conformation comes from the direction and
+    the factor's role, so the same factor docked for `up` and for
+    `down` is two different screens under one filename. Recording what
+    was asked for is what makes the difference visible in the file.
+    """
+    import inspect
+    from promoter_tf_drugs import docking
+    src = inspect.getsource(docking.dock_screen_for_target)
+    assert 'out["asked_for"]' in src
+    # The three fields a reader needs to audit a merged file: what was
+    # wanted, what was used, and whether they agree.
+    for field in ('"state": want_state', '"pocket_state"', '"matched"'):
+        assert field in src, field
+    assert 'out["produced"]' in src, "a result with no date cannot be stale"
+
+
+def test_the_launcher_clears_last_runs_factor_docking():
+    """The launcher deletes product.json and factors.txt each run. The
+    per-factor files have to go too, or a merge folds the previous
+    workup into this one."""
+    from pathlib import Path
+    bat = (Path(__file__).resolve().parents[1]
+           / "scripts" / "run_everything.bat").read_text(encoding="utf-8")
+    assert 'for %%F in ("!DOCKDIR!\\*.json")' in bat, \
+        "nothing clears the per-factor results"
+    # product.json is written by the stage that follows, and deleting it
+    # here would be harmless but confusing; it is excluded on purpose.
+    assert '"%%~nxF"=="product.json"' in bat
+
+
+def test_the_inventory_names_the_directory_it_searched(capsys):
+    """Paths are relative, so from the wrong directory this reports
+    almost nothing present - which reads as missing downloads and is
+    not. Naming the directory is what separates the two."""
+    from promoter_tf_drugs import datasets
+    datasets.main([])
+    out = capsys.readouterr().out
+    assert "searched " in out
+    assert "data" in out
+
+
+# ===================================================================== #
+# How much the gene has to move, and what has actually been measured.   #
+# ===================================================================== #
+def test_the_requirement_is_arithmetic_not_a_prediction():
+    """One allele dead means the other supplies about half the normal
+    total, so it has to roughly double. That comes from the mechanism,
+    not from a model, and stating it turns a ranked list into a
+    specification."""
+    from promoter_tf_drugs import magnitude as mag
+    a = mag.restore_one_allele("BUB1B", broken_allele_makes="null")
+    assert a.target_fold == 2.0
+    assert a.goal == "up"
+    assert "2x" in a.requirement
+    assert any("return to the normal level" in n for n in a.notes)
+
+
+def test_raising_both_copies_is_not_the_whole_specification():
+    """Where the broken copy makes protein, doubling total transcript is
+    not doubling functional protein - so the stated requirement does not
+    describe what you actually need."""
+    from promoter_tf_drugs import magnitude as mag
+    truncated = mag.restore_one_allele("X", broken_allele_makes="truncated")
+    null = mag.restore_one_allele("X", broken_allele_makes="null")
+    assert any("not the whole specification" in n for n in truncated.notes)
+    assert not any("not the whole specification" in n for n in null.notes)
+
+
+def test_lowering_a_protein_says_the_package_moves_transcripts():
+    """The HTT case: the target is protein and everything ranked here
+    acts on transcription. A measured transcript change is an upper
+    bound on the blot at the same time point."""
+    from promoter_tf_drugs import magnitude as mag
+    a = mag.lower_toxic_product("HTT", target_fraction=0.5,
+                                acts_on="protein",
+                                wild_type_essential=True)
+    joined = " ".join(a.notes)
+    assert "PROTEIN" in joined and "transcription" in joined
+    assert "half-life" in joined
+    # The essential-wild-type constraint is a floor, not a direction.
+    assert "floor" in joined and "window" in joined
+    assert "50%" in a.requirement
+
+
+def test_a_z_score_is_never_converted_to_a_fold_change():
+    """L1000's z is computed against the plate population, whose spread
+    is not in the data read here. Converting it would invent the number
+    that matters most."""
+    from promoter_tf_drugs import magnitude as mag
+    routes = [{"drug": "a", "source": "lincs", "score": -2.4,
+               "cell_line": "BT20"}]
+    ask = mag.lower_toxic_product("HTT", target_fraction=0.5)
+    text = mag.summarise(ask, mag.measured_effects(routes, "HTT"))
+    assert "cannot be converted to a fold change" in text
+    assert "whether the largest of them is enough" in text
+    # No fabricated percentage attached to the measured effect.
+    assert "z=-2.4" in text
+
+
+def test_routes_without_a_measured_effect_are_counted_as_such():
+    """Most routes are annotation, and an annotation has no size. The
+    split is the useful part."""
+    from promoter_tf_drugs import magnitude as mag
+    routes = ([{"drug": f"m{i}", "source": "lincs", "score": -3.0 + i}
+               for i in range(3)]
+              + [{"drug": f"a{i}", "source": "drugs"} for i in range(7)])
+    e = mag.measured_effects(routes, "G")
+    assert e["n_measured"] == 3 and e["n_unmeasured"] == 7
+    # Largest absolute effect first.
+    assert abs(e["measured"][0]["z"]) >= abs(e["measured"][-1]["z"])
+
+
+def test_measured_effects_in_the_wrong_direction_are_called_out():
+    """A compound that measurably moves the gene the wrong way is worse
+    than one with no measurement, and must not read as support."""
+    from promoter_tf_drugs import magnitude as mag
+    routes = [{"drug": "up1", "source": "lincs", "score": 2.5}]
+    ask = mag.restore_one_allele("G")          # goal is up
+    text = mag.summarise(ask, mag.measured_effects(routes, "G"))
+    assert "WRONG way" not in text, "an up effect suits an up goal"
+    down = mag.lower_toxic_product("G", target_fraction=0.5)
+    text2 = mag.summarise(down, mag.measured_effects(routes, "G"))
+    assert "WRONG way" in text2
+
+
+def test_no_measured_effect_says_so_without_caveating_absent_numbers():
+    from promoter_tf_drugs import magnitude as mag
+    routes = [{"drug": "a", "source": "drugs"} for _ in range(5)]
+    ask = mag.lower_toxic_product("HTT", target_fraction=0.5)
+    text = mag.summarise(ask, mag.measured_effects(routes, "HTT"))
+    assert "No route carries a measured effect" in text
+    assert "These numbers order" not in text, "caveated numbers it lacks"
+
+
+def test_one_entry_point_covers_the_shapes_a_dosage_problem_takes():
+    """Haploinsufficiency, a hypomorph, a toxic gain, a null, a silenced
+    allele, and a gene with no mutation at all. Different problems that
+    share a structure: each fixes the direction and the requirement."""
+    from promoter_tf_drugs import magnitude as mag
+    seen = {}
+    for name in mag.SCENARIOS:
+        a = mag.ask_for(name, "GENE")
+        seen[name] = a.goal
+        assert a.requirement, name
+    assert seen["haploinsufficiency"] == "up"
+    assert seen["hypomorph"] == "up"
+    assert seen["toxic_gain"] == "down"
+    assert seen["silenced_allele"] == "up"
+
+
+def test_an_unknown_scenario_raises_rather_than_defaulting():
+    """A silent default here would set the direction of a whole
+    analysis."""
+    import pytest
+    from promoter_tf_drugs import magnitude as mag
+    with pytest.raises(ValueError, match="unknown scenario"):
+        mag.ask_for("probably_fine", "GENE")
+
+
+def test_a_null_allele_is_told_that_transcription_cannot_help():
+    """Transcribing a null allele harder makes more non-functional
+    transcript. Handing over two hundred routes for a problem none of
+    them solves is worse than saying so."""
+    from promoter_tf_drugs import magnitude as mag
+    a = mag.ask_for("null", "GENE")
+    assert a.feasible is False
+    text = mag.summarise(a)
+    assert "cannot solve this" in text
+    assert "Read it as context rather than as candidates" in text
+
+
+def test_a_modifier_has_no_restoration_target_and_says_so():
+    """The stroke case: the gene is already at its normal level, so
+    there is no arithmetic to check a plan against - and the safety
+    argument inverts, because you are moving a working copy."""
+    from promoter_tf_drugs import magnitude as mag
+    a = mag.ask_for("modifier", "CCR5", goal="down",
+                    condition="stroke recovery")
+    assert a.target_fold is None, "there is no multiple to aim for"
+    assert a.feasible is True
+    joined = " ".join(a.notes)
+    assert "no normal level to return to" in joined
+    assert "inverts the safety argument" in joined
+    assert "stroke recovery" in a.mechanism
+
+
+def test_a_hypomorph_has_no_bad_product_to_amplify():
+    """The most favourable shape: both copies make a working if reduced
+    product, so raising transcription raises only what you want."""
+    from promoter_tf_drugs import magnitude as mag
+    a = mag.ask_for("hypomorph", "GENE")
+    joined = " ".join(a.notes)
+    assert "nothing you do not" in joined
+    assert "no allele-selectivity problem" in joined
+
+
+def test_a_measured_effect_on_another_gene_is_not_counted():
+    """A LINCS hit records which gene it measured. One for a different
+    gene is not evidence about this one, and counting it would inflate
+    the single number this function exists to report."""
+    from promoter_tf_drugs import magnitude as mag
+    routes = [
+        {"drug": "right", "source": "lincs", "score": -2.5, "gene": "HTT"},
+        {"drug": "wrong", "source": "lincs", "score": -9.9, "gene": "CCR5"},
+        {"drug": "nogene", "source": "lincs", "score": -1.0},
+    ]
+    e = mag.measured_effects(routes, "HTT")
+    names = {m["drug"] for m in e["measured"]}
+    assert "wrong" not in names, "counted an effect on a different gene"
+    assert names == {"right", "nogene"}
+
+
+# ===================================================================== #
+# The requirement reaches the report, above the tables.                 #
+# ===================================================================== #
+def test_the_requirement_appears_above_every_table():
+    """A reader who sees only the ranking cannot tell a plan that needs
+    a doubling from one that needs a halving, and the tables look
+    identical in both cases."""
+    from promoter_tf_drugs import pipeline as pl, report as rep
+    res = pl.run("DEMOGENE", demo=True, scenario="haploinsufficiency",
+                 broken_allele_makes="truncated")
+    assert res["requirement"]["target_fold"] == 2.0
+    text = rep.markdown_report(res)
+    i = text.index("## What would have to happen")
+    assert i < text.index("## Evidence available in this run")
+    assert "2x from the working allele" in text
+    assert "raises BOTH copies" in text
+
+
+def test_an_unachievable_scenario_says_so_before_the_candidates():
+    """Handing over routes for a problem none of them addresses is
+    worse than saying nothing."""
+    from promoter_tf_drugs import pipeline as pl, report as rep
+    res = pl.run("DEMOGENE", demo=True, scenario="null")
+    assert res["requirement"]["feasible"] is False
+    text = rep.markdown_report(res)
+    assert "⛔" in text
+    assert "context, not candidates" in text
+
+
+def test_no_scenario_means_no_section_rather_than_an_empty_one():
+    """Most runs do not declare a mechanism, and an empty heading is
+    worse than none."""
+    from promoter_tf_drugs import pipeline as pl, report as rep
+    res = pl.run("DEMOGENE", demo=True)
+    assert res["requirement"] is None
+    text = rep.markdown_report(res)
+    assert "## What would have to happen" not in text
+
+
+def test_the_scenario_is_recorded_in_the_query_block():
+    """It sets the direction of the whole analysis, so a saved result
+    has to say which one produced it."""
+    from promoter_tf_drugs import pipeline as pl
+    res = pl.run("DEMOGENE", demo=True, scenario="toxic_gain",
+                 target_fraction=0.4)
+    q = res["query"]
+    assert q["scenario"] == "toxic_gain"
+    assert q["target_fraction"] == 0.4
+
+
+def test_an_invalid_scenario_is_refused_before_the_run_starts():
+    import pytest
+    from promoter_tf_drugs import pipeline as pl
+    with pytest.raises(ValueError, match="scenario"):
+        pl.run("DEMOGENE", demo=True, scenario="probably_fine")
+
+
+def test_both_clis_accept_the_scenario_flags():
+    from promoter_tf_drugs import cli, panel
+    for mod, base in ((cli, ["--gene", "X"]), (panel, ["--genes", "X"])):
+        args = mod.build_parser().parse_args(
+            base + ["--scenario", "modifier", "--condition", "stroke"])
+        kw = cli.run_kwargs_from_args(args)
+        assert kw["scenario"] == "modifier"
+        assert kw["condition"] == "stroke"
+
+
+def test_a_source_that_found_nothing_is_not_shown_as_one_that_delivered():
+    """The ledger had three states and `ok` covered both a source that
+    returned a hundred and fifty-three records and one that returned
+    none. A reader scanning the table for `ok` counts the second as
+    evidence that arrived."""
+    from promoter_tf_drugs import provenance as prov
+    led = prov.Ledger()
+    led.record("found", requested=True, ok=True, yielded=153, detail="d")
+    led.record("searched", requested=True, ok=True, yielded=0, detail="d")
+    led.record("broke", requested=True, ok=False, yielded=0, detail="d")
+    led.record("off", requested=False, ok=False, yielded=0, detail="d")
+    states = {n: s["state"] for n, s in led.to_dict()["sources"].items()}
+    assert states == {"found": "ok", "searched": "empty",
+                      "broke": "FAILED", "off": "not requested"}
+
+
+def test_an_empty_answer_still_counts_as_the_source_having_worked():
+    """A measured nothing outranks a lookup that broke, which is the
+    distinction the ledger exists to keep. `empty` must not be treated
+    as a failure by anything that decides whether a source is usable."""
+    from promoter_tf_drugs import provenance as prov
+    led = prov.Ledger()
+    led.record("searched", requested=True, ok=True, yielded=0, detail="d")
+    src = led.get("searched")
+    assert src.state == "empty"
+    assert src.ok is True
+    assert src.usable is True
+    assert src not in led.failures()
+
+
+def test_the_report_marks_an_empty_source_rather_than_hiding_it():
+    from promoter_tf_drugs import provenance as prov
+    import inspect
+    from promoter_tf_drugs import report as rep
+    src = inspect.getsource(rep.markdown_report)
+    assert '"empty": "ok, nothing found"' in src

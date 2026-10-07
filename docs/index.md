@@ -8,6 +8,8 @@ inputs and inspect the evidence behind each route.
   commands and what would make you stop at each one.
 - [Installation](installation.md): environments, extras, and Windows launchers.
 - [Usage](usage.md): analysis, directions, offline runs, and saved-result tools.
+- [Getting the analysis tables](datasets.md): every table the analysis can
+  read, where to obtain it, and the command that says what you are missing.
 - [Inputs and outputs](data.md): file formats, coordinates, and cache behavior.
 - [Running with no network](offline.md): every data file, where it comes
   from, where to put it, and the three that need building first.

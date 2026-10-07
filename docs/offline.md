@@ -47,6 +47,17 @@ Put each one under `data/` with the name in the second column. The names
 are what the loaders search for; alternatives are listed where several
 are accepted.
 
+This section is the short form, ordered by what each file buys. [Getting
+the analysis tables](datasets.md) is the complete per-table reference —
+every accepted filename, the exact source, the size, the build step
+where there is one, and what the run loses without it. It is generated
+from the loaders themselves, so it cannot drift from what the code
+searches for. To find out what this checkout is missing right now:
+
+```sh
+python -m promoter_tf_drugs.datasets --missing
+```
+
 ### Transcription factor binding
 
 **JASPAR motifs** — `data/jaspar2024.txt`
@@ -215,6 +226,38 @@ A local GWAS catalogue reports the gene nearest a signal, which is weaker
 than the fine-mapped support Open Targets gives. The report distinguishes
 them rather than adding the counts together.
 
+### Dosage tolerance
+
+Whether there is room to move the gene, and whether moving it is safe.
+Both are read from disk only — there is no API fallback, so without these
+files the report says dosage was not assessed.
+
+| Source | Keep as | From |
+| --- | --- | --- |
+| gnomAD v4.1 constraint | `data/gnomad.v4.1.constraint_metrics.tsv` | <https://storage.googleapis.com/gcp-public-data--gnomad/release/4.1/constraint/gnomad.v4.1.constraint_metrics.tsv> |
+| ClinGen dosage curation | `data/ClinGen_gene_curation_list_GRCh38.tsv` | <https://ftp.clinicalgenome.org/ClinGen_gene_curation_list_GRCh38.tsv> |
+
+`scripts/run_everything.bat` fetches both, asking first about gnomAD
+because it is 91 MB. ClinGen is 250 KB and re-dated weekly upstream.
+
+Two things about reading them that the files do not announce:
+
+gnomAD is one row per transcript — 211,523 rows for 18,204 genes — and
+the gene's value comes from its MANE Select transcript, falling back to
+canonical. Taking the lowest LOEUF across transcripts instead looks
+neutral and is not: a minimum over a dozen draws lands below the typical
+one, so every multi-transcript gene drifts toward "constrained". It moves
+9,207 of 18,204 genes, 922 of them by more than 0.2 LOEUF, which is wider
+than the gap between this package's own sensitive and tolerant lines.
+
+ClinGen's score is not a severity scale. Two of its values are category
+codes sitting above the evidence grade: `30` means the gene has a
+recessive phenotype, which says nothing about dose, and `40` means
+dosage sensitivity is **unlikely** — the opposite of the top of the
+scale. `0` means "no evidence available", which is 1,306 of the genes in
+the current release and is read as not assessed rather than as a
+negative.
+
 ### Docking
 
 A binary rather than a data file. [The docking guide](docking.md) covers
@@ -245,10 +288,12 @@ python -m promoter_tf_drugs --gene CCR5 --direction down --offline \
     --out results/offline_check
 ```
 
-The table names every source as `ok`, `FAILED`, or `not requested`, with
-what each failure cost. **A source that failed is recorded as failed, not
-as zero** — which is the whole point of reading that table before the
-ranking underneath it.
+The table names every source as `ok`, `ok, nothing found`, `FAILED`, or
+`not requested`, with what each failure cost. **A source that failed is
+recorded as failed, not as zero** — which is the whole point of reading
+that table before the ranking underneath it. The second state is the one
+that is easy to skim past: the source was reached, it answered, and the
+answer was nothing. That is a measurement, and it is not a find.
 
 Individual checks, when you want one:
 

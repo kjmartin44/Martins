@@ -28,7 +28,7 @@ echo === Checking dependencies ===
 
 REM --- motif file (required) -------------------------------------------
 if not exist data\jaspar2024.txt (
-    echo === Downloading JASPAR motifs ^(~2 MB^) ===
+    echo === Downloading JASPAR motifs ^(~284 KB^) ===
     curl.exe -fL -o data\jaspar2024.txt "https://jaspar.elixir.no/download/data/2024/CORE/JASPAR2024_CORE_vertebrates_non-redundant_pfms_jaspar.txt"
 )
 REM Checked by CONTENT, not by size. A captive portal or an error page can
@@ -45,6 +45,40 @@ if not exist data\trrust.tsv (
     echo === Downloading TRRUST regulons ^(optional^) ===
     curl.exe -fL -o data\trrust.tsv "https://www.grnpedia.org/trrust/data/trrust_rawdata.human.tsv"
 )
+REM --- dosage tolerance: is there room to move this gene, and is
+REM --- moving it safe? Neither file is required and neither is large
+REM --- enough to think about, except gnomAD, which is asked for.
+if not exist data\ClinGen_gene_curation_list_GRCh38.tsv (
+    echo === Downloading ClinGen dosage curation ^(~250 KB^) ===
+    curl.exe -fL -o data\ClinGen_gene_curation_list_GRCh38.tsv "https://ftp.clinicalgenome.org/ClinGen_gene_curation_list_GRCh38.tsv"
+)
+REM Content, not size: the header is a comment line, so a gene column
+REM in it is the thing that proves this is the curation list.
+findstr /m /c:"Haploinsufficiency Score" data\ClinGen_gene_curation_list_GRCh38.tsv >nul 2>&1
+if errorlevel 1 (
+    echo   ClinGen file is not the curation list - deleting it.
+    del data\ClinGen_gene_curation_list_GRCh38.tsv >nul 2>&1
+)
+
+if not exist data\gnomad.v4.1.constraint_metrics.tsv (
+    echo.
+    echo gnomAD constraint says whether this gene's dose is under
+    echo selection. It is 91 MB and takes about a minute. Without it the
+    echo report says dosage was not assessed, which is not the same as
+    echo saying the gene tolerates any dose.
+    set "GETGNOMAD="
+    set /p GETGNOMAD="Download it? Y/n: "
+    if /i not "!GETGNOMAD!"=="n" (
+        echo === Downloading gnomAD v4.1 constraint ^(91 MB^) ===
+        curl.exe -fL -o data\gnomad.v4.1.constraint_metrics.tsv "https://storage.googleapis.com/gcp-public-data--gnomad/release/4.1/constraint/gnomad.v4.1.constraint_metrics.tsv"
+        findstr /m /c:"lof.oe_ci.upper" data\gnomad.v4.1.constraint_metrics.tsv >nul 2>&1
+        if errorlevel 1 (
+            echo   That is not the constraint table - deleting it.
+            del data\gnomad.v4.1.constraint_metrics.tsv >nul 2>&1
+        )
+    )
+)
+
 set "REGULON="
 if exist data\trrust.tsv set "REGULON=--regulon-file data\trrust.tsv"
 REM A ChIP-derived table covers far more factors. It is occupancy rather
@@ -63,7 +97,14 @@ if "!GENE!"=="" (
 )
 REM Letters, digits, hyphen, underscore. Anything else is a typo, or an
 REM attempt to put a second command on the line.
-echo !GENE!| findstr /r /c:"^[A-Za-z0-9_-][A-Za-z0-9_-]*$" >nul
+REM
+REM The value is echoed QUOTED, and the pattern matches the quotes. That
+REM is not decoration: unquoted, `echo !GENE!| findstr ...` with a gene
+REM of `CCR5 & del *` runs as `echo CCR5` and then `del *| findstr ...`,
+REM so findstr reads del's output, errorlevel comes back 0, and the
+REM value is accepted because it contained a separator. Delayed
+REM expansion does not protect a pipeline. Quoting does.
+echo "!GENE!"| findstr /r /c:"^\"[A-Za-z0-9_-][A-Za-z0-9_-]*\"$" >nul
 if errorlevel 1 (
     echo "!GENE!" is not a gene symbol.
     pause
@@ -95,6 +136,115 @@ REM a quarter of an hour into the run.
 set "ACTIVITY="
 set /p ATISSUE="Tissue to infer factor activity in, blank to skip: "
 if not "!ATISSUE!"=="" set "ACTIVITY=--tf-activity --activity-tissue "!ATISSUE!""
+
+REM --- the shape of the dosage problem ---------------------------------
+REM This fixes what counts as enough, and the ranking below cannot tell
+REM you it: a list of two hundred routes looks the same whether the plan
+REM needs a doubling or a halving. Declared rather than inferred, because
+REM nothing in this package reads a variant - guessing here would be
+REM inventing the premise of the answer.
+REM
+REM Skipping is a real option and the default. The report then ranks
+REM routes without stating a requirement, which is what it did before
+REM this prompt existed.
+echo.
+echo What is the shape of the problem for !GENE!?
+echo    1  haploinsufficiency  - one copy broken, raise the other
+echo    2  hypomorph           - both copies weak
+echo    3  toxic gain          - lower a harmful product
+echo    4  null                - no working product at all
+echo    5  silenced allele     - an intact copy switched off
+echo    6  modifier            - no mutation; moving a normal gene helps
+echo    0  skip                - rank routes, state no requirement
+set "SNUM="
+set /p SNUM="Choose [0]: "
+
+set "SCEN="
+if "!SNUM!"=="1" set "SCEN=haploinsufficiency"
+if "!SNUM!"=="2" set "SCEN=hypomorph"
+if "!SNUM!"=="3" set "SCEN=toxic_gain"
+if "!SNUM!"=="4" set "SCEN=null"
+if "!SNUM!"=="5" set "SCEN=silenced_allele"
+if "!SNUM!"=="6" set "SCEN=modifier"
+if not "!SNUM!"=="" if not "!SNUM!"=="0" if "!SCEN!"=="" (
+    echo "!SNUM!" is not one of the choices.
+    pause
+    exit /b 1
+)
+
+REM A null allele is the one case where the answer is known before the
+REM run: there is no working copy to raise, so no amount of
+REM transcription produces a working product. The report says so and
+REM the routes become context rather than candidates. Worth saying here
+REM too, rather than after half an hour of docking and scanning.
+if "!SCEN!"=="null" (
+    echo.
+    echo   With no working copy, raising transcription cannot produce a
+    echo   working product. The report will say so and treat every route
+    echo   below it as context rather than as a candidate.
+    set "GOON="
+    set /p GOON="Run anyway? y/N: "
+    if /i not "!GOON!"=="y" exit /b 0
+)
+
+REM What the broken copy makes. This matters because transcription is
+REM not allele-specific: raising the gene raises BOTH copies, so a
+REM truncated product gets amplified alongside the working one, and the
+REM requirement above stops being the whole specification.
+set "BROKEN="
+set "ASKBROKEN="
+if "!SCEN!"=="haploinsufficiency" set "ASKBROKEN=1"
+if "!SCEN!"=="silenced_allele" set "ASKBROKEN=1"
+if defined ASKBROKEN (
+    echo.
+    echo What does the broken copy make?
+    echo    1  nothing - no transcript or no protein
+    echo    2  a truncated or altered product
+    echo    3  unknown
+    set "BNUM="
+    set /p BNUM="Choose [3]: "
+    set "BMAKES=unknown"
+    if "!BNUM!"=="1" set "BMAKES=null"
+    if "!BNUM!"=="2" set "BMAKES=truncated"
+    set "BROKEN=--broken-allele-makes !BMAKES!"
+)
+
+REM For a lowering plan, how much you want left. Half is the usual ask
+REM and is the default the package uses.
+set "FRACTION="
+if "!SCEN!"=="toxic_gain" (
+    set "TF="
+    set /p TF="Share of the current level you want left, e.g. 0.5 [0.5]: "
+    if not "!TF!"=="" (
+        echo "!TF!"| findstr /r /c:"^\"0\.[0-9][0-9]*\"$" >nul
+        if errorlevel 1 (
+            echo "!TF!" is not a fraction between 0 and 1, such as 0.5.
+            pause
+            exit /b 1
+        )
+        set "FRACTION=--target-fraction !TF!"
+    )
+)
+
+REM For a gene with no mutation in it, what is being treated. Letters,
+REM digits, spaces and hyphens only - this goes onto a command line.
+set "CONDITION="
+if "!SCEN!"=="modifier" (
+    set "COND="
+    set /p COND="Condition being treated, blank to skip: "
+    if not "!COND!"=="" (
+        echo "!COND!"| findstr /r /c:"^\"[A-Za-z0-9][A-Za-z0-9 _-]*\"$" >nul
+        if errorlevel 1 (
+            echo "!COND!" has characters that cannot go on a command line.
+            pause
+            exit /b 1
+        )
+        set "CONDITION=--condition "!COND!""
+    )
+)
+
+set "DOSAGE="
+if not "!SCEN!"=="" set "DOSAGE=--scenario !SCEN! !BROKEN! !FRACTION! !CONDITION!"
 
 set "OUT=results\!GENE!_!DIR!"
 
@@ -203,6 +353,24 @@ if "!NTF!"=="" set "NTF=3"
 set "TFLIST=!DOCKDIR!\factors.txt"
 if exist "!TFLIST!" del "!TFLIST!"
 
+REM Last run's per-factor results, which are NOT overwritten the way
+REM product.json is. They are named <FACTOR>.json, the set of factors
+REM changes with the scan, and merge_docking.py globs the directory -
+REM so a stale STAT3.json joins today's SP1 and NFKB1 and is handed to
+REM the analysis as part of one result.
+REM
+REM Which would be harmless if a docking run meant the same thing every
+REM time, and it does not. The conformation comes from the direction
+REM and the factor's role: lowering a gene through an activator docks
+REM that activator's INACTIVE pocket. Yesterday's "up" run leaves a
+REM screen of the opposite pocket under exactly the filename today's
+REM run would write.
+REM
+REM Nothing is lost. That run's merged docking_all.json is still there.
+for %%F in ("!DOCKDIR!\*.json") do (
+    if /i not "%%~nxF"=="product.json" del "%%F" >nul 2>&1
+)
+
 if not "!NTF!"=="0" (
     echo.
     echo === 2 of 4: finding the factors worth docking ===
@@ -283,7 +451,7 @@ echo.
     --predict-direction --upstream-network --upstream-depth 3 ^
     !LINCS! --genetics --screen --design-screen --design-modality ^
     --promoter-dna --screen-product --find-analogs ^
-    !ACTIVITY! !SENS! !DOCKING! ^
+    !ACTIVITY! !SENS! !DOCKING! !DOSAGE! ^
     --out "!OUT!" -v
 
 if errorlevel 1 (

@@ -2066,6 +2066,33 @@ def dock_screen_for_target(client, symbol: str, uniprot: str, library: list,
             "nothing here says whether a hit would activate or inhibit. "
             "Binding and direction are different questions, and only the "
             "first was addressed.")
+
+    # What this run was ASKED for, as against what it found.
+    #
+    # Without it a saved result cannot be audited after the fact, and
+    # the case that needs auditing is ordinary: per-factor files are
+    # named <FACTOR>.json, so a second workup overwrites or sits beside
+    # the first, and a merge globs whatever is in the directory. The
+    # requested conformation is derived from the direction and the
+    # factor's role - lowering a gene through an activator wants that
+    # activator's INACTIVE pocket - so the same factor docked for `up`
+    # and for `down` gives different answers under the same filename.
+    #
+    # `matched` is the question a reader actually has: was the pocket
+    # the one asked for. None means nothing specific was requested.
+    out["asked_for"] = {
+        "state": want_state,
+        "pocket_state": pocket.state,
+        "matched": None if not want_state else pocket.state == want_state,
+    }
+    try:
+        from . import provenance as _prov
+        out["produced"] = _prov.run_provenance()
+    except Exception:                                       # noqa: BLE001
+        # Provenance is a record, not a result. A run that produced a
+        # validated screen must not be thrown away because the stamp
+        # could not be written.
+        pass
     return out
 
 
