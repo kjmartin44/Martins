@@ -137,8 +137,9 @@ def _chembl_targets(client: Client, symbol: str, uniprot: str | None) -> list[st
                 "format": "json", "limit": 20,
             })
             targets = res.get("targets", [])
-        except HttpError:
-            pass
+        except HttpError as exc:
+            log.warning("ChEMBL target lookup for %s failed (%s); falling "
+                        "back to a search by name", uniprot, str(exc)[:80])
     if not targets:
         try:
             res = client.get(f"{CHEMBL}/target/search", {
@@ -177,7 +178,9 @@ def _chembl_molecules(client: Client, ids: list[str]) -> dict[str, dict]:
                 "molecule_chembl_id__in": ",".join(chunk),
                 "format": "json", "limit": 50,
             })
-        except HttpError:
+        except HttpError as exc:
+            log.warning("ChEMBL molecule lookup failed for %d id(s) (%s); "
+                        "they are left out", len(chunk), str(exc)[:80])
             continue
         for m in res.get("molecules", []):
             out[m["molecule_chembl_id"]] = m
@@ -192,7 +195,10 @@ def chembl_drugs(client: Client, symbol: str, uniprot: str | None = None,
             res = client.get(f"{CHEMBL}/mechanism", {
                 "target_chembl_id": target_id, "format": "json", "limit": 500,
             })
-        except HttpError:
+        except HttpError as exc:
+            log.warning("ChEMBL mechanism lookup failed for %s (%s); its "
+                        "drugs are left out, which is not a finding that "
+                        "there are none", target_id, str(exc)[:80])
             continue
         mechs = res.get("mechanisms", [])
         if not mechs:
@@ -233,6 +239,79 @@ def chembl_drugs(client: Client, symbol: str, uniprot: str | None = None,
     return drugs
 
 
+def approved_target_index(client: Client, library: list) -> dict:
+    """Every approved drug's ChEMBL mechanisms, keyed by target gene symbol.
+
+    `chembl_drugs` answers for one gene at a cost of a few requests, which
+    is right for one question and wrong for hundreds of upstream nodes. This
+    reads the same facts in batches instead: the mechanisms of every drug in
+    `library` (a list of `{"chembl_id", "name", ...}` rows, such as the
+    local approved-drug table) fifty at a time, then the gene symbols of the
+    targets they name. About eighty requests for the whole table, cached
+    like any other, after which a lookup is a dictionary read.
+
+    Returns `{SYMBOL: [Drug, ...]}`. A batch that fails raises `HttpError`:
+    an index missing a tenth of its drugs would answer "no approved drug"
+    for them, which is a different statement from "could not ask", so the
+    caller falls back to asking per gene.
+    """
+    rows = {d["chembl_id"]: d for d in library if d.get("chembl_id")}
+    ids = sorted(rows)
+    mechs: list = []
+    for i in range(0, len(ids), 50):
+        res = client.get(f"{CHEMBL}/mechanism", {
+            "molecule_chembl_id__in": ",".join(ids[i:i + 50]),
+            "format": "json", "limit": 1000})
+        mechs.extend(res.get("mechanisms", []))
+
+    target_ids = sorted({m["target_chembl_id"] for m in mechs
+                         if m.get("target_chembl_id")})
+    symbols: dict = {}
+    for i in range(0, len(target_ids), 50):
+        res = client.get(f"{CHEMBL}/target", {
+            "target_chembl_id__in": ",".join(target_ids[i:i + 50]),
+            "format": "json", "limit": 1000})
+        for t in res.get("targets", []):
+            if t.get("organism") != "Homo sapiens":
+                continue
+            if t.get("target_type") not in ("SINGLE PROTEIN", "PROTEIN COMPLEX"):
+                continue
+            syms = {(syn.get("component_synonym") or "").upper()
+                    for comp in t.get("target_components") or []
+                    for syn in comp.get("target_component_synonyms") or []
+                    if syn.get("syn_type") == "GENE_SYMBOL"}
+            if syms:
+                symbols[t["target_chembl_id"]] = syms
+
+    index: dict = {}
+    seen: set = set()
+    for m in mechs:
+        mol = rows.get(m.get("molecule_chembl_id"))
+        if mol is None:
+            continue
+        action = (m.get("action_type") or "UNKNOWN").upper()
+        direction = ("up" if action in ACTIVATING_ACTIONS else
+                     "down" if action in INHIBITING_ACTIONS else "unclear")
+        for sym in symbols.get(m.get("target_chembl_id"), ()):
+            key = (sym, m["molecule_chembl_id"], action)
+            if key in seen:
+                continue
+            seen.add(key)
+            index.setdefault(sym, []).append(Drug(
+                name=(mol.get("name") or m["molecule_chembl_id"]).title(),
+                chembl_id=m["molecule_chembl_id"], target_symbol=sym,
+                action_type=action, mechanism=m.get("mechanism_of_action"),
+                approved=True, max_phase=4.0, first_approval=None,
+                withdrawn=bool(mol.get("withdrawn")),
+                oral=mol.get("oral") or None, direction=direction,
+                source="ChEMBL (approved-drug index)",
+                target_chembl_id=m.get("target_chembl_id")))
+    log.info("approved-drug index: %d drug(s) on %d target gene(s)",
+             len({d.chembl_id for ds in index.values() for d in ds}),
+             len(index))
+    return index
+
+
 # -------------------------------------------------------------------- DGIdb
 _DGIDB_QUERY = """
 query($names: [String!]) {
@@ -261,9 +340,21 @@ def dgidb_drugs(client: Client, symbols: list[str],
     except HttpError as exc:
         log.warning("DGIdb query failed: %s", exc)
         return []
+    nodes = ((res.get("data") or {}).get("genes") or {}).get("nodes") or []
+    if res.get("errors"):
+        # HTTP 200 with an errors body. With nothing to read it used to
+        # fall through, find no nodes, and return [] as though DGIdb knew
+        # of no drugs for these genes. With nodes alongside, use them.
+        log.warning("DGIdb returned an error (%s)%s",
+                    str(res["errors"])[:120],
+                    "; using the part that came back" if nodes else
+                    " - its drugs are skipped, which is not a finding "
+                    "that there are none")
+        if not nodes:
+            return []
 
     out: list[Drug] = []
-    for node in (res.get("data", {}).get("genes", {}) or {}).get("nodes", []) or []:
+    for node in nodes:
         sym = node.get("name", "?")
         for inter in node.get("interactions") or []:
             drug = inter.get("drug") or {}
@@ -404,7 +495,11 @@ def opentargets_drugs(client: Client, symbol: str, *,
 
     try:
         ensembl = _resolve_ensembl(client, symbol)
-    except Exception:                                       # noqa: BLE001
+    except Exception as exc:                                # noqa: BLE001
+        # `_resolve_ensembl` raises on an outage; an empty list from here
+        # would otherwise read as "Open Targets knows no drugs for it".
+        log.warning("Open Targets could not resolve %s, so its drugs are "
+                    "skipped: %s", symbol, str(exc)[:120])
         ensembl = None
     if not ensembl:
         return []

@@ -213,6 +213,32 @@ you to different places. For the CCR5 library, 20 of 3,315 failed, all of
 them at conformer generation — macrocycles and peptides such as
 daptomycin, oritavancin and pibrentasvir, which ETKDG cannot build.
 
+## Salts and counter-ions
+
+About a third of the approved library is stored as a salt: the drug with
+chloride, sodium, calcium, sulfate, maleate or another counter-ion, and
+sometimes two copies of the drug. By default each structure is docked exactly
+as stored, so the counter-ion is scored as part of the ligand. The salt
+dissociates in solution and does not bind the receptor, and the extra atoms
+add contacts, charge and size to the score. A bare ion such as `Ca+2` also
+draws RDKit's `UFFTYPER` warning, because it has no force field type.
+
+`--strip-counter-ions` docks the drug alone, with one copy of each remaining
+component. A piece is removed when it has no carbon, when RDKit's default
+salt list recognises it, or when it is on a short list of organic counter-ions
+in `docking.py` (citrate, succinate, besylate, meglumine and similar). Charges
+are left as stored. A piece that can also be the drug, such as piperazine,
+lysine or caffeine, is never removed on its own: piperazine citrate becomes
+piperazine, and an entry with two such components stays whole and is counted
+as ambiguous. On the bundled library this changes about 1,130 of 3,315
+entries and leaves about 40 ambiguous.
+
+The option applies to the validation gate as well as the library, so the
+known ligands and decoys are prepared the same way as the drugs they are
+compared with. The saved result gains a `ligand_prep` block with the number of
+entries changed and ambiguous; it is absent when the option is off. Scores
+from the two modes are not interchangeable, so compare runs only within one.
+
 ## A caution about size
 
 Docking scores grow with molecular size: a larger molecule makes more

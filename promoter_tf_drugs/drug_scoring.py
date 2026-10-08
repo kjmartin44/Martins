@@ -88,6 +88,10 @@ class DrugEvidence:
     regulon_note: str | None = None
     withdrawn: bool = False
     black_box: bool = False
+    # True when the drug-warning lookup did not complete. `withdrawn` and
+    # `black_box` are False by default, so without this a failed lookup
+    # reads as "checked, no warning on record".
+    safety_lookup_failed: bool = False
     properties: dict = field(default_factory=dict)
     source: str = "ChEMBL"
 
@@ -182,8 +186,9 @@ def fetch_evidence(client: Client, drug) -> DrugEvidence:
         targets = {m.get("target_chembl_id") for m in res.get("mechanisms", [])
                    if m.get("target_chembl_id")}
         ev.n_targets = len(targets) or None
-    except HttpError:
-        pass
+    except HttpError as exc:
+        log.warning("ChEMBL mechanism lookup failed for %s (%s); its "
+                    "selectivity is not assessed", mol_id, str(exc)[:80])
 
     # Safety flags.
     try:
@@ -196,8 +201,11 @@ def fetch_evidence(client: Client, drug) -> DrugEvidence:
                 ev.withdrawn = True
             if "black" in kind or "box" in kind:
                 ev.black_box = True
-    except HttpError:
-        pass
+    except HttpError as exc:
+        ev.safety_lookup_failed = True
+        log.warning("ChEMBL drug-warning lookup failed for %s (%s); its "
+                    "withdrawn and boxed-warning flags are unknown, not "
+                    "clear", mol_id, str(exc)[:80])
 
     return ev
 
@@ -291,6 +299,11 @@ def _safety_multiplier(ev: DrugEvidence) -> tuple[float, list[str]]:
     if ev.black_box:
         mult *= 0.65
         notes.append("black-box warning")
+    if ev.safety_lookup_failed:
+        # No change to the multiplier: it is not known to be wrong. The
+        # note is what stops a missing flag reading as a clear one.
+        notes.append("safety flags unchecked: the ChEMBL warning lookup "
+                     "failed")
     return mult, notes
 
 

@@ -543,7 +543,10 @@ def uniprot_for(symbol: str) -> str | None:
     try:
         from . import localannot as la
         return la.uniprot_for(symbol)
-    except Exception:                                       # noqa: BLE001
+    except Exception as exc:                                # noqa: BLE001
+        log.warning("the local HGNC table could not be read for %s "
+                    "(%s: %s); its UniProt accession is unknown", symbol,
+                    type(exc).__name__, str(exc)[:100])
         return None
 
 
@@ -563,7 +566,12 @@ def local_actives_for(symbol: str, *, uniprot: str | None = None) -> list:
         if not any(lp.available().values()):
             return []
         return lp.actives_for(uni)
-    except Exception:                                       # noqa: BLE001
+    except Exception as exc:                                # noqa: BLE001
+        # [] is "no known ligands", and that is a measured statement. A
+        # table that is present and unreadable is not one.
+        log.warning("the local potency table could not be read for %s "
+                    "(%s: %s); its known ligands are not assessed", uni,
+                    type(exc).__name__, str(exc)[:100])
         return []
 
 
@@ -572,7 +580,10 @@ def local_library(path=None) -> list:
     try:
         from . import localdrugs as ld
         return ld.library(path) if path else ld.library()
-    except Exception:                                       # noqa: BLE001
+    except Exception as exc:                                # noqa: BLE001
+        log.warning("the local approved-drug library could not be read "
+                    "(%s: %s); the screening library is empty",
+                    type(exc).__name__, str(exc)[:100])
         return []
 
 
@@ -595,10 +606,10 @@ def match_actives_to_library(actives: list, library: list) -> set:
     excluding the actives, so a real binder sitting in the library gets
     sampled as a decoy and trained on as a negative.
     """
-    try:
-        from .localdrugs import parent_key
-    except Exception:                                       # noqa: BLE001
-        return set()
+    # No guard around this import: it is a module of this package, and an
+    # empty set here would put known binders into the decoy pool without a
+    # word, which is the harm the paragraph above describes.
+    from .localdrugs import parent_key
 
     # Memoised across calls: a pipeline run screens many targets against
     # the SAME library, and an InChIKey per molecule per target made that

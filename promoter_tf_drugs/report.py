@@ -555,7 +555,7 @@ def _sig_q(value) -> float:
     `value or 1` reads a q of exactly 0.0, the MOST significant result
     possible, as the least. `tfactivity._q` exists for this and this line
     reimplemented the broken version. Latent rather than live today only
-    because `tfactivity._bh` floors its output at Q_FLOOR, an invariant
+    because `stats.benjamini_hochberg` floors its output at Q_FLOOR, an invariant
     held in another module.
     """
     return 1.0 if value is None else float(value)
@@ -627,7 +627,65 @@ def _bbb_footnote(counts: dict) -> list:
     return out
 
 
+def escape_pipes(value):
+    """Return `value` with each `|` in a string escaped, copying only what changes.
+
+    Values reach the report from services and from notes this package builds
+    ("A --> B |" arrows, "eQTLGen: ... | eQTL Catalogue"). Inside a table row
+    an unescaped pipe starts a new cell, so one such value shifts every cell
+    after it and the row no longer lines up with its header. Escaping once,
+    at the entry point, covers every table without touching the thousand
+    f-strings that build them. Outside a table, Markdown renders an escaped
+    pipe as a plain one, so prose is unaffected. Dictionary keys are left
+    alone.
+
+    A container is rebuilt only when something inside it changed, so a
+    result with no pipes (the usual case) is returned as it is, with no
+    copy of its sequences and route tables.
+    """
+    if isinstance(value, str):
+        return value.replace("|", "\\|") if "|" in value else value
+    if isinstance(value, dict):
+        changed = False
+        out = {}
+        for k, v in value.items():
+            nv = escape_pipes(v)
+            changed = changed or nv is not v
+            out[k] = nv
+        return out if changed else value
+    if isinstance(value, (list, tuple)):
+        items = [escape_pipes(v) for v in value]
+        if all(a is b for a, b in zip(items, value)):
+            return value
+        return items if isinstance(value, list) else tuple(items)
+    return value
+
+
+def _standard_of_care_section(result: dict) -> list:
+    """Approved treatments for the condition, beside the ranking and apart
+    from it. Empty when the gene has no entry in `standard_of_care`."""
+    soc = result.get("standard_of_care")
+    if not soc or not soc.get("treatments"):
+        return []
+    gene = soc["gene"]
+    L = [f"## Approved treatments for {soc['condition']}", "",
+         f"Already prescribed for the condition {gene} causes, listed so the "
+         f"ranking below can be read against what exists. They are context, "
+         f"not candidates: they are not part of any score here, and they are "
+         f"not routes to {gene}.", "",
+         "| Drug | Brand | Approved | For | Acts on | Mechanism |",
+         "|---|---|---|---|---|---|"]
+    for t in soc["treatments"]:
+        L.append(f"| {t['generic']} | {t['brand']} | {t['approved']} | "
+                 f"{t['use']} | {t['target_gene']} | {t['mechanism']} |")
+    L += ["", f"{soc['note']} *Source: {soc['source']}. The table is "
+              f"hand-maintained; confirm dates and labels against Drugs@FDA.*",
+          ""]
+    return L
+
+
 def markdown_report(result: dict, top_n: int = 25) -> str:
+    result = escape_pipes(result)
     q = result["query"]
     goal = q.get("goal", "up")
     verb = "Upregulation" if goal == "up" else "Downregulation"
@@ -790,6 +848,8 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                  "date; check FDA/EMA and clinicaltrials.gov before concluding "
                  "nothing exists.")
         L.append("")
+
+    L.extend(_standard_of_care_section(result))
 
     # ------------------------------------- the headline answer, up front
     # This is the question people actually bring to the tool. It used to be
@@ -1392,6 +1452,28 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                 L.append("")
 
         ups = res.get("upstream") or {}
+        up_search = res.get("upstream_search") or {}
+        if up_search.get("factors_searched") and not ups:
+            L.append("### Upstream routes to factors with no direct drug")
+            L.append("")
+            L.append(
+                f"No route found. {up_search['nodes_checked']} of "
+                f"{up_search['nodes_reachable']} upstream node(s) reachable "
+                f"from {up_search['factors_searched']} factor(s) were checked "
+                f"for an approved drug that moves them the needed way, in "
+                f"order of how well each path explains the factor, and none "
+                f"has one."
+                + (f" {up_search['lookups_failed']} drug lookup(s) failed, so "
+                   f"this is weaker than it reads."
+                   if up_search.get("lookups_failed") else "")
+                + (f" {up_search['factors_truncated']} factor(s) reached the "
+                   f"limit of {up_search['max_checked']} nodes with more "
+                   f"reachable, so a route further out is not ruled out."
+                   if up_search.get("factors_truncated") else "")
+                + (" Every reachable node was checked against an index of "
+                   "approved-drug targets."
+                   if up_search.get("drug_index") else ""))
+            L.append("")
         if ups:
             L.append("### Upstream routes to factors with no direct drug")
             L.append("")
@@ -2004,7 +2086,7 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                         L.append(f"| {e['chemical']} | {kind} | {mark} | "
                                  f"{e['actions']} |")
                     if len(want) > top_n:
-                        L.append(f"| … {len(want) - top_n} more | | |")
+                        L.append(f"| … {len(want) - top_n} more | | | |")
                     L.append("")
 
                 only = rl.get("reported_but_not_predicted") or []
@@ -3035,6 +3117,7 @@ def corroboration_table(result: dict, top_n: int = 20) -> list:
 
 def summary_report(result: dict, top_n: int = SUMMARY_TOP) -> str:
     """A one-page summary. Everything here is also in report.md."""
+    result = escape_pipes(result)
     q = result["query"]
     goal = q.get("goal", "up")
     verb = "raise" if goal == "up" else "lower"
@@ -3046,6 +3129,13 @@ def summary_report(result: dict, top_n: int = SUMMARY_TOP) -> str:
              f"{'Demo data - not a real analysis. ' if q.get('demo') else ''}"
              f"Full detail, with every qualification, in `report.md`.")
     L.append("")
+
+    soc = result.get("standard_of_care") or {}
+    if soc.get("treatments"):
+        L.append(f"**Already approved for {soc['condition']}:** "
+                 + ", ".join(t["generic"] for t in soc["treatments"])
+                 + f". {soc['note']}")
+        L.append("")
 
     verdict = result.get("evidence_verdict") or {}
     L.append(_verdict_line(verdict))

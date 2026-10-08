@@ -243,6 +243,8 @@ Generated from each module's own first docstring line.
 | `shortlist.py` | Narrow an existing results.json to a shortlist, without re-running anything. |
 | `signatures.py` | LINCS L1000 transcriptomic signatures — the only empirical link in the package. |
 | `stabilizers.py` | Locking a transcription factor into an active state — without a ligand pocket. |
+| `standard_of_care.py` | Approved treatments for the condition a gene causes. |
+| `stats.py` | Statistics shared by more than one analysis stage. |
 | `systemic.py` | Drugs and receptors whose action is systemic by design, not by accident. |
 | `tfactivity.py` | Which factors are demonstrably active, inferred from their targets. |
 | `validation.py` | Declarative argument checking for the entry points. |

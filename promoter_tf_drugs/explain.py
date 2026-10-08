@@ -104,6 +104,8 @@ def collect(result: dict, query: str) -> dict:
 
 
 def render(found: dict) -> str:
+    from .report import escape_pipes
+    found = escape_pipes(found)
     q = found["query"]
     names = found["names"]
     L: list[str] = []

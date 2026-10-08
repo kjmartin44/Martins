@@ -15,7 +15,9 @@ not an external validation of its scientific models or curated claims.
    are collapsed. Its threshold is per position, not a study-wide false discovery
    rate. The scan-quality summary compares site counts with a rough null estimate.
 3. Annotation identifies TF roles and nuclear receptors. Optional ChIP overlap
-   provides another source of evidence. A motif match alone is not observed binding.
+   provides another source of evidence. It counts peaks for each factor over the
+   whole promoter window, so it says the factor was seen somewhere in the window,
+   not at the motif site. A motif match alone is not observed binding.
 4. ChEMBL and optional DGIdb queries associate drugs with factors. The requested
    direction and the annotated TF role determine which actions are retained.
 5. Scoring modules rank TF/drug pairs. Additional modules propose direct,
@@ -44,7 +46,7 @@ to identify missing evidence, not to claim a numerical chance of efficacy.
 | Module or option | What it contributes | Main limit |
 | --- | --- | --- |
 | Direct routes | Drugs and modalities associated with the gene itself. | Acting on its protein does not necessarily change its transcription. |
-| `--upstream-network` | Signed paths to druggable upstream targets. | Sign and confidence depend on curated edges; longer paths incur penalties. |
+| `--upstream-network` | Signed paths to druggable upstream targets. | Sign and confidence depend on curated edges; longer paths incur penalties. Every reachable node is checked against an index of approved-drug targets built from the local drug table (about 80 ChEMBL requests the first time). Without the table, or if the index fails, each node is asked about separately and the search stops after 100 per factor; the evidence ledger says which. |
 | Ligand axes | Curated synthesis, catabolism, sequestration, and supplementation routes. | Context and feedback are not quantitatively modeled. |
 | Mechanism comparison | Orthosteric, allosteric, and related mechanism classes. | Class labels do not establish a useful effect in the target tissue. |
 | Stabilization | Curated stabilizers, glues, and degradation-related routes. | Coverage is incomplete and target effects need confirmation. |

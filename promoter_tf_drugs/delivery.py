@@ -640,7 +640,12 @@ def tissue_expression(client, symbol: str, *, min_level: int = 2) -> set:
     if _EXPR_DISABLED["value"]:
         return set()
 
-    ensembl = _resolve_ensembl(client, symbol)
+    try:
+        ensembl = _resolve_ensembl(client, symbol)
+    except Exception as exc:                              # noqa: BLE001
+        log.warning("Open Targets could not resolve %s for expression: %s",
+                    symbol, str(exc)[:120])
+        return set()
     if not ensembl:
         return set()
 

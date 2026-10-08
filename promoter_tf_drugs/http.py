@@ -41,13 +41,37 @@ class HttpError(RuntimeError):
     pass
 
 
+def _is_error_body(payload) -> bool:
+    """Is this a GraphQL-style failure delivered with HTTP 200?
+
+    {"errors": [...]} marks a response the server itself reports as
+    failed, whatever the status line says. Partial answers (data and
+    errors together) are included: they are the ones a caller would
+    otherwise take for complete.
+    """
+    return (isinstance(payload, dict)
+            and isinstance(payload.get("errors"), (list, dict))
+            and bool(payload.get("errors")))
+
+
 class Client:
-    def __init__(self, cache_dir: Path | str = DEFAULT_CACHE, ttl_days: float = 30,
+    def __init__(self, cache_dir: Path | str = DEFAULT_CACHE,
+                 ttl_days: float | None = 30,
                  offline: bool = False, min_interval: float = 0.15,
                  max_requests: int | None = None):
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self.ttl = ttl_days * 86400
+        # How long a cached response stays usable, in days. `None` means
+        # it never expires. `0` means it is already stale, so nothing is
+        # served from the cache: the check used to be `if self.ttl`, which
+        # read 0 as "no limit" and made the obvious way to ask for fresh
+        # data return the oldest data instead.
+        self.ttl = None if ttl_days is None else ttl_days * 86400
+        # When true, cached responses are not READ (they are still
+        # written). A contract check has to see what the service says
+        # today; answered from a 30-day-old copy it cannot notice a change
+        # made last week.
+        self.bypass_cache = False
         self.offline = offline
         self.min_interval = min_interval
         self._last_call = 0.0
@@ -103,13 +127,24 @@ class Client:
     def _read_cache(self, path: Path):
         if not path.exists():
             return None
-        if self.ttl and (time.time() - path.stat().st_mtime) > self.ttl and not self.offline:
+        # `ttl == 0` is tested on its own: a file's modification time can
+        # sit a few milliseconds ahead of `time.time()` (Windows clock
+        # granularity), which makes the age slightly negative and a
+        # zero-day TTL would serve the entry it was meant to refuse.
+        if (self.ttl is not None and not self.offline
+                and (self.ttl == 0
+                     or (time.time() - path.stat().st_mtime) >= self.ttl)):
             return None
         try:
             with gzip.open(path, "rt", encoding="utf-8") as fh:
                 cached = json.load(fh)
             return cached if isinstance(cached, dict) and "payload" in cached else None
-        except Exception:
+        except Exception as exc:                            # noqa: BLE001
+            # A truncated or corrupt entry is a miss, and the response is
+            # fetched again and overwritten. Worth a line at debug level so
+            # a cache that keeps doing this can be noticed.
+            log.debug("unreadable cache entry %s (%s); refetching",
+                      path.name, type(exc).__name__)
             return None
 
     def _write_cache(self, path: Path, payload) -> None:
@@ -155,7 +190,10 @@ class Client:
         cache_path = self._path(url, body, method=method,
                                 parse_json=parse_json, headers=headers)
 
-        cached = self._read_cache(cache_path)
+        # A bypass never applies offline: with no network there is no
+        # fresh answer to prefer, and the cache is all there is.
+        cached = (None if self.bypass_cache and not self.offline
+                  else self._read_cache(cache_path))
         if cached is not None:
             return cached["payload"]
 
@@ -202,14 +240,43 @@ class Client:
                     if resp.headers.get("Content-Encoding") == "gzip":
                         raw = gzip.decompress(raw)
                 text = raw.decode("utf-8", "replace")
-                payload = json.loads(text) if parse_json else text
-                self._write_cache(cache_path, {"url": url, "payload": payload})
+                if parse_json:
+                    try:
+                        payload = json.loads(text)
+                    except json.JSONDecodeError as exc:
+                        # The body ARRIVED and is not JSON - a proxy page,
+                        # a maintenance notice, an endpoint that changed
+                        # format. Retrying returns the same body, and it is
+                        # not evidence the host is down, so neither retry
+                        # nor poison the host for the rest of the run.
+                        raise HttpError(
+                            f"{url} returned HTTP 200 with a body that is "
+                            f"not JSON ({text[:60]!r}...)") from exc
+                else:
+                    payload = text
+                if _is_error_body(payload):
+                    # HTTP 200 carrying {"errors": [...]}: the server said
+                    # it failed. Caching it freezes a transient fault for
+                    # the whole TTL, and every later run reads it as "no
+                    # data". Hand it back to this caller, who may inspect
+                    # it, and keep it out of the cache.
+                    log.warning("%s answered with an error body (%s); "
+                                "not caching it", url,
+                                str(payload.get("errors"))[:100])
+                else:
+                    self._write_cache(cache_path,
+                                      {"url": url, "payload": payload})
                 return payload
             except urllib.error.HTTPError as exc:
                 last_exc = exc
                 # urllib will not replay a POST body across 307/308, so it
-                # surfaces the redirect as an error. Follow it manually.
-                if exc.code in (307, 308) and method == "POST":
+                # surfaces the redirect as an error. It also does not
+                # follow 308 on a GET before Python 3.11, which is the
+                # project's floor - so the same error reaches here for a
+                # GET on 3.10 and not on 3.12. Follow both by hand, with
+                # the same method and body, so the behaviour does not
+                # depend on the interpreter.
+                if exc.code in (307, 308):
                     target = exc.headers.get("Location")
                     if target and target != url:
                         if max_redirects == 0:
@@ -242,8 +309,7 @@ class Client:
                     continue
                 raise HttpError(f"HTTP {exc.code} for {url}") from exc
             except (urllib.error.URLError, http.client.HTTPException,
-                    socket.error, OSError, TimeoutError,
-                    json.JSONDecodeError) as exc:
+                    socket.error, OSError, TimeoutError) as exc:
                 # RemoteDisconnected subclasses ConnectionResetError -> OSError,
                 # not URLError, so a narrower clause lets it escape the retry
                 # loop and abort the run. Catch the whole family.
@@ -262,6 +328,75 @@ class Client:
                 host, retries, reason, sum(min(RETRY_CAP, 2.0 ** a)
                                            for a in range(retries - 1)))
         raise HttpError(f"request failed after {retries} attempts: {url} ({last_exc})")
+
+    def fetch_bytes(self, url: str, *, timeout: float = 120,
+                    headers: dict | None = None, retries: int = 3,
+                    max_redirects: int = 5) -> bytes:
+        """Download a binary file, inside the same rules as `request`.
+
+        `request` caches JSON text and cannot carry a gzip stream, so bulk
+        files that belong on disk (the eQTLGen table) were fetched with
+        urllib directly - which put them outside the request budget, the
+        offline check, the retry logic and the host breaker. This keeps
+        those and returns the raw bytes. It does not cache: the caller
+        decides where the file lives. Like `request`, it follows 307/308
+        by hand (urllib follows 308 on a GET only from Python 3.11) and
+        honours Retry-After.
+        """
+        host = urllib.parse.urlsplit(url).netloc
+        if host in self._down:
+            raise HttpError(f"{host} already failed this run "
+                            f"({self._down[host]}); not retrying {url}")
+        if self.offline:
+            raise HttpError(f"offline mode; not downloading {url}. Run once "
+                            "with network access, or use --demo.")
+        if (self.max_requests is not None
+                and self.requests_made >= self.max_requests):
+            self.requests_refused += 1
+            raise HttpError(f"request budget of {self.max_requests} spent; "
+                            f"not fetching {url}.")
+        self.requests_made += 1
+
+        hdrs = {"User-Agent": USER_AGENT}
+        hdrs.update(headers or {})
+        attempts = max(1, retries)
+        last_exc: Exception | None = None
+        for attempt in range(attempts):
+            self._throttle()
+            try:
+                req = urllib.request.Request(url, headers=hdrs)
+                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                    return resp.read()
+            except urllib.error.HTTPError as exc:
+                last_exc = exc
+                if exc.code in (307, 308):
+                    target = exc.headers.get("Location")
+                    if target and target != url:
+                        if max_redirects == 0:
+                            raise HttpError(
+                                f"too many redirects for {url}") from exc
+                        log.info("following %s redirect to %s", exc.code,
+                                 target)
+                        return self.fetch_bytes(
+                            urllib.parse.urljoin(url, target),
+                            timeout=timeout, headers=headers,
+                            retries=retries, max_redirects=max_redirects - 1)
+                if exc.code not in (429, 500, 502, 503, 504):
+                    raise HttpError(f"HTTP {exc.code} for {url}") from exc
+                retry_after = exc.headers.get("Retry-After")
+                wait = min(RETRY_CAP, _retry_delay(retry_after, attempt))
+                if not retry_after:
+                    wait += random.uniform(0, 1.0)
+            except (urllib.error.URLError, http.client.HTTPException,
+                    socket.error, OSError, TimeoutError) as exc:
+                last_exc = exc
+                wait = min(RETRY_CAP, 2.0 ** attempt)
+            if attempt + 1 < attempts:
+                time.sleep(wait)
+        self._down.setdefault(host, f"{type(last_exc).__name__}: "
+                                    f"{str(last_exc)[:80]}")
+        raise HttpError(f"download failed after {attempts} attempts: "
+                        f"{url} ({last_exc})")
 
     def spend(self) -> dict:
         """What this run cost, and whether the ceiling bound it.

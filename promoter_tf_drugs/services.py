@@ -41,9 +41,11 @@ reported as unreachable and never as a contract break.
 Opt-in, and not free
 --------------------
 Nothing calls this during a run. Each probe is a live request, which is
-why it is a command rather than a stage — and why the results are
-cached like any other request, so repeating it inside the cache window
-costs nothing.
+why it is a command rather than a stage. It is deliberately NOT served
+from the response cache: a probe answered from a copy kept for up to 30
+days reports last month's schema and cannot see a change made last
+week. The fresh response is still written to the cache, so a normal run
+afterwards benefits.
 
     python -m promoter_tf_drugs.services
     python -m promoter_tf_drugs.services --key opentargets --verbose
@@ -313,6 +315,12 @@ def check(contract: Contract, client: Client) -> dict:
         row["detail"] = "offline; a contract check has to reach the service"
         return row
 
+    # Ask the service, not the cache. Client keeps a response for 30 days,
+    # so a probe answered from it reports last month's schema and a change
+    # made last week goes unseen, which defeats the whole point of the
+    # check. Restored afterwards so a caller's client is left as it was.
+    previous = getattr(client, "bypass_cache", False)
+    client.bypass_cache = True
     try:
         res = contract.probe(client)
     except HttpError as exc:
@@ -334,6 +342,8 @@ def check(contract: Contract, client: Client) -> dict:
         row["state"] = UNREACHABLE
         row["detail"] = f"{type(exc).__name__}: {str(exc)[:160]}"
         return row
+    finally:
+        client.bypass_cache = previous
 
     missing = []
     for path in contract.requires:
@@ -353,7 +363,16 @@ def check(contract: Contract, client: Client) -> dict:
 
     value_check = VALUE_CHECKS.get(contract.key)
     if value_check is not None:
-        problem = value_check(res)
+        try:
+            problem = value_check(res)
+        except Exception as exc:                          # noqa: BLE001
+            # The value checks read the response with .get(). A service
+            # that starts returning a list, a string or null raises here,
+            # and that is exactly the event this command exists to
+            # report: it must not end as a traceback.
+            problem = (f"the response is {type(res).__name__}, not the "
+                       f"object the parser reads "
+                       f"({type(exc).__name__}: {str(exc)[:80]})")
         if problem:
             row["state"] = CHANGED
             row["detail"] = problem

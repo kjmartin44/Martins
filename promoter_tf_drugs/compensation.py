@@ -49,7 +49,10 @@ the original, or nothing is gained.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -137,10 +140,9 @@ def find_paralogs(client, gene: str, *, species: str = "human",
     """
     url = (f"https://rest.ensembl.org/homology/symbol/{species}/{gene}"
            f"?type=paralogues;format=condensed;content-type=application/json")
-    try:
-        res = client.get(url)
-    except Exception as exc:                                # noqa: BLE001
-        return []
+    # A failure propagates. It used to return [], which reads as "Ensembl
+    # knows no paralogs"; the caller says which of the two happened.
+    res = client.get(url)
 
     homologies = []
     for block in (res or {}).get("data", []):
@@ -200,7 +202,15 @@ def assess(gene: str, *, goal: str = "up", client=None) -> dict:
             f"down in this file.")
 
     if client is not None:
-        result["paralogs"] = find_paralogs(client, gene)
+        try:
+            result["paralogs"] = find_paralogs(client, gene)
+        except Exception as exc:                            # noqa: BLE001
+            result["paralogs"] = []
+            log.warning("Ensembl paralog lookup for %s failed: %s", gene,
+                        str(exc)[:120])
+            result["notes"].append(
+                f"The Ensembl paralog lookup failed ({str(exc)[:100]}), so "
+                f"the absence of sequence paralogs here is not a finding.")
         if result["paralogs"]:
             result["notes"].append(
                 f"{len(result['paralogs'])} sequence paralog(s) found in "

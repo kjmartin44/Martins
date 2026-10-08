@@ -69,6 +69,9 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
+# The WSL search runs on every engine lookup; it is reported once.
+_WSL_PROBE_REPORTED = False
+
 RCSB_SEARCH = "https://search.rcsb.org/rcsbsearch/v2/query"
 RCSB_FILE = "https://files.rcsb.org/download"
 
@@ -245,7 +248,7 @@ def fetch_pdb(client, pdb_id: str, out_dir: Path) -> Path | None:
     except Exception as exc:                      # noqa: BLE001
         log.debug("could not fetch %s: %s", pdb_id, exc)
         return None
-    out.write_text(text)
+    out.write_text(text, encoding="utf-8")
     return out
 
 
@@ -262,8 +265,13 @@ def _docking_binary() -> str | None:
         name, path = _wsl.find_binary()
         if path:
             return path
-    except Exception:                                       # noqa: BLE001
-        pass
+    except Exception as exc:                                # noqa: BLE001
+        global _WSL_PROBE_REPORTED
+        if not _WSL_PROBE_REPORTED:
+            _WSL_PROBE_REPORTED = True
+            log.warning("the WSL docking-program search failed (%s: %s); "
+                        "only Windows programs on PATH are considered",
+                        type(exc).__name__, str(exc)[:100])
     for name in ("gnina", "smina", "smina.static", "vina"):
         path = shutil.which(name)
         if path:
@@ -399,14 +407,14 @@ def _run_dock(binary: str, args: list, out_sdf: Path, *,
         try:
             proc = subprocess.run([binary] + [str(a) for a in args],
                                   capture_output=True, text=True,
-                                  timeout=timeout)
+                                  timeout=timeout, encoding="utf-8", errors="replace")
         except subprocess.TimeoutExpired:
             log.warning("docking timed out")
             return None, ""
     if proc.returncode != 0:
         log.warning("docking failed: %s", (proc.stderr or "").strip()[:220])
         return None, ""
-    text = out_sdf.read_text(errors="replace") if out_sdf.exists() else ""
+    text = out_sdf.read_text(errors="replace", encoding="utf-8") if out_sdf.exists() else ""
     return proc.stdout or "", text
 
 
@@ -457,6 +465,126 @@ def dock_one_scored(receptor_pdb: Path, ligand_sdf: Path, box: tuple, *,
         # first is its answer. Re-ranking on the CNN is the caller's
         # decision, not something to bury here.
         return poses[0]
+
+
+# Organic counter-ions that RDKit's default salt list does not cover, as
+# neutral SMILES. Taken from the pieces left over when the approved library is
+# split. Anything that can also be the drug itself is left out on purpose:
+# piperazine, lysine, caffeine, choline, hippuric acid and salicylic acid
+# each appear as an active ingredient, and an entry such as piperazine
+# citrate would otherwise lose the wrong half. Those entries stay whole and
+# are reported as ambiguous.
+_ORGANIC_COUNTER_IONS = (
+    "O=C(O)CC(O)(CC(=O)O)C(=O)O",                 # citric acid
+    "O=C(O)CCC(=O)O",                             # succinic acid
+    "O=C(O)CC(O)C(=O)O",                          # malic acid
+    "CC(O)C(=O)O",                                # lactic acid
+    "O=C(O)c1ccccc1",                             # benzoic acid
+    "O=C(O)CCCCC(=O)O",                           # adipic acid
+    "NC(CC(=O)O)C(=O)O",                          # aspartic acid
+    "OCC(O)C(O)C(O)C(O)C(=O)O",                   # gluconic acid
+    "OCC(O)C(O)C(O)C(O)C(O)C(=O)O",               # glucoheptonic acid
+    "O=C(O)C(O)C(O)C(O)C(O)C(=O)O",               # mucic and saccharic acid
+    "O=C1CCC(C(=O)O)N1",                          # pidolic acid
+    "O=S(=O)(O)c1ccccc1",                         # benzenesulfonic acid
+    "O=S(=O)(O)c1ccc2ccccc2c1",                   # naphthalenesulfonic acid
+    "O=S(=O)(O)CCO",                              # isethionic acid
+    "COS(=O)(=O)O",                               # methyl sulfate
+    "O=C(O)c1cc(S(=O)(=O)O)ccc1O",                # sulfosalicylic acid
+    "O=[N+]([O-])c1cc([N+](=O)[O-])c(O)c([N+](=O)[O-])c1",   # picric acid
+    "CNCC(O)C(O)C(O)C(O)CO",                      # meglumine
+    "NC(CO)(CO)CO",                               # tromethamine
+    "NCCO", "OCCNCCO", "OCCN1CCCC1",              # ethanolamines
+    "CCO", "CC(O)CO",                             # ethanol, propylene glycol
+    "O=C(O)c1cc2ccccc2c(Cc2c(O)c(C(=O)O)cc3ccccc23)c1O",      # pamoic acid
+    "CCCCCCCCCCCCCCCCCC(=O)O",                    # stearic acid
+    "CC1(C)C2CCC1(CS(=O)(=O)O)C(=O)C2",           # camphorsulfonic acid
+    "CCS(=O)(=O)O", "O=S(=O)(O)CCS(=O)(=O)O",     # ethane(di)sulfonic acid
+    "CCCCCCCCCCCCOS(=O)(=O)O",                    # lauryl sulfate
+    "CC(C)(C)N",                                  # tert-butylamine (erbumine)
+    "O=C(O)c1ccc(C(=O)O)cc1",                     # terephthalic acid
+    "OCC(O)C(O)C(OC1OC(CO)C(O)C(O)C1O)C(O)C(=O)O",            # lactobionic acid
+)
+_COUNTER_ION_KEYS: set = set()
+
+
+def _neutral_key(mol) -> str:
+    """Charge-neutral, stereo-free SMILES, so an acid and its anion match."""
+    from rdkit import Chem, rdBase
+    from rdkit.Chem.MolStandardize import rdMolStandardize
+    _quiet = rdBase.BlockLogs()     # the Uncharger announces itself each call
+    try:
+        mol = rdMolStandardize.Uncharger().uncharge(mol)
+    except Exception as exc:                                # noqa: BLE001
+        # Matching then uses the charged form, which can only miss a
+        # counter-ion (the entry stays whole), never remove the wrong piece.
+        log.debug("could not neutralise a fragment for matching: %s",
+                  type(exc).__name__)
+    return Chem.MolToSmiles(mol, isomericSmiles=False)
+
+
+def _is_organic_counter_ion(mol) -> bool:
+    from rdkit import Chem
+    if not _COUNTER_ION_KEYS:
+        _COUNTER_ION_KEYS.update(
+            _neutral_key(Chem.MolFromSmiles(x)) for x in _ORGANIC_COUNTER_IONS)
+    return _neutral_key(mol) in _COUNTER_ION_KEYS
+
+
+def split_counter_ions(smiles: str) -> dict:
+    """Separate a drug from the counter-ions it is stored with.
+
+    About a third of the approved library is written as a salt: the drug
+    plus chloride, calcium, sulfate, maleate and so on, sometimes with two
+    copies of the drug. Docked whole, the extra pieces are scored as part
+    of the ligand, which is not what binds a receptor (the salt dissociates
+    in solution). Returns
+
+        smiles      the drug alone: one copy of each remaining component
+        removed     the counter-ions taken out, one entry per distinct kind
+        n_fragments how many pieces the input had
+        ambiguous   True when more than one component is left
+
+    A piece is a counter-ion when it has no carbon (chloride, a metal,
+    sulfate, phosphate), RDKit's default salt list recognises it (acetate,
+    maleate, fumarate, tartrate, mesylate and the like), or it is on the
+    short list above (citrate, succinate, besylate, meglumine and so on).
+    Anything else stays. Two organic components that are both left, such as a drug
+    paired with piperazine or two active ingredients sold together, are
+    reported as ambiguous and kept, because choosing the "real" one would be
+    a guess about pharmacology. Charges are not changed. When every piece is
+    a counter-ion (sodium chloride), the largest is kept so that something
+    is still returned.
+    """
+    from rdkit import Chem, RDLogger
+    from rdkit.Chem import SaltRemover
+
+    RDLogger.DisableLog("rdApp.*")
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        raise ValueError(f"could not parse SMILES: {smiles}")
+    frags = Chem.GetMolFrags(mol, asMols=True)
+    if len(frags) < 2:
+        return {"smiles": smiles, "removed": [], "n_fragments": len(frags),
+                "ambiguous": False}
+
+    distinct: dict = {}
+    for f in frags:
+        distinct.setdefault(Chem.MolToSmiles(f), f)
+    remover = SaltRemover.SaltRemover()
+    keep, removed = [], []
+    for smi, f in distinct.items():
+        has_carbon = any(a.GetAtomicNum() == 6 for a in f.GetAtoms())
+        stripped = remover.StripMol(f, dontRemoveEverything=False)
+        is_counter_ion = ((not has_carbon) or stripped.GetNumAtoms() == 0
+                          or _is_organic_counter_ion(f))
+        (removed if is_counter_ion else keep).append(smi)
+    if not keep:
+        biggest = max(distinct, key=lambda k: distinct[k].GetNumHeavyAtoms())
+        keep = [biggest]
+        removed = [k for k in distinct if k != biggest]
+    return {"smiles": ".".join(keep), "removed": removed,
+            "n_fragments": len(frags), "ambiguous": len(keep) > 1}
 
 
 def smiles_to_sdf(smiles: str, path: Path, n_confs: int = 1, seed: int = 0) -> Path:
@@ -528,7 +656,7 @@ def predict_direction(client, drug, smiles: str, uniprot: str, *,
         path = fetch_pdb(client, pid, work)
         if path is None:
             continue
-        conf = classify_conformation(path.read_text(), pid)
+        conf = classify_conformation(path.read_text(encoding="utf-8", errors="replace"), pid)
         conf.path = str(path)
         if conf.state == "active" and len(active) < max_structures:
             active.append(conf)
@@ -644,7 +772,7 @@ def fetch_alphafold(client, uniprot: str, out_dir) -> "Path | None":
         log.warning("AlphaFold fetch failed for %s: %s", uniprot, exc)
         return None
     Path(out_dir).mkdir(parents=True, exist_ok=True)
-    out.write_text(text)
+    out.write_text(text, encoding="utf-8")
     return out
 
 
@@ -726,6 +854,13 @@ MIN_DOCKING_AUC = 0.70
 # the only part anyone looks at. 1.0 is random.
 MIN_EF1 = 2.0
 MIN_VALIDATION_ACTIVES = 5
+# AUC and enrichment compare the known ligands with the decoys, so the
+# decoys that SCORED matter as much as the actives that did: five actives
+# ranked against one surviving decoy is a coin flip with a number on it.
+# The gate normally docks at least 50 decoys, so twenty scored means
+# docking handled well under half of them failing. A floor on sample size,
+# not a calibrated threshold.
+MIN_VALIDATION_DECOYS = 20
 
 # Above this the gate is sampled rather than run whole. Sixty actives
 # against ten times as many decoys puts the standard error on the AUC at
@@ -738,8 +873,13 @@ MAX_VALIDATION_ACTIVES = 60
 def roc_auc(scores: list, labels: list, *, lower_is_better: bool = True
             ) -> float | None:
     """AUC via Mann-Whitney U, ties at half. None entries are failed docks
-    and are dropped rather than scored worst, which would flatter the
-    method by burying every compound it could not handle."""
+    and are dropped rather than scored worst.
+
+    Dropping them is the usual choice and it is NOT neutral: it measures
+    recall only over the compounds that docked, so a method that fails on
+    most of the known ligands is judged on the few it could handle, and
+    looks better than it is. The caller has to bound how many were
+    dropped; `validate_pocket` does, and reports the counts."""
     pairs = [(s, y) for s, y in zip(scores, labels) if s is not None]
     if not pairs:
         return None
@@ -770,6 +910,29 @@ def enrichment_factor(scores: list, labels: list, *, fraction: float = 0.01,
     return round((hits / float(k)) / (n_act / float(n)), 2)
 
 
+def enrichment_basis(scores: list, labels: list, *, fraction: float = 0.01,
+                     lower_is_better: bool = True) -> dict | None:
+    """What the enrichment factor rests on: how many compounds, how many hits.
+
+    With a few hundred compounds the top 1% is a handful, so the factor
+    moves in coarse steps (one active more or fewer among seven shifts it
+    by about 1.7) while being quoted to two decimals. Two runs of the same
+    pocket gave 11.31 and 9.62, which is one compound. Stating the basis
+    lets a reader see that, instead of reading the difference as real.
+    """
+    pairs = [(s, y) for s, y in zip(scores, labels) if s is not None]
+    if not pairs:
+        return None
+    n = len(pairs)
+    n_act = sum(1 for _, y in pairs if y)
+    if not n_act or n_act == n:
+        return None
+    k = max(1, int(math.ceil(n * fraction)))
+    pairs.sort(key=lambda t: t[0] if lower_is_better else -t[0])
+    return {"top_n": k, "actives_in_top_n": sum(1 for _, y in pairs[:k] if y),
+            "n_scored": n, "n_actives_scored": n_act}
+
+
 # The receptor PDBQT is the same file for every compound in a
 # screen, so it is converted once and reused.
 _REC_CACHE: dict = {}
@@ -779,8 +942,13 @@ def _dock_smiles(smiles_list: list, receptor: Path, autobox: Path | None,
                  *, exhaustiveness: int, seed: int, score_fn=None,
                  box: tuple | None = None, cpu: int = 1,
                  jobs: int = 1, detailed: bool = False,
-                 tally: dict | None = None) -> list:
+                 tally: dict | None = None,
+                 strip_counter_ions: bool = False) -> list:
     """Score each SMILES, None where docking or embedding failed.
+
+    `strip_counter_ions` docks the drug without its salt (see
+    `split_counter_ions`). It is off by default, which docks the structure
+    exactly as stored, so no earlier result changes.
 
     `score_fn` exists so the gate and the ranking can be exercised
     without a docking binary; it takes a SMILES and returns a score.
@@ -811,10 +979,18 @@ def _dock_smiles(smiles_list: list, receptor: Path, autobox: Path | None,
 
     def one(smi):
         """Score a single SMILES. Returns None rather than raising."""
+        if strip_counter_ions:
+            try:
+                smi = split_counter_ions(smi)["smiles"]
+            except ValueError:
+                pass            # unparseable: fails below, and is counted
         if score_fn is not None:
             try:
                 got = score_fn(smi)
-            except Exception:                               # noqa: BLE001
+            except Exception as exc:                        # noqa: BLE001
+                log.debug("scorer raised for %s: %s", smi[:40],
+                          type(exc).__name__)
+                _count("scorer_failed")
                 return None
             # The gate and the ranking are exercised without a binary by
             # passing score_fn, so it has to work in both shapes.
@@ -898,7 +1074,7 @@ def validate_pocket(receptor: Path, actives: list, decoys: list, *,
                     autobox: Path | None = None, exhaustiveness: int = 8,
                     seed: int = 0, score_fn=None,
                     box: tuple | None = None, cpu: int = 1,
-                    jobs: int = 1) -> dict:
+                    jobs: int = 1, strip_counter_ions: bool = False) -> dict:
     """Does docking into THIS pocket recover ligands known to bind it?
 
     `actives` and `decoys` are `[{"smiles": ...}]`. Returns the measured
@@ -922,7 +1098,8 @@ def validate_pocket(receptor: Path, actives: list, decoys: list, *,
     poses = _dock_smiles(smiles, receptor, autobox,
                          jobs=jobs, detailed=True,
                          exhaustiveness=exhaustiveness, seed=seed,
-                         score_fn=score_fn, box=box, cpu=cpu)
+                         score_fn=score_fn, box=box, cpu=cpu,
+                         strip_counter_ions=strip_counter_ions)
     scores = [None if q is None else q.affinity for q in poses]
 
     # What each metric is worth on THIS pocket, measured rather than
@@ -947,15 +1124,58 @@ def validate_pocket(receptor: Path, actives: list, decoys: list, *,
     auc = roc_auc(scores, labels)
     ef1 = enrichment_factor(scores, labels, fraction=0.01)
     n_failed = sum(1 for s in scores if s is None)
+
+    # How many of each class actually scored. `n_failed` mixes actives and
+    # decoys, and the minimum-actives check above ran on what was SUPPLIED,
+    # before docking: a pocket where docking failed for 58 of 60 known
+    # ligands passed with an AUC of 1.0 from the two that scored. What the
+    # gate measures is recall on known ligands, and a ligand that failed to
+    # dock is dropped from that measurement rather than counted as a miss.
+    n_act = len(actives)
+    a_scored = sum(1 for s in scores[:n_act] if s is not None)
+    d_scored = sum(1 for s in scores[n_act:] if s is not None)
+    gate = {"n_actives": n_act, "n_actives_scored": a_scored,
+            "n_actives_failed": n_act - a_scored,
+            "n_decoys": len(decoys), "n_decoys_scored": d_scored,
+            "n_decoys_failed": len(decoys) - d_scored,
+            "ef1_basis": enrichment_basis(scores, labels, fraction=0.01)}
+
     if auc is None:
         return {"usable": False, "auc": None, "ef1": None,
-                "n_failed": n_failed,
+                "n_failed": n_failed, "gate": gate,
                 "reason": "every dock failed, so nothing could be measured"}
+    if a_scored < MIN_VALIDATION_ACTIVES:
+        return {"usable": False, "auc": None, "ef1": None,
+                "n_failed": n_failed, "gate": gate,
+                "reason": (f"docking produced a score for only {a_scored} "
+                           f"of {n_act} known ligand(s), below the "
+                           f"{MIN_VALIDATION_ACTIVES} needed to say whether "
+                           f"docking works in this pocket. The other "
+                           f"{n_act - a_scored} failed (3D embedding or "
+                           f"pose generation), and an AUC taken from "
+                           f"{a_scored} compound(s) would describe those "
+                           f"alone. Not reported.")}
+    if d_scored < MIN_VALIDATION_DECOYS:
+        return {"usable": False, "auc": None, "ef1": None,
+                "n_failed": n_failed, "gate": gate,
+                "reason": (f"docking produced a score for only {d_scored} "
+                           f"of {len(decoys)} decoy(s), below the "
+                           f"{MIN_VALIDATION_DECOYS} needed to rank the "
+                           f"known ligands against. The other "
+                           f"{len(decoys) - d_scored} failed, and an AUC "
+                           f"against {d_scored} decoy(s) would be mostly "
+                           f"noise. Not reported.")}
 
     usable = auc >= MIN_DOCKING_AUC and (ef1 is None or ef1 >= MIN_EF1)
     out = {"usable": usable, "auc": round(auc, 3), "ef1": ef1,
            "n_actives": len(actives), "n_decoys": len(decoys),
-           "n_failed": n_failed}
+           "n_failed": n_failed, "gate": gate}
+    if n_act - a_scored:
+        out["gate_note"] = (
+            f"The AUC and enrichment cover the {a_scored} of {n_act} known "
+            f"ligands that docked. The {n_act - a_scored} that failed are "
+            f"left out, not counted as misses, so the figures describe the "
+            f"compounds docking can handle.")
     if len(by_metric) > 1:
         out["auc_by_metric"] = by_metric
         best = max(by_metric, key=lambda k: by_metric[k]["auc"])
@@ -995,6 +1215,12 @@ class DockingScreen:
     failures: dict | None = None
     # Whether agonist/antagonist was predicted for the hits, and on what.
     direction: dict | None = None
+    # What the validation gate rested on: how many known ligands and decoys
+    # actually scored, and what the top-1% enrichment was counted over.
+    gate: dict | None = None
+    # How ligands were prepared, when that differs from "as stored": set
+    # only when counter-ions were stripped, with how many entries changed.
+    ligand_prep: dict | None = None
     hits: list = field(default_factory=list)
     error: str | None = None
     caveats: list = field(default_factory=list)
@@ -1012,7 +1238,7 @@ def _model_assessment(receptor) -> "PocketAssessment | None":
     every pLDDT sits in 0-100 and the header names the predictor.
     """
     try:
-        text = Path(receptor).read_text(errors="replace")
+        text = Path(receptor).read_text(errors="replace", encoding="utf-8")
     except OSError:
         return None
     head = text[:4000].upper()
@@ -1029,7 +1255,8 @@ def screen_by_docking(receptor: Path, library: list, *, target: str = "?",
                       autobox: Path | None = None, top_n: int = 25,
                       exhaustiveness: int = 8, seed: int = 0,
                       score_fn=None, box: tuple | None = None,
-                      cpu: int = 1, jobs: int = 1) -> DockingScreen:
+                      cpu: int = 1, jobs: int = 1,
+                      strip_counter_ions: bool = False) -> DockingScreen:
     """Dock an approved library into one pocket, if the pocket validates.
 
     `library` is `[{"name", "smiles"}]`. The validation runs first and the
@@ -1071,9 +1298,13 @@ def screen_by_docking(receptor: Path, library: list, *, target: str = "?",
     val = validate_pocket(receptor, actives or [], decoys or [],
                           jobs=jobs,
                           autobox=autobox, exhaustiveness=exhaustiveness,
-                          seed=seed, score_fn=score_fn, box=box, cpu=cpu)
+                          seed=seed, score_fn=score_fn, box=box, cpu=cpu,
+                          strip_counter_ions=strip_counter_ions)
     run.auc, run.ef1, run.usable = val.get("auc"), val.get("ef1"), \
         bool(val.get("usable"))
+    run.gate = val.get("gate")
+    if val.get("gate_note"):
+        run.caveats.append(val["gate_note"])
     if not run.usable:
         run.error = val.get("reason")
         return run
@@ -1082,7 +1313,20 @@ def screen_by_docking(receptor: Path, library: list, *, target: str = "?",
     poses = _dock_smiles([d["smiles"] for d in library], receptor, autobox,
                          jobs=jobs, detailed=True, tally=tally,
                          exhaustiveness=exhaustiveness, seed=seed,
-                         score_fn=score_fn, box=box, cpu=cpu)
+                         score_fn=score_fn, box=box, cpu=cpu,
+                         strip_counter_ions=strip_counter_ions)
+    if strip_counter_ions:
+        changed = ambiguous = 0
+        for d in library:
+            try:
+                got = split_counter_ions(d["smiles"])
+            except ValueError:
+                continue
+            changed += bool(got["removed"])
+            ambiguous += got["ambiguous"]
+        run.ligand_prep = {"strip_counter_ions": True,
+                           "n_library": len(library),
+                           "n_changed": changed, "n_ambiguous": ambiguous}
     scored = []
     for d, q in zip(library, poses):
         if q is None or q.affinity is None:
@@ -1133,6 +1377,9 @@ def screen_by_docking(receptor: Path, library: list, *, target: str = "?",
         if tally.get("docking_failed"):
             parts.append(f"{tally['docking_failed']} raised an error in "
                          f"the docking program")
+        if tally.get("scorer_failed"):
+            parts.append(f"{tally['scorer_failed']} raised an error in the "
+                         f"scoring function")
         if tally.get("no_pose"):
             parts.append(f"{tally['no_pose']} were docked but produced no "
                          f"pose")
@@ -1336,7 +1583,7 @@ def write_ligand_pdb(pdb_text: str, group: dict, path) -> Path:
                 and line[21] == group["chain"]
                 and line[22:27].strip() == group["resi"]):
             keep.append(line)
-    path.write_text("\n".join(keep) + "\nEND\n")
+    path.write_text("\n".join(keep) + "\nEND\n", encoding="utf-8")
     return path
 
 
@@ -1357,7 +1604,7 @@ def prepare_receptor(pdb_text: str, path, *, keep_chain: str | None = None
             keep.append(line)
         elif line.startswith("TER"):
             keep.append(line)
-    path.write_text("\n".join(keep) + "\nEND\n")
+    path.write_text("\n".join(keep) + "\nEND\n", encoding="utf-8")
     return path
 
 
@@ -1517,7 +1764,9 @@ def _meeko_ligand_pdbqt(smiles: str, seed: int = 0) -> str | None:
     # Older meeko exposed the writer on the preparation object.
     try:
         return setups[0].write_pdbqt_string()
-    except Exception:                                       # noqa: BLE001
+    except Exception as exc:                                # noqa: BLE001
+        log.debug("meeko could not write the ligand: %s",
+                  type(exc).__name__)
         return None
 
 
@@ -1533,13 +1782,18 @@ def _receptor_pdbqt(receptor_pdb: Path, out: Path) -> Path | None:
                     [_sys.executable, "-m", mod, "--read_pdb",
                      str(receptor_pdb), "-o", str(out.with_suffix("")),
                      "--skip_gpf"],
-                    capture_output=True, text=True, timeout=300)
+                    capture_output=True, text=True, encoding="utf-8",
+                    errors="replace", timeout=300)
             except FileNotFoundError:
                 continue
             if proc.returncode == 0 and out.exists():
                 return out
-    except Exception:                                       # noqa: BLE001
-        pass
+    except Exception as exc:                                # noqa: BLE001
+        # The next converter (Open Babel) is tried; if all fail the caller
+        # reports that no receptor file could be made.
+        log.info("receptor conversion with the Python tools failed "
+                 "(%s: %s); trying Open Babel", type(exc).__name__,
+                 str(exc)[:100])
 
     # Open Babel: -xr writes a rigid receptor.
     obabel = shutil.which("obabel")
@@ -1564,7 +1818,7 @@ def _receptor_pdbqt(receptor_pdb: Path, out: Path) -> Path | None:
             proc = subprocess.run(
                 [obabel, "-ipdb", str(receptor_pdb), "-opdbqt",
                  "-O", str(out), "-xr"],
-                capture_output=True, text=True, timeout=300)
+                capture_output=True, text=True, timeout=300, encoding="utf-8", errors="replace")
             if proc.returncode == 0 and out.exists():
                 return out
         except Exception as exc:                            # noqa: BLE001
@@ -1654,7 +1908,7 @@ def dock_one_vina(receptor_pdb: Path, smiles: str, box: tuple, *,
         if stdout is None:
             return None
 
-        text = op.read_text() if op.exists() else ""
+        text = op.read_text(encoding="utf-8", errors="replace") if op.exists() else ""
         scores = [float(m.group(1)) for m in
                   re.finditer(r"REMARK VINA RESULT:\s+(-?\d+\.\d+)", text)]
         if not scores:
@@ -1788,7 +2042,7 @@ def choose_pocket(client, uniprot: str, out_dir, *, limit: int = 12,
         path = fetch_pdb(client, pdb_id, out_dir)
         if path is None:
             continue
-        text = path.read_text(errors="replace")
+        text = path.read_text(errors="replace", encoding="utf-8")
         lig = best_ligand(text)
         if lig is None:
             continue
@@ -1805,7 +2059,7 @@ def choose_pocket(client, uniprot: str, out_dir, *, limit: int = 12,
             text, out_dir / f"{pdb_id}_receptor.pdb",
             keep_chain=lig["chain"])
         try:
-            box = box_from_ligand(lig_path.read_text())
+            box = box_from_ligand(lig_path.read_text(encoding="utf-8", errors="replace"))
         except ValueError:
             continue
         choice = PocketChoice(
@@ -1947,7 +2201,8 @@ def dock_screen_for_target(client, symbol: str, uniprot: str, library: list,
                            want_state: str | None = None,
                            state_note: str | None = None,
                            score_fn=None, cpu: int = 1,
-                           jobs: int = 1) -> dict:
+                           jobs: int = 1,
+                           strip_counter_ions: bool = False) -> dict:
     """Gene symbol to a validated, ranked shortlist of approved drugs.
 
     Returns the DockingScreen as a dict, plus which structure was used.
@@ -2043,7 +2298,7 @@ def dock_screen_for_target(client, symbol: str, uniprot: str, library: list,
         decoys=decoys, top_n=top_n, exhaustiveness=exhaustiveness,
         cpu=cpu, jobs=jobs,
         seed=seed, score_fn=score_fn,
-        box=pocket.box)
+        box=pocket.box, strip_counter_ions=strip_counter_ions)
     # Which way each hit would push the receptor. An annotation, never a
     # filter: the screen ranks on fit, and direction is a prediction
     # about the protein rather than about the pocket.
@@ -2096,7 +2351,10 @@ def dock_screen_for_target(client, symbol: str, uniprot: str, library: list,
     try:
         from . import provenance as _prov
         out["produced"] = _prov.run_provenance()
-    except Exception:                                       # noqa: BLE001
+    except Exception as exc:                                # noqa: BLE001
+        log.warning("the provenance stamp could not be written to the "
+                    "bundle (%s: %s); the bundle has no 'produced' record",
+                    type(exc).__name__, str(exc)[:100])
         # Provenance is a record, not a result. A run that produced a
         # validated screen must not be thrown away because the stamp
         # could not be written.
@@ -2142,7 +2400,7 @@ def write_bundle(client, symbol: str, uniprot: str, out_dir, *,
 
     # --- the structure
     if pdb_file:
-        text = Path(pdb_file).read_text(errors="replace")
+        text = Path(pdb_file).read_text(errors="replace", encoding="utf-8")
         lig = best_ligand(text)
         if lig is None:
             return {"error": (f"{pdb_file} has no co-crystallised ligand big "
@@ -2154,7 +2412,7 @@ def write_bundle(client, symbol: str, uniprot: str, out_dir, *,
         pocket = PocketChoice(
             pdb_id=Path(pdb_file).stem, path=str(rec_path),
             ligand_path=str(lig_path), ligand_resname=lig["resname"],
-            box=box_from_ligand(lig_path.read_text()),
+            box=box_from_ligand(lig_path.read_text(encoding="utf-8", errors="replace")),
             state=classify_conformation(text, Path(pdb_file).stem).state,
             note=f"supplied structure {pdb_file}")
     else:
@@ -2169,7 +2427,7 @@ def write_bundle(client, symbol: str, uniprot: str, out_dir, *,
                           (pocket.ligand_path, "ligand.pdb")):
             dst = out_dir / name
             if Path(src) != dst:
-                dst.write_text(Path(src).read_text(errors="replace"))
+                dst.write_text(Path(src).read_text(errors="replace", encoding="utf-8"), encoding="utf-8")
         pocket.path = str(out_dir / "receptor.pdb")
         pocket.ligand_path = str(out_dir / "ligand.pdb")
 
@@ -2257,7 +2515,8 @@ def load_bundle(bundle_dir) -> dict:
 
 def dock_from_bundle(bundle_dir, *, top_n: int = 25,
                      exhaustiveness: int = 8, seed: int = 0,
-                     score_fn=None, cpu: int = 1) -> dict:
+                     score_fn=None, cpu: int = 1,
+                     strip_counter_ions: bool = False) -> dict:
     """Run the validated screen from a bundle, with no network at all."""
     import random
 
@@ -2274,7 +2533,7 @@ def dock_from_bundle(bundle_dir, *, top_n: int = 25,
         Path(m["_receptor"]), library, target=m.get("symbol", "?"),
         actives=actives, decoys=decoys, top_n=top_n,
         exhaustiveness=exhaustiveness, seed=seed, score_fn=score_fn,
-        box=m["_box"], cpu=cpu)
+        box=m["_box"], cpu=cpu, strip_counter_ions=strip_counter_ions)
     out = run.to_dict()
     out["pocket"] = {k: m.get(k) for k in
                      ("pdb_id", "ligand_resname", "state", "note")}
@@ -2397,6 +2656,25 @@ def _report(res: dict, top: int = 25) -> None:
 
     print(f"Validation: AUC {res.get('auc')}, "
           f"top-1% enrichment {res.get('ef1')}")
+    gate = res.get("gate") or {}
+    if gate:
+        # What the two numbers rest on. The enrichment is counted over a
+        # handful of compounds, so one more or fewer shifts it visibly.
+        basis = gate.get("ef1_basis") or {}
+        print(f"            {gate.get('n_actives_scored')} of "
+              f"{gate.get('n_actives')} known ligand(s) and "
+              f"{gate.get('n_decoys_scored')} of {gate.get('n_decoys')} "
+              f"decoy(s) scored"
+              + (f"; enrichment counts {basis.get('actives_in_top_n')} "
+                 f"known ligand(s) among the top {basis.get('top_n')}"
+                 if basis else ""))
+    prep = res.get("ligand_prep") or {}
+    if prep.get("strip_counter_ions"):
+        print(f"Ligands   : counter-ions removed from {prep.get('n_changed')} "
+              f"of {prep.get('n_library')} library entries"
+              + (f"; {prep.get('n_ambiguous')} with a second organic "
+                 f"component were kept whole"
+                 if prep.get("n_ambiguous") else ""))
     n_av = res.get("n_actives_available")
     n_used = res.get("n_actives_used_for_gate")
     if n_av and n_used and n_av > n_used:
@@ -2565,6 +2843,15 @@ def main(argv=None) -> int:
                    help="cores per docking job. A screen is thousands of "
                         "independent jobs, so raising this is the single "
                         "biggest speed-up available (default 1)")
+    p.add_argument("--strip-counter-ions", action="store_true",
+                   help="dock each drug without its salt (chloride, "
+                        "calcium, maleate and so on) and with one copy "
+                        "rather than two. About a third of the library is "
+                        "stored as a salt. Off by default, which docks the "
+                        "structure as stored; the result records how many "
+                        "entries changed, and a drug sold with a second "
+                        "organic component is kept whole and counted as "
+                        "ambiguous")
     p.add_argument("--exhaustiveness", type=int, default=8,
                    help="docking search effort; 8 is the usual default, 16 "
                         "is slower and steadier (default 8)")
@@ -2598,7 +2885,8 @@ def main(argv=None) -> int:
             return 1
         res = dock_from_bundle(args.bundle, top_n=args.top,
                                exhaustiveness=args.exhaustiveness,
-                               cpu=args.cpu)
+                               cpu=args.cpu,
+                               strip_counter_ions=args.strip_counter_ions)
         _report(res, args.top)
         if args.out:
             Path(args.out).write_text(_json.dumps(res, indent=2),
@@ -2782,7 +3070,8 @@ def main(argv=None) -> int:
         work_dir=args.work_dir, top_n=args.top,
         exhaustiveness=args.exhaustiveness, want_state=want_state,
         state_note=state_note,
-        cpu=args.cpu, jobs=args.jobs)
+        cpu=args.cpu, jobs=args.jobs,
+        strip_counter_ions=args.strip_counter_ions)
 
     _report(res, args.top)
 

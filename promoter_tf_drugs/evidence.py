@@ -31,8 +31,11 @@ type is not available for binding no matter how good the motif is.
 from __future__ import annotations
 
 import gzip
+import hashlib
 import io
+import json
 import logging
+import os
 import re
 from collections import defaultdict
 from pathlib import Path
@@ -65,14 +68,57 @@ def _tf_from_name(name: str) -> list[str]:
     return out[:1] or ([parts[0].strip().upper()] if parts else [])
 
 
+def _memo_path(bed_path: Path, chrom: str, start: int, end: int,
+               name_to_tf: bool, memo_dir: Path) -> Path | None:
+    """Where the answer for this exact file and region is kept, or None.
+
+    Keyed on the file's identity (absolute path, size, modification time)
+    and the region, so replacing or editing the BED invalidates it without
+    anyone remembering to. Reading a 1.5 GB gzip for a 1.2 kb window takes
+    about 72 seconds, and the launcher asks for the same window in three
+    stages.
+    """
+    try:
+        st = bed_path.stat()
+    except OSError:
+        return None
+    ident = "|".join([str(bed_path.resolve()), str(st.st_size),
+                      str(st.st_mtime_ns), chrom, str(start), str(end),
+                      str(bool(name_to_tf))])
+    key = hashlib.sha256(ident.encode("utf-8")).hexdigest()[:32]
+    return Path(memo_dir) / "chip_regions" / f"{key}.json"
+
+
 def peaks_in_region(bed_path: str | Path, chrom: str, start: int, end: int,
-                    name_to_tf=True) -> dict[str, int]:
+                    name_to_tf=True, memo_dir: str | Path | None = None
+                    ) -> dict[str, int]:
     """Stream a BED and count overlapping intervals, keyed by TF symbol.
 
     Streaming keeps memory flat on a 30 GB ReMap file at the cost of one full
     pass per region. For many genes, pre-filter once with tabix or bedtools.
+
+    `memo_dir`, when given, remembers the answer for this exact file and
+    region so a second request for the same window does not re-read the
+    file. It is off by default: a caller that does not name a directory
+    gets no files written.
+
+    The count is per TRANSCRIPTION FACTOR over the WHOLE window. It does
+    not say where in the window a peak lies, so it cannot tell a motif hit
+    on top of a peak from one 900 bp away; every hit of a factor with any
+    peak in the window carries the same support. That is a coarser claim
+    than "ChIP overlap" suggests, and the documentation says so.
     """
     chrom = _norm_chrom(chrom)
+    memo = None
+    if memo_dir is not None:
+        memo = _memo_path(Path(bed_path), chrom, start, end, name_to_tf,
+                          Path(memo_dir))
+        if memo is not None and memo.is_file():
+            try:
+                return {k: int(v) for k, v in
+                        json.loads(memo.read_text(encoding="utf-8")).items()}
+            except (OSError, ValueError):
+                pass                      # unreadable memo: just recompute
     counts: dict[str, int] = defaultdict(int)
     with _open(bed_path) as fh:
         for line in fh:
@@ -87,14 +133,28 @@ def peaks_in_region(bed_path: str | Path, chrom: str, start: int, end: int,
                 s, e = int(f[1]), int(f[2])
             except ValueError:
                 continue
-            if e < start or s > end:          # BED is 0-based half-open; region 1-based
+            # BED is 0-based half-open [s, e); the region is 1-based
+            # inclusive [start, end], i.e. 0-based half-open
+            # [start - 1, end). They overlap iff s < end and e > start - 1.
+            # The upper bound used to be `s > end`, which kept a peak whose
+            # first base is the one just past the window.
+            if e < start or s >= end:
                 continue
             if not name_to_tf or len(f) < 4:
                 counts["_ANY_"] += 1
                 continue
             for tf in _tf_from_name(f[3]):
                 counts[tf] += 1
-    return dict(counts)
+    result = dict(counts)
+    if memo is not None:
+        try:
+            memo.parent.mkdir(parents=True, exist_ok=True)
+            tmp = memo.with_suffix(f".{os.getpid()}.tmp")
+            tmp.write_text(json.dumps(result), encoding="utf-8")
+            tmp.replace(memo)
+        except OSError as exc:
+            log.debug("could not memoise %s: %s", memo, exc)
+    return result
 
 
 def region_is_open(bed_path: str | Path, chrom: str, start: int, end: int) -> bool:
@@ -311,8 +371,12 @@ def chip_evidence_status(promoter, *, chip_bed=None, client=None,
     Returns (counts, status) where status has: requested, ok, detail, yielded.
     """
     if chip_bed:
+        # The client's cache directory doubles as the memo location, so
+        # the 72 s pass over a ReMap file for this window is paid once and
+        # not again in every stage of a workup that asks for it.
         counts = peaks_in_region(chip_bed, promoter.chrom, promoter.start,
-                                 promoter.end)
+                                 promoter.end,
+                                 memo_dir=getattr(client, "cache_dir", None))
         # A local BED is parsed directly, so an empty result here is a real
         # statement about this region rather than a transport failure.
         return counts, {

@@ -227,7 +227,10 @@ def chembl_stabilisers(client: Client, symbol: str, uniprot: str | None = None,
     keys = ("STABILISER", "STABILIZER", "CHAPERONE")
     try:
         found = chembl_drugs(client, symbol, uniprot, approved_only)
-    except HttpError:
+    except HttpError as exc:
+        log.warning("ChEMBL lookup for stabilisers of %s failed (%s); none "
+                    "are listed, which is not a finding that none exist",
+                    symbol, str(exc)[:80])
         return []
     out = []
     for d in found:

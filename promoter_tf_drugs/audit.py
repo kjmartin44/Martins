@@ -169,8 +169,10 @@ def all_curated_names() -> dict:
     try:
         out["ligands.ROUTES"] = sorted(
             {r.drug for lst in ligands.ROUTES.values() for r in lst})
-    except Exception:                                       # noqa: BLE001
-        pass
+    except Exception as exc:                                # noqa: BLE001
+        log.warning("audit could not read ligands.ROUTES (%s: %s); its "
+                    "names are not checked", type(exc).__name__,
+                    str(exc)[:100])
     try:
         rows = direct.CURATED
         vals = rows.values() if isinstance(rows, dict) else rows
@@ -183,8 +185,10 @@ def all_curated_names() -> dict:
                     names.add(d)
         if names:
             out["direct.CURATED"] = sorted(names)
-    except Exception:                                       # noqa: BLE001
-        pass
+    except Exception as exc:                                # noqa: BLE001
+        log.warning("audit could not read direct.CURATED (%s: %s); its "
+                    "names are not checked", type(exc).__name__,
+                    str(exc)[:100])
     return {k: v for k, v in out.items() if v}
 
 

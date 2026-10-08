@@ -169,17 +169,22 @@ def _count_fasta(path):
     return n
 
 
-def _count_zip_members(path):
-    """Members of a zip. For the Orange Book, which ships as one."""
+def _count_orangebook(path):
+    """Lines of `products.txt`, which is the file the loader reads.
+
+    The download is a zip of three tables, so counting its members would
+    report "3" for a healthy file and for one that lacks the products table.
+    """
+    if not str(path).lower().endswith(".zip"):
+        return _count_lines(path)
     import zipfile
     with zipfile.ZipFile(path) as z:
-        return len(z.namelist())
-
-
-def _count_orangebook(path):
-    if str(path).lower().endswith(".zip"):
-        return _count_zip_members(path)
-    return _count_lines(path)
+        name = next((n for n in z.namelist()
+                     if n.lower().endswith("products.txt")), None)
+        if name is None:
+            raise ValueError("the zip has no products.txt")
+        with z.open(name) as fh:
+            return sum(1 for _ in fh)
 
 
 def _count_pfm(path):

@@ -168,6 +168,8 @@ def load_gene_effect(path, genes) -> dict:
         try:
             header = next(reader)
         except StopIteration:
+            from .sensitivity import warn_empty_table
+            warn_empty_table(path)
             return {}
 
         idx: dict = {}

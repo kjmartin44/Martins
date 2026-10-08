@@ -497,7 +497,11 @@ def parent_key(smiles: str) -> str | None:
         mol = rdMolStandardize.TautomerEnumerator().Canonicalize(mol)
         key = Chem.MolToInchiKey(mol)
         return key[:14] if key else None
-    except Exception:                                       # noqa: BLE001
+    except Exception as exc:                                # noqa: BLE001
+        # One structure RDKit cannot standardise gets no key, so it is
+        # matched by name only. Per molecule, so debug rather than warning.
+        log.debug("no structure key for %s: %s", smiles[:40],
+                  type(exc).__name__)
         return None
 
 

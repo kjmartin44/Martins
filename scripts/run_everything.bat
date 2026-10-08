@@ -79,6 +79,32 @@ if not exist data\gnomad.v4.1.constraint_metrics.tsv (
     )
 )
 
+REM --- route of administration: the FDA Orange Book. About 1 MB, read
+REM --- from the zip directly. Without it, route is known for roughly
+REM --- seventy hand-entered drugs and unknown for the rest, which the
+REM --- report says rather than treating unknown as systemic.
+set "HAVEOB="
+if exist data\EOBZIP.zip set "HAVEOB=1"
+if exist data\products.txt set "HAVEOB=1"
+if not defined HAVEOB (
+    echo.
+    echo The FDA Orange Book gives each approved drug's route of
+    echo administration ^(oral, injection, topical ...^). It is about 1 MB.
+    echo Without it the report cannot tell a topical-only drug from a
+    echo systemic one, and shows the route as unknown.
+    set "GETOB="
+    set /p GETOB="Download it? Y/n: "
+    if /i not "!GETOB!"=="n" (
+        echo === Downloading the FDA Orange Book ^(~1 MB^) ===
+        curl.exe -fL -A "Mozilla/5.0 promoter-tf-drugs" -o data\EOBZIP.zip "https://www.fda.gov/media/76860/download?attachment"
+        "%PY%" -c "import sys,zipfile; sys.exit(0 if any(n.lower().endswith('products.txt') for n in zipfile.ZipFile(sys.argv[1]).namelist()) else 1)" data\EOBZIP.zip >nul 2>&1
+        if errorlevel 1 (
+            echo   That is not the Orange Book - deleting it.
+            del data\EOBZIP.zip >nul 2>&1
+        )
+    )
+)
+
 set "REGULON="
 if exist data\trrust.tsv set "REGULON=--regulon-file data\trrust.tsv"
 REM A ChIP-derived table covers far more factors. It is occupancy rather
@@ -187,6 +213,23 @@ if "!SCEN!"=="null" (
     if /i not "!GOON!"=="y" exit /b 0
 )
 
+REM A scenario fixes which way transcription has to move, so a direction
+REM that disagrees is refused here rather than after the run: the CLI
+REM refuses the same pair, but only once it is started.
+set "NEEDDIR="
+if "!SCEN!"=="haploinsufficiency" set "NEEDDIR=up"
+if "!SCEN!"=="hypomorph" set "NEEDDIR=up"
+if "!SCEN!"=="silenced_allele" set "NEEDDIR=up"
+if "!SCEN!"=="toxic_gain" set "NEEDDIR=down"
+if defined NEEDDIR if /i not "!DIR!"=="!NEEDDIR!" (
+    echo.
+    echo The scenario "!SCEN!" needs direction "!NEEDDIR!", but "!DIR!" was chosen.
+    echo The requirement and the ranking would point opposite ways. Start again
+    echo with the direction that matches, or choose another scenario.
+    pause
+    exit /b 1
+)
+
 REM What the broken copy makes. This matters because transcription is
 REM not allele-specific: raising the gene raises BOTH copies, so a
 REM truncated product gets amplified alongside the working one, and the
@@ -216,9 +259,9 @@ if "!SCEN!"=="toxic_gain" (
     set "TF="
     set /p TF="Share of the current level you want left, e.g. 0.5 [0.5]: "
     if not "!TF!"=="" (
-        echo "!TF!"| findstr /r /c:"^\"0\.[0-9][0-9]*\"$" >nul
+        echo "!TF!"| findstr /r /c:"^\"0\.[0-9]*[1-9][0-9]*\"$" >nul
         if errorlevel 1 (
-            echo "!TF!" is not a fraction between 0 and 1, such as 0.5.
+            echo "!TF!" is not a fraction above 0 and below 1, such as 0.5.
             pause
             exit /b 1
         )

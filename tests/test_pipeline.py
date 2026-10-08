@@ -10740,9 +10740,9 @@ def test_the_q_helper_treats_zero_as_the_most_significant_value():
 def test_bh_never_emits_a_zero_that_a_falsy_test_would_drop():
     """The invariant the helper above is paired with, pinned explicitly
     because other modules rely on it without saying so."""
-    from promoter_tf_drugs import tfactivity as tfa
+    from promoter_tf_drugs import stats, tfactivity as tfa
     qs = tfa._bh([0.0, 1e-300, 1e-12, 0.5, None])
-    assert all(q is None or q >= tfa.Q_FLOOR for q in qs)
+    assert all(q is None or q >= stats.Q_FLOOR for q in qs)
     assert qs[4] is None, "a missing p-value must stay missing"
 
 
@@ -10887,7 +10887,7 @@ def test_the_head_token_fallback_does_not_fire_on_a_code_stem():
     """Without this guard "raf 265" would look up "raf", and any future
     member starting with a shared stem would collect unrelated rows."""
     from promoter_tf_drugs import systemic as sy
-    assert sy.classify("imatinib 400") is None or True
+    assert sy.classify("imatinib 400") is None
     # A two-token name containing a digit must not fall back to its head.
     assert sy.classify("nosuchdrug 123") is None
 
@@ -13603,7 +13603,8 @@ def test_both_commands_can_turn_progress_off():
         assert args.quiet is True
 
 
-def test_a_missing_optional_file_is_reported_once_not_per_lookup(caplog):
+def test_a_missing_optional_file_is_reported_once_not_per_lookup(
+        caplog, monkeypatch):
     """The Orange Book notice printed once per drug. `load` returns early
     only when it SUCCEEDED - the guard is `if _PRODUCTS:` and a file that
     is not there leaves that empty - so every lookup re-resolved the path
@@ -13612,6 +13613,7 @@ def test_a_missing_optional_file_is_reported_once_not_per_lookup(caplog):
     that is simply absent."""
     import logging
     from promoter_tf_drugs import orangebook as ob
+    monkeypatch.setattr(ob, "DEFAULT_PATHS", ())   # nothing on disk, whatever data/ holds
     ob.reset()
     with caplog.at_level(logging.INFO,
                          logger="promoter_tf_drugs.orangebook"):
@@ -13623,12 +13625,13 @@ def test_a_missing_optional_file_is_reported_once_not_per_lookup(caplog):
     ob.reset()
 
 
-def test_a_file_appearing_after_a_miss_is_still_found(tmp_path):
+def test_a_file_appearing_after_a_miss_is_still_found(tmp_path, monkeypatch):
     """The once-only notice must suppress the LOGGING, not the lookup.
     A guard that skipped the lookup made a file dropped into place after
     an earlier miss invisible for the rest of the process - which broke
     ten tests that write a file and then read it."""
     from promoter_tf_drugs import orangebook as ob
+    monkeypatch.setattr(ob, "DEFAULT_PATHS", ())   # nothing on disk, whatever data/ holds
     ob.reset()
     assert ob.load() == 0                      # absent, reported once
 
@@ -13644,12 +13647,13 @@ def test_a_file_appearing_after_a_miss_is_still_found(tmp_path):
     ob.reset()
 
 
-def test_the_missing_file_notice_is_a_whole_sentence(caplog):
+def test_the_missing_file_notice_is_a_whole_sentence(caplog, monkeypatch):
     """It logged SOURCE.splitlines()[0], which ends mid-clause on
     "Approved Drug Products with Therapeutic Equivalence" and stops.
     Logging once means it can afford to finish."""
     import logging
     from promoter_tf_drugs import orangebook as ob
+    monkeypatch.setattr(ob, "DEFAULT_PATHS", ())   # nothing on disk, whatever data/ holds
     ob.reset()
     with caplog.at_level(logging.INFO,
                          logger="promoter_tf_drugs.orangebook"):
@@ -14461,6 +14465,1231 @@ def test_a_redirect_hop_costs_budget_but_a_retry_does_not(tmp_path):
     _with_fake_urlopen(fake, lambda: c.post("https://example.org/v1", {"q": 1}))
     assert len(calls) == 2, "one hop, then the target"
     assert c.spend()["requests"] == 2, "each hop is a round trip"
+
+
+def _json_server(responses):
+    """A urlopen that answers from a list of (status, body_bytes), then
+    repeats the last one, and records every URL it was asked for."""
+    import urllib.error
+    calls = []
+
+    def fake(req, timeout=None):
+        calls.append(req.full_url)
+        status, body, headers = responses[min(len(calls), len(responses)) - 1]
+        if status != 200:
+            raise urllib.error.HTTPError(req.full_url, status, "x",
+                                         headers or {}, None)
+
+        class R:
+            headers = {}
+            def read(self, *a): return body
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+        return R()
+    return fake, calls
+
+
+def test_a_graphql_error_body_is_not_cached(tmp_path):
+    """HTTP 200 carrying {"errors": [...]} is the server saying it failed.
+
+    The status line looked like success, so the response was cached for
+    the whole TTL and every later run read the frozen failure as "no
+    data". The caller still receives it, since several inspect `errors`
+    themselves; it just must not be remembered.
+    """
+    from promoter_tf_drugs.http import Client
+    bad = b'{"errors": [{"message": "upstream timeout"}], "data": null}'
+    good = b'{"data": {"ok": true}}'
+    fake, calls = _json_server([(200, bad, None), (200, good, None)])
+    c = Client(cache_dir=tmp_path / "c", min_interval=0)
+
+    first = _with_fake_urlopen(fake, lambda: c.post("https://x.org/g", {"q": 1}))
+    assert first.get("errors"), "the caller must still see the error body"
+
+    second = _with_fake_urlopen(fake, lambda: c.post("https://x.org/g", {"q": 1}))
+    assert second == {"data": {"ok": True}}, "the failure must not be cached"
+    assert len(calls) == 2
+
+    third = _with_fake_urlopen(fake, lambda: c.post("https://x.org/g", {"q": 1}))
+    assert third == second and len(calls) == 2, "a good answer IS cached"
+
+
+def test_a_transient_server_error_does_not_freeze_into_no_genetic_evidence(
+        tmp_path):
+    """The reported scenario, end to end through the real function.
+
+    Run one: Open Targets answers 200 with an errors body. Run two: it
+    has recovered. Before the fix the second run made zero requests and
+    returned the same "could not resolve CCR5" for the next 30 days.
+    """
+    import json
+    import urllib.request
+    from promoter_tf_drugs import genetics
+    from promoter_tf_drugs.http import Client
+
+    state = {"mode": "error", "calls": 0}
+    search = {"data": {"search": {"hits": [{"id": "ENSG00000160791"}]}}}
+    assoc = {"data": {"target": {"associatedDiseases": {"rows": [
+        {"score": 0.6, "disease": {"id": "EFO_1", "name": "HIV"},
+         "datatypeScores": [{"id": "genetic_association", "score": 0.6}]}]}}}}
+
+    def fake(req, timeout=None):
+        state["calls"] += 1
+        q = json.loads(req.data.decode()).get("query", "")
+        payload = ({"errors": [{"message": "upstream timeout"}], "data": None}
+                   if state["mode"] == "error"
+                   else search if "search(" in q else assoc)
+
+        class R:
+            headers = {}
+            def read(self, *a): return json.dumps(payload).encode()
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+        return R()
+
+    c = Client(cache_dir=tmp_path / "c", min_interval=0)
+    orig = urllib.request.urlopen
+    urllib.request.urlopen = fake
+    try:
+        ev1 = genetics.target_consequences(c, "CCR5")
+        assert ev1.phenotypes == []
+        state["mode"] = "healthy"
+        before = state["calls"]
+        ev2 = genetics.target_consequences(c, "CCR5")
+    finally:
+        urllib.request.urlopen = orig
+    assert state["calls"] > before, "the recovered server was never asked"
+    assert len(ev2.phenotypes) == 1, ev2.notes
+
+
+def test_ttl_zero_means_nothing_is_served_from_the_cache(tmp_path):
+    """`if self.ttl` read 0 as "no limit", so asking for fresh data by
+    setting the TTL to zero returned the oldest data instead."""
+    from promoter_tf_drugs.http import Client
+    fake, calls = _json_server([(200, b'{"v": 1}', None)])
+    for ttl, expect_calls in ((None, 1), (30, 1), (0, 2)):
+        calls.clear()
+        c = Client(cache_dir=tmp_path / f"c{ttl}", ttl_days=ttl,
+                   min_interval=0)
+        _with_fake_urlopen(fake, lambda: c.get("https://x.org/a"))
+        _with_fake_urlopen(fake, lambda: c.get("https://x.org/a"))
+        assert len(calls) == expect_calls, (ttl, calls)
+
+
+def test_an_expired_entry_is_refetched_and_none_never_expires(tmp_path):
+    import os
+    import time
+    from promoter_tf_drugs.http import Client
+    fake, calls = _json_server([(200, b'{"v": 1}', None)])
+    for ttl, expect in ((30, 2), (None, 1)):
+        calls.clear()
+        c = Client(cache_dir=tmp_path / f"e{ttl}", ttl_days=ttl,
+                   min_interval=0)
+        _with_fake_urlopen(fake, lambda: c.get("https://x.org/a"))
+        old = time.time() - 40 * 86400
+        for f in (tmp_path / f"e{ttl}").rglob("*.json.gz"):
+            os.utime(f, (old, old))
+        _with_fake_urlopen(fake, lambda: c.get("https://x.org/a"))
+        assert len(calls) == expect, (ttl, calls)
+
+
+def test_bypass_cache_reads_the_service_not_the_copy(tmp_path):
+    """A contract check answered from a 30-day-old copy cannot see a
+    change made last week. Bypass skips the READ; offline still serves
+    the cache, because with no network it is all there is."""
+    from promoter_tf_drugs.http import Client
+    fake, calls = _json_server([(200, b'{"v": 1}', None)])
+    c = Client(cache_dir=tmp_path / "c", min_interval=0)
+    _with_fake_urlopen(fake, lambda: c.get("https://x.org/a"))
+    _with_fake_urlopen(fake, lambda: c.get("https://x.org/a"))
+    assert len(calls) == 1
+
+    c.bypass_cache = True
+    _with_fake_urlopen(fake, lambda: c.get("https://x.org/a"))
+    assert len(calls) == 2, "bypass must go to the service"
+
+    c.offline = True
+    assert c.get("https://x.org/a") == {"v": 1}, "offline still serves it"
+    assert len(calls) == 2
+
+
+def test_a_body_that_is_not_json_is_neither_retried_nor_poisons_the_host(
+        tmp_path):
+    """A 200 whose body is an HTML page arrived intact; sending the same
+    request six times returns the same page. It used to cost ~31 s of
+    backoff and then mark the WHOLE host down for the run, so one bad
+    endpoint took out every working one beside it."""
+    import pytest
+    from promoter_tf_drugs.http import Client, HttpError
+    fake, calls = _json_server([
+        (200, b"<html>Maintenance window</html>", None),
+        (200, b'{"fine": true}', None)])
+    c = Client(cache_dir=tmp_path / "c", min_interval=0)
+
+    with pytest.raises(HttpError) as exc:
+        _with_fake_urlopen(fake, lambda: c.get("https://x.org/bad"))
+    assert "not JSON" in str(exc.value)
+    assert len(calls) == 1, "a body that parses the same way is not retried"
+    assert "x.org" not in c._down, "one bad URL must not poison the host"
+
+    assert _with_fake_urlopen(
+        fake, lambda: c.get("https://x.org/good")) == {"fine": True}
+
+
+def test_a_get_answered_with_308_is_followed_on_every_python(tmp_path):
+    """urllib follows 308 on a GET only from 3.11, so on the 3.10 floor the
+    same response was an error and on 3.12 it was not."""
+    fake, calls = _json_server([
+        (308, b"", {"Location": "https://x.org/moved"}),
+        (200, b'{"v": 2}', None)])
+    from promoter_tf_drugs.http import Client
+    c = Client(cache_dir=tmp_path / "c", min_interval=0)
+    assert _with_fake_urlopen(fake, lambda: c.get("https://x.org/old")) == {"v": 2}
+    assert calls == ["https://x.org/old", "https://x.org/moved"]
+
+
+def test_fetch_bytes_obeys_the_budget_the_breaker_and_offline(tmp_path,
+                                                              monkeypatch):
+    """The eQTLGen download used urllib directly, so it was outside the
+    request budget, the retry logic and the host breaker - a run capped at
+    N requests could still send one more, uncounted."""
+    import urllib.error
+    import pytest
+    from promoter_tf_drugs import http
+    monkeypatch.setattr(http.time, "sleep", lambda s: None)
+    fake, calls = _json_server([(200, b"\x1f\x8bBYTES", None)])
+
+    c = http.Client(cache_dir=tmp_path / "a", min_interval=0, max_requests=1)
+    assert _with_fake_urlopen(fake, lambda: c.fetch_bytes("https://x.org/f")) \
+        == b"\x1f\x8bBYTES"
+    with pytest.raises(http.HttpError, match="budget"):
+        _with_fake_urlopen(fake, lambda: c.fetch_bytes("https://x.org/g"))
+    assert c.spend()["requests"] == 1 and c.spend()["refused"] == 1
+
+    off = http.Client(cache_dir=tmp_path / "b", min_interval=0, offline=True)
+    with pytest.raises(http.HttpError, match="offline"):
+        off.fetch_bytes("https://x.org/f")
+
+    def dead(req, timeout=None):
+        raise urllib.error.URLError("refused")
+    d = http.Client(cache_dir=tmp_path / "d", min_interval=0)
+    with pytest.raises(http.HttpError):
+        _with_fake_urlopen(dead, lambda: d.fetch_bytes("https://y.org/f"))
+    assert "y.org" in d._down, "an unreachable host must trip the breaker"
+
+
+def test_a_failed_genetics_query_is_reported_as_failed_not_as_no_association(
+        tmp_path):
+    """Three different things used to read "could not resolve CCR5": a
+    server error, an outage, and a symbol Open Targets does not know. Only
+    the last says anything about the gene."""
+    import json
+    import urllib.error
+    import urllib.request
+    from promoter_tf_drugs import genetics
+    from promoter_tf_drugs.http import Client
+
+    def run(handler):
+        c = Client(cache_dir=tmp_path / f"c{id(handler)}", min_interval=0,
+                   ttl_days=0)
+        orig = urllib.request.urlopen
+        urllib.request.urlopen = handler
+        try:
+            return genetics.target_consequences(c, "CCR5")
+        finally:
+            urllib.request.urlopen = orig
+
+    def ok(payload):
+        class R:
+            headers = {}
+            def read(self, *a): return json.dumps(payload).encode()
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+        return lambda req, timeout=None: R()
+
+    # 1. an error body on the resolver
+    ev = run(ok({"errors": [{"message": "boom"}], "data": None}))
+    assert ev.error and "error" in ev.error.lower(), ev
+    assert ev.phenotypes == []
+
+    # 2. an outage
+    def dead(req, timeout=None):
+        raise urllib.error.HTTPError(req.full_url, 400, "bad", {}, None)
+    ev = run(dead)
+    assert ev.error, "an outage must set `error`"
+
+    # 3. a symbol Open Targets genuinely does not know: NOT an error
+    ev = run(ok({"data": {"search": {"hits": []}}}))
+    assert ev.error is None, "an unknown gene is a finding, not a failure"
+    assert "not a target Open Targets knows" in " ".join(ev.notes)
+
+
+def test_the_ledger_names_a_failed_genetics_query_as_one():
+    """"no genetic association returned for this gene" is a statement
+    about the gene. For a query that never completed it is false."""
+    from promoter_tf_drugs import pipeline as pl
+    failed = pl._genetics_detail([], None, error="Open Targets could not "
+                                                 "resolve CCR5: HTTP 500")
+    assert "failed" in failed and "says nothing" in failed
+    assert "no genetic association" not in failed
+    assert pl._genetics_detail([], None) == \
+        "no genetic association returned for this gene"
+    assert "associated phenotype" in pl._genetics_detail([{"x": 1}], None,
+                                                         error="ignored")
+
+
+def test_dgidb_with_an_errors_body_is_skipped_not_read_as_no_drugs(
+        tmp_path, caplog):
+    import json
+    import logging
+    import urllib.request
+    from promoter_tf_drugs import drugs
+    from promoter_tf_drugs.http import Client
+
+    class R:
+        headers = {}
+        def read(self, *a):
+            return json.dumps({"errors": [{"message": "x"}],
+                               "data": {"genes": {"nodes": []}}}).encode()
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    c = Client(cache_dir=tmp_path / "c", min_interval=0)
+    orig = urllib.request.urlopen
+    urllib.request.urlopen = lambda req, timeout=None: R()
+    try:
+        with caplog.at_level(logging.WARNING):
+            out = drugs.dgidb_drugs(c, ["CCR5"])
+    finally:
+        urllib.request.urlopen = orig
+    assert out == []
+    assert any("not a finding" in r.message for r in caplog.records), \
+        "the skip must be said, not silent"
+
+
+def test_the_contract_check_sees_a_change_made_after_the_cache_was_filled(
+        tmp_path):
+    """It used to be answered from the 30-day cache: healthy once, the
+    service renames its fields, and the second check still reported ok
+    having made no request at all."""
+    from promoter_tf_drugs import services
+    from promoter_tf_drugs.http import Client
+    state = {"body": b'{"hits": [{"symbol": "TP53"}], "total": 1}'}
+    fake, calls = _json_server([(200, state["body"], None)])
+
+    def serve(req, timeout=None):
+        return _json_server([(200, state["body"], None)])[0](req, timeout)
+    contract = services.Contract(
+        key="mygene", name="MyGene.info", why="w", reads="annotate.py",
+        probe=lambda c: c.get("https://example.org/query", {"q": "TP53"}),
+        requires=("hits[]", "hits[].symbol", "total"),
+        symptom="a symbol Ensembl missed stays unresolved on the page")
+    c = Client(cache_dir=tmp_path / "c", min_interval=0)
+
+    first = _with_fake_urlopen(serve, lambda: services.check(contract, c))
+    assert first["state"] == services.OK
+
+    state["body"] = b'{"results": [{"gene": "TP53"}], "count": 1}'
+    second = _with_fake_urlopen(serve, lambda: services.check(contract, c))
+    assert second["state"] == services.CHANGED, second
+    assert "hits[]" in second["missing"]
+    assert c.bypass_cache is False, "the caller's client must be left as found"
+
+
+def test_a_response_that_changes_type_is_reported_not_raised():
+    """A service that starts returning a list, a string or null made the
+    value checks raise AttributeError and the command end as a traceback -
+    the event the command exists to report."""
+    from promoter_tf_drugs import services
+    for body in ([{"a": 1}], "maintenance", None, 7):
+        contract = services.Contract(
+            key="ensembl_mane", name="Ensembl MANE", why="w", reads="r",
+            probe=lambda c, b=body: b, requires=(), symptom="s" * 25)
+        row = services.check(contract, _LiveProbeClient())
+        assert row["state"] == services.CHANGED, (body, row)
+        assert type(body).__name__ in row["detail"], row["detail"]
+
+
+def test_the_eqtl_download_counts_against_the_request_budget(tmp_path):
+    """It used urllib directly, so a run capped at N requests could still
+    send one more, uncounted, with no retry and no host breaker."""
+    import pytest
+    from promoter_tf_drugs import eqtl
+    from promoter_tf_drugs.http import Client, HttpError
+    big = b"x" * 150_000
+    fake, calls = _json_server([(200, big, None)])
+
+    c = Client(cache_dir=tmp_path / "a", min_interval=0, max_requests=5)
+    assert _with_fake_urlopen(fake, lambda: eqtl._fetch(c)) == big
+    assert c.spend()["requests"] == 1, "the download was not counted"
+
+    spent = Client(cache_dir=tmp_path / "b", min_interval=0, max_requests=1)
+    spent.requests_made = 1
+    with pytest.raises(HttpError, match="budget"):
+        _with_fake_urlopen(fake, lambda: eqtl._fetch(spent))
+
+
+def test_every_scenario_and_direction_pair_is_judged_once_in_one_place():
+    """A scenario implies a direction. Declared separately they could
+    contradict, and the report then opened "about 2x from the working
+    allele" above a ranking built to LOWER the gene, led by a transcription
+    inhibitor, with no sentence saying the two disagreed."""
+    from promoter_tf_drugs import magnitude as mag
+    needs_up = ("haploinsufficiency", "hypomorph", "silenced_allele")
+    for scen in needs_up:
+        assert mag.goal_conflict(scen, "up") is None, scen
+        msg = mag.goal_conflict(scen, "down")
+        assert msg and "'up'" in msg and "'down'" in msg, (scen, msg)
+    assert mag.goal_conflict("toxic_gain", "down") is None
+    assert "'down'" in mag.goal_conflict("toxic_gain", "up")
+    # No direction is implied: a null cannot be helped either way, and a
+    # modifier is moved whichever way helps.
+    for scen in ("null", "modifier"):
+        for goal in ("up", "down"):
+            assert mag.goal_conflict(scen, goal) is None, (scen, goal)
+    assert mag.goal_conflict(None, "down") is None
+    # Every scenario the package knows is accounted for, either way.
+    for scen in mag.SCENARIOS:
+        assert scen in mag.SCENARIO_GOAL or scen in ("null", "modifier"), scen
+
+
+def test_a_contradictory_scenario_stops_the_run_before_any_work():
+    import pytest
+    from promoter_tf_drugs import pipeline as pl
+    with pytest.raises(ValueError, match="needs direction 'up'"):
+        pl.run("DEMOGENE", demo=True, goal="down",
+               scenario="haploinsufficiency", broken_allele_makes="null")
+    with pytest.raises(ValueError, match="needs direction 'down'"):
+        pl.run("DEMOGENE", demo=True, goal="up", scenario="toxic_gain")
+    # A consistent pair still runs.
+    res = pl.run("DEMOGENE", demo=True, goal="up",
+                 scenario="haploinsufficiency", broken_allele_makes="null")
+    assert res["requirement"]["feasible"] is True
+
+
+def test_both_command_lines_refuse_a_contradictory_scenario(capsys):
+    """The single-gene command and the panel take the same flags. The
+    panel had its own word-for-word copy of the checker, so a rule added
+    to one was missing from the other."""
+    import pytest
+    from promoter_tf_drugs import cli, panel
+    for entry in (cli.main, panel.main):
+        with pytest.raises(SystemExit) as exc:
+            entry(["--demo", "--gene", "DEMOGENE", "--direction", "down",
+                   "--scenario", "haploinsufficiency"]
+                  if entry is cli.main else
+                  ["--demo", "--genes", "DEMOGENE", "--direction", "down",
+                   "--scenario", "haploinsufficiency"])
+        assert exc.value.code == 2
+        err = capsys.readouterr().err
+        assert "disagree" in err and "haploinsufficiency" in err, err
+
+
+def test_the_panel_does_not_keep_its_own_copy_of_the_flag_checker():
+    import inspect
+    from promoter_tf_drugs import panel
+    src = inspect.getsource(panel._check_flag_combinations)
+    assert "_shared" in src and "parser.error" not in src, \
+        "the panel must delegate, not re-implement the CLI's rules"
+
+
+def _load_script(name):
+    import importlib.util
+    from pathlib import Path
+    path = Path(__file__).resolve().parents[1] / "scripts" / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(f"_script_{name}", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_a_factor_whose_role_is_unknown_is_not_picked_for_docking():
+    """annotate.py stores the STRING "unknown" for an unresolved role, which
+    is truthy, so `not tf.get("role")` let every one of them through: on a
+    real CCR5 result 39 of 106 factors, and require_role=True returned the
+    same factors as require_role=False."""
+    tf = _load_script("top_factors")
+
+    def f(sym, role, score):
+        return {"symbol": sym, "role": role, "chip_peaks": 3, "score": score}
+    result = {"query": {"gene": "G"}, "results": [{"tfs": [
+        f("AAA", "unknown", 90), f("BBB", "activator", 50),
+        f("CCC", None, 80), f("DDD", "", 70), f("EEE", "repressor", 40),
+        f("FFF", "dual", 30), f("GGG", "Unknown ", 60)]}]}
+
+    strict = [t["symbol"] for t in tf.pick(result, top=10)]
+    assert strict == ["BBB", "EEE", "FFF"], strict
+    loose = [t["symbol"] for t in tf.pick(result, top=10, require_role=False)]
+    assert "AAA" in loose and len(loose) == 7, loose
+    assert strict != loose, "the filter must change the answer"
+
+
+def test_the_remap_launcher_does_not_overwrite_the_windows_temp_variable():
+    """`set "TMP=data\\remap2022.bed.gz.part"` hands every child process
+    in the script a file where it expects a directory."""
+    from pathlib import Path
+    text = (Path(__file__).resolve().parents[1] / "scripts"
+            / "download_remap.bat").read_text(encoding="utf-8")
+    import re
+    assert not re.search(r'(?im)^\s*set\s+"?TMP=', text)
+    assert not re.search(r"(?i)%TMP%", text)
+
+
+def _gate(tmp_path, scorer, n_actives=60, n_decoys=600):
+    from promoter_tf_drugs import docking as dk
+    rec = tmp_path / "r.pdb"
+    rec.write_text("ATOM\n", encoding="utf-8")
+    return dk.validate_pocket(
+        rec, [{"smiles": f"A{i}"} for i in range(n_actives)],
+        [{"smiles": f"D{i}"} for i in range(n_decoys)],
+        score_fn=scorer, box=(0, 0, 0, 20, 20, 20))
+
+
+def test_the_gate_refuses_when_almost_no_known_ligand_scored(tmp_path):
+    """The minimum-actives check ran on what was SUPPLIED, before docking.
+    With 58 of 60 known ligands failing to dock, the AUC came from the two
+    that scored: usable=True, AUC 1.0, enrichment 86 - a pocket that
+    "validated" on two compounds, and its screen's hits were then trusted."""
+    import random
+    rng = random.Random(3)
+
+    def scorer(smiles):
+        if smiles.startswith("A"):
+            return -12.0 if smiles in ("A0", "A1") else None
+        return -rng.uniform(4.0, 9.0)
+
+    out = _gate(tmp_path, scorer)
+    assert out["usable"] is False, out
+    assert out["auc"] is None, "a number from two compounds must not be shown"
+    assert "only 2 of 60" in out["reason"], out["reason"]
+    assert out["gate"]["n_actives_scored"] == 2
+    assert out["gate"]["n_actives_failed"] == 58
+
+
+def test_a_passing_gate_says_how_many_known_ligands_it_rests_on(tmp_path):
+    """`n_failed` lumped actives and decoys together, so a gate that passed
+    on 50 of 60 looked the same as one that passed on all 60. The failed
+    actives are dropped from the measurement, not counted as misses, which
+    flatters it - so the count has to be stated."""
+    import random
+    rng = random.Random(5)
+    failing = {f"A{i}" for i in range(10)}
+
+    def scorer(smiles):
+        if smiles.startswith("A"):
+            return None if smiles in failing else -rng.uniform(10, 13)
+        return -rng.uniform(4.0, 9.0)
+
+    out = _gate(tmp_path, scorer)
+    assert out["usable"] is True
+    g = out["gate"]
+    assert (g["n_actives"], g["n_actives_scored"], g["n_actives_failed"]) \
+        == (60, 50, 10)
+    assert (g["n_decoys"], g["n_decoys_scored"]) == (600, 600)
+    assert "10 that failed" in out["gate_note"]
+    assert "not counted as misses" in out["gate_note"]
+
+
+def test_a_gate_where_everything_scored_carries_no_caveat(tmp_path):
+    import random
+    rng = random.Random(7)
+    out = _gate(tmp_path, lambda s: -rng.uniform(10, 13) if s[0] == "A"
+                else -rng.uniform(4, 9))
+    assert out["usable"] is True
+    assert out["gate"]["n_actives_failed"] == 0
+    assert "gate_note" not in out
+
+
+def test_the_enrichment_factor_states_what_it_was_counted_over():
+    """With 660 compounds the top 1% is seven, so the factor moves in steps
+    of about 1.7 while being quoted to two decimals. Two runs of one pocket
+    gave 11.31 and 9.62 - one active more or fewer among seven."""
+    from promoter_tf_drugs import docking as dk
+    labels = [1] * 60 + [0] * 600
+    scores = [-12.0 - i * 0.01 for i in range(60)] + \
+             [-5.0 + i * 0.001 for i in range(600)]
+    basis = dk.enrichment_basis(scores, labels, fraction=0.01)
+    assert basis["top_n"] == 7 and basis["actives_in_top_n"] == 7
+    assert basis["n_scored"] == 660 and basis["n_actives_scored"] == 60
+    # The factor itself is unchanged by adding the basis.
+    assert dk.enrichment_factor(scores, labels, fraction=0.01) == 11.0
+    assert dk.enrichment_basis([None, None], [1, 0]) is None
+
+
+def test_every_text_read_and_write_in_the_package_names_its_encoding():
+    """`read_text()`/`write_text()` use the platform default: cp1252 on
+    Windows, UTF-8 on Linux. A file that is fine on one fails on the other.
+    Verified: a PDB with a character whose UTF-8 bytes include 0x8D, read
+    with errors="replace" and written back, raised UnicodeEncodeError on
+    Windows and copied cleanly on Linux - the pair of environments the CI
+    matrix exists to cover, and only one of which a developer sits at."""
+    import ast as _ast
+    from pathlib import Path
+    pkg = Path(__file__).resolve().parents[1] / "promoter_tf_drugs"
+    bad = []
+    for py in sorted(pkg.glob("*.py")):
+        tree = _ast.parse(py.read_text(encoding="utf-8"))
+        for n in _ast.walk(tree):
+            if not isinstance(n, _ast.Call):
+                continue
+            f = n.func
+            name = f.attr if isinstance(f, _ast.Attribute) else (
+                f.id if isinstance(f, _ast.Name) else "")
+            kws = {k.arg for k in n.keywords}
+            if name in ("read_text", "write_text") and "encoding" not in kws:
+                bad.append(f"{py.name}:{n.lineno} {name}() without encoding")
+            if name in ("run", "check_output") and (
+                    "text" in kws or "universal_newlines" in kws) \
+                    and "encoding" not in kws:
+                bad.append(f"{py.name}:{n.lineno} subprocess text without "
+                           f"encoding")
+            if name == "open" and isinstance(f, _ast.Name):
+                mode = None
+                if len(n.args) > 1 and isinstance(n.args[1], _ast.Constant):
+                    mode = n.args[1].value
+                for k in n.keywords:
+                    if k.arg == "mode" and isinstance(k.value, _ast.Constant):
+                        mode = k.value.value
+                if not (isinstance(mode, str) and "b" in mode) \
+                        and "encoding" not in kws:
+                    bad.append(f"{py.name}:{n.lineno} open() text mode "
+                               f"without encoding")
+    assert not bad, "; ".join(bad)
+
+
+def _bed(tmp_path, rows, name="peaks.bed"):
+    f = tmp_path / name
+    f.write_text("".join(f"chr1\t{a}\t{b}\tGSE1.{tf}.cell\n"
+                         for a, b, tf in rows), encoding="utf-8")
+    return f
+
+
+def test_a_peak_adjacent_to_the_window_is_not_counted_as_inside_it(tmp_path):
+    """BED is 0-based half-open [s, e); the promoter window is 1-based
+    inclusive, so [101, 200] is the BED interval [100, 200). The upper
+    bound used to be `s > end`, which kept a peak whose FIRST base is the
+    one just past the window."""
+    from promoter_tf_drugs import evidence as ev
+    bed = _bed(tmp_path, [
+        # Names avoid underscores: the ReMap name parser accepts only
+        # letters, digits and hyphens as a factor symbol.
+        (200, 210, "OUTRIGHT"),      # first base is 201: outside
+        (199, 205, "INRIGHT"),       # covers base 200: inside
+        (90, 100, "OUTLEFT"),        # last base is 100: outside
+        (90, 101, "INLEFT"),         # covers base 101: inside
+        (100, 200, "EXACT"),         # the window itself
+    ])
+    got = ev.peaks_in_region(bed, "1", 101, 200)
+    assert set(got) == {"INRIGHT", "INLEFT", "EXACT"}, got
+
+
+def test_a_repeat_request_for_the_same_window_does_not_reread_the_file(
+        tmp_path, monkeypatch):
+    """The 1.5 GB ReMap file takes about 72 s per window and the launcher
+    asks for the same window in three stages."""
+    from promoter_tf_drugs import evidence as ev
+    bed = _bed(tmp_path, [(150, 160, "CTCF"), (155, 170, "SP1")])
+    memo = tmp_path / "memo"
+    first = ev.peaks_in_region(bed, "1", 101, 200, memo_dir=memo)
+    assert first == {"CTCF": 1, "SP1": 1}
+
+    def boom(*a, **k):
+        raise AssertionError("the BED was read again")
+    monkeypatch.setattr(ev, "_open", boom)
+    assert ev.peaks_in_region(bed, "1", 101, 200, memo_dir=memo) == first
+
+
+def test_changing_the_bed_invalidates_the_memo_and_other_windows_do_not_share(
+        tmp_path):
+    """Keyed on the file's size and modification time and on the region, so
+    a replaced ReMap release or a different window is never answered with
+    someone else's counts."""
+    from promoter_tf_drugs import evidence as ev
+    bed = _bed(tmp_path, [(150, 160, "CTCF")])
+    memo = tmp_path / "memo"
+    assert ev.peaks_in_region(bed, "1", 101, 200, memo_dir=memo) == {"CTCF": 1}
+    _bed(tmp_path, [(150, 160, "CTCF"), (150, 160, "SP1")])   # same path
+    assert ev.peaks_in_region(bed, "1", 101, 200, memo_dir=memo) \
+        == {"CTCF": 1, "SP1": 1}
+    assert ev.peaks_in_region(bed, "1", 1000, 1100, memo_dir=memo) == {}
+
+
+def test_no_memo_directory_means_no_files_are_written(tmp_path):
+    from promoter_tf_drugs import evidence as ev
+    bed = _bed(tmp_path, [(150, 160, "CTCF")])
+    before = {x.name for x in tmp_path.rglob("*")}
+    ev.peaks_in_region(bed, "1", 101, 200)
+    assert {x.name for x in tmp_path.rglob("*")} == before
+
+
+def test_the_chip_evidence_entry_point_memoises_in_the_clients_cache(tmp_path):
+    from promoter_tf_drugs import evidence as ev
+
+    class _P:
+        chrom, start, end = "1", 101, 200
+
+    class _C:
+        cache_dir = tmp_path / "cache"
+    bed = _bed(tmp_path, [(150, 160, "CTCF")])
+    counts, status = ev.chip_evidence_status(_P(), chip_bed=bed, client=_C())
+    assert counts == {"CTCF": 1} and status["ok"]
+    assert list((tmp_path / "cache" / "chip_regions").glob("*.json"))
+
+
+def test_an_unreadable_library_is_reported_and_approval_degrades_to_unknown(
+        monkeypatch, caplog):
+    """The library read was wrapped in `except Exception: pass`, so a
+    locked or corrupt file silently left approval checks resting on a few
+    hundred curated names. The consequence is graceful - a drug outside
+    them is 'unknown', not 'unapproved' - but nothing said why."""
+    import logging
+    from promoter_tf_drugs import catalogue as cat
+    from promoter_tf_drugs import localdrugs as ld
+
+    def broken(*a, **k):
+        raise OSError("the file is locked by another process")
+    monkeypatch.setattr(ld, "library", broken)
+    monkeypatch.setattr(cat, "_APPROVED_NAMES", None)
+    monkeypatch.setattr(cat, "_APPROVED_FROM_LIBRARY", False)
+    with caplog.at_level(logging.WARNING):
+        pool = cat.approved_name_set()
+    assert pool, "the curated names should still be there"
+    assert any("could not be read" in r.message and "locked" in r.message
+               for r in caplog.records), [r.message for r in caplog.records]
+    # Not 'proven unapproved': with no library read, a miss is unknown.
+    assert cat.verify_approval("a-drug-nobody-curated") is None
+
+
+def test_an_empty_table_file_is_named_in_the_log_and_still_means_not_measured(
+        tmp_path, caplog):
+    """A zero-byte file is what an interrupted download of a multi-GB table
+    leaves. `{}` already means "not measured" to every caller; what was
+    missing was any word that the file was empty, where a missing file does
+    log."""
+    import logging
+    from promoter_tf_drugs import depmap, sensitivity
+    f = tmp_path / "table.csv"
+    f.write_bytes(b"")
+    with caplog.at_level(logging.WARNING):
+        assert sensitivity.load_prism(str(f)) == {}
+        assert sensitivity.load_expression(str(f), "TP53") == {}
+        assert depmap.load_gene_effect(str(f), ["TP53"]) == {}
+    msgs = [r.message for r in caplog.records]
+    assert sum("is empty" in m for m in msgs) == 3, msgs
+    assert all("interrupted download" in m for m in msgs if "is empty" in m)
+
+
+def test_the_uniprot_lookup_failure_is_not_swallowed_silently():
+    """`except Exception: pass` around the gene's accession lookup meant a
+    MyGene outage turned the direct-drug search weaker with no trace, and
+    the progress line then read "none annotated" as a finding."""
+    import ast as _ast
+    from pathlib import Path
+    src = (Path(__file__).resolve().parents[1] / "promoter_tf_drugs"
+           / "pipeline.py").read_text(encoding="utf-8")
+    tree = _ast.parse(src)
+    found = 0
+    for n in _ast.walk(tree):
+        if not isinstance(n, _ast.Try):
+            continue
+        calls = {getattr(c.func, "attr", getattr(c.func, "id", ""))
+                 for b in n.body for c in _ast.walk(b)
+                 if isinstance(c, _ast.Call)}
+        if "annotate_tfs" not in calls:
+            continue
+        for h in n.handlers:
+            found += 1
+            assert not all(isinstance(b, _ast.Pass) for b in h.body), \
+                f"pipeline.py:{h.lineno} swallows the failure with `pass`"
+    assert found, "the annotate_tfs call was not found - has it moved?"
+
+
+def _table_problems(md):
+    """Every Markdown table row whose cell count differs from its header's.
+    A pipe written as backslash-pipe is text, not a cell boundary."""
+    esc = chr(92)
+
+    def cells(line):
+        out, cur, i = [], "", 0
+        body = line.strip()[1:]
+        while i < len(body):
+            c = body[i]
+            if c == esc and i + 1 < len(body) and body[i + 1] == "|":
+                cur += "|"
+                i += 2
+                continue
+            if c == "|":
+                out.append(cur)
+                cur = ""
+            else:
+                cur += c
+            i += 1
+        if cur.strip():
+            out.append(cur)
+        return out
+
+    lines = md.splitlines()
+    bad = []
+    i = 0
+    while i < len(lines) - 1:
+        sep = lines[i + 1].strip()
+        if (lines[i].lstrip().startswith("|") and sep.startswith("|")
+                and set(sep) <= set("|-: ") and "-" in sep):
+            width = len(cells(lines[i]))
+            j = i + 2
+            while j < len(lines) and lines[j].lstrip().startswith("|"):
+                if len(cells(lines[j])) != width:
+                    bad.append((j + 1, width, len(cells(lines[j])),
+                                lines[j][:90]))
+                j += 1
+            i = j
+        else:
+            i += 1
+    return bad
+
+
+def _inject_pipes(value, key=None):
+    """Append a pipe to every free-text string. `goal` and `direction` are
+    the two enumerations the renderer branches on; neither ever carries a
+    pipe, and a value that is not 'up' or 'down' is rejected, not rendered."""
+    if isinstance(value, str):
+        return value if key in ("goal", "direction") else value + " | tail"
+    if isinstance(value, dict):
+        return {k: _inject_pipes(v, k) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_inject_pipes(v, key) for v in value]
+    return value
+
+
+def test_every_demo_table_row_matches_its_header_even_when_it_is_truncated():
+    """top_n=1 forces every "... N more" row, which had three cells under a
+    four-column header."""
+    res = _demo_result()
+    assert _table_problems(pipeline.markdown_report(res, top_n=1)) == []
+    assert _table_problems(pipeline.markdown_report(res)) == []
+
+
+def test_a_pipe_inside_a_value_does_not_split_a_table_cell():
+    """Service text and the upstream-network notes contain pipes; unescaped,
+    one shifts every cell after it. Real reports already had an eight-cell row
+    in a seven-column table."""
+    res = _inject_pipes(_demo_result())
+    md = pipeline.markdown_report(res, top_n=1)
+    assert "tail" in md
+    assert _table_problems(md) == []
+    # The escaping is on a copy: the caller's result is not rewritten.
+    assert chr(92) + "|" not in repr(res).replace(chr(92) * 2, "")
+
+
+def test_both_stages_use_the_one_benjamini_hochberg_and_it_is_correct():
+    """`_bh` existed twice, with docstrings that disagreed about the floor."""
+    from promoter_tf_drugs import sensitivity, stats, tfactivity
+    assert sensitivity._bh is stats.benjamini_hochberg
+    assert tfactivity._bh is stats.benjamini_hochberg
+    # Hand-worked: sorted p = .01 .02 .03 .5 over m = 4 tests gives
+    # .04 .04 .04 .5 after the monotone step; None is skipped, not counted.
+    got = stats.benjamini_hochberg([0.5, 0.01, None, 0.03, 0.02])
+    assert got == [0.5, 0.04, None, 0.04, 0.04]
+    assert stats.benjamini_hochberg([None, None]) == [None, None]
+    assert stats.benjamini_hochberg([0.0]) == [stats.Q_FLOOR]
+
+
+def test_the_orange_book_zip_is_counted_by_its_products_table(tmp_path):
+    """It counted zip members, so a good download and one without the
+    products table both read "3"."""
+    import zipfile
+    from promoter_tf_drugs import datasets
+    good = tmp_path / "EOBZIP.zip"
+    with zipfile.ZipFile(good, "w") as z:
+        z.writestr("products.txt", "h" + chr(10) + "a" + chr(10) + "b" + chr(10))
+        z.writestr("patent.txt", "x" + chr(10))
+        z.writestr("exclusivity.txt", "y" + chr(10))
+    assert datasets._count_orangebook(good) == 3
+    bad = tmp_path / "other.zip"
+    with zipfile.ZipFile(bad, "w") as z:
+        z.writestr("patent.txt", "x" + chr(10))
+        z.writestr("exclusivity.txt", "y" + chr(10))
+    import pytest
+    with pytest.raises(ValueError, match="products.txt"):
+        datasets._count_orangebook(bad)
+
+
+def test_the_launcher_refuses_a_zero_fraction_and_a_contradictory_direction():
+    """`0.0` passed the fraction pattern and meant "leave none of the
+    transcript"; and the launcher let a scenario that needs up be paired with
+    down, which the CLI then refused only after the run had started. Behaviour
+    of the two checks was run through cmd.exe when they were written; this
+    pins what the file says."""
+    from pathlib import Path
+    src = (Path(__file__).resolve().parents[1] / "scripts"
+           / "run_everything.bat").read_text(encoding="utf-8")
+    esc = chr(92)
+    assert "0" + esc + ".[0-9]*[1-9][0-9]*" + esc + '"$' in src
+    assert "0" + esc + ".[0-9][0-9]*" + esc + '"$' not in src
+    for scen, need in (("haploinsufficiency", "up"), ("hypomorph", "up"),
+                       ("silenced_allele", "up"), ("toxic_gain", "down")):
+        assert f'if "!SCEN!"=="{scen}" set "NEEDDIR={need}"' in src
+    from promoter_tf_drugs import magnitude as mag
+    for scen in ("haploinsufficiency", "hypomorph", "silenced_allele"):
+        assert mag.SCENARIO_GOAL[scen][0] == "up"
+    assert mag.SCENARIO_GOAL["toxic_gain"][0] == "down"
+
+
+def test_summary_md_tables_survive_a_pipe_in_a_value():
+    """summary.md is the page users open first, and its tables were not
+    escaped when report.md's were."""
+    from promoter_tf_drugs import report
+    clean = _demo_result()
+    assert _table_problems(report.summary_report(clean)) == []
+    res = _inject_pipes(clean)
+    md = report.summary_report(res)
+    assert "tail" in md
+    assert _table_problems(md) == []
+
+
+def test_escaping_copies_only_what_it_changes():
+    """A result with no pipe is returned as it is; with one, only the
+    containers on the path to it are rebuilt and the caller's data is left
+    alone."""
+    from promoter_tf_drugs.report import escape_pipes
+    clean = {"a": ["x", {"b": "y"}], "c": ("z",), "n": 3}
+    assert escape_pipes(clean) is clean
+    dirty = {"a": ["x", {"b": "y | z"}], "keep": [1, 2], "c": ("q",)}
+    out = escape_pipes(dirty)
+    assert out is not dirty and out["a"][1]["b"] == "y " + chr(92) + "| z"
+    assert dirty["a"][1]["b"] == "y | z", "the input must not be modified"
+    assert out["keep"] is dirty["keep"] and out["c"] is dirty["c"]
+
+
+def test_the_gate_refuses_when_almost_no_decoy_scored(tmp_path):
+    """Five known ligands ranked against one surviving decoy is a coin flip
+    with a number on it. The check was only on the actives."""
+    import random
+    rng = random.Random(5)
+
+    def scorer(smiles):
+        if smiles.startswith("A"):
+            return -10.0 - rng.random()
+        return -rng.uniform(4.0, 9.0) if smiles in ("D0", "D1") else None
+
+    out = _gate(tmp_path, scorer, n_actives=20, n_decoys=100)
+    assert out["usable"] is False, out
+    assert out["auc"] is None
+    assert "only 2 of 100 decoy" in out["reason"], out["reason"]
+    assert out["gate"]["n_decoys_scored"] == 2
+
+
+def test_a_gate_with_enough_decoys_is_not_refused_for_them(tmp_path):
+    import random
+    rng = random.Random(6)
+
+    def scorer(smiles):
+        if smiles.startswith("A"):
+            return -10.0 - rng.random()
+        return -rng.uniform(4.0, 8.0)
+
+    out = _gate(tmp_path, scorer, n_actives=20, n_decoys=100)
+    assert out["usable"] is True, out
+
+
+def test_errors_beside_usable_data_are_used_not_discarded():
+    """GraphQL can answer with data and a warning about one field. Only an
+    errors list with nothing to read is a failed lookup."""
+    from promoter_tf_drugs import drugs, genetics
+
+    warn = [{"message": "a deprecated field"}]
+
+    class C:
+        def post(self, url, body):
+            q = body["query"]
+            if "search(" in q:
+                return {"errors": warn, "data": {"search": {"hits": [
+                    {"id": "ENSG1"}]}}}
+            if "ensemblId" in str(body.get("variables")):
+                return {"errors": warn, "data": {"target": {
+                    "associatedDiseases": {"rows": [
+                        {"score": 0.5, "disease": {"id": "E1", "name": "X"},
+                         "datatypeScores": [
+                             {"id": "genetic_association", "score": 0.5}]}
+                    ]}}}}
+            return {"errors": warn, "data": {"genes": {"nodes": [{
+                "name": "G", "interactions": [{"drug": {
+                    "name": "D", "approved": True}, "interactionTypes": [
+                    {"type": "inhibitor", "directionality": "NEGATIVE"}],
+                    "interactionScore": 1.0,
+                    "sources": [{"sourceDbName": "s"}]}]}]}}}
+
+    assert genetics._resolve_ensembl(C(), "G") == "ENSG1"
+    ev = genetics.target_consequences(C(), "G")
+    assert ev.error is None, ev.error
+    assert ev.phenotypes, "the data that came back must be used"
+    assert any("incomplete" in n for n in ev.notes), ev.notes
+    assert [d.name for d in drugs.dgidb_drugs(C(), ["G"])] == ["D"]
+
+
+def test_an_open_targets_outage_is_logged_by_the_drug_lookup(caplog):
+    """`_resolve_ensembl` now raises on an outage; the drug lookup caught it
+    and returned [] without a word, which reads as 'no drugs known'."""
+    import logging
+    from promoter_tf_drugs import drugs
+    from promoter_tf_drugs.http import HttpError
+
+    class C:
+        def post(self, *a, **k):
+            raise HttpError("down")
+    with caplog.at_level(logging.WARNING):
+        assert drugs.opentargets_drugs(C(), "G") == []
+    assert any("could not resolve" in r.message and "down" in r.message
+               for r in caplog.records), [r.message for r in caplog.records]
+
+
+def test_fetch_bytes_follows_308_and_honours_retry_after(tmp_path,
+                                                         monkeypatch):
+    """request() follows 307/308 by hand so 3.10 and 3.12 agree; the bulk
+    download did not, and it ignored Retry-After."""
+    import urllib.error
+    from promoter_tf_drugs import http
+    slept = []
+    monkeypatch.setattr(http.time, "sleep", lambda s: slept.append(s))
+
+    seen = []
+
+    def fake(req, timeout=None):
+        seen.append(req.full_url)
+        if req.full_url.endswith("/old"):
+            raise urllib.error.HTTPError(req.full_url, 308, "x",
+                                         {"Location": "/new"}, None)
+        if req.full_url.endswith("/busy") and len(seen) < 3:
+            raise urllib.error.HTTPError(req.full_url, 429, "x",
+                                         {"Retry-After": "7"}, None)
+
+        class R:
+            headers = {}
+            def read(self, *a): return b"BODY"
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+        return R()
+
+    c = http.Client(cache_dir=tmp_path / "c", min_interval=0)
+    assert _with_fake_urlopen(fake, lambda: c.fetch_bytes("https://x.org/old")) \
+        == b"BODY"
+    assert seen == ["https://x.org/old", "https://x.org/new"]
+
+    seen.clear()
+    assert _with_fake_urlopen(fake, lambda: c.fetch_bytes("https://x.org/busy")) \
+        == b"BODY"
+    assert 7 in slept, slept
+
+
+def test_a_gene_file_with_a_bom_or_in_utf16_is_read_as_what_it_is(tmp_path):
+    import pytest
+    from promoter_tf_drugs import panel
+    plain = tmp_path / "a.txt"
+    plain.write_bytes(b"# my genes" + bytes([10]) + b"ccr5" + bytes([10])
+                      + b"PCSK9" + bytes([10]) + bytes([10]))
+    assert panel.read_gene_file(plain) == ["CCR5", "PCSK9"]
+    bom = tmp_path / "b.txt"
+    bom.write_bytes(bytes([0xEF, 0xBB, 0xBF]) + b"CCR5" + bytes([13, 10])
+                    + b"LDLR" + bytes([13, 10]))
+    assert panel.read_gene_file(bom) == ["CCR5", "LDLR"]
+    u16 = tmp_path / "c.txt"
+    # Written the way PowerShell does: BOM first, then UTF-16 little endian.
+    u16.write_bytes(("CCR5" + chr(13) + chr(10) + "ACTB" + chr(13) + chr(10))
+                    .encode("utf-16"))
+    assert panel.read_gene_file(u16) == ["CCR5", "ACTB"]
+    bad = tmp_path / "d.txt"
+    bad.write_bytes(b"CCR5" + bytes([10, 0xE9, 0xFF, 0xFF, 10]))
+    with pytest.raises(ValueError, match="not UTF-8"):
+        panel.read_gene_file(bad)
+
+
+def test_the_empty_table_warning_is_written_once():
+    """The same six lines had been copied into three loaders."""
+    import inspect
+    from promoter_tf_drugs import depmap, sensitivity
+    for mod in (sensitivity, depmap):
+        assert "is empty - most likely" not in inspect.getsource(
+            mod).replace(inspect.getsource(sensitivity.warn_empty_table), "")
+
+
+def test_no_broad_exception_handler_swallows_without_a_word():
+    """`except Exception: pass` (or return None, [], continue) turns a failed
+    read into the same value as 'nothing there'. Twenty-one of them were
+    found and each now says what failed. The one allowed is the progress
+    writer, which cannot report its own failure through the logger it feeds."""
+    import ast
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1] / "promoter_tf_drugs"
+    allowed = {"progress.py"}
+    bad = []
+    for p in sorted(root.glob("*.py")):
+        if p.name in allowed:
+            continue
+        for n in ast.walk(ast.parse(p.read_text(encoding="utf-8"))):
+            if not isinstance(n, ast.ExceptHandler):
+                continue
+            kind = ast.unparse(n.type) if n.type else "bare"
+            if kind not in ("Exception", "BaseException", "bare"):
+                continue
+            silent = True
+            for b in n.body:
+                if isinstance(b, (ast.Pass, ast.Continue)):
+                    continue
+                if isinstance(b, ast.Return) and (
+                        b.value is None
+                        or isinstance(b.value, ast.Constant)
+                        or (isinstance(b.value, (ast.List, ast.Dict,
+                                                 ast.Set, ast.Tuple))
+                            and not ast.unparse(b.value).strip("[]{}()"))
+                        or ast.unparse(b.value) == "set()"):
+                    continue
+                silent = False
+            if silent:
+                bad.append(f"{p.name}:{n.lineno}")
+    assert not bad, f"silent broad handlers: {bad}"
+
+
+def test_a_failed_paralog_lookup_is_said_in_the_result():
+    from promoter_tf_drugs import compensation
+    from promoter_tf_drugs.http import HttpError
+
+    class C:
+        def get(self, *a, **k):
+            raise HttpError("Ensembl is down")
+    out = compensation.assess("ZZZNOTAGENE", client=C())
+    assert out["paralogs"] == []
+    assert any("paralog lookup failed" in n for n in out["notes"]), out["notes"]
+
+
+def test_an_unreadable_potency_table_is_not_reported_as_no_known_ligands(
+        monkeypatch, caplog):
+    import logging
+    from promoter_tf_drugs import localpotency, screening
+    monkeypatch.setattr(localpotency, "available", lambda: {"x": True})
+
+    def boom(uni):
+        raise OSError("the table is locked")
+    monkeypatch.setattr(localpotency, "actives_for", boom)
+    with caplog.at_level(logging.WARNING):
+        assert screening.local_actives_for("G", uniprot="P12345") == []
+    assert any("could not be read" in r.message and "locked" in r.message
+               for r in caplog.records), [r.message for r in caplog.records]
+
+
+def test_an_unreadable_gwas_table_is_logged_not_silently_none(monkeypatch,
+                                                              caplog):
+    import logging
+    from promoter_tf_drugs import genetics, localannot
+
+    def boom():
+        raise OSError("the table is locked")
+    monkeypatch.setattr(localannot, "available", boom)
+    with caplog.at_level(logging.WARNING):
+        assert genetics.local_support("G") is None
+    assert any("GWAS table could not be read" in r.message
+               for r in caplog.records)
+
+
+def test_an_unreadable_orange_book_is_reported_once_not_per_drug(
+        monkeypatch, caplog):
+    import logging
+    from promoter_tf_drugs import indications, orangebook
+
+    def boom(name, path=None):
+        raise OSError("the file is locked")
+    monkeypatch.setattr(orangebook, "lookup", boom)
+    monkeypatch.setattr(indications, "_ROUTE_ERROR_REPORTED", False)
+    with caplog.at_level(logging.WARNING):
+        for name in ("aspirin", "imatinib", "warfarin"):
+            assert indications.route_of(name) is None
+    msgs = [r.message for r in caplog.records if "Orange Book" in r.message]
+    assert len(msgs) == 1, msgs
+
+
+def test_a_scorer_that_raises_is_counted_as_a_failure_of_its_kind(tmp_path):
+    from promoter_tf_drugs import docking as dk
+    rec = tmp_path / "r.pdb"
+    rec.write_text("ATOM" + chr(10), encoding="utf-8")
+
+    def boom(smiles):
+        raise RuntimeError("scorer bug")
+    tally = {}
+    out = dk._dock_smiles(["CCO", "CCN"], rec, None, exhaustiveness=1,
+                          seed=1, score_fn=boom, tally=tally)
+    assert out == [None, None]
+    assert tally == {"scorer_failed": 2}, tally
+
+
+def test_a_failed_safety_lookup_is_not_a_clear_one(caplog):
+    """`withdrawn` and `black_box` default to False, so a failed ChEMBL
+    warning lookup read as 'checked, nothing on record'."""
+    import logging
+    from promoter_tf_drugs import drug_scoring as dsc
+    from promoter_tf_drugs.http import HttpError
+
+    class C:
+        def get(self, url, *a, **k):
+            if "drug_warning" in url:
+                raise HttpError("ChEMBL 500")
+            return {}
+
+    class D:
+        withdrawn = False
+        chembl_id = "CHEMBL25"
+        target_symbol = "X"
+        name = "aspirin"
+        properties = {}
+    with caplog.at_level(logging.WARNING):
+        ev = dsc.fetch_evidence(C(), D())
+    assert ev.safety_lookup_failed is True
+    assert ev.withdrawn is False and ev.black_box is False
+    mult, notes = dsc._safety_multiplier(ev)
+    assert mult == 1.0, "no score is changed for a lookup that failed"
+    assert any("unchecked" in n for n in notes), notes
+    assert any("drug-warning lookup failed" in r.message
+               for r in caplog.records)
+    ok = dsc.DrugEvidence()
+    assert dsc._safety_multiplier(ok) == (1.0, [])
+
+
+def test_a_drug_likeness_failure_is_noted_not_left_looking_clean(monkeypatch):
+    import pytest
+    pytest.importorskip("rdkit")
+    from rdkit.Chem import QED
+    from promoter_tf_drugs import liabilities
+
+    def boom(mol):
+        raise ValueError("bad molecule")
+    monkeypatch.setattr(QED, "qed", boom)
+    liab = liabilities.assess("ethanol", "CCO")
+    assert liab.assessed is True and liab.qed is None
+    assert any("QED could not be computed" in n for n in liab.notes)
+
+
+def test_a_curated_table_the_audit_cannot_read_is_logged(monkeypatch, caplog):
+    import logging
+    from promoter_tf_drugs import audit, ligands
+
+    class Broken:
+        def values(self):
+            raise RuntimeError("table is corrupt")
+    monkeypatch.setattr(ligands, "ROUTES", Broken())
+    with caplog.at_level(logging.WARNING):
+        names = audit.all_curated_names()
+    assert "ligands.ROUTES" not in names
+    assert any("ligands.ROUTES" in r.message for r in caplog.records)
+
+
+def test_a_failed_wsl_search_is_logged(monkeypatch, caplog):
+    import logging
+    from promoter_tf_drugs import wsldock
+
+    def boom(script, **k):
+        raise OSError("wsl.exe not found")
+    monkeypatch.setattr(wsldock, "run_script", boom)
+    with caplog.at_level(logging.WARNING):
+        assert wsldock._first_existing("/opt", "true") is None
+    assert any("inside WSL" in r.message for r in caplog.records)
 
 
 def test_no_budget_means_no_ceiling(tmp_path):
@@ -15278,7 +16507,9 @@ def test_the_scenario_is_recorded_in_the_query_block():
     """It sets the direction of the whole analysis, so a saved result
     has to say which one produced it."""
     from promoter_tf_drugs import pipeline as pl
-    res = pl.run("DEMOGENE", demo=True, scenario="toxic_gain",
+    # toxic_gain means lowering, so the direction has to say so: the pair
+    # used to be allowed to contradict, and the default direction is up.
+    res = pl.run("DEMOGENE", demo=True, goal="down", scenario="toxic_gain",
                  target_fraction=0.4)
     q = res["query"]
     assert q["scenario"] == "toxic_gain"

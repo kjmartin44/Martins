@@ -418,7 +418,9 @@ def filter_routes(result: dict, **f) -> list[dict]:
 
 def render(rows: list[dict], criteria: dict, total: int,
            set_aside: list | None = None) -> str:
-    set_aside = set_aside or []
+    from .report import escape_pipes
+    rows = escape_pipes(rows)
+    set_aside = escape_pipes(set_aside or [])
     L = ["# Shortlist", ""]
     L.append(f"{len(rows)} of {total} routes kept"
              + (f", {len(set_aside)} set aside for clinical burden"
@@ -507,8 +509,11 @@ def _why_class(name: str) -> str:
         for c in _sys.CLASSES:
             if c.name == name:
                 return f"**{name}** — {c.why}"
-    except Exception:                                       # noqa: BLE001
-        pass
+    except Exception as exc:                                # noqa: BLE001
+        # Cosmetic: the class name is still shown, without its explanation.
+        import logging
+        logging.getLogger(__name__).debug(
+            "no explanation for class %s: %s", name, type(exc).__name__)
     return f"**{name}**"
 
 

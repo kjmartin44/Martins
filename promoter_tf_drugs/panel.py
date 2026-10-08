@@ -598,6 +598,9 @@ def cap_per_gene(rows: list, n: int | None) -> list:
 
 def markdown_report(panel: Panel, merged: dict, rows: list, stages: list,
                     rec: dict, criteria: dict | None = None) -> str:
+    from .report import escape_pipes
+    rows, merged, rec = (escape_pipes(rows), escape_pipes(merged),
+                         escape_pipes(rec))
     criteria = criteria or {}
     L: list[str] = []
     genes = [g.symbol for g in panel.included]
@@ -1087,23 +1090,37 @@ def _check_flag_combinations(parser, args) -> None:
     anything wastes all of it, and the condition is knowable before the
     first request goes out.
 
-    This is the CLI's check, not the pipeline's: `run()` still records a
-    failed source and carries on, because a library caller may want the
-    rest of the run regardless.
+    The panel takes the same analysis flags as the single-gene command, so
+    it runs the same checks. This was a word-for-word copy of cli.py's
+    function, which is how a rule added to one gets missed in the other;
+    it now delegates, so there is one list of rules.
     """
-    if getattr(args, "tf_activity", False) and not getattr(
-            args, "activity_tissue", None):
-        parser.error(
-            "--tf-activity needs --activity-tissue: it infers which "
-            "factors are active from their targets' expression in one "
-            "tissue, and without a tissue there is no expression profile "
-            "to infer from. Name a tissue as the expression table spells "
-            "it, e.g. --activity-tissue liver.")
-    if getattr(args, "activity_permutations", 0) and not getattr(
-            args, "tf_activity", False):
-        parser.error(
-            "--activity-permutations only applies to --tf-activity, "
-            "which was not requested. It would do nothing here.")
+    from .cli import _check_flag_combinations as _shared
+    _shared(parser, args)
+
+
+def read_gene_file(path) -> list[str]:
+    """Gene symbols from a text file, one per line, `#` for comments.
+
+    A file saved from Notepad as "UTF-8 with BOM" starts with U+FEFF, which
+    would become part of the first symbol, and one written by a PowerShell
+    `>` redirect is UTF-16. Both are read as what they are. Anything else
+    that is not valid UTF-8 is an error rather than a replaced character,
+    which would turn a symbol into one nothing recognises.
+    """
+    raw = Path(path).read_bytes()
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        text = raw.decode("utf-16")
+    else:
+        try:
+            text = raw.decode("utf-8-sig")
+        except UnicodeDecodeError as exc:
+            raise ValueError(
+                f"{path} is not UTF-8 or UTF-16 text ({exc.reason} at byte "
+                f"{exc.start}). Save it as UTF-8 with one gene per line."
+            ) from exc
+    return [ln.strip().upper() for ln in text.splitlines()
+            if ln.strip() and not ln.strip().startswith("#")]
 
 
 def main(argv=None) -> int:
@@ -1170,9 +1187,7 @@ def main(argv=None) -> int:
     if args.genes:
         genes += [g.strip().upper() for g in args.genes.split(",") if g.strip()]
     if args.gene_file:
-        genes += [ln.strip().upper()
-                  for ln in Path(args.gene_file).read_text().splitlines()
-                  if ln.strip() and not ln.startswith("#")]
+        genes += read_gene_file(args.gene_file)
     if args.control_gene:
         genes.append(args.control_gene.strip().upper())
     if not genes:

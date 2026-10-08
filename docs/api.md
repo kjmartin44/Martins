@@ -43,7 +43,10 @@ translated explicitly in [`cli.py`](../promoter_tf_drugs/cli.py); for example,
 ## Errors and partial results
 
 Invalid numeric ranges, empty gene names, unsupported direction, and unsupported
-tissue states raise `ValueError` before the HTTP client is created. Missing
+tissue states raise `ValueError` before the HTTP client is created. So does a
+scenario that contradicts the direction, such as `scenario="haploinsufficiency"`
+with `goal="down"`: the requirement and the ranking would point opposite ways.
+The scenarios `null` and `modifier` accept either direction. Missing
 explicit input files raise `FileNotFoundError`. Failed required requests can
 raise `promoter_tf_drugs.http.HttpError`. Optional stages often log warnings and
 return defaults instead of aborting. Retain logs with saved results when using

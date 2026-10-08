@@ -181,7 +181,10 @@ def _first_existing(candidates: str, test: str) -> str | None:
               f"done\nexit 1\n")
     try:
         r = run_script(script, timeout=120)
-    except Exception:                                       # noqa: BLE001
+    except Exception as exc:                                # noqa: BLE001
+        log.warning("could not run a search inside WSL (%s: %s), so "
+                    "nothing was found there", type(exc).__name__,
+                    str(exc)[:100])
         return None
     if r.returncode == 0 and r.stdout.strip():
         return r.stdout.strip().splitlines()[0].strip()
@@ -208,7 +211,9 @@ def find_binary(prefer: str | None = None) -> tuple:
                   f"done\nexit 1\n")
         try:
             r = run_script(script, timeout=120)
-        except Exception:                                   # noqa: BLE001
+        except Exception as exc:                            # noqa: BLE001
+            log.warning("could not look for %s inside WSL (%s: %s)", name,
+                        type(exc).__name__, str(exc)[:100])
             continue
         if r.returncode == 0 and r.stdout.strip():
             found = r.stdout.strip().splitlines()[0].strip()
@@ -264,7 +269,8 @@ def gpu_name() -> str | None:
             "nvidia-smi --query-gpu=name,memory.total --format=csv,noheader",
             timeout=120)
         return r.stdout.strip().splitlines()[0].strip() or None
-    except Exception:                                       # noqa: BLE001
+    except Exception as exc:                                # noqa: BLE001
+        log.debug("could not read the GPU name: %s", type(exc).__name__)
         return None
 
 

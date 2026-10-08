@@ -148,8 +148,9 @@ def assess(drug_name: str, smiles: str | None) -> Liability:
 
     try:
         liab.qed = round(QED.qed(mol), 3)
-    except Exception:                                       # noqa: BLE001
-        pass
+    except Exception as exc:                                # noqa: BLE001
+        log.debug("QED failed for %s: %s", drug_name, type(exc).__name__)
+        liab.notes.append("QED could not be computed for this structure")
 
     # Lipinski, counted rather than pass/fail: an approved drug breaking one
     # rule is unremarkable and the count is what carries information.
@@ -163,8 +164,14 @@ def assess(drug_name: str, smiles: str | None) -> Liability:
         tpsa = Descriptors.TPSA(mol)
         rot = Descriptors.NumRotatableBonds(mol)
         liab.veber_pass = bool(tpsa <= 140 and rot <= 10)
-    except Exception:                                       # noqa: BLE001
-        pass
+    except Exception as exc:                                # noqa: BLE001
+        # The fields stay None, which means "not computed", not "no
+        # violations". Say so on the record rather than only in a log.
+        log.debug("drug-likeness descriptors failed for %s: %s", drug_name,
+                  type(exc).__name__)
+        liab.notes.append("Lipinski and Veber descriptors could not be "
+                          "computed for this structure, so their absence "
+                          "is not a clean result")
 
     # Only PAINS moves the multiplier, and only because it undermines the
     # EVIDENCE. Brenk and the drug-likeness rules are reported and not

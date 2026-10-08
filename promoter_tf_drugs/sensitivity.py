@@ -81,7 +81,21 @@ from pathlib import Path
 
 import numpy as np
 
+from .stats import benjamini_hochberg as _bh
+
 log = logging.getLogger(__name__)
+
+
+def warn_empty_table(path) -> None:
+    """Say that a table file holds nothing, where a missing file would log.
+
+    A zero-byte file is what an interrupted download of a multi-gigabyte
+    table leaves. The loaders still return {}, which every caller reads as
+    "not measured", but without a word the log reads as though the table
+    had simply held nothing.
+    """
+    log.warning("%s is empty - most likely an interrupted download. It is "
+                "treated as not measured, which is not a result.", path)
 
 # PRISM ships under several names across releases; all the common
 # spellings are accepted so a download needs no renaming.
@@ -121,9 +135,6 @@ MIN_LINES = 25
 MIN_ABS_R = 0.20
 MAX_Q = 0.10
 
-# A q-value floor, so the most significant result cannot round to zero and
-# read as missing through a falsy test somewhere downstream.
-Q_FLOOR = 1e-6
 
 
 @dataclass
@@ -242,6 +253,7 @@ def load_prism(path=None) -> dict:
         try:
             header = next(reader)
         except StopIteration:
+            warn_empty_table(p)
             return {}
         columns = [c.strip() for c in header[1:]]
         if not columns:
@@ -289,6 +301,7 @@ def load_expression(path, gene: str) -> dict:
         try:
             header = next(reader)
         except StopIteration:
+            warn_empty_table(p)
             return {}
         idx = None
         for i, col in enumerate(header[1:], start=1):
@@ -310,22 +323,6 @@ def load_expression(path, gene: str) -> dict:
             except ValueError:
                 continue
     log.info("expression for %s: %d cell line(s)", want, len(out))
-    return out
-
-
-def _bh(pvals: list) -> list:
-    """Benjamini-Hochberg q-values, order preserved, floored."""
-    vals = [(i, p) for i, p in enumerate(pvals) if p is not None]
-    if not vals:
-        return [None] * len(pvals)
-    vals.sort(key=lambda t: t[1])
-    m = len(vals)
-    out = [None] * len(pvals)
-    running = 1.0
-    for rank in range(m, 0, -1):
-        i, p = vals[rank - 1]
-        running = min(running, p * m / rank)
-        out[i] = max(Q_FLOOR, round(min(1.0, running), 6))
     return out
 
 

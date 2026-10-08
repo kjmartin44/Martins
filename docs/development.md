@@ -50,6 +50,18 @@ regressions are in `test_reliability.py`. Keep tests focused on observable behav
 and use fixed seeds for models. For request behavior, mock `urlopen` and sleep;
 do not rely on service availability.
 
+Three files test the functions the launcher calls one at a time:
+`test_launcher_docking.py` (docking, WSL), `test_launcher_data.py` (gene models,
+eQTL, annotation, ChEMBL and table readers) and `test_launcher_scripts.py` (the
+helper scripts and the `to_dict` records). They replace the one external
+boundary, a docking program, WSL, a web service or a download, and check what the
+function does on its own side of it. They were written from a list of functions
+that the launcher's commands can reach and no test entered. To rebuild that list,
+record which functions a test run enters with `sys.monitoring` (Python 3.12 and
+later) and compare it with a call graph from `cli.main`, `docking.main` and
+`panel.main`. A function that runs only inside a subprocess will not show as
+entered.
+
 ## Documentation maintenance
 
 Keep the README short. Update the appropriate guide when changing behavior.

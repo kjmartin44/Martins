@@ -167,7 +167,9 @@ file size.
 
 <https://www.fda.gov/drugs/drug-approvals-and-databases/approved-drug-products-therapeutic-equivalence-evaluations-orange-book>
 → the EOBZIP download, `products.txt` inside it. Gives route of
-administration, which nothing else here does.
+administration, which nothing else here does. Put the zip itself in `data/`
+(`data/EOBZIP.zip`) or unzip `products.txt` there; both are read. About 1 MB.
+`scripts/run_everything.bat` offers to download it when neither file is present.
 
 ### Measured perturbation
 

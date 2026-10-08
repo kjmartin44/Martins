@@ -254,6 +254,38 @@ SCENARIOS = (
     "modifier",             # no mutation; move a normal gene to help
 )
 
+# The direction each scenario implies, and why. A scenario and --direction
+# are declared separately, so nothing stopped a contradictory pair: the
+# report opened "about 2x from the working allele" above a ranking built to
+# LOWER the gene, led by a transcription inhibitor. `null` and `modifier`
+# imply no direction (a null cannot be helped either way, and a modifier is
+# moved whichever way helps), so they accept both.
+SCENARIO_GOAL = {
+    "haploinsufficiency": ("up", "one allele is lost, so the plan is to "
+                                 "raise the working one"),
+    "hypomorph": ("up", "both alleles are weak, so the plan is to raise "
+                        "expression"),
+    "silenced_allele": ("up", "an intact copy is switched off, so the plan "
+                              "is to switch it on"),
+    "toxic_gain": ("down", "the product is harmful, so the plan is to "
+                           "lower it"),
+}
+
+
+def goal_conflict(scenario: str | None, goal: str | None) -> str | None:
+    """A sentence naming the contradiction, or None when the pair is fine.
+
+    Checked before any request goes out: the combination is knowable from
+    the two arguments alone, and learning of it from the report means a
+    run spent ranking the opposite of what was asked.
+    """
+    need = SCENARIO_GOAL.get(scenario or "")
+    if need is None or goal is None or goal == need[0]:
+        return None
+    return (f"scenario {scenario!r} needs direction {need[0]!r} - "
+            f"{need[1]} - but direction {goal!r} was asked for. The "
+            f"requirement and the ranking would point opposite ways.")
+
 
 def ask_for(scenario: str, gene: str, **kw) -> Ask:
     """The requirement for one of the recognised scenarios.

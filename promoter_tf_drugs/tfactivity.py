@@ -65,6 +65,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from .stats import benjamini_hochberg as _bh
+
 log = logging.getLogger(__name__)
 
 # Below this many measured targets the score is noise regardless of how
@@ -308,32 +310,9 @@ def _erfinv(x):
     return out
 
 
-# A q-value that rounds to 0.0 is the most significant result possible, and
-# `q or 1.0` would read it as the least - `0.0` is falsy. Every comparison
-# goes through this instead, and `_bh` floors at Q_FLOOR so a reported
-# number never claims to be exactly zero either.
-Q_FLOOR = 1e-6
-
-
 def _q(value, default: float = 1.0) -> float:
     """A q- or p-value for comparison, with None (not 0.0) as missing."""
     return default if value is None else float(value)
-
-
-def _bh(pvals: list) -> list:
-    """Benjamini-Hochberg q-values, order preserved."""
-    vals = [(i, p) for i, p in enumerate(pvals) if p is not None]
-    if not vals:
-        return [None] * len(pvals)
-    vals.sort(key=lambda t: t[1])
-    m = len(vals)
-    out = [None] * len(pvals)
-    running = 1.0
-    for rank in range(m, 0, -1):
-        i, p = vals[rank - 1]
-        running = min(running, p * m / rank)
-        out[i] = max(Q_FLOOR, round(min(1.0, running), 6))
-    return out
 
 
 def _overlap(targets: set, regulons: dict, tf: str) -> tuple:

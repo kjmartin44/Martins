@@ -109,10 +109,18 @@ def _fetch(client) -> bytes:
             f"offline and {local} not present; fetch it once with network "
             f"access, or pass a local copy")
 
-    req = urllib.request.Request(
-        TRANS_URL, headers={"User-Agent": "promoter-tf-drugs"})
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        raw = resp.read()
+    fetch = getattr(client, "fetch_bytes", None)
+    if fetch is not None:
+        # Through the client, so the download counts against
+        # --max-requests, is retried, and trips the host breaker like every
+        # other request. It used to bypass all three.
+        raw = fetch(TRANS_URL, timeout=120,
+                    headers={"User-Agent": "promoter-tf-drugs"})
+    else:
+        req = urllib.request.Request(
+            TRANS_URL, headers={"User-Agent": "promoter-tf-drugs"})
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            raw = resp.read()
     if len(raw) < 100_000:
         raise RuntimeError(
             f"eQTLGen download was only {len(raw)} bytes — expected ~2 MB, "
@@ -148,12 +156,15 @@ def load_trans(client=None, path: str | None = None) -> list:
                      errors="replace") if raw[:2] == b"\x1f\x8b" else \
         io.StringIO(raw.decode("utf-8", "replace"))
 
+    # Strip CR as well as LF. A copy saved on Windows ends its lines with CRLF,
+    # and a stray CR on the last header name made every row fail the column
+    # lookup, which read as 'no significant trans-eQTLs' for every gene.
     rows, targets = [], set()
     with text as fh:
-        hdr = fh.readline().rstrip("\n").split("\t")
+        hdr = fh.readline().rstrip("\r\n").split("\t")
         idx = {c: i for i, c in enumerate(hdr)}
         for line in fh:
-            f = line.rstrip("\n").split("\t")
+            f = line.rstrip("\r\n").split("\t")
             if len(f) < len(hdr):
                 continue
             try:

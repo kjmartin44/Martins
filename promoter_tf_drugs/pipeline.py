@@ -37,6 +37,8 @@ from . import magnitude as mag_mod
 from . import constraint as con_mod
 from .http import Client
 
+from . import standard_of_care as soc_mod
+
 log = logging.getLogger(__name__)
 
 # Transparent, tunable. These are heuristics, not a validated model.
@@ -385,6 +387,11 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
     if upstream + downstream == 0:
         raise ValueError(
             "upstream and downstream must define a non-empty window")
+    # Likewise a scenario and a direction that point opposite ways. Both are
+    # declared, neither inferred, so only a check can notice.
+    _conflict = mag_mod.goal_conflict(scenario, goal)
+    if _conflict:
+        raise ValueError(_conflict)
     _ckw = {"offline": offline or demo, "max_requests": max_requests}
     client = Client(cache_dir=cache_dir, **_ckw) if cache_dir \
         else Client(**_ckw)
@@ -497,20 +504,33 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
     # anything later that wanted the gene's own accession raised
     # NameError on a --no-direct run.
     uniprot = None
+    _uniprot_failed = False
     if include_direct:
         if not demo:
             try:
                 ann = annotate.annotate_tfs(client, [gene])
                 uniprot = (ann.get(gene.upper()) or {}).get("uniprot")
-            except Exception:                              # noqa: BLE001
-                pass
+            except Exception as exc:                       # noqa: BLE001
+                # This was `pass`. The search below still runs without the
+                # accession, but a lookup that failed and a gene with no
+                # accession look identical afterwards, and the progress
+                # line then reads "none annotated" as a finding about the
+                # gene. Say what happened.
+                log.warning("UniProt lookup for %s failed (%s: %s); the "
+                            "direct-drug search continues without an "
+                            "accession, so an empty result here is weaker "
+                            "evidence than usual", gene,
+                            type(exc).__name__, str(exc)[:100])
+                _uniprot_failed = True
         direct_hits = direct.find_direct(
             client, gene, uniprot, goal=goal,
             approved_only=approved_only, use_dgidb=use_dgidb, demo=demo)
 
     _progress.step(0, "drugs acting on the gene itself",
                    f"{len(direct_hits)} found" if direct_hits
-                   else "none annotated")
+                   else ("none annotated (the UniProt lookup failed, so "
+                         "this is not a finding)" if _uniprot_failed
+                         else "none annotated"))
 
     # ---------------------------------------------------------- 1. promoter
     if demo:
@@ -877,6 +897,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
 
         # ------------------- 8c. multi-hop upstream routes to undruggable TFs
         upstream_hits = {}
+        upstream_search = {}
         if upstream_network and not demo:
             edges = net_mod.fetch_network(client)
             # The high-scoring factors with no ligand are precisely what this
@@ -885,30 +906,92 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             _priority = [r for r in ranked if r.symbol in
                          set(attrition.get("top25_without_drug") or [])]
             _rest = [r for r in ranked[:6] if r not in _priority]
-            for r in (_priority + _rest)[:8]:
+            _up = {"factors_searched": 0, "factors_errored": 0,
+                   "nodes_reachable": 0, "nodes_checked": 0,
+                   "lookups_failed": 0, "factors_truncated": 0,
+                   "max_checked": net_mod.UPSTREAM_MAX_CHECKED}
+            _drug_cache: dict = {}
+            # One batched read of what every approved drug targets, when the
+            # local drug table is on disk, so each upstream node is a lookup
+            # and none has to be skipped. Without it, or if it fails, each
+            # node is asked about on its own and the walk is capped.
+            _drug_index = None
+            if edges and approved_only:
+                try:
+                    from . import localdrugs as _ld
+                    _lib = _ld.library()
+                    if _lib:
+                        _drug_index = drugs_mod.approved_target_index(
+                            client, _lib)
+                except Exception as exc:                      # noqa: BLE001
+                    log.warning("could not build the approved-drug index "
+                                "(%s); asking about upstream nodes one at a "
+                                "time, capped at %d per factor", str(exc)[:100],
+                                net_mod.UPSTREAM_MAX_CHECKED)
+            _up["drug_index"] = _drug_index is not None
+            for r in (_priority + _rest)[:8] if edges else []:
                 # The point of this step is TFs with no direct pharmacology.
                 if r.drugs:
                     continue
                 try:
-                    hs = net_mod.find_upstream_targets(
+                    srch = net_mod.find_druggable_upstream(
                         client, r.symbol, goal=goal,
                         tf_role=r.annotation.get("role", "activator"),
-                        max_depth=upstream_depth, edges=edges)
-                    hs = net_mod.attach_drugs(client, hs,
-                                              approved_only=approved_only)
+                        max_depth=upstream_depth, edges=edges,
+                        approved_only=approved_only, drug_cache=_drug_cache,
+                        drug_index=_drug_index)
                 except Exception as exc:                      # noqa: BLE001
                     log.warning("upstream search failed for %s: %s", r.symbol, exc)
+                    _up["factors_errored"] += 1
                     continue
-                hs = [h for h in hs if h.drugs]
-                if hs:
-                    upstream_hits[r.symbol] = [h.to_dict() for h in hs[:10]]
-            ledger.record("upstream", requested=True, ok=bool(upstream_hits),
-                          yielded=len(upstream_hits),
-                          detail=(f"druggable routes for "
-                                  f"{len(upstream_hits)} factor(s)"
-                                  if upstream_hits else
-                                  "no signed causal path reached a druggable "
-                                  "node"))
+                _up["factors_searched"] += 1
+                _up["nodes_reachable"] += srch.n_reachable
+                _up["nodes_checked"] += srch.n_checked
+                _up["lookups_failed"] += srch.n_lookup_failed
+                _up["factors_truncated"] += int(srch.truncated)
+                if srch.stopped:
+                    log.warning("upstream search for %s stopped early: %s",
+                                r.symbol, srch.stopped)
+                if srch.hits:
+                    upstream_hits[r.symbol] = [h.to_dict() for h in srch.hits[:10]]
+            upstream_search = _up
+            _scope = (f"{_up['nodes_checked']} of {_up['nodes_reachable']} "
+                      f"reachable upstream node(s) checked across "
+                      f"{_up['factors_searched']} factor(s)")
+            if not edges:
+                ledger.record("upstream", requested=True, ok=False,
+                              yielded=0,
+                              detail="the OmniPath network could not be "
+                                     "loaded, so no upstream search was "
+                                     "possible")
+            elif not _up["factors_searched"] and not _up["factors_errored"]:
+                ledger.record("upstream", requested=True, ok=True, yielded=0,
+                              detail="every leading factor already has a "
+                                     "drug acting on it directly, so no "
+                                     "upstream search was needed")
+            elif upstream_hits:
+                ledger.record("upstream", requested=True, ok=True,
+                              yielded=len(upstream_hits),
+                              detail=f"druggable routes for "
+                                     f"{len(upstream_hits)} factor(s); "
+                                     f"{_scope}")
+            elif (not _up["factors_searched"]
+                  or _up["lookups_failed"] * 2 > _up["nodes_checked"]):
+                ledger.record(
+                    "upstream", requested=True, ok=False, yielded=0,
+                    detail=f"{_up['lookups_failed']} of "
+                           f"{_up['nodes_checked']} drug lookup(s) failed, so "
+                           f"this says nothing about whether a druggable "
+                           f"route exists; {_scope}")
+            else:
+                _more = (f"; {_up['factors_truncated']} factor(s) reached "
+                         f"the limit of {_up['max_checked']} nodes with more "
+                         f"still reachable, so a route further out is not "
+                         f"ruled out" if _up["factors_truncated"] else "")
+                ledger.record(
+                    "upstream", requested=True, ok=True, yielded=0,
+                    detail=f"no node checked has an approved drug that moves "
+                           f"it the needed way; {_scope}{_more}")
 
         # ------------- 8b2. stabilisation routes for pocket-less factors
         stabilisation = {}
@@ -1290,7 +1373,9 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                           # detail below says which source was consulted.
                           ok=bool(_phen) or _n_local_gwas(_local_gen) > 0,
                           yielded=len(_phen) + _n_local_gwas(_local_gen),
-                          detail=_genetics_detail(_phen, _local_gen))
+                          detail=_genetics_detail(
+                              _phen, _local_gen,
+                              error=(genetic["cis"] or {}).get("error")))
             genetic["trans"] = [
                 gen_mod.tf_link_support(client, r.symbol, prom.gene_symbol).to_dict()
                 for r in ranked[:3]]
@@ -1437,6 +1522,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             "stabilisation": stabilisation,
             "ligand_axes": ligand_axes,
             "upstream": upstream_hits,
+            "upstream_search": upstream_search,
             "lincs": lincs,
             "screens": screens,
             # Both of these were computed above and left out of the dict
@@ -1509,6 +1595,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             "all_routes": all_routes,
             "mechanisms": mechanisms,
             "upstream": upstream_hits,
+            "upstream_search": upstream_search,
             "stabilisation": stabilisation,
             "ligand_axes": ligand_axes,
             "cell_type": celltype,
@@ -1571,6 +1658,9 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
 
     _result = {
         "direct_therapies": [t.to_dict() for t in direct_hits],
+        # What is already approved for the condition this gene causes. Not a
+        # route to the gene and not part of any score; see standard_of_care.
+        "standard_of_care": soc_mod.for_gene(gene),
         "tss_window_overlap": tss_overlap,
         "evidence_sources": ledger.to_dict(),
         "evidence_verdict": prov_mod.verdict(
@@ -1604,7 +1694,8 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
 
 
 
-def _genetics_detail(phenotypes: list, local: dict | None) -> str:
+def _genetics_detail(phenotypes: list, local: dict | None,
+                     error: str | None = None) -> str:
     """What the genetics step actually found, naming which source found it.
 
     Open Targets and a local GWAS catalogue are not the same evidence: the
@@ -1626,6 +1717,12 @@ def _genetics_detail(phenotypes: list, local: dict | None) -> str:
             parts.append("a local GWAS Catalog was read and holds no "
                          "significant association for this gene")
     if not parts:
+        if error:
+            # The query did not complete. "No association returned" would
+            # read as a finding about the gene, and it is not one.
+            return (f"the Open Targets query failed ({error[:110]}), so "
+                    f"this says nothing about whether the gene has "
+                    f"associations")
         return "no genetic association returned for this gene"
     return "; ".join(parts)
 

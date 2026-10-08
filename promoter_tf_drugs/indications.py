@@ -287,6 +287,9 @@ def fetch_indications(client, chembl_id: str, *, limit: int = 6) -> list:
     return [{"indication": t, "max_phase": p} for t, p in ranked[:limit]]
 
 
+_ROUTE_ERROR_REPORTED = False
+
+
 def route_of(drug_name: str) -> dict | None:
     """FDA route of administration, from the Orange Book if it is on disk.
 
@@ -298,7 +301,17 @@ def route_of(drug_name: str) -> dict | None:
     try:
         from . import orangebook as ob
         return ob.lookup(drug_name)
-    except Exception:                                       # noqa: BLE001
+    except Exception as exc:                                # noqa: BLE001
+        # Said once: this runs for every drug. A file that is on disk and
+        # cannot be read leaves route unknown for all of them, and the
+        # curated list below covers only about seventy.
+        global _ROUTE_ERROR_REPORTED
+        if not _ROUTE_ERROR_REPORTED:
+            _ROUTE_ERROR_REPORTED = True
+            log.warning("the Orange Book could not be read (%s: %s); route "
+                        "of administration falls back to the curated list "
+                        "and is unknown for the rest", type(exc).__name__,
+                        str(exc)[:100])
         return None
 
 

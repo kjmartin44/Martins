@@ -458,6 +458,11 @@ def approved_name_set() -> set | None:
     local drug table, then the curated indication and drug-class tables
     this package ships. None when none of them is available, which must
     stay distinguishable from an empty set.
+
+    It reads the DEFAULT library locations (see `localdrugs.resolve`), not
+    a file passed with `--library`, and it is built once per process: a
+    library that becomes readable later is not picked up until the next
+    run. A read failure is logged when it happens.
     """
     global _APPROVED_NAMES, _APPROVED_FROM_LIBRARY
     if _APPROVED_NAMES is not None:
@@ -473,13 +478,23 @@ def approved_name_set() -> set | None:
             if n:
                 names.add(n)
         _APPROVED_FROM_LIBRARY = bool(rows)
-    except Exception:                                       # noqa: BLE001
-        pass
+    except Exception as exc:                                # noqa: BLE001
+        # Said once, here. This used to be `pass`, so a locked, corrupt or
+        # half-written library silently left approval checks resting on a
+        # few hundred curated names - the effect (a vaguer "unknown" for
+        # every drug not curated) is graceful, but nothing said WHY it had
+        # changed. The set is built once per process, so this is the only
+        # place it can be reported.
+        log.warning("the local approved-drug library could not be read "
+                    "(%s: %s); approval checks fall back to the %s curated "
+                    "names and answer 'unknown' for anything else",
+                    type(exc).__name__, str(exc)[:100], "few hundred")
     try:
         from . import indications as _ind
         names.update(salt_free_name(k.lower()) for k in _ind.CURATED)
-    except Exception:                                       # noqa: BLE001
-        pass
+    except Exception as exc:                                # noqa: BLE001
+        log.warning("the curated indication table could not be read "
+                    "(%s: %s)", type(exc).__name__, str(exc)[:100])
     # NOT systemic.CLASSES. That is a burden table, and it deliberately
     # contains investigational and tool compounds - CGP-60474, AT-7519,
     # ALW-II-38-3 - because their PHARMACOLOGY is what the burden claim is

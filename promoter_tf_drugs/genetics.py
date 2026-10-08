@@ -68,6 +68,11 @@ class GeneticEvidence:
     phenotypes: list = field(default_factory=list)
     colocalised: bool | None = None
     notes: list = field(default_factory=list)
+    # Set when the source could not be read: an outage, or the server
+    # answering with an error. Distinct from `notes` and from an empty
+    # `phenotypes`, which is what a gene with no association also has -
+    # the difference between "nothing found" and "could not look".
+    error: str | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -93,14 +98,18 @@ def _resolve_ensembl(client: Client, symbol: str) -> str | None:
         hits { id entity name }
       }
     }"""
-    try:
-        res = client.post(OPENTARGETS, {"query": q, "variables": {"q": symbol}})
-    except Exception as exc:                              # noqa: BLE001
-        # Catching broadly on purpose: a resolver failure of any kind should
-        # degrade to "no genetic evidence", never take the run down.
-        log.debug("Open Targets resolve failed for %s: %s", symbol, exc)
-        return None
+    # A failure PROPAGATES. It used to be caught here and returned as
+    # None, which is also what a symbol Open Targets does not know
+    # returns, so an outage, an error body and a gene that does not exist
+    # all read "could not resolve". Callers decide how to degrade; none of
+    # them should have to guess which of the three happened.
+    res = client.post(OPENTARGETS, {"query": q, "variables": {"q": symbol}})
     hits = (((res.get("data") or {}).get("search") or {}).get("hits")) or []
+    # An `errors` list next to usable data is a warning about some field,
+    # not a failed lookup. Only errors with nothing to read are a failure.
+    if res.get("errors") and not hits:
+        raise HttpError("Open Targets returned an error: "
+                        f"{str(res['errors'])[:120]}")
     return hits[0]["id"] if hits else None
 
 
@@ -112,9 +121,17 @@ def target_consequences(client: Client, gene: str, *, size: int = 15) -> Genetic
     intervention you are proposing, including its unwanted effects.
     """
     ev = GeneticEvidence(gene=gene.upper(), kind="cis")
-    ensembl = _resolve_ensembl(client, gene)
+    try:
+        ensembl = _resolve_ensembl(client, gene)
+    except Exception as exc:                              # noqa: BLE001
+        # Degrades to "no genetic evidence" and never takes the run down,
+        # but says WHY, and sets `error` so the ledger can tell a query
+        # that failed from a gene with no associations.
+        ev.error = f"Open Targets could not resolve {gene}: {str(exc)[:140]}"
+        ev.notes.append(ev.error)
+        return ev
     if not ensembl:
-        ev.notes.append(f"could not resolve {gene} in Open Targets")
+        ev.notes.append(f"{gene} is not a target Open Targets knows")
         return ev
 
     try:
@@ -122,10 +139,20 @@ def target_consequences(client: Client, gene: str, *, size: int = 15) -> Genetic
             "query": _ASSOC_QUERY,
             "variables": {"ensemblId": ensembl, "size": size}})
     except HttpError as exc:
-        ev.notes.append(f"Open Targets query failed: {exc}")
+        ev.error = f"Open Targets query failed: {str(exc)[:140]}"
+        ev.notes.append(ev.error)
         return ev
-
     target = (res.get("data") or {}).get("target") or {}
+    if res.get("errors"):
+        if not target:
+            ev.error = ("Open Targets returned an error for the "
+                        f"associations query: {str(res['errors'])[:120]}")
+            ev.notes.append(ev.error)
+            return ev
+        # Data came back with the errors: use it, and say it may be short.
+        ev.notes.append("Open Targets reported errors alongside this "
+                        f"answer ({str(res['errors'])[:80]}), so it may be "
+                        "incomplete")
     rows = ((target.get("associatedDiseases") or {}).get("rows")) or []
     for r in rows:
         dtypes = {d["id"]: d["score"] for d in (r.get("datatypeScores") or [])}
@@ -208,5 +235,10 @@ def local_support(symbol: str) -> dict | None:
         # zero hits on purpose: read-and-found-nothing is a different
         # state from never-looked, and the caller needs to tell them apart.
         return got if got.get("assessed") else None
-    except Exception:                                       # noqa: BLE001
+    except Exception as exc:                                # noqa: BLE001
+        # None means "no local table", which is a different statement from
+        # a table that is present and could not be read.
+        log.warning("the local GWAS table could not be read for %s "
+                    "(%s: %s); local genetic support is not assessed",
+                    symbol, type(exc).__name__, str(exc)[:100])
         return None

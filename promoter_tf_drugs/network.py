@@ -125,6 +125,32 @@ class UpstreamHit:
         return asdict(self)
 
 
+# How far down the ranked list of upstream nodes the drug search goes for one
+# factor, and how many druggable nodes are enough. The ranking is by path
+# confidence and specificity, not by whether anything can be done at the node,
+# and the nodes at the top are mostly chromatin and DNA-repair proteins with
+# no approved drug. A search that asked about only the best 25 reported "no
+# druggable route" for a factor whose first druggable node ranked 103rd of
+# 1,189. Each node costs a few ChEMBL requests, so the walk is bounded.
+UPSTREAM_MAX_CHECKED = 100
+UPSTREAM_WANT = 10
+# Consecutive failed lookups after which the walk stops. A service that is
+# down answers every node the same way, and asking on would only repeat it.
+UPSTREAM_MAX_CONSECUTIVE_FAILURES = 5
+
+
+@dataclass
+class UpstreamSearch:
+    """What the search for druggable upstream nodes covered, not only found."""
+    tf: str
+    hits: list = field(default_factory=list)
+    n_reachable: int = 0          # upstream nodes the network reaches at all
+    n_checked: int = 0            # nodes asked about, in score order
+    n_lookup_failed: int = 0      # of those, how many lookups raised
+    truncated: bool = False       # stopped at the limit with nodes unchecked
+    stopped: str | None = None    # why it stopped early, if it did
+
+
 # ------------------------------------------------------------------ loading
 def fetch_network(client: Client, organism: int = 9606,
                   datasets: str = "omnipath,kinaseextra,tfregulons",
@@ -330,37 +356,121 @@ def find_upstream_targets(client: Client, tf: str, *, goal: str = "up",
     return hits[:top_n]
 
 
-def attach_drugs(client: Client, hits: list[UpstreamHit], *, goal_on_node: str = "up",
-                 approved_only: bool = True) -> list[UpstreamHit]:
-    """Find approved drugs for each upstream node, respecting the path sign."""
+def _attach_one(client: Client, h: UpstreamHit, *, goal_on_node: str,
+                approved_only: bool, drug_cache: dict | None = None,
+                drug_index: dict | None = None) -> bool:
+    """Attach the drugs that move one node the needed way.
+
+    Returns False when the lookup raised, so the caller can tell "no drug
+    found" from "could not ask". `drug_cache` remembers answers across
+    factors, because the same upstream nodes recur from one factor to the
+    next; a failed lookup is never remembered.
+    """
     from .drugs import chembl_drugs
 
-    for h in hits:
-        # Two signs decide this, and only one of them was being read.
-        #
-        #   n * net_sign = want_tf_sign,  so  n = want_tf_sign * net_sign
-        #
-        # where n is the direction the DRUG must move the upstream node.
-        # The previous version used `want = "up" if net_sign == 1`, which
-        # silently assumes want_tf_sign is always +1. It is not:
-        # `find_upstream_targets` flips it for a repressor, and again for
-        # a downregulation goal. Worse, `upstream_paths` keeps only paths
-        # whose net sign EQUALS want_tf_sign, so the two were always equal
-        # and the old expression reduced to "follow want_tf_sign" - giving
-        # the opposite of the right answer whenever it was -1.
-        #
-        # Concretely, for KINASE -| REPRESSOR with the gene to be raised:
-        # you lower the repressor, which means RAISING the kinase. The old
-        # code asked for a kinase inhibitor, which raises the repressor and
-        # lowers the gene.
-        want_tf = getattr(h, "want_tf_sign", None)
-        if want_tf is None:
-            want_tf = 1 if goal_on_node == "up" else -1
-        want = "up" if want_tf * h.net_sign == 1 else "down"
+    # Two signs decide this, and only one of them was being read.
+    #
+    #   n * net_sign = want_tf_sign,  so  n = want_tf_sign * net_sign
+    #
+    # where n is the direction the DRUG must move the upstream node.
+    # The previous version used `want = "up" if net_sign == 1`, which
+    # silently assumes want_tf_sign is always +1. It is not:
+    # `find_upstream_targets` flips it for a repressor, and again for
+    # a downregulation goal. Worse, `upstream_paths` keeps only paths
+    # whose net sign EQUALS want_tf_sign, so the two were always equal
+    # and the old expression reduced to "follow want_tf_sign" - giving
+    # the opposite of the right answer whenever it was -1.
+    #
+    # Concretely, for KINASE -| REPRESSOR with the gene to be raised:
+    # you lower the repressor, which means RAISING the kinase. The old
+    # code asked for a kinase inhibitor, which raises the repressor and
+    # lowers the gene.
+    want_tf = getattr(h, "want_tf_sign", None)
+    if want_tf is None:
+        want_tf = 1 if goal_on_node == "up" else -1
+    want = "up" if want_tf * h.net_sign == 1 else "down"
+
+    key = (h.node, bool(approved_only))
+    if drug_index is not None:
+        found = drug_index.get(h.node.upper(), [])
+    elif drug_cache is not None and key in drug_cache:
+        found = drug_cache[key]
+    else:
         try:
             found = chembl_drugs(client, h.node, None, approved_only)
         except Exception as exc:                             # noqa: BLE001
             log.debug("drug lookup failed for %s: %s", h.node, exc)
-            continue
-        h.drugs = [d.to_dict() for d in found if d.direction in (want, "unclear")][:5]
+            return False
+        if drug_cache is not None:
+            drug_cache[key] = found
+    h.drugs = [d.to_dict() for d in found if d.direction in (want, "unclear")][:5]
+    return True
+
+
+def attach_drugs(client: Client, hits: list[UpstreamHit], *, goal_on_node: str = "up",
+                 approved_only: bool = True,
+                 drug_cache: dict | None = None) -> list[UpstreamHit]:
+    """Find approved drugs for each upstream node, respecting the path sign."""
+    failed = 0
+    for h in hits:
+        if not _attach_one(client, h, goal_on_node=goal_on_node,
+                           approved_only=approved_only,
+                           drug_cache=drug_cache):
+            failed += 1
+    if failed:
+        log.warning("the drug lookup failed for %d of %d upstream node(s); "
+                    "those are left without drugs, which is not a finding "
+                    "that none exist", failed, len(hits))
     return hits
+
+
+def find_druggable_upstream(client: Client, tf: str, *, goal: str = "up",
+                            tf_role: str = "activator",
+                            max_depth: int = MAX_DEPTH,
+                            edges: list[Edge] | None = None,
+                            approved_only: bool = True,
+                            want: int = UPSTREAM_WANT,
+                            max_checked: int = UPSTREAM_MAX_CHECKED,
+                            drug_cache: dict | None = None,
+                            drug_index: dict | None = None) -> UpstreamSearch:
+    """Walk the upstream nodes in score order until enough have a drug.
+
+    `find_upstream_targets` ranks by how well a path explains the factor;
+    this asks about drugs down that ranking, up to `max_checked` nodes or
+    `want` druggable ones, and reports how far it got. The search records
+    what it covered, so "nothing found" can say among how many, and a
+    service outage is counted apart from a node with no drug.
+
+    With `drug_index` (`drugs.approved_target_index`) every reachable node is
+    checked, because a lookup is a dictionary read and there is nothing to
+    ration; `max_checked` then does not apply. Without it each node costs
+    ChEMBL requests, and the walk stops at `max_checked`.
+    """
+    nodes = find_upstream_targets(client, tf, goal=goal, tf_role=tf_role,
+                                  max_depth=max_depth, edges=edges,
+                                  top_n=1_000_000)
+    search = UpstreamSearch(tf=tf.upper(), n_reachable=len(nodes))
+    if drug_index is not None:
+        max_checked = len(nodes)
+    in_a_row = 0
+    for h in nodes:
+        if len(search.hits) >= want:
+            break
+        if search.n_checked >= max_checked:
+            search.truncated = True
+            break
+        search.n_checked += 1
+        if not _attach_one(client, h, goal_on_node=goal,
+                           approved_only=approved_only,
+                           drug_cache=drug_cache, drug_index=drug_index):
+            search.n_lookup_failed += 1
+            in_a_row += 1
+            if in_a_row >= UPSTREAM_MAX_CONSECUTIVE_FAILURES:
+                search.stopped = (f"{in_a_row} drug lookups in a row failed, "
+                                  f"so the service looks unavailable")
+                break
+            continue
+        in_a_row = 0
+        if h.drugs:
+            search.hits.append(h)
+    return search

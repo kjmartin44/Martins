@@ -357,6 +357,15 @@ decoys, and the ranking is scored by ROC AUC and by enrichment in the top
 1 percent. Both must clear a bar before any score on an untested compound
 is reported. Below it, nothing is reported and the reason is given.
 
+The gate counts ligands that received a score, not ligands that were
+submitted. If docking scores fewer than five known ligands, or fewer than
+twenty decoys, the gate refuses and says how many were submitted and how
+many scored. The twenty is a floor on sample size, not a calibrated value.
+The result's `gate`
+block records the counts (`n_actives`, `n_actives_scored`, `n_actives_failed`,
+and the same for decoys) and the number of compounds behind the enrichment
+figure, which is small enough that it moves a lot between runs.
+
 `--state active` restricts to agonist-bound conformations, read from the
 file by detecting a bound LXXLL coactivator peptide. That matters when you
 want a compound that raises your gene: an agonist has to fit the active
@@ -679,10 +688,56 @@ would be the one mistake the page could make. It never drops a caveat to
 make a row fit.
 
 `results.json` has top-level `query`, `results`, `direct_therapies`, `weights`,
-and `drug_weights`. Each entry in `results` includes `promoter`, `sequence`,
-`hits`, `tfs`, `drug_grades`, `all_routes`, and optional stage outputs. Empty
-sections can mean no result, a disabled stage, or a service failure; consult the
-run log. There is no versioned JSON schema yet.
+`drug_weights`, `dosage`, `requirement`, `spend`, `evidence_sources`,
+`evidence_verdict`, `provenance`, `tss_window_overlap`, and `standard_of_care`. Each entry in
+`results` includes `promoter`, `sequence`, `hits`, `tfs`, `drug_grades`,
+`all_routes`, and optional stage outputs. Empty sections can mean no result, a
+disabled stage, or a service failure; the `evidence_sources` ledger tells them
+apart, and the run log has the detail. `provenance.schema` is the result
+format version, currently 1. It changes when a saved field changes meaning,
+not when a field is added. There is no formal JSON schema file.
+
+In the `genetic` stage output, `cis.error` is text when the Open Targets
+query failed and null otherwise. An empty `cis.phenotypes` with a null
+`error` means the gene has no associations there; with an `error` it means
+the query did not complete and says nothing about the gene.
+
+`standard_of_care` is the approved treatments for the condition the gene
+causes, or null when the gene has no entry. It is read from a short
+hand-maintained table in `standard_of_care.py`, not from a service: Open
+Targets omits valbenazine for Huntington disease and lists four ADHD drugs as
+approved for it. Each treatment records the gene its target is, and the
+entry says whether any of them acts on the gene itself. For HTT none does:
+tetrabenazine, deutetrabenazine and valbenazine inhibit VMAT2 (SLC18A2) and
+treat chorea. The field is context beside the ranking, not part of it. The
+approval dates are as supplied by the project owner; confirm them against
+Drugs@FDA.
+
+Each promoter block's `upstream_search` records what the `--upstream-network`
+search covered: `factors_searched`, `nodes_reachable`, `nodes_checked`,
+`lookups_failed`, `factors_truncated`, `max_checked` and whether a `drug_index`
+was used. The evidence ledger's `upstream` row quotes the same counts, so
+"nothing found" says among how many nodes.
+
+**Compatibility:** the upstream search used to ask about drugs for only the 25
+best-scoring nodes of each factor. Those are mostly chromatin and repair
+proteins with no approved drug, so many factors reported no druggable route
+when one existed further down the ranking. It now checks every reachable node
+when the local drug table is present, so a run with `--upstream-network` can
+return upstream routes that an earlier version did not. The routes are real
+paths but often three steps from the factor, so read the hop count.
+
+In each `drug_grades` entry, `evidence.safety_lookup_failed` is true when the
+ChEMBL drug-warning lookup did not complete. `withdrawn` and `black_box` are
+false in that case because nothing was read, not because the drug is clear,
+and the grade's notes say the flags are unchecked. No score is changed for it.
+A docking screen that loses compounds to an error in its scoring function
+counts them as `scorer_failed` in `failures`, separate from `embedding_failed`,
+`docking_failed` and `no_pose`.
+
+When a docking run used `--strip-counter-ions`, its result carries
+`ligand_prep` with `strip_counter_ions`, `n_library`, `n_changed` and
+`n_ambiguous`. A run that docked the structures as stored has no such key.
 
 The TF TSV combines promoter blocks without transcript identifiers. Use the
 JSON when distinguishing alternative promoters. The BED contains a `track`
@@ -711,11 +766,24 @@ from being reused as parsed JSON or a GET from being reused as a POST.
 **Compatibility:** cache keys changed during the reliability update. Old cache
 files remain on disk but are not reused; populate the new cache online before
 expecting an offline run to work. The package does not delete old entries.
+Ensembl gene lookups now send `mane=1` so the MANE Select transcript is
+reported, which changes their cache key. A cache warmed by an earlier version
+needs one online run before `--offline` finds those lookups.
+
+A response is not cached when its body carries an `errors` list, such as
+GraphQL `errors` with HTTP 200, and a 200 whose body is not JSON raises an
+error instead of being stored. When data comes back beside the errors, the
+callers use the data and note that it may be incomplete; with nothing to
+read, the lookup counts as failed. Because such a response is never cached,
+an endpoint that always attaches a warning is asked again on every run. Redirects with status 307 or 308 are followed for any
+method. Large reads such as ChIP peak counts keep a memo under
+`chip_regions/` in the cache directory, keyed on the file path, size,
+modification time, and the window, so a replaced file is read again.
 
 Concurrent writers use separate temporary files and atomic replacement. A cache
 write failure is logged and does not discard a successful HTTP response.
 Service requests retry transient failures, honor valid `Retry-After` seconds or
-dates, and bound manually followed POST redirects. No authenticated service
+dates, and bound manually followed redirects. No authenticated service
 configuration is provided by the CLI.
 
 ## Running without the web services

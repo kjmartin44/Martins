@@ -354,6 +354,14 @@ def _check_flag_combinations(parser, args) -> None:
         parser.error(
             "--activity-permutations only applies to --tf-activity, "
             "which was not requested. It would do nothing here.")
+    # A scenario implies a direction. Declared separately they could
+    # contradict, and the report would then open with a requirement to
+    # raise the gene above a ranking built to lower it.
+    from .magnitude import goal_conflict
+    problem = goal_conflict(getattr(args, "scenario", None),
+                            getattr(args, "direction", None))
+    if problem:
+        parser.error(f"--scenario and --direction disagree: {problem}")
 
 
 def main(argv=None) -> int:

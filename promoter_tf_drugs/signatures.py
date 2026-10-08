@@ -121,7 +121,9 @@ def is_landmark(gene: str, client: Client | None = None) -> bool | None:
     try:
         res = client.get(f"{SIGCOM}/entities/find", {
             "filter": f'{{"where":{{"meta.symbol":"{g}"}}}}'})
-    except HttpError:
+    except HttpError as exc:
+        log.warning("SigCom lookup for %s failed (%s); it is treated as "
+                    "not found, which is not a finding", g, str(exc)[:80])
         return None
     rows = res if isinstance(res, list) else res.get("entities", []) or []
     for r in rows:

@@ -33,6 +33,20 @@ import sys
 from pathlib import Path
 
 
+# What a factor's role looks like when it was looked for and not found.
+# annotate.py stores the STRING "unknown" for it, which is truthy, so the
+# filter below used to test `not tf.get("role")` and let every unresolved
+# factor straight through - on a real CCR5 result, 39 of 106 factors, and
+# `require_role=True` returned exactly what `require_role=False` did.
+UNRESOLVED_ROLES = {"", "unknown", "?", "none"}
+
+
+def has_role(tf: dict) -> bool:
+    """Is this factor's role resolved to something docking can use?"""
+    role = tf.get("role")
+    return role is not None and str(role).strip().lower() not in UNRESOLVED_ROLES
+
+
 def pick(result: dict, *, top: int = 3, min_peaks: int = 1,
          require_role: bool = True) -> list[dict]:
     """The factors worth docking, best first."""
@@ -45,7 +59,7 @@ def pick(result: dict, *, top: int = 3, min_peaks: int = 1,
                 continue
             if (tf.get("chip_peaks") or 0) < min_peaks:
                 continue
-            if require_role and not tf.get("role"):
+            if require_role and not has_role(tf):
                 continue
             # The same factor can appear under several transcripts.
             best = seen.get(sym)

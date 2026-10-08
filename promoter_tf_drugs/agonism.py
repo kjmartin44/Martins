@@ -158,7 +158,9 @@ def fetch_actives(client: Client, target_chembl_id: str, *,
             res = client.get(f"{CHEMBL}/molecule", {
                 "molecule_chembl_id__in": ",".join(chunk),
                 "limit": 50, "format": "json"})
-        except HttpError:
+        except HttpError as exc:
+            log.warning("ChEMBL molecule lookup failed for %d id(s) (%s); "
+                        "they are left out", len(chunk), str(exc)[:80])
             continue
         for m in res.get("molecules", []):
             smi = (m.get("molecule_structures") or {}).get("canonical_smiles")
@@ -202,7 +204,9 @@ def fetch_labelled_ligands(client: Client, target_chembl_id: str) -> list[dict]:
                 "molecule_chembl_id__in": ",".join(chunk),
                 "limit": 50, "format": "json",
             })
-        except HttpError:
+        except HttpError as exc:
+            log.warning("ChEMBL molecule lookup failed for %d id(s) (%s); "
+                        "they are left out", len(chunk), str(exc)[:80])
             continue
         for mol in res.get("molecules", []):
             smiles = (mol.get("molecule_structures") or {}).get("canonical_smiles")
@@ -477,8 +481,10 @@ def predict_for_drug(client: Client, drug, smiles: str | None = None,
         try:
             mol = client.get(f"{CHEMBL}/molecule/{drug.chembl_id}", {"format": "json"})
             smiles = (mol.get("molecule_structures") or {}).get("canonical_smiles")
-        except HttpError:
-            pass
+        except HttpError as exc:
+            log.warning("ChEMBL structure lookup failed for %s (%s); no "
+                        "structure, so it is not assessed",
+                        drug.chembl_id, str(exc)[:80])
     if not smiles:
         p = AgonismPrediction(drug.name, drug.target_symbol, "undetermined")
         p.notes.append("no structure available")
