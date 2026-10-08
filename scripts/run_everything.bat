@@ -161,7 +161,10 @@ REM because the CLI refuses that combination up front rather than failing
 REM a quarter of an hour into the run.
 set "ACTIVITY="
 set /p ATISSUE="Tissue to infer factor activity in, blank to skip: "
-if not "!ATISSUE!"=="" set "ACTIVITY=--tf-activity --activity-tissue "!ATISSUE!""
+REM 2000 permutations build an empirical null in place of the analytic one,
+REM which assumes targets are independent and co-expression makes false.
+REM The CLI's own help says to use 2000 or more before relying on a number.
+if not "!ATISSUE!"=="" set "ACTIVITY=--tf-activity --activity-tissue "!ATISSUE!" --activity-permutations 2000"
 
 REM --- the shape of the dosage problem ---------------------------------
 REM This fixes what counts as enough, and the ranking below cannot tell
@@ -353,10 +356,18 @@ if defined NUMBER_OF_PROCESSORS (
 if !JOBS! LSS 1 set "JOBS=1"
 if !CORES! LSS 1 set "CORES=1"
 
+REM The whole approved library rather than the first 600, and exhaustiveness
+REM 16 rather than 8, which the docking help describes as slower and steadier.
+REM Both only cost time once a pocket validates; a pocket that cannot be
+REM validated is refused before the library is touched.
+set "LIBLIMIT=100000"
+set "EXH=16"
+
 echo === 1 of 4: docking the !GENE! protein ===
 echo   ^(needs gnina or smina. Skipped cleanly when neither is installed.^)
-echo   !JOBS! compound^(s^) at a time on !CORES! core^(s^) each; 600 compounds
-echo   by default, which is roughly twenty minutes once a pocket validates.
+echo   !JOBS! compound^(s^) at a time on !CORES! core^(s^) each; the whole
+echo   approved library ^(about 3,300 compounds^) at exhaustiveness !EXH!, which
+echo   is a couple of hours once a pocket validates and seconds if it refuses.
 if not exist "!OUT!" mkdir "!OUT!"
 set "DOCKDIR=!OUT!\docking"
 if not exist "!DOCKDIR!" mkdir "!DOCKDIR!"
@@ -366,6 +377,7 @@ if exist "!DOCKJSON!" del "!DOCKJSON!"
 "%PY%" -m promoter_tf_drugs.docking --product --gene !GENE! ^
     --direction !DIR! --state any !LIBRARY! ^
     --jobs !JOBS! --cpu !CORES! --top 40 ^
+    --library-limit !LIBLIMIT! --exhaustiveness !EXH! ^
     --work-dir "!OUT!\docking_work" --out "!DOCKJSON!" -v
 if errorlevel 1 (
     echo.
@@ -389,9 +401,9 @@ REM stabilised - to lower a gene through an activator you want that
 REM activator inactive - and the docking derives it. A factor whose role
 REM is unresolved is left out by top_factors.py rather than docked
 REM against a guessed conformation.
-set "NTF=3"
-set /p NTF="How many transcription factors to dock [3, 0 to skip]: "
-if "!NTF!"=="" set "NTF=3"
+set "NTF=5"
+set /p NTF="How many transcription factors to dock [5, 0 to skip]: "
+if "!NTF!"=="" set "NTF=5"
 
 set "TFLIST=!DOCKDIR!\factors.txt"
 if exist "!TFLIST!" del "!TFLIST!"
@@ -450,6 +462,7 @@ if exist "!TFLIST!" (
         "%PY%" -m promoter_tf_drugs.docking --gene %%T !TFROLE! ^
             --direction !DIR! !LIBRARY! ^
             --jobs !JOBS! --cpu !CORES! --top 40 ^
+            --library-limit !LIBLIMIT! --exhaustiveness !EXH! ^
             --work-dir "!OUT!\docking_work" ^
             --out "!DOCKDIR!\%%T.json" -v
         if errorlevel 1 echo       %%T produced nothing; continuing.
@@ -484,7 +497,7 @@ set "TFW=--tf-weight 0.5"
 if not "!CHIP!"=="--chip-api" set "TFW=--tf-weight 0.7"
 
 echo === 3 of 4: analysing !GENE! ===
-echo   Ten to thirty minutes on a first run. Checkpoints print as it goes.
+echo   Thirty minutes to a couple of hours on a first run. Checkpoints print as it goes.
 echo.
 
 "%PY%" -m promoter_tf_drugs --gene !GENE! --direction !DIR! ^

@@ -49,6 +49,16 @@ environment activated. `run_demo.bat` uses synthetic fixtures.
 `run_analysis.bat` and `run_everything.bat` use live services. The latter may
 install missing chemistry dependencies and download reference files.
 
+`run_everything.bat` runs every stage at full effort, and a run takes a long
+time. It docks the whole approved library (about 3,300 compounds, not the first
+600) at exhaustiveness 16, docks five transcription factors unless you say
+otherwise, and runs the factor activity test with 2000 permutations when you
+name a tissue. A pocket that cannot be validated is refused before the library
+is touched, so a gene whose structure or ligands are missing finishes the
+docking stages in minutes. A pocket that validates costs about two hours per
+target. The stages that need a large optional file (PRISM and DepMap for the
+sensitivity scan) run only when the file is in `data/`.
+
 The launchers are convenience wrappers. Prefer the documented Python commands
 for reproducible runs and when diagnosing failures.
 

@@ -751,6 +751,11 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
 
         # ------------------------------------- 8. optional library screen
         screens = {}
+        # The receptors this screen could be asked about: factors with a drug
+        # that names its ChEMBL target. Counted whether or not the screen
+        # runs, so the ledger can tell "nothing to screen" from "could not".
+        _screen_eligible = {getattr(d, "target_chembl_id", None)
+                            for r in ranked for d in r.drugs} - {None}
         if screen_receptors and not demo:
             from . import screening
             seen_targets = set(_screen_cache)
@@ -1565,10 +1570,9 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                     dock_consensus[sym] = both
 
         if screen_receptors and not demo:
-            ledger.record("screen", requested=True, ok=bool(screens),
-                          yielded=len(screens),
-                          detail=(f"{len(screens)} receptor(s) screened"
-                                  if screens else "no receptor screened"))
+            _ok, _detail = _screen_outcome(screens, _screen_eligible)
+            ledger.record("screen", requested=True, ok=_ok,
+                          yielded=len(screens), detail=_detail)
 
         outputs.append({
             "promoter": prom.to_dict(),
@@ -1692,6 +1696,24 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
     return _result
 
 
+
+
+def _screen_outcome(screens: dict, eligible: set) -> tuple:
+    """(ok, detail) for the receptor screen's ledger row.
+
+    The screen runs on receptors that already have an approved drug naming
+    their ChEMBL target. A promoter whose factors have none (HTT's: 49
+    factors, no approved drug on any) leaves nothing to screen, which is a
+    complete answer and not a failure. Recording it as a failure kept the
+    run's verdict at "degraded" for a reason that was not a fault.
+    """
+    if screens:
+        return True, f"{len(screens)} receptor(s) screened"
+    if not eligible:
+        return True, ("no factor has an approved drug that names its target, "
+                      "so there was no receptor to screen")
+    return False, (f"{len(eligible)} receptor(s) had drugs to build a screen "
+                   f"from, and none could be screened")
 
 
 def _genetics_detail(phenotypes: list, local: dict | None,

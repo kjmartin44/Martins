@@ -295,3 +295,24 @@ def test_the_orange_book_zip_the_launcher_downloads_is_one_the_package_reads(
         zf.writestr("patent.txt", "x" + NL)
     got =orangebook.lookup("tetrabenazine", path=str(z))
     assert got is not None and got["systemic_routes"] == ["ORAL"]
+
+
+def test_the_launcher_runs_its_expensive_processes_by_default():
+    """The whole approved library, the steadier search setting, more factors,
+    and the activity test with an empirical null. Each costs time and none
+    of them is optional in the sense of being skipped unless asked for."""
+    bs = chr(92)
+    src = (Path(__file__).resolve().parents[1] / "scripts"
+           / "run_everything.bat").read_text(encoding="utf-8")
+    assert 'set "LIBLIMIT=100000"' in src and 'set "EXH=16"' in src
+    # both docking commands carry them
+    assert src.count("--library-limit !LIBLIMIT! --exhaustiveness !EXH!") == 2
+    assert 'set "NTF=5"' in src and 'if "!NTF!"=="" set "NTF=5"' in src
+    assert "--activity-permutations 2000" in src
+    # the permutation flag only exists together with the activity test
+    line = [ln for ln in src.splitlines()
+            if "--activity-permutations" in ln and "set " in ln][0]
+    assert "--tf-activity" in line and "--activity-tissue" in line
+    # what the launcher says it will do matches what it does
+    assert "the whole" in src and "exhaustiveness !EXH!" in src
+    assert "600 compounds" not in src

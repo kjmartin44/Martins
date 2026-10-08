@@ -273,7 +273,8 @@ def test_lowering_the_gene_through_an_activator_is_reached_by_an_inhibitory_edge
 
 # ----------------------------------------- what a whole run says about it
 def _lf_offline_run(tmp_path, monkeypatch, *, edges, library, index=None,
-                    index_error=None, chembl=None):
+                    index_error=None, chembl=None, ledger_row="upstream",
+                    **run_kw):
     from promoter_tf_drugs import eqtl, genes, neighbours
     from promoter_tf_drugs import localdrugs, pipeline
 
@@ -320,10 +321,11 @@ def _lf_offline_run(tmp_path, monkeypatch, *, edges, library, index=None,
                        upstream=500, downstream=100,
                        cache_dir=str(tmp_path / "cache"), grade_drugs=False,
                        estimate_outcome=False, find_improvements=False,
-                       compare_mechanisms=False, include_stabilizers=False)
+                       compare_mechanisms=False, include_stabilizers=False,
+                       **run_kw)
     src = res["evidence_sources"]["sources"]
     rows = {r["source"]: r for r in src} if isinstance(src, list) else src
-    return res["results"][0], rows["upstream"]
+    return res["results"][0], rows[ledger_row]
 
 
 def _lf_tf_edges(n=6):
@@ -394,3 +396,36 @@ def test_a_run_whose_lookups_all_fail_is_not_reported_as_a_clean_negative(
     assert "says nothing about whether a druggable route exists" \
         in row["detail"]
     assert block["upstream_search"]["lookups_failed"] > 0
+
+
+# ------------------------------------------- the receptor screen's ledger row
+def test_a_screen_with_nothing_to_screen_is_not_a_failure():
+    """HTT's promoter has 49 factors and no approved drug on any of them, so
+    there is no receptor to build a screen from. That is a complete answer."""
+    from promoter_tf_drugs import pipeline
+    ok, detail = pipeline._screen_outcome({}, set())
+    assert ok is True
+    assert "no receptor to screen" in detail
+
+
+def test_a_screen_that_had_receptors_and_screened_none_is_a_failure():
+    from promoter_tf_drugs import pipeline
+    ok, detail = pipeline._screen_outcome({}, {"CHEMBL1", "CHEMBL2"})
+    assert ok is False
+    assert "2 receptor(s) had drugs" in detail and "none could be screened" in detail
+
+
+def test_a_screen_that_ran_says_how_many():
+    from promoter_tf_drugs import pipeline
+    ok, detail = pipeline._screen_outcome({"ESR1": {}}, {"CHEMBL1"})
+    assert ok is True and detail == "1 receptor(s) screened"
+
+
+def test_a_whole_run_with_no_eligible_receptor_records_the_screen_as_ok(
+        tmp_path, monkeypatch):
+    block, row = _lf_offline_run(
+        tmp_path, monkeypatch, edges=_lf_tf_edges(),
+        library=[{"chembl_id": "C1", "name": "x"}], index={},
+        ledger_row="screen", screen_receptors=True)
+    assert row["ok"] is True and row["yielded"] == 0
+    assert "no receptor to screen" in row["detail"]
