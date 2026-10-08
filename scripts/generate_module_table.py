@@ -86,7 +86,7 @@ def main(argv=None) -> int:
     if current == updated:
         print("module table already current")
         return 0
-    DOC.write_text(updated, encoding="utf-8")
+    DOC.write_text(updated, encoding="utf-8", newline="\n")
     print(f"rewrote the module table: {len(rows())} modules")
     return 0
 

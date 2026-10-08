@@ -215,8 +215,13 @@ def build(block: dict, *, goal: str = "up", has_chip: bool = False,
         # ---- the chain, in order
         mech = (r.get("mechanism") or "").strip().rstrip(".")
         if is_direct:
-            p.why.append(f"**{r['drug']}** — {mech or 'acts on the gene '
-                                                      'product directly'}.")
+            # The fallback is named first rather than written inside the
+            # braces. A multi-line expression in a single-quoted f-string
+            # is legal from 3.12 (PEP 701) and a SyntaxError on 3.10, the
+            # project's floor - so this one line stopped the whole
+            # package importing there.
+            fallback = "acts on the gene product directly"
+            p.why.append(f"**{r['drug']}** — {mech or fallback}.")
         elif mech:
             p.why.append(f"**{r['drug']}** acts on **{target}**: {mech}.")
         else:

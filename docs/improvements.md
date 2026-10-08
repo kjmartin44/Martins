@@ -29,6 +29,14 @@ everything under the headings below is still outstanding.
 
 ## Maintainability and release work
 
+- Run the full test suite on Linux before pushing. The two CI failures above
+  were found without access to the CI logs, by testing a clean clone on
+  Windows under Python 3.10 and 3.12, compiling every file under 3.10 and
+  3.14, and running individual stdlib-only modules under WSL. That found
+  everything that was visible, and it cannot show a Linux-only failure in a
+  test that needs NumPy. The development machine is Windows and its WSL has no
+  pip, so those tests have so far only run in CI. A virtual environment in WSL
+  with the dev and chemistry extras would close the gap.
 - Finish splitting `pipeline.py`. The report formatting moved to `report.py`
   and the file went from 4,649 lines to 1,493, but `run` is still 1,185 of
   those and does the fetching, the scoring and the assembly in one function.
@@ -262,6 +270,42 @@ None of these was in the review. Each has a regression test.
   below the spread of any real log fold change column, because a looser
   one would start discarding small genuine effects — a change to results
   rather than to robustness.
+- The Python 3.10 jobs failed from 2026-10-01, on both operating systems,
+  and nothing on a development machine could show it. `predictions.py` put a
+  multi-line expression inside a single-quoted f-string, which is legal from
+  3.12 (PEP 701) and a SyntaxError on 3.10, so the package did not import
+  there and every test errored before it ran. `ast.parse(feature_version=...)`
+  cannot find this, because it does not change how f-strings are tokenised;
+  only a real 3.10 interpreter rejects the file. Found by compiling every
+  file under 3.10. The workflow now does that as its first step, with the
+  file and line in the output, and a tokenizer-based test catches the same
+  constructs on 3.12 and later.
+- A second CI failure affected every Linux job whatever the Python version.
+  `wsldock.to_wsl_path` turned `C:\Users\x\y.pdb` into `/mnt/c/Users/x/y.pdb` by
+  calling `Path(...).resolve()` and reading the drive off the result, which
+  only works where `Path` is a WindowsPath. On Linux a backslash is an ordinary
+  filename character, so the whole string is one relative name, `resolve()`
+  prefixes the current directory, and the function returned
+  `/home/runner/work/.../C:/Users/x/y.pdb`. In production this never mattered,
+  because the function only runs on Windows to reach a Linux binary through
+  WSL, but it is a pure string conversion and its test failed on Linux. Found
+  by running the real function under WSL's Python, which needs only the
+  standard library for this module. The conversion for other hosts is now its
+  own function, `_from_windows_path`, so a test can call it on any machine and
+  not only on the one it was broken on. Windows behaviour is unchanged.
+- The test that checks the 3.10 floor could not run on 3.10. It read
+  `pyproject.toml` with `tomllib`, which exists from 3.11, so on the
+  interpreter it was written about it failed with ModuleNotFoundError.
+- The command reference depended on the shell it was generated in. argparse
+  wraps help to `$COLUMNS`, and the generator never set it: unset or 80
+  reproduced the committed file exactly, 120 rewrote 320 lines, and 200
+  rewrote 208. The CI step that fails on `git diff` would have reported stale
+  docs that were not stale. The generators now pin the width and write LF.
+- Four failures in the first attempt to reproduce CI were not CI failures.
+  They were `WinError 3` from cache paths over Windows' 260 character limit,
+  caused by running the test from a deeply nested scratch directory. The
+  development guide now says so, because the next person to reproduce CI on
+  Windows will meet the same four.
 - `_is_mane` had never once returned True against the live API. Found
   by the new contract check on its first run. `select_transcripts`
   prefers MANE Select, falling back to Ensembl canonical, and `_is_mane`

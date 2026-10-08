@@ -9395,13 +9395,92 @@ def test_no_module_needs_python_3_12_to_import():
         "named constant: " + ", ".join(offenders))
 
 
+def test_no_f_string_needs_python_3_12_to_parse():
+    """PEP 701 relaxed f-strings in 3.12, and the project supports 3.10.
+
+    Three things became legal that were not before, and each is a
+    SyntaxError on the floor:
+
+      * a newline inside a replacement field of a single-quoted f-string
+      * the outer quote character reused inside the field
+      * a comment inside the field
+
+    `predictions.py` had the first, committed 2026-10-01. On 3.10 the
+    package did not import, so every test in both 3.10 jobs errored
+    before running - and nothing on a 3.12 development machine can
+    notice, because 3.12 accepts it happily.
+
+    Uses the tokenizer, which reports an f-string as FSTRING_START ...
+    FSTRING_END from 3.12 on. Skipped on older interpreters: there the
+    offending file would not import, and the CI matrix is the check.
+    """
+    import io
+    import sys
+    import tokenize
+    from pathlib import Path
+
+    import pytest
+    if sys.version_info < (3, 12):
+        pytest.skip("FSTRING tokens exist from 3.12; older interpreters "
+                    "reject the file outright")
+
+    root = Path(__file__).resolve().parent.parent
+    offenders = []
+    files = (sorted((root / "promoter_tf_drugs").glob("*.py"))
+             + sorted((root / "tests").glob("*.py"))
+             + sorted((root / "scripts").glob("*.py")))
+    for f in files:
+        src = f.read_text(encoding="utf-8")
+        toks = list(tokenize.generate_tokens(io.StringIO(src).readline))
+        stack = []                    # open f-strings: (quote, start_line)
+        for t in toks:
+            kind = tokenize.tok_name.get(t.type, "")
+            if kind == "FSTRING_START":
+                quote = t.string.lstrip("fFrRbBuU")
+                if stack and quote == stack[-1][0] and len(quote) == 1:
+                    offenders.append(
+                        f"{f.name}:{t.start[0]} reuses the enclosing "
+                        f"f-string's quote inside the expression")
+                stack.append((quote, t.start[0]))
+            elif kind == "FSTRING_END":
+                quote, start_line = stack.pop()
+                triple = len(quote) == 3
+                if not triple and t.end[0] != start_line:
+                    # A backslash-newline inside the LITERAL part is
+                    # legal on 3.10; only a raw newline in a field is
+                    # not. The span between the lines tells them apart.
+                    span = "\n".join(
+                        src.splitlines()[start_line - 1:t.end[0]])
+                    inner_ok = all(
+                        ln.rstrip().endswith("\\")
+                        for ln in span.splitlines()[:-1])
+                    if not inner_ok:
+                        offenders.append(
+                            f"{f.name}:{start_line} single-quoted f-string "
+                            f"runs over {t.end[0] - start_line + 1} lines")
+            elif kind == "COMMENT" and stack:
+                offenders.append(
+                    f"{f.name}:{t.start[0]} comment inside an f-string "
+                    f"expression")
+    assert not offenders, (
+        "these need Python 3.12 but the project supports 3.10 - lift the "
+        "expression out of the f-string: " + "; ".join(offenders))
+
+
 def test_the_version_floor_is_still_what_the_test_above_assumes():
-    """If the floor moves to 3.12 the scan above is obsolete, not failing."""
-    import tomllib
+    """If the floor moves to 3.12 the scan above is obsolete, not failing.
+
+    Read with a regular expression rather than `tomllib`, which exists
+    only from 3.11: this is the test that checks the 3.10 floor, and it
+    errored with ModuleNotFoundError on 3.10 itself.
+    """
+    import re
     from pathlib import Path
     root = Path(__file__).resolve().parent.parent
-    cfg = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
-    assert cfg["project"]["requires-python"] == ">=3.10"
+    text = (root / "pyproject.toml").read_text(encoding="utf-8")
+    m = re.search(r'^requires-python\s*=\s*"([^"]+)"', text, re.M)
+    assert m, "pyproject.toml declares no requires-python"
+    assert m.group(1) == ">=3.10"
 
 
 # ===================================================================== #
@@ -11939,6 +12018,41 @@ def test_windows_drive_letters_become_mount_points():
     assert "\\" not in got
     # An already-POSIX path is left alone rather than mangled.
     assert wd.to_wsl_path("/home/u/x.pdb") == "/home/u/x.pdb"
+
+
+def test_a_windows_path_converts_the_same_way_on_every_host():
+    """`to_wsl_path` read the drive off `Path(...).resolve()`, which only
+    understands a Windows path on Windows.
+
+    On Linux a backslash is an ordinary filename character, so
+    `Path("C:\\Users\\x")` is one relative name, `resolve()` prefixes
+    the current directory, and the function returned
+    `/home/runner/.../C:/Users/x`. That failed
+    `test_windows_drive_letters_become_mount_points` on every Linux job,
+    something a Windows development machine cannot show.
+
+    The conversion is its own function so it can be run here, on any
+    host, rather than only on the one it was broken on.
+    """
+    from promoter_tf_drugs import wsldock as wd
+    cases = {
+        "C:\\Users\\x\\y.pdb": "/mnt/c/Users/x/y.pdb",
+        "D:/data/r.pdb": "/mnt/d/data/r.pdb",
+        "c:\\lower\\case.pdb": "/mnt/c/lower/case.pdb",
+        "C:\\": "/mnt/c",
+    }
+    for given, want in cases.items():
+        assert wd._from_windows_path(given) == want, given
+
+
+def test_only_a_drive_absolute_path_is_converted():
+    """Everything else is left to the caller, as it always was: a POSIX
+    path, a relative path, `C:file` (relative to the drive's current
+    directory, so it names no fixed place) and a UNC share."""
+    from promoter_tf_drugs import wsldock as wd
+    for given in ("/home/u/x.pdb", "relative/x.pdb", "C:relative.pdb",
+                  "\\\\server\\share\\x.pdb", ""):
+        assert wd._from_windows_path(given) is None, given
 
 
 def test_scripts_reach_wsl_as_bytes_with_unix_newlines(monkeypatch):

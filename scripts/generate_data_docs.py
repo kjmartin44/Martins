@@ -325,7 +325,7 @@ def main(argv=None) -> int:
         print("data guide already current")
         return 0
 
-    OUT.write_text(text, encoding="utf-8")
+    OUT.write_text(text, encoding="utf-8", newline="\n")
     n = len(datasets.registry())
     print(f"wrote {OUT.relative_to(ROOT)} ({n} tables)")
     return 0

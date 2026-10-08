@@ -56,9 +56,10 @@ arrive slower.
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import subprocess
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 log = logging.getLogger(__name__)
 
@@ -127,6 +128,22 @@ def available() -> bool:
     return ok
 
 
+def _from_windows_path(path) -> str | None:
+    """`C:\\Users\\x\\y` -> `/mnt/c/Users/x/y`, parsed as Windows syntax.
+
+    `PureWindowsPath` reads a Windows path on any host, which `Path`
+    does not: on POSIX a backslash is an ordinary filename character,
+    so `Path("C:\\Users\\x")` is a single relative name. Returns None
+    for anything that is not drive-absolute - a POSIX path, a relative
+    path, `C:file` (relative to a drive's current directory) or a UNC
+    path - so the caller can handle those as it always did.
+    """
+    win = PureWindowsPath(str(path))
+    if win.is_absolute() and len(win.drive) == 2 and win.drive[1] == ":":
+        return "/".join(["/mnt", win.drive[0].lower(), *win.parts[1:]])
+    return None
+
+
 def to_wsl_path(path) -> str:
     """`C:\\Users\\x\\y` -> `/mnt/c/Users/x/y`.
 
@@ -143,6 +160,14 @@ def to_wsl_path(path) -> str:
     raw = str(path).replace("\\", "/")
     if raw.startswith("/"):
         return raw
+    if os.name != "nt":
+        # `Path` cannot read a Windows path here, and `resolve()` would
+        # prefix the current directory to it. On Windows itself the
+        # code below stays as it was: `resolve()` collapses `..` and
+        # follows junctions, which parsing the text does not.
+        converted = _from_windows_path(path)
+        if converted is not None:
+            return converted
     s = str(Path(path).resolve()).replace("\\", "/")
     if len(s) > 1 and s[1] == ":":
         return "/mnt/" + s[0].lower() + s[2:]

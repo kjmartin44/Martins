@@ -61,6 +61,61 @@ The CI workflow tests supported Python versions on Linux and Windows, installs
 the chemistry extra, builds distributions, and smoke-tests a wheel outside the
 checkout. A local passing test run does not mean CI has run or passed remotely.
 
+### Why a green local run can be red in CI
+
+The package declares Python 3.10 and is usually written on 3.12. Python 3.12
+accepts f-string forms that 3.10 rejects: a newline inside the braces of a
+single-quoted f-string, the outer quote character reused inside them, and a
+comment inside them. A file using one imports without complaint on 3.12 and
+fails to import on 3.10, so every test in that job errors before it runs.
+This happened on 2026-10-01 and the 3.10 jobs failed from then on.
+
+Two checks now catch it. The first step of each CI job compiles every file on
+that job's Python and names the file and line. On 3.12 and later,
+`test_no_f_string_needs_python_3_12_to_parse` finds the same constructs with the
+tokenizer before you push. The fix is always to lift the expression out of the
+f-string and name it first.
+
+The test suite cannot import `tomllib`, which exists only from 3.11. Read
+`pyproject.toml` with a regular expression instead.
+
+### Reproducing CI on your own machine
+
+Test a clean clone, not your working copy. A runner has no `data/` directory
+beyond the one tracked file, an empty cache, and no files you downloaded, so a
+test that quietly reads one of them passes on your machine and fails there.
+
+```bash
+git clone . /tmp/ci-check
+cd /tmp/ci-check
+PTD_CACHE="$(mktemp -d)" python -m pytest -q
+```
+
+To make any test that reaches for the network fail loudly instead of being
+answered from your warm cache, point the proxy variables at a closed port:
+
+```bash
+HTTP_PROXY=http://127.0.0.1:9 HTTPS_PROXY=http://127.0.0.1:9 \
+PTD_CACHE="$(mktemp -d)" python -m pytest -q
+```
+
+On Windows keep the clone and the temporary directory under a short path such
+as `C:\Users\you\AppData\Local\Temp\ci`. Several tests write cache files
+three or four directories deep, and a long parent path pushes them past the
+260 character limit. That produces `WinError 3` failures that CI, which uses
+short paths, never sees.
+
+To check a different Python, compile the source with that interpreter. It
+needs no dependencies and finds syntax the running interpreter accepts:
+
+```bash
+python3.10 -m compileall -q promoter_tf_drugs scripts tests
+```
+
+`python scripts/generate_cli_docs.py` pins the terminal width and writes LF line
+endings, so the command reference is the same whatever your shell exports and
+whichever platform you run it on.
+
 ## Auditing the curated tables
 
 Several tables are hand-entered: the systemic drug classes, the receptor
