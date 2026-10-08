@@ -60,8 +60,19 @@ everything under the headings below is still outstanding.
   license was present during this review; selecting one requires the owner's
   decision and is not inferred from the dependency licenses.
 
-- Add periodic opt-in service contract checks. The other two parts of this
-  item are done. Progress reporting prints a checkpoint per stage with
+- ~~Add periodic opt-in service contract checks.~~ **Done**, and it found
+  a live bug on its first run — see below. `python -m
+  promoter_tf_drugs.services` probes each web service with a query whose
+  answer cannot disappear (TP53, aspirin) and checks that the paths the
+  parsers actually walk are present and populated. Four outcomes, never
+  two: `ok`, `CONTRACT CHANGED`, `unreachable`, and `PROBE BROKEN` — an
+  outage is a reason to try later, a schema change is a reason to edit a
+  parser, and a broken check says nothing about the service at all.
+  Probes call the package's own request functions rather than composing
+  their own, because a probe that builds its own parameters checks a
+  fiction.
+
+  The other two parts of this item were already done. Progress reporting prints a checkpoint per stage with
   elapsed time and what it found, and `--max-requests N` caps how many
   requests a run may send. The budget counts requests that leave rather
   than lookups, so a cache hit stays free and a rerun resumes; retries of
@@ -238,6 +249,29 @@ None of these was in the review. Each has a regression test.
   PCSK9 is the clean example — its loss has a phenotype, which is what
   ClinGen records, but the phenotype is low LDL, so selection never
   removed the carriers.
+- "No variance" meant "a standard deviation of exactly zero", which is
+  a narrower thing. A column constant to every digit anyone would print
+  can still have a std near 4e-17, and `_pairwise_r` divided by it and
+  reported r = -0.134 for a profile carrying no information — breaking
+  its own docstring, which promises that a correlation that could not be
+  computed is not a correlation of none. The same rule was written a
+  second time thirty lines below as `.std() > 0`, around a copy of the
+  same formula, which is how the two spellings came to disagree. Now one
+  `_pearson`, one flatness test, both callers. The tolerance is relative
+  to the values' own magnitude and sits about nine orders of magnitude
+  below the spread of any real log fold change column, because a looser
+  one would start discarding small genuine effects — a change to results
+  rather than to robustness.
+- `_is_mane` had never once returned True against the live API. Found
+  by the new contract check on its first run. `select_transcripts`
+  prefers MANE Select, falling back to Ensembl canonical, and `_is_mane`
+  tests four spellings of the flag — but the lookup never sent `mane=1`,
+  so Ensembl never returned any of them. Every gene silently took the
+  canonical branch. Canonical is a reasonable answer and it is not
+  always the same answer: where the two differ, the package scanned a
+  different promoter than it believed it was scanning. Both halves are
+  fixed — the request asks, and the parser reads the fifth spelling
+  Ensembl actually sends.
 - `run_everything.bat` could not reach the newest work. It never passed
   `--scenario`, so the requirement section was never computed, and it
   downloaded neither gnomAD nor ClinGen, so dosage was never assessed.

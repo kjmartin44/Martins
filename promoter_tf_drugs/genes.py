@@ -65,10 +65,20 @@ class Promoter:
         return d
 
 
+# Ensembl returns MANE only when asked. Without `mane=1` the transcripts
+# carry `is_canonical`, `ens_canon_extended` and `gencode_primary` and
+# nothing MANE-shaped, so `_is_mane` below can never match and the MANE
+# branch of `select_transcripts` never runs - every gene quietly takes
+# the canonical fallback instead. Canonical is a reasonable answer and
+# it is not always the same answer.
+_LOOKUP_PARAMS = {"expand": 1, "mane": 1,
+                  "content-type": "application/json"}
+
+
 def _lookup_symbol(client: Client, symbol: str, species: str) -> dict:
     url = f"{ENSEMBL}/lookup/symbol/{species}/{symbol}"
     try:
-        return client.get(url, {"expand": 1, "content-type": "application/json"})
+        return client.get(url, dict(_LOOKUP_PARAMS))
     except HttpError as exc:
         raise HttpError(
             f"Ensembl could not resolve '{symbol}' in {species}. "
@@ -78,12 +88,28 @@ def _lookup_symbol(client: Client, symbol: str, species: str) -> dict:
 
 def _lookup_id(client: Client, gene_id: str) -> dict:
     url = f"{ENSEMBL}/lookup/id/{gene_id}"
-    return client.get(url, {"expand": 1, "content-type": "application/json"})
+    return client.get(url, dict(_LOOKUP_PARAMS))
 
 
 def _is_mane(tr: dict) -> bool:
+    """Is this the MANE Select transcript?
+
+    Five spellings, because Ensembl has used several and the earlier
+    four were added without the request parameter that makes any of
+    them arrive. The one the live API actually sends, given `mane=1`,
+    is the last: a `MANE` list whose entries carry
+    `{"type": "MANE_Select"}`. MANE Plus Clinical is deliberately not
+    accepted - it is a second transcript for variant reporting, not the
+    representative one.
+    """
     if tr.get("mane_select") or tr.get("is_mane_select"):
         return True
+    mane = tr.get("MANE") or []
+    if isinstance(mane, dict):
+        mane = [mane]
+    for entry in mane:
+        if isinstance(entry, dict) and entry.get("type") == "MANE_Select":
+            return True
     tags = tr.get("tag") or tr.get("tags") or []
     if isinstance(tags, str):
         tags = [tags]

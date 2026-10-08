@@ -384,12 +384,60 @@ def _betainc_half(x: float, a: float) -> float:
     return min(1.0, max(0.0, front * (f - 1.0)))
 
 
+# How flat a vector has to be before it is treated as carrying nothing.
+#
+# Relative to the vector's own magnitude, because a spread of 1e-16
+# means something different for values near 1000 than for values near
+# 0.001. Sixteen machine epsilons is about 3.6e-15 - roughly nine
+# orders of magnitude below the relative spread of any real log fold
+# change column, so it can only catch a vector that is constant to the
+# limit of double precision. That bound is the point: a looser
+# threshold would start discarding small but genuine variation, which
+# changes answers rather than guarding against nonsense.
+_FLAT_REL_TOL = 16.0 * float(np.finfo(float).eps)
+
+
+def _is_flat(x: np.ndarray) -> bool:
+    """Is this vector constant to the limit of its own precision?
+
+    `x.std() == 0.0` is the narrower question and the one this code
+    used to ask. A column of 0.3 repeated, perturbed only in the last
+    bits, has a std near 4e-17 and answers "no" to it - so the
+    correlation went ahead and divided by that, reporting a number for
+    a vector that carries no information.
+    """
+    spread = float(x.std())
+    if spread == 0.0:
+        return True
+    scale = float(np.max(np.abs(x)))
+    if scale == 0.0:                     # all zeros, already caught above
+        return True
+    return spread <= scale * _FLAT_REL_TOL
+
+
+def _pearson(a: np.ndarray, b: np.ndarray) -> float | None:
+    """Pearson r, or None when either side carries no information.
+
+    One definition, used by both callers. The two sites previously had
+    the same formula written twice with the guard spelled two different
+    ways, which is how they came to disagree.
+    """
+    if _is_flat(a) or _is_flat(b):
+        return None
+    return float(((a - a.mean()) * (b - b.mean())).mean()
+                 / (a.std() * b.std()))
+
+
 def _pairwise_r(matrix: np.ndarray, target: np.ndarray) -> tuple:
     """Pearson r of every column against `target`, pairwise complete.
 
-    Returns (r, n) arrays. Columns with fewer than two shared points, or
-    no variance on either side, come back as NaN rather than as zero - a
-    correlation that could not be computed is not a correlation of none.
+    Returns (r, n) arrays. Columns with fewer than three shared points,
+    or no variance on either side, come back as NaN rather than as zero
+    - a correlation that could not be computed is not a correlation of
+    none.
+
+    "No variance" means none that can be told from rounding noise, not
+    a std of exactly zero. See `_is_flat`.
     """
     n_cols = matrix.shape[1]
     out_r = np.full(n_cols, np.nan)
@@ -403,12 +451,9 @@ def _pairwise_r(matrix: np.ndarray, target: np.ndarray) -> tuple:
         out_n[j] = n
         if n < 3:
             continue
-        a = col[ok]
-        b = target[ok]
-        sa, sb = a.std(), b.std()
-        if sa == 0.0 or sb == 0.0:
-            continue
-        out_r[j] = float(((a - a.mean()) * (b - b.mean())).mean() / (sa * sb))
+        r = _pearson(col[ok], target[ok])
+        if r is not None:
+            out_r[j] = r
     return out_r, out_n
 
 
@@ -471,13 +516,14 @@ def correlate(prism: dict, target: dict, *, readout: str = "phenocopy",
     r_xy, n_xy = _pairwise_r(values, vec)
     r_xz, _ = _pairwise_r(values, fragility)
     ok_z = np.isfinite(fragility) & np.isfinite(vec)
-    if int(ok_z.sum()) >= 3 and fragility[ok_z].std() > 0 \
-            and vec[ok_z].std() > 0:
-        a, b = fragility[ok_z], vec[ok_z]
-        r_yz = float(((a - a.mean()) * (b - b.mean())).mean()
-                     / (a.std() * b.std()))
-    else:
-        r_yz = 0.0
+    # Same rule as the columns above, through the same function. It used
+    # to be `.std() > 0` around a second copy of the formula, which is
+    # how the two drifted apart. Zero is the right fallback: no
+    # measurable relationship between the confounder and the target
+    # means there is nothing to partial out.
+    r_yz = 0.0
+    if int(ok_z.sum()) >= 3:
+        r_yz = _pearson(fragility[ok_z], vec[ok_z]) or 0.0
 
     r_part = _partial(r_xy, np.nan_to_num(r_xz), r_yz)
 

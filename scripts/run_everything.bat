@@ -479,12 +479,27 @@ echo === 4 of 4: narrowing, against a control ===
 echo   Puts !GENE! and ACTB through the same funnel.
 echo.
 
+REM The scan settings are the ones stage 3 used, and they have to be.
+REM The funnel narrows a route list; built from a different window it
+REM narrows a different population, and the number it reports can no
+REM longer be cross-checked against `shortlist --preset specific` on
+REM the same gene - which is the check stage 4 exists to support, since
+REM stage 4's regulon stage and that preset apply the same criterion.
+REM
+REM Left out of the defaults this would scan 6 kb at p=1e-4, which the
+REM comment above stage 3 explains is ~83%% noise whichever gene you
+REM run. Observed: 241 sites against 187 expected by chance.
+REM
+REM --proliferation and --tissue describe the target tissue rather than
+REM either gene, so the control gets them too; that is what makes it a
+REM control rather than a second analysis.
 "%PY%" -m promoter_tf_drugs.panel --genes !GENE! --control-gene ACTB ^
     --direction !DIR! ^
     --pfm-file data\jaspar2024.txt !REGULON! ^
-    !CHIP! !EXPR! !GTF! --cell-type-check ^
+    !CHIP! !WINDOW! --all-tss !TFW! ^
+    --proliferation !PROLIF! !TISS! !EXPR! !GTF! --cell-type-check ^
     !LINCS! --genetics --upstream-network ^
-    --promoter-dna --screen-product !ACTIVITY! !DOCKING! ^
+    --promoter-dna --screen-product !ACTIVITY! !SENS! !DOCKING! ^
     --max-regulon 600 --max-burden moderate ^
     --out "!OUT!_panel" -v
 if errorlevel 1 (

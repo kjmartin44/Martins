@@ -1945,6 +1945,7 @@ def dock_screen_for_target(client, symbol: str, uniprot: str, library: list,
                            work_dir="docking_work", top_n: int = 25,
                            exhaustiveness: int = 8, seed: int = 0,
                            want_state: str | None = None,
+                           state_note: str | None = None,
                            score_fn=None, cpu: int = 1,
                            jobs: int = 1) -> dict:
     """Gene symbol to a validated, ranked shortlist of approved drugs.
@@ -2082,6 +2083,13 @@ def dock_screen_for_target(client, symbol: str, uniprot: str, library: list,
     # the one asked for. None means nothing specific was requested.
     out["asked_for"] = {
         "state": want_state,
+        # Why it is what it is. `state` alone comes back None both for
+        # `--state any`, which is an explicit opt-out, and for a factor
+        # whose role could not be resolved, where nothing could be
+        # derived. Those are different and the note is what separates
+        # them. None when the caller supplied no note, rather than a
+        # sentence invented on its behalf.
+        "state_note": state_note,
         "pocket_state": pocket.state,
         "matched": None if not want_state else pocket.state == want_state,
     }
@@ -2115,6 +2123,7 @@ BUNDLE_FILE = "bundle.json"
 
 def write_bundle(client, symbol: str, uniprot: str, out_dir, *,
                  library_limit: int = 600, want_state: str | None = None,
+                 state_note: str | None = None,
                  pdb_file=None, library_file=None, actives_file=None
                  ) -> dict:
     """Fetch everything docking needs into one folder. Needs the network.
@@ -2200,6 +2209,17 @@ def write_bundle(client, symbol: str, uniprot: str, out_dir, *,
         "symbol": symbol, "uniprot": uniprot,
         "pdb_id": pocket.pdb_id, "ligand_resname": pocket.ligand_resname,
         "state": pocket.state, "note": pocket.note,
+        # What was ASKED for, beside what was found. A bundle is
+        # prepared in one place and docked in another, later, so by the
+        # time it is used the command that chose the conformation is
+        # gone - which makes this worth more here than in a run that
+        # does both halves in one process.
+        "asked_for": {
+            "state": want_state,
+            "state_note": state_note,
+            "pocket_state": pocket.state,
+            "matched": None if not want_state else pocket.state == want_state,
+        },
         "box": list(pocket.box),
         "receptor": "receptor.pdb", "ligand": "ligand.pdb",
         "n_actives": len(actives), "n_library": len(library),
@@ -2644,7 +2664,8 @@ def main(argv=None) -> int:
         print(f"Preparing {symbol} ({uniprot}) into {args.prepare} ...")
         man = write_bundle(client, symbol, uniprot, args.prepare,
                            library_limit=args.library_limit,
-                           want_state=want_state, pdb_file=args.pdb,
+                           want_state=want_state, state_note=state_note,
+                           pdb_file=args.pdb,
                            library_file=args.library,
                            actives_file=args.actives)
         if man.get("error"):
@@ -2760,6 +2781,7 @@ def main(argv=None) -> int:
         client, symbol, uniprot, library, actives=actives,
         work_dir=args.work_dir, top_n=args.top,
         exhaustiveness=args.exhaustiveness, want_state=want_state,
+        state_note=state_note,
         cpu=args.cpu, jobs=args.jobs)
 
     _report(res, args.top)

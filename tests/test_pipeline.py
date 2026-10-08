@@ -10310,6 +10310,79 @@ def test_pure_noise_produces_no_significant_hit():
     assert res.hits == [], f"{len(res.hits)} false positive(s) on noise"
 
 
+def test_a_column_with_no_information_is_nan_not_a_correlation():
+    """"No variance" has to mean none that can be told from rounding
+    noise, not a std of exactly zero.
+
+    A column of 0.3 repeated, perturbed only in its last bits, has a
+    std near 4e-17. Tested with `== 0.0` it goes through, and the
+    division reports r = -0.134 for a profile that carries nothing -
+    breaking the function's own promise that a correlation which could
+    not be computed is not a correlation of none.
+    """
+    import numpy as np
+    from promoter_tf_drugs.sensitivity import _pairwise_r
+
+    target = np.array([0.1, -0.4, 0.9, -1.2, 0.3, 0.7])
+    flat = np.array([0.3 + k * 1e-17 for k in range(6)])
+    assert flat.std() > 0.0, "the point is that it is not exactly zero"
+
+    r, n = _pairwise_r(np.column_stack([flat]), target)
+    assert np.isnan(r[0]), f"expected NaN, got {r[0]}"
+    assert n[0] == 6, "the point count is still real"
+
+
+def test_the_flatness_test_is_relative_to_the_values_own_scale():
+    """A spread of 1e-12 is noise beside values near 1000 and signal
+    beside values near 0.001, so an absolute threshold would be wrong
+    in one direction or the other."""
+    import numpy as np
+    from promoter_tf_drugs.sensitivity import _is_flat
+
+    big_noise = np.array([1000.0 + k * 1e-12 for k in range(6)])
+    assert _is_flat(big_noise), "1e-12 beside 1000 is rounding noise"
+
+    small_real = np.array([1e-9 * k for k in range(6)])
+    assert not _is_flat(small_real), \
+        "tiny values with real structure are not flat"
+
+
+def test_the_flatness_tolerance_never_discards_real_variation():
+    """The guard is for numerical nonsense, not for small effects.
+
+    A threshold loose enough to drop genuinely small variation would be
+    a change to results rather than to robustness, so it sits about
+    nine orders of magnitude below the relative spread of any real log
+    fold change column.
+    """
+    import numpy as np
+    from promoter_tf_drugs.sensitivity import _is_flat, _pairwise_r
+
+    target = np.array([0.1, -0.4, 0.9, -1.2, 0.3, 0.7])
+    # Relative spread ~1e-6: far smaller than any real PRISM column,
+    # and still kept.
+    small = np.array([0.3 + k * 1e-7 for k in range(6)])
+    assert not _is_flat(small)
+    r, _ = _pairwise_r(np.column_stack([small]), target)
+    assert np.isfinite(r[0]), "a real, small effect must survive"
+
+
+def test_both_correlation_sites_share_one_guard():
+    """The rule was written twice - `== 0.0` in one place and
+    `.std() > 0` in the other - around two copies of the same formula,
+    which is how they came to disagree."""
+    import inspect
+    from promoter_tf_drugs import sensitivity
+    src = inspect.getsource(sensitivity)
+    assert src.count("def _pearson") == 1
+    # Neither site may hand-roll the division any more.
+    body = src.split("def _pearson", 1)[1]
+    assert body.count("/ (a.std() * b.std())") == 1, \
+        "the Pearson division should exist once, inside _pearson"
+    assert "r_yz = _pearson(" in src, \
+        "the confounder correlation must use the shared function too"
+
+
 def test_a_planted_phenocopy_is_recovered_with_the_right_sign():
     from promoter_tf_drugs import sensitivity as sn
     prism, target, names = _sens_panel()
@@ -14011,6 +14084,54 @@ def test_a_curated_phenotype_selection_never_saw_is_reported_as_a_conflict(
     con.reset_cache()
 
 
+def test_a_curated_negative_is_not_reported_as_nothing_known(tmp_path):
+    """`assess` is an elif chain, and a gene ClinGen reviewed and found
+    NOT haploinsufficient fell through every branch when its LOEUF sat
+    in the middle band.
+
+    The result was `assessed=True, dosage="unknown", notes=[]`, so the
+    report printed a bare "dosage: unknown" for a gene a panel had
+    assessed. That is this package's own rule running backwards - an
+    absence manufactured out of a measurement.
+
+    The two negatives are told apart because they are not equivalent:
+    40 is a conclusion about the gene, 1 is mostly a statement about
+    how much anyone has published.
+    """
+    from promoter_tf_drugs import constraint as con
+
+    def assess_with(grade):
+        cg = tmp_path / f"clingen_{grade}.tsv"
+        cg.write_text(
+            "#Gene Symbol\tHaploinsufficiency Score"
+            "\tTriplosensitivity Score\n"
+            f"G\t{grade}\t0\n", encoding="utf-8")
+        gn = tmp_path / f"gnomad_{grade}.tsv"
+        gn.write_text(
+            "gene\tmane_select\tlof.pLI\tlof.oe_ci.upper\n"
+            "G\ttrue\t0.2\t0.60\n", encoding="utf-8")
+        con.reset_cache()
+        return con.assess("G", gnomad_path=str(gn), clingen_path=str(cg))
+
+    # 40: "Dosage sensitivity unlikely" — a panel's conclusion.
+    unlikely = assess_with(40)
+    assert unlikely.assessed is True
+    assert unlikely.notes, "a curated verdict must not vanish"
+    assert unlikely.dosage == "tolerant"
+    joined = " ".join(unlikely.notes)
+    assert "not an absence" in joined
+    assert "recessive" in joined, "tolerance of ONE copy is not the whole"
+
+    # 1: "Little evidence" — mostly about the literature, so it must
+    # not be reported as a finding of tolerance.
+    little = assess_with(1)
+    assert little.notes, "this must not be silent either"
+    assert little.dosage == "unknown", \
+        "absence of reports is not evidence of tolerance"
+    assert "REPORTED" in " ".join(little.notes)
+    con.reset_cache()
+
+
 def test_a_constraint_number_carries_the_release_it_came_from(tmp_path):
     """gnomAD v2.1.1 and v4.1 disagree about the same gene.
 
@@ -14191,6 +14312,41 @@ def test_an_exhausted_budget_fails_the_way_a_dead_host_does(tmp_path):
     assert "budget" in str(exc.value)
     assert len(calls) == 1, "the refused request must not reach the network"
     assert c.spend() == {"requests": 1, "refused": 1, "budget": 1}
+
+
+def test_a_redirect_hop_costs_budget_but_a_retry_does_not(tmp_path):
+    """Both are "one logical request" and they are counted differently.
+
+    A retry is the same round trip attempted again until it lands: one
+    question, one answer, one unit. A redirect is a second round trip
+    to a second address, and a server redirecting repeatedly inside
+    max_redirects puts real traffic on the wire each time. A ceiling
+    that declined to count that would be measuring intent rather than
+    cost.
+    """
+    import urllib.error
+    from promoter_tf_drugs.http import Client
+    c = Client(cache_dir=tmp_path / "cache", offline=False,
+               min_interval=0, max_requests=10)
+    calls = []
+
+    def fake(req, timeout=None):
+        calls.append(req.full_url)
+        if req.full_url.endswith("/v1"):
+            raise urllib.error.HTTPError(
+                req.full_url, 307, "Temporary Redirect",
+                {"Location": "https://example.org/v2"}, None)
+
+        class R:
+            headers = {}
+            def read(self): return b'{"ok": true}'
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+        return R()
+
+    _with_fake_urlopen(fake, lambda: c.post("https://example.org/v1", {"q": 1}))
+    assert len(calls) == 2, "one hop, then the target"
+    assert c.spend()["requests"] == 2, "each hop is a round trip"
 
 
 def test_no_budget_means_no_ceiling(tmp_path):
@@ -14482,6 +14638,265 @@ def test_a_line_count_is_not_reported_as_a_parse(tmp_path, capsys):
     assert "record(s)" not in out, "the generic word hides the difference"
 
 
+# ===================================================================== #
+# Do the services still return the shape the parsers read?               #
+# ===================================================================== #
+def _service_contract(probe, requires=(), key="t", **kw):
+    from promoter_tf_drugs import services
+    return services.Contract(
+        key=key, name="Test", why="w", reads="m.py", probe=probe,
+        requires=tuple(requires), symptom="s", **kw)
+
+
+class _LiveProbeClient:
+    offline = False
+
+
+def test_a_renamed_field_is_reported_as_changed_not_as_empty():
+    """The whole point. A parser reaching for a renamed field returns
+    None and the caller writes "could not resolve", which reads as a
+    gene with no evidence rather than an API that moved."""
+    from promoter_tf_drugs import services
+    c = _service_contract(lambda cl: {"data": {"searchResults": {"hits": [1]}}},
+                  requires=("data.search.hits[]",))
+    row = services.check(c, _LiveProbeClient())
+    assert row["state"] == services.CHANGED
+    assert "data.search.hits[]" in row["missing"]
+
+
+def test_present_but_empty_is_a_break_too():
+    """The probes ask about TP53 and aspirin. An empty answer for those
+    is not a gene with no data, it is a contract that moved."""
+    from promoter_tf_drugs import services
+    c = _service_contract(lambda cl: {"molecules": []},
+                  requires=("molecules[]",))
+    row = services.check(c, _LiveProbeClient())
+    assert row["state"] == services.CHANGED
+
+
+def test_an_outage_is_not_reported_as_a_schema_change():
+    """An outage is a reason to try later; a schema change is a reason
+    to edit a parser. A check that conflates them sends you to do the
+    wrong one."""
+    from promoter_tf_drugs import services
+    from promoter_tf_drugs.http import HttpError
+
+    def dead(cl):
+        raise HttpError("503 from the service")
+
+    row = services.check(_service_contract(dead, requires=("a",)), _LiveProbeClient())
+    assert row["state"] == services.UNREACHABLE
+    assert row["state"] != services.CHANGED
+    assert row["missing"] == []
+
+
+def test_a_broken_probe_is_neither_an_outage_nor_a_change():
+    """It says nothing about the service at all.
+
+    The first run of this module reported MyGene as unreachable because
+    the probe imported a constant from the wrong module. MyGene was
+    answering perfectly.
+    """
+    from promoter_tf_drugs import services
+
+    def bad(cl):
+        from promoter_tf_drugs.genes import NO_SUCH_CONSTANT  # noqa: F401
+
+    row = services.check(_service_contract(bad, requires=("a",)), _LiveProbeClient())
+    assert row["state"] == services.BROKEN_PROBE
+    assert row["state"] not in (services.UNREACHABLE, services.CHANGED)
+    assert "fault in the check" in row["detail"]
+
+
+def test_offline_is_skipped_rather_than_passed():
+    """A contract check has to reach the service. Reporting "ok" for a
+    check that never ran would be the exact failure this module is
+    about."""
+    from promoter_tf_drugs import services
+
+    class Off:
+        offline = True
+
+    def must_not_run(cl):
+        raise AssertionError("the probe ran while offline")
+
+    row = services.check(_service_contract(must_not_run, requires=("a",)), Off())
+    assert row["state"] == services.SKIPPED
+    assert row["state"] != services.OK
+
+
+def test_a_probe_must_use_the_packages_own_request():
+    """A probe that composes its own parameters checks a fiction.
+
+    That is how the MANE bug survived: the real lookup omitted `mane=1`
+    and the first version of this probe omitted it too, so the two
+    agreed about the wrong thing.
+    """
+    import inspect
+    from promoter_tf_drugs import services
+    src = inspect.getsource(services._ensembl)
+    assert "_lookup_symbol" in src, \
+        "the Ensembl probe must call the package's own lookup"
+
+
+def test_the_mane_check_catches_a_regression(monkeypatch):
+    """Guard the fix. `_is_mane` is only reachable because the lookup
+    asks for `mane=1`; drop either half and transcript selection falls
+    back to canonical with nothing to say so."""
+    from promoter_tf_drugs import services, genes
+
+    tp53 = {"Transcript": [
+        {"id": "ENST1", "is_canonical": True,
+         "MANE": [{"type": "MANE_Select", "id": "ENST1"}]},
+        {"id": "ENST2"}]}
+
+    # As shipped: recognised.
+    assert services._check_mane(tp53) is None
+
+    # The server stops sending it — or the request stops asking.
+    stripped = {"Transcript": [{k: v for k, v in t.items() if k != "MANE"}
+                               for t in tp53["Transcript"]]}
+    problem = services._check_mane(stripped)
+    assert problem and "MANE Select" in problem
+
+    # And the selection really does change, which is why it matters.
+    assert genes.select_transcripts(tp53)[0][1] == "MANE Select"
+    assert genes.select_transcripts(stripped)[0][1] != "MANE Select"
+
+
+def test_the_genetic_association_datatype_is_checked_by_value():
+    """Renaming that one string empties the genetics section while
+    every structural path still resolves, so a shape check cannot see
+    it."""
+    from promoter_tf_drugs import services
+    good = {"data": {"target": {"associatedDiseases": {"rows": [
+        {"datatypeScores": [{"id": "genetic_association", "score": 0.5}]}]}}}}
+    assert services._check_genetic_association(good) is None
+
+    renamed = {"data": {"target": {"associatedDiseases": {"rows": [
+        {"datatypeScores": [{"id": "genetic_evidence", "score": 0.5}]}]}}}}
+    problem = services._check_genetic_association(renamed)
+    assert problem and "genetic_association" in problem
+
+
+def test_dig_tells_absence_from_a_legitimate_none():
+    """`None` is a value a service can send, so the walker returns a
+    found/value pair rather than using None to mean missing."""
+    from promoter_tf_drugs.services import _dig
+    assert _dig({"a": {"b": None}}, "a.b") == (True, None)
+    assert _dig({"a": {}}, "a.b") == (False, None)
+    assert _dig({"a": [{"b": 1}]}, "a[].b") == (True, 1)
+    assert _dig({"a": []}, "a[].b") == (False, None)
+
+
+def test_every_contract_names_a_module_and_a_symptom():
+    """"ChEMBL changed" is not actionable. "The screen would report no
+    known ligands" is."""
+    from promoter_tf_drugs import services
+    for c in services.registry():
+        assert c.reads and c.reads.endswith((".py", "_is_mane",
+                                             "target_consequences",
+                                             "_resolve_ensembl")) or c.reads
+        assert len(c.symptom) > 20, f"{c.key} has no useful symptom"
+        assert c.why, c.key
+
+
+def test_no_call_passes_a_keyword_its_callee_does_not_accept():
+    """Python checks this at call time, so an untested branch never does.
+
+    Threading a new argument through `docking.main`, a replace landed
+    on the call to `write_bundle` rather than the one intended, and
+    `--prepare` died with TypeError while the whole suite stayed green -
+    nothing exercises that path, and it is the half of the split
+    workflow that runs where the network is.
+
+    Conservative on purpose: same-module calls to plain names only, and
+    anything taking `**kwargs` is skipped. It would rather miss a case
+    than invent one.
+    """
+    import ast as _ast
+    from pathlib import Path
+    pkg = Path(__file__).resolve().parents[1] / "promoter_tf_drugs"
+
+    bad = []
+    for py in sorted(pkg.glob("*.py")):
+        tree = _ast.parse(py.read_text(encoding="utf-8"))
+        accepts, star = {}, set()
+        for node in _ast.walk(tree):
+            if not isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
+                continue
+            a = node.args
+            accepts.setdefault(node.name, set()).update(
+                p.arg for p in
+                list(a.posonlyargs) + list(a.args) + list(a.kwonlyargs))
+            if a.kwarg is not None:
+                star.add(node.name)
+
+        for node in _ast.walk(tree):
+            if not isinstance(node, _ast.Call):
+                continue
+            if not isinstance(node.func, _ast.Name):
+                continue
+            name = node.func.id
+            if name not in accepts or name in star:
+                continue
+            for kw in node.keywords:
+                if kw.arg is not None and kw.arg not in accepts[name]:
+                    bad.append(f"{py.name}:{node.lineno} "
+                               f"{name}(... {kw.arg}=...)")
+
+    assert not bad, ("these calls pass a keyword the callee does not "
+                     "accept, which is a TypeError the moment the line "
+                     "runs: " + "; ".join(bad))
+
+
+def test_preparing_a_bundle_records_what_it_was_asked_for():
+    """A bundle is prepared in one place and docked in another, later.
+
+    By the time it is docked the command that chose the conformation is
+    gone, so the manifest is the only thing that can say what was asked
+    for - which makes it worth more here than in a run that does both
+    halves in one process.
+    """
+    import inspect
+    from promoter_tf_drugs import docking
+    assert "state_note" in inspect.signature(
+        docking.write_bundle).parameters, \
+        "the caller passes it; the signature has to take it"
+    src = inspect.getsource(docking.write_bundle)
+    assert '"asked_for"' in src
+    assert '"state_note": state_note' in src
+
+
+def test_every_internal_documentation_link_resolves():
+    """A link to a page that does not exist is only found by following
+    it, and the index is the first thing a reader opens."""
+    import re
+    from pathlib import Path
+    docs = Path(__file__).resolve().parents[1] / "docs"
+    bad = []
+    for md in sorted(docs.glob("*.md")):
+        for m in re.finditer(r"\[([^\]]+)\]\(([^)]+)\)",
+                             md.read_text(encoding="utf-8")):
+            target = m.group(2)
+            if target.startswith(("http://", "https://", "#", "mailto:")):
+                continue
+            path = target.partition("#")[0]
+            if path and not (md.parent / path).exists():
+                bad.append(f"{md.name}: [{m.group(1)}]({target})")
+    assert not bad, "broken documentation links: " + "; ".join(bad)
+
+
+def test_the_documentation_index_reaches_the_three_data_documents():
+    """They have distinct jobs — obtaining, formats, operating offline —
+    which only helps if a reader can find all three."""
+    from pathlib import Path
+    index = (Path(__file__).resolve().parents[1] / "docs" / "index.md"
+             ).read_text(encoding="utf-8")
+    for name in ("datasets.md", "data.md", "offline.md"):
+        assert f"]({name})" in index, f"the index does not link {name}"
+
+
 def test_a_docking_result_records_the_conformation_it_was_asked_for():
     """Per-factor results are named <FACTOR>.json and a merge globs the
     directory, so one run's answer can sit beside another's.
@@ -14498,8 +14913,15 @@ def test_a_docking_result_records_the_conformation_it_was_asked_for():
     assert 'out["asked_for"]' in src
     # The three fields a reader needs to audit a merged file: what was
     # wanted, what was used, and whether they agree.
-    for field in ('"state": want_state', '"pocket_state"', '"matched"'):
+    for field in ('"state": want_state', '"pocket_state"', '"matched"',
+                  '"state_note": state_note'):
         assert field in src, field
+    # `state` alone is None both for `--state any`, an explicit opt-out,
+    # and for a factor whose role could not be resolved. The note is
+    # what tells those apart, and main() already computes it.
+    import inspect
+    assert "state_note" in inspect.signature(
+        docking.dock_screen_for_target).parameters
     assert 'out["produced"]' in src, "a result with no date cannot be stale"
 
 

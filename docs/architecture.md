@@ -239,6 +239,7 @@ Generated from each module's own first docstring line.
 | `screening.py` | Screen the whole approved-drug library against a receptor. |
 | `screens.py` | Design the experiment that settles what this whole package only predicts. |
 | `sensitivity.py` | Which approved drugs behave as though they act on your factor. |
+| `services.py` | Do the web services still return the shape the parsers expect? |
 | `shortlist.py` | Narrow an existing results.json to a shortlist, without re-running anything. |
 | `signatures.py` | LINCS L1000 transcriptomic signatures — the only empirical link in the package. |
 | `stabilizers.py` | Locking a transcription factor into an active state — without a ligand pocket. |

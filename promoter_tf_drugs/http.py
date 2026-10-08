@@ -55,10 +55,16 @@ class Client:
         #
         # It counts requests that LEAVE. A cache hit is free and stays
         # free, or a resumed run would behave differently from a fresh
-        # one for no reason the caller could see. Retries of one logical
-        # request count once: the quantity a caller can reason about is
-        # how many distinct questions were asked, not how many packets
-        # the answer took.
+        # one for no reason the caller could see.
+        #
+        # Retries do not count: one attempt sequence against one URL is
+        # one question, however many times the connection had to be
+        # made before an answer came back. A redirect DOES count, and
+        # the difference is deliberate - a 307 to a new host is a second
+        # round trip, and a server that redirects repeatedly inside
+        # max_redirects produces real traffic on every hop. A budget
+        # that declined to count that would be measuring intent rather
+        # than cost, which is not what a ceiling is for.
         #
         # Running out raises HttpError - the same exception a dead host
         # raises - so every `_optional` and `except HttpError` path
@@ -259,6 +265,10 @@ class Client:
 
     def spend(self) -> dict:
         """What this run cost, and whether the ceiling bound it.
+
+        `requests` counts round trips that left the machine: cache hits
+        are not among them, a retried request counts once, and each
+        redirect hop counts separately.
 
         `refused` above zero means evidence is missing because of the
         budget rather than because a source had nothing - a distinction

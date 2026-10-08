@@ -142,6 +142,24 @@ def _column(header: list, *names) -> int | None:
 # the loaders so `assess` can report it without re-reading anything.
 _SOURCES: dict = {}
 
+# ClinGen's raw grade per gene, beside the boolean the rest of the
+# module reads. Two different grades collapse to False and they are not
+# equivalent: 40 is "Dosage sensitivity unlikely", a panel's conclusion
+# ABOUT THE GENE, while 1 is "Little evidence for dosage pathogenicity",
+# which is mostly a statement about how much anyone has published. The
+# boolean cannot carry that and the report should not have to guess.
+_CLINGEN_GRADE: dict = {}
+
+# ClinGen's own vocabulary, for saying what a grade meant.
+CLINGEN_GRADES = {
+    3: "sufficient evidence for dosage pathogenicity",
+    2: "some evidence for dosage pathogenicity",
+    1: "little evidence for dosage pathogenicity",
+    0: "no evidence available",
+    30: "associated with an autosomal recessive phenotype",
+    40: "dosage sensitivity unlikely",
+}
+
 
 def _gnomad_release(path: str, header: list) -> tuple:
     """(release, where it was read) for a gnomAD constraint table."""
@@ -274,6 +292,7 @@ def load_clingen(path=None) -> dict:
         return _CACHE[key]
 
     out: dict = {}
+    grades: dict = {}
     try:
         # ClinGen's header is itself a '#' line - five comment lines,
         # then "#Gene Symbol<TAB>Gene ID<TAB>...". Dropping every '#'
@@ -355,12 +374,22 @@ def load_clingen(path=None) -> dict:
                     return None
                 return v >= 2
             out[sym] = (score(i_hi), score(i_ts))
+
+            def raw(i):
+                if i is None or len(row) <= i:
+                    return None
+                try:
+                    return int(str(row[i]).strip())
+                except ValueError:
+                    return None
+            grades[sym] = (raw(i_hi), raw(i_ts))
     except OSError as exc:
         log.warning("could not read %s: %s", p, exc)
         return {}
 
     rel, how = _clingen_release(lines)
     _SOURCES[key] = Source("ClinGen dosage curation", p, rel, how)
+    _CLINGEN_GRADE[key] = grades
     log.info("ClinGen dosage: %d gene(s) from %s (release %s)",
              len(out), Path(p).name, rel or "unrecorded")
     _CACHE[key] = out
@@ -448,6 +477,35 @@ def assess(symbol: str, *, gnomad_path=None, clingen_path=None
             "are healthy, so selection never saw the phenotype. Mosaic "
             "variegated aneuploidy works this way: biallelic BUB1B, with "
             "unaffected heterozygous parents.")
+
+    # A curated negative is a result, and the chain above has no branch
+    # for one: a gene ClinGen reviewed and found NOT haploinsufficient,
+    # whose LOEUF sits in the middle band, matched nothing and came back
+    # "unknown" with no notes at all. The reader was told nothing is
+    # known about a gene a panel had assessed.
+    if hi is False and not c.notes:
+        grade = (_CLINGEN_GRADE.get(("clingen", cp)) or {}).get(sym)
+        raw_hi = grade[0] if grade else None
+        if raw_hi == 40:
+            c.dosage = "tolerant"
+            c.notes.append(
+                "ClinGen curates this gene as dosage-insensitive: a panel "
+                "reviewed it and concluded that losing one copy is "
+                "unlikely to be harmful. That is a finding, not an "
+                "absence of one.")
+            c.notes.append(
+                "It speaks to ONE copy. A recessive condition is outside "
+                "what either source measures - carriers are healthy, so "
+                "neither selection nor a haploinsufficiency curation "
+                "sees the phenotype.")
+        else:
+            c.notes.append(
+                "ClinGen reviewed this gene and found little evidence for "
+                "haploinsufficiency. That is weaker than it sounds: the "
+                "question is whether a deletion has been REPORTED to "
+                "cause disease, which depends on whether anyone has "
+                "looked, so it is not evidence that a deletion would be "
+                "tolerated.")
 
     if ts:
         c.notes.append(
@@ -594,3 +652,4 @@ def summarise(c: Constraint, goal: str = "up", *,
 def reset_cache() -> None:
     _CACHE.clear()
     _SOURCES.clear()
+    _CLINGEN_GRADE.clear()
