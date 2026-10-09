@@ -55,6 +55,7 @@ from __future__ import annotations
 
 import logging
 import math
+import re
 from dataclasses import dataclass, asdict, field
 from pathlib import Path
 
@@ -434,6 +435,123 @@ def _parse_sig_name(name: str) -> dict:
                 pass
     return {"drug": (drug or name).strip(), "cell_line": cell,
             "timepoint": time, "dose": dose}
+
+
+# --------------------------------------------------- how broadly a compound acts
+# A .gmt signature lists the genes that passed a cutoff in one compound,
+# cell line, dose and time. The lists differ a lot in length (median 119 genes
+# up and down together, longest 648), so the length says how many genes that
+# condition moved. A compound whose signatures are long moves a large part of
+# the transcriptome whichever gene you asked about, and a hit on your gene from
+# it is weak evidence of specificity.
+#
+# This is a caution and not a verdict. The files hold set membership with no
+# scores, so they cannot say whether YOUR gene stands out among the genes a
+# compound moved. The length rises with dose, depends on the cell line, and
+# the cutoff is whatever Enrichr used. Nothing here changes a score.
+BROAD_PERCENTILE = 75            # top quartile of all signatures
+# The tier of breadth that costs a route score, not just a flag: the top
+# decile. Chosen to catch the compounds that move a large part of the
+# transcriptome whatever gene is asked about (vorinostat, trichostatin A,
+# emetine) and to leave the merely broad ones (the CDK inhibitors, about
+# the 77th percentile) flagged but not scored down.
+VERY_BROAD_PERCENTILE = 90
+MIN_SIGNATURES_FOR_BREADTH = 3   # fewer than this is too few to judge
+
+_BREADTH_CACHE: dict = {}
+
+
+def breadth_key(name: str) -> str:
+    """A compound's name reduced so spellings of it meet: case, hyphens and
+    spaces, and trailing salt words ("Vorinostat", "trichostatin-a",
+    "Emetine Dihydrochloride Hydrate")."""
+    from .congeners import salt_free_name
+    spaced = re.sub(r"[-_]+", " ", (name or "").lower())
+    return re.sub(r"[^a-z0-9]", "", salt_free_name(spaced))
+
+
+def _count_genes(path) -> dict:
+    """`{signature name: number of genes}` for one .gmt file."""
+    counts: dict = {}
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            f = line.rstrip("\n").split("\t")
+            if len(f) < 2 or not f[0]:
+                continue
+            counts[f[0]] = len([g for g in f[2:] if g.strip()])
+    return counts
+
+
+def signature_breadth(up_path=None, down_path=None) -> dict | None:
+    """How many genes each compound moves, from the local .gmt files.
+
+    Returns `{"n_signatures", "median_genes_all", "compounds": {key: {
+    "median_genes", "n_signatures", "percentile"}}}`, or None when either file
+    is missing. `percentile` is the share of ALL signatures that moved fewer
+    genes than this compound's median. Read once per process and remembered.
+    """
+    import bisect
+    import statistics
+    from pathlib import Path as _P
+
+    def find(direction, explicit):
+        cands = [explicit] if explicit else list(DEFAULT_GMT_PATHS[direction])
+        return next((_P(c) for c in cands if c and _P(c).exists()), None)
+
+    up, down = find("up", up_path), find("down", down_path)
+    if up is None or down is None:
+        return None
+    key = (str(up.resolve()), up.stat().st_size, up.stat().st_mtime_ns,
+           str(down.resolve()), down.stat().st_size, down.stat().st_mtime_ns)
+    if key in _BREADTH_CACHE:
+        return _BREADTH_CACHE[key]
+
+    n_up, n_down = _count_genes(up), _count_genes(down)
+    per_signature = {n: n_up.get(n, 0) + n_down.get(n, 0)
+                     for n in set(n_up) | set(n_down)}
+    everything = sorted(per_signature.values())
+    by_compound: dict = {}
+    for name, n in per_signature.items():
+        by_compound.setdefault(breadth_key(_parse_sig_name(name)["drug"]),
+                               []).append(n)
+    compounds = {}
+    for k, counts in by_compound.items():
+        if not k:
+            continue
+        med = statistics.median(counts)
+        compounds[k] = {
+            "median_genes": med, "n_signatures": len(counts),
+            "percentile": round(100.0 * bisect.bisect_left(everything, med)
+                                / len(everything), 1)}
+    out = {"n_signatures": len(everything),
+           "median_genes_all": statistics.median(everything),
+           "compounds": compounds}
+    _BREADTH_CACHE[key] = out
+    return out
+
+
+def breadth_for(names, breadth: dict | None) -> dict:
+    """Breadth records for the compounds in `names`, keyed by `breadth_key`.
+
+    Each record adds `broad` (top quartile, with enough signatures to judge)
+    and `thin` (too few signatures to say either way). Compounds the LINCS
+    files do not contain are left out, which is not the same as "narrow".
+    """
+    if not breadth:
+        return {}
+    out = {}
+    for name in names:
+        k = breadth_key(name)
+        rec = breadth["compounds"].get(k)
+        if rec is None or k in out:
+            continue
+        thin = rec["n_signatures"] < MIN_SIGNATURES_FOR_BREADTH
+        out[k] = dict(
+            rec, thin=thin,
+            broad=(not thin and rec["percentile"] >= BROAD_PERCENTILE),
+            very_broad=(not thin
+                        and rec["percentile"] >= VERY_BROAD_PERCENTILE))
+    return out
 
 
 def load_enrichr_gmt(gene: str, *, direction: str = "up",

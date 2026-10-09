@@ -37,6 +37,7 @@ from . import magnitude as mag_mod
 from . import constraint as con_mod
 from .http import Client
 
+from . import poisonexon
 from . import standard_of_care as soc_mod
 
 log = logging.getLogger(__name__)
@@ -822,8 +823,13 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                     scan, cands)
                 n_enr = sum(1 for f in (scan.get("features") or {}).values()
                             if f.get("enriched"))
+                # ok whether or not anything was found: this is a local scan
+                # of a sequence in hand, so it either ran or it did not, and
+                # "no feature beat the shuffled null" is its answer. Recording
+                # that as a failure kept runs at "degraded" for a finished,
+                # negative analysis.
                 ledger.record(
-                    "promoter_dna", requested=True, ok=bool(cands),
+                    "promoter_dna", requested=True, ok=True,
                     yielded=len(cands),
                     detail=(f"{n_enr} sequence feature(s) enriched over "
                             f"{scan.get('shuffles')} shuffles; "
@@ -1549,7 +1555,25 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             "promoter_dna": promoter_dna_scan,
             "gene_symbol": prom.gene_symbol,
         }
-        all_routes = cat_mod.build(block_for_catalogue, goal=goal)
+        _mitotic_gene = (cellcycle.is_mitotic_gene(gene)
+                         or cellcycle.is_mitotic_gene(prom.gene_symbol))
+        all_routes = cat_mod.build(block_for_catalogue, goal=goal,
+                                   mitotic_gene=_mitotic_gene)
+        # Compounds that move a large share of the transcriptome lose score
+        # within their tier. The routes are built once to learn which
+        # compounds are candidates, and again only if one of them is that
+        # broad, so a run with no LINCS files or no broad candidate pays
+        # nothing and scores as it always did.
+        if not demo:
+            _b = _optional("LINCS compound breadth",
+                           lambda: _compound_breadth([{"all_routes": all_routes}]),
+                           {})
+            _very = {k: v for k, v in (_b.get("compounds") or {}).items()
+                     if v.get("very_broad")}
+            if _very:
+                all_routes = cat_mod.build(block_for_catalogue, goal=goal,
+                                           breadth=_b["compounds"],
+                                           mitotic_gene=_mitotic_gene)
 
         # Where a factor has both a dock and a ligand screen, intersect
         # them. The two share no input - one reads pocket shape, the other
@@ -1660,8 +1684,23 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
 
     _dosage = _optional("dosage constraint", _assess_dosage, None)
 
+    _compound_breadth_info = ({} if demo else _optional(
+        "LINCS compound breadth", lambda: _compound_breadth(outputs), {}))
+
+    _brake = {} if demo else _brake_exons(client, gene, species, goal)
+    _mitotic_gene_flag = (cellcycle.is_mitotic_gene(gene) or any(
+        cellcycle.is_mitotic_gene(p.gene_symbol) for p in promoters))
+
     _result = {
         "direct_therapies": [t.to_dict() for t in direct_hits],
+        # Exons only decay-prone isoforms use: candidates for an antisense
+        # oligonucleotide that raises output. Annotation, not a design.
+        "brake_exons": _brake,
+        # True for a gene whose job is mitosis; see cellcycle.MITOTIC_GENES.
+        "mitotic_gene": _mitotic_gene_flag,
+        # How many genes each candidate compound moves in LINCS, as a caution
+        # about specificity. Annotation only; see signatures.signature_breadth.
+        "compound_breadth": _compound_breadth_info,
         # What is already approved for the condition this gene causes. Not a
         # route to the gene and not part of any score; see standard_of_care.
         "standard_of_care": soc_mod.for_gene(gene),
@@ -1696,6 +1735,50 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
     return _result
 
 
+
+
+def _brake_exons(client, gene: str, species: str, goal: str) -> dict:
+    """Candidate brake exons for an up goal, from the Ensembl isoform list.
+
+    Always asks Ensembl, even when a local GTF supplies the gene models: the
+    GTF records carry no exon coordinates, and the basic set leaves out most
+    decay isoforms. Returns `{}` when the goal is not to raise the gene, and
+    a dict with an `error` when the isoforms could not be read, so a failed
+    lookup is not reported as "no brake exon".
+    """
+    if goal != "up":
+        return {}
+    try:
+        return poisonexon.find(genes._lookup_symbol(client, gene, species))
+    except Exception as exc:                                # noqa: BLE001
+        log.warning("brake-exon search for %s failed: %s", gene,
+                    str(exc)[:100])
+        return {"gene": gene, "candidates": [], "n_nmd": 0,
+                "error": f"the isoform list could not be read "
+                         f"({str(exc)[:80]})",
+                "note": ""}
+
+
+def _compound_breadth(outputs: list) -> dict:
+    """How broadly each candidate compound acts, from the local LINCS files.
+
+    Empty when the files are not on disk. Added to the result as an
+    annotation; nothing is scored or filtered on it.
+    """
+    breadth = sig_mod.signature_breadth()
+    if breadth is None:
+        return {}
+    names = []
+    for block in outputs or []:
+        for r in ((block.get("all_routes") or {}).get("routes") or []):
+            if r.get("drug"):
+                names.append(r["drug"])
+    found = sig_mod.breadth_for(names, breadth)
+    return {"broad_percentile": sig_mod.BROAD_PERCENTILE,
+            "min_signatures": sig_mod.MIN_SIGNATURES_FOR_BREADTH,
+            "n_signatures": breadth["n_signatures"],
+            "median_genes_all": breadth["median_genes_all"],
+            "compounds": found}
 
 
 def _screen_outcome(screens: dict, eligible: set) -> tuple:

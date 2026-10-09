@@ -684,6 +684,55 @@ def _standard_of_care_section(result: dict) -> list:
     return L
 
 
+def _brake_exon_section(result: dict) -> list:
+    """Exons only decay-prone isoforms use, as targets to look at for an
+    antisense oligonucleotide. Empty unless the goal is to raise the gene."""
+    brake = result.get("brake_exons") or {}
+    if not brake:
+        return []
+    gene = result["query"]["gene"]
+    L = [f"## Exons that may brake {gene} output", ""]
+    if brake.get("error"):
+        L += [f"Not assessed: {brake['error']}. That is not a finding that "
+              f"{gene} has no such exon.", ""]
+        return L
+    L += [f"Some genes make part of their transcript with an extra exon that "
+          f"puts a stop codon early, so the message is destroyed. An antisense "
+          f"oligonucleotide that makes the cell skip that exon turns those "
+          f"transcripts into working ones and raises the protein, from the "
+          f"working copy only. {brake['note']}", ""]
+    cands = brake.get("candidates") or []
+    novel = [c for c in cands if c["kind"] == "novel exon"]
+    other = [c for c in cands if c["kind"] != "novel exon"][:5]
+    if novel or other:
+        L += ["| Exon (genomic) | Length | Kind | Decay isoforms using it |",
+              "|---|---|---|---|"]
+        for c in novel + other:
+            L.append(f"| {c['start']}\u2013{c['end']} | {c['length']} bp | "
+                     f"{c['kind']} | {c['n_transcripts']} |")
+        L.append("")
+        if len(cands) - len(novel) > len(other):
+            L += [f"{len(cands) - len(novel) - len(other)} more extended or "
+                  f"shifted coding exons are not shown; most are first-exon "
+                  f"start variants, which are not brakes.", ""]
+    L += ["**This is a list of places to look, not a design.** An annotated "
+          "exon is one Ensembl has seen in some tissue. Whether it is "
+          "included in your cells, how often, and whether skipping it raises "
+          "protein is a question for RNA sequencing and a splicing assay. "
+          "Nothing here picks an oligonucleotide sequence or checks it "
+          "against the rest of the transcriptome.", ""]
+    return L
+
+
+def _mitotic_gene_section(result: dict) -> list:
+    """A short caution for a gene whose job is mitosis."""
+    if not result.get("mitotic_gene"):
+        return []
+    from .cellcycle import MITOTIC_GENE_CAUTION
+    return ["## A mitotic gene", "",
+            MITOTIC_GENE_CAUTION.format(gene=result["query"]["gene"]), ""]
+
+
 def markdown_report(result: dict, top_n: int = 25) -> str:
     result = escape_pipes(result)
     q = result["query"]
@@ -850,6 +899,8 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
         L.append("")
 
     L.extend(_standard_of_care_section(result))
+    L.extend(_mitotic_gene_section(result))
+    L.extend(_brake_exon_section(result))
 
     # ------------------------------------- the headline answer, up front
     # This is the question people actually bring to the tool. It used to be
@@ -2892,6 +2943,9 @@ def corroboration(result: dict, top_n: int = 20) -> list:
         # prediction about it.
         liab = liab_mod.assess(g["drug"], (_pr or {}).get("canonical_smiles"))
         exp = _expected_change(rs, goal, outcomes, measured)
+        from . import signatures as _sig
+        _breadth = ((result.get("compound_breadth") or {})
+                    .get("compounds") or {}).get(_sig.breadth_key(g["drug"]))
 
         out.append({
             "drug": g["drug"],
@@ -2925,10 +2979,22 @@ def corroboration(result: dict, top_n: int = 20) -> list:
             "chain": exp.get("chain"),
             "limiting_step": exp.get("limiting_step"),
             "n_routes": len(rs),
+            "breadth": _breadth,
+            "mitotic_disruptor": sys_mod.is_mitotic_disruptor(g["drug"]),
         })
 
     out.sort(key=lambda r: (r["best_tier"], -r["weight"], -r["n_methods"]))
     return out
+
+
+def _breadth_cell(b: dict | None) -> str:
+    """How broadly a compound acts, for one table cell."""
+    if not b:
+        return "\u2014"
+    if b.get("thin"):
+        return "few signatures"
+    pct = f"{b['percentile']:.0f}th pct, {b['median_genes']:.0f} genes"
+    return f"\u26a0 broad ({pct})" if b.get("broad") else pct
 
 
 def corroboration_table(result: dict, top_n: int = 20) -> list:
@@ -2945,12 +3011,14 @@ def corroboration_table(result: dict, top_n: int = 20) -> list:
              "supports.")
     L.append("")
     L.append(f"| Drug | Methods | Tier | Acts on | What it is | Systems it "
-             f"acts on | Reach | BBB? | {gene} change | P(moves) | "
+             f"acts on | Breadth | Reach | BBB? | {gene} change | P(moves) | "
              f"Measured effect |")
-    L.append("|---|---|---|---|---|---|---|---|---|---|---|")
+    L.append("|---|---|---|---|---|---|---|---|---|---|---|---|")
     any_p, any_effect = False, False
     for r in rows:
         sys_cell = r["systems"] or "no systemic class flagged"
+        if r.get("mitotic_disruptor"):
+            sys_cell += " + mitotic disruptor"
         what = r["what_it_is"] or r["mechanism"] or "\u2014"
         tag = ("measured" if "MEASURED" in r["expected_basis"]
                else "established" if "established" in r["expected_basis"]
@@ -2978,11 +3046,27 @@ def corroboration_table(result: dict, top_n: int = 20) -> list:
                  f"{r['best_tier']} | "
                  f"{', '.join(r['acts_on']) or EMDASH} | "
                  f"{_clip(what, 34)} | {_clip(sys_cell, 28)} | "
+                 f"{_breadth_cell(r.get('breadth'))} | "
                  f"{_route_cell(r)} | "
                  f"{r.get('bbb') or '—'} | "
                  f"{r['expected_change']} ({tag}) | {p_cell} | "
                  f"{eff_cell} |")
     L.append("")
+
+    info = result.get("compound_breadth") or {}
+    if any(r.get("breadth") for r in rows):
+        L.append(
+            f"**Breadth** is how many genes the compound moved across its "
+            f"LINCS signatures (up and down together), against all "
+            f"{info.get('n_signatures', 0):,} signatures. \u26a0 broad means "
+            f"the top quartile. It is a caution, not a verdict: it rises "
+            f"with dose and depends on the cell line, and the files hold "
+            f"set membership without scores, so they cannot say whether "
+            f"{gene} stands out among the genes a compound changed. A "
+            f"compound moving hundreds of genes lowers {gene} among many "
+            f"others. Compounds with fewer than "
+            f"{info.get('min_signatures', 3)} signatures are not judged.")
+        L.append("")
 
     # What the two numeric columns are, and what neither of them is.
     L.append(f"**There is no predicted fold-change here, and that is not an "
@@ -3176,15 +3260,39 @@ def summary_report(result: dict, top_n: int = SUMMARY_TOP) -> str:
         L.append("| # | Drug | Approved to treat | Acts on | Tier | Why it "
                  "is here |")
         L.append("|---|---|---|---|---|---|")
+        _any_broad = False
+        _any_mitotic = False
         for i, r in enumerate(rows, 1):
             d = ind_mod.describe(
                 r.get("drug", ""),
                 mechanism=(r.get("mechanism") or "").strip() or None)
             treats = d["treats"] or "not established here"
-            L.append(f"| {i} | **{r.get('drug')}** | {_clip(treats)} | "
+            from . import signatures as _sig
+            _b = ((result.get("compound_breadth") or {}).get("compounds")
+                  or {}).get(_sig.breadth_key(r.get("drug", "")))
+            _broad = " ⚠broad" if (_b or {}).get("broad") else ""
+            _any_broad = _any_broad or bool(_broad)
+            if (result.get("mitotic_gene")
+                    and sys_mod.is_mitotic_disruptor(r.get("drug", ""))):
+                _broad += " ⚠mitotic"
+                _any_mitotic = True
+            L.append(f"| {i} | **{r.get('drug')}**{_broad} | {_clip(treats)} | "
                      f"{r.get('acts_on') or EMDASH} | {r.get('tier')} | "
                      f"{r.get('category')} |")
         L.append("")
+        if _any_mitotic:
+            L.append("⚠mitotic: the compound disturbs mitosis directly "
+                     "and this gene is a mitotic one, so it moves the gene "
+                     "by changing the cell's cycle. Its route is scored at "
+                     "half.")
+            L.append("")
+        if _any_broad:
+            L.append("⚠broad: the compound moves a large share of the "
+                     "transcriptome (top quartile of LINCS signatures), so "
+                     "lowering this gene is one of many changes it makes. "
+                     "A caution about specificity, not a score; the full "
+                     "table in `report.md` says how it is measured.")
+            L.append("")
         L.append("**Every row is off-label.** The third column is what the "
                  "drug was approved for; using it to move your gene is a "
                  "different purpose, and the distance between the two is "

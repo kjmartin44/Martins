@@ -97,6 +97,81 @@ everything under the headings below is still outstanding.
   degrades into an empty result rather than an error.
 
 
+## Tried and dropped: a cell-cycle-shift check from the LINCS files
+
+The idea was to warn when a compound raises a mitotic gene only because it
+arrests cells in G2/M, by asking how much of a G2/M gene panel its signatures
+move the same way. It cannot work with the local `.gmt` files: even for
+nocodazole, paclitaxel, vincristine and tozasertib the median share of a
+54-gene panel in the up lists is zero, and the highest of 2,207 compounds is
+two genes. The lists are short and most of the genes are inferred rather than
+measured. Checking the premise directly for BUB1B also found no pattern: 1 of
+468 mitotic-disruptor signatures has BUB1B in its up list (0.21%), against 19
+of 32,665 others (0.06%), and only 20 compounds in all of LINCS raise it. What
+was kept instead is the principled part: a curated tag for compounds that
+disturb mitosis, scored down for mitotic genes, and a plain caution that a
+mitotic transcript moves with the phase mix of the culture.
+
+## Proposed: reading the conformation beyond nuclear receptors
+
+This is a scope, not a change. It was written on 2026-10-08 from queries
+against GPCRdb and KLIFS, and the numbers below are what they returned that
+day.
+
+**The gap.** `--state` picks the agonist-bound or antagonist-bound structure,
+but the package can only tell which is which for nuclear receptors, from a
+bound coactivator peptide. A GPCR, a kinase or an enzyme carries no such
+peptide, so every structure comes back `unknown`, a request for a particular
+state is refused, and the only option is `--state any` with the direction left
+unclaimed.
+
+**Reading the state is a lookup, not geometry.** Two public databases already
+classify each structure, and both answered from this network.
+
+- GPCRdb labels every GPCR structure Inactive, Active or Intermediate. CCR5
+  has 11: seven inactive and four active.
+- KLIFS labels every kinase structure by DFG (in, out, out-like) and by the
+  position of the αC helix. EGFR has 565, covering all the usual combinations.
+
+So the adapter is small: ask the database for the structure's state, record
+the source, and treat a structure the database does not know as `unknown`, as
+now. The state is then read from a curated source rather than from the file,
+and the result should say so.
+
+**What the lookup does not solve.**
+
+- *The box needs a ligand.* The package places the box on a co-crystallised
+  ligand. CCR5's four active-state structures carry a chemokine or nothing, no
+  small molecule, so there is nothing to place a box on. Docking into the
+  active state would need the box carried over from an inactive structure by
+  aligning the two pockets, which is new work with its own error. CCR5 also has
+  no small-molecule agonists to validate against: maraviroc is an antagonist.
+- *Coverage varies a lot.* BUB1B has one human structure in KLIFS (6TLJ, DFG
+  out-like, αC out) and it holds no ligand, so docking would refuse for the
+  same reason it does today. BUB1B's kinase domain is also reported to be
+  catalytically inactive (it is a pseudokinase), which makes "active versus
+  inactive" a weak idea for it. Check that before relying on it.
+- *Direction cannot be derived.* For a nuclear receptor the wanted state comes
+  from the factor's role and your goal. A GPCR has no such role annotation, so
+  the wanted state would have to be stated by the user.
+- *The gate needs known ligands per state.* A pocket is validated against
+  agonists for the active state and antagonists for the inactive one, with at
+  least five of each. Active-state GPCR pockets will often refuse.
+
+**By class.**
+
+| Class | What to build | Worth it? |
+|---|---|---|
+| Kinases | KLIFS adapter; dock into DFG-in and DFG-out structures separately | Best: hundreds of structures for many kinases, and the DFG state separates type I from type II inhibitors |
+| GPCRs | GPCRdb adapter; box transfer for active-state structures without a ligand | Second: inactive-state docking already works, the gain is the active state, which is the part with the weakest data |
+| Enzymes | Nothing new | There is no on/off pocket; an inhibitor fits the active site, and the existing gate already tests whether docking recovers known inhibitors |
+
+**Recommendation.** Do kinases first, GPCRs second, and leave enzymes alone.
+Each adapter should return the existing `Conformation` record with a `source`
+field, keep the refusal for a structure that cannot be classified, and add a
+test for each of: state known, state unknown, database unreachable (which must
+read as unreachable, not as "unknown state").
+
 ## Done since this review was written
 
 **Global expression state removed.** `delivery._LOCAL_EXPRESSION` survived

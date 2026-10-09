@@ -689,7 +689,8 @@ make a row fit.
 
 `results.json` has top-level `query`, `results`, `direct_therapies`, `weights`,
 `drug_weights`, `dosage`, `requirement`, `spend`, `evidence_sources`,
-`evidence_verdict`, `provenance`, `tss_window_overlap`, and `standard_of_care`. Each entry in
+`evidence_verdict`, `provenance`, `tss_window_overlap`, `standard_of_care`,
+`compound_breadth`, `brake_exons`, and `mitotic_gene`. Each entry in
 `results` includes `promoter`, `sequence`, `hits`, `tfs`, `drug_grades`,
 `all_routes`, and optional stage outputs. Empty sections can mean no result, a
 disabled stage, or a service failure; the `evidence_sources` ledger tells them
@@ -701,6 +702,60 @@ In the `genetic` stage output, `cis.error` is text when the Open Targets
 query failed and null otherwise. An empty `cis.phenotypes` with a null
 `error` means the gene has no associations there; with an `error` it means
 the query did not complete and says nothing about the gene.
+
+**Compatibility:** routes through compounds in the top decile of LINCS breadth
+now score half of what they did, so a run that used the local `.gmt` files can
+rank them lower within their tier than an earlier version did. Runs without the
+files, and demo runs, score as before. Each route has a new `breadth_penalty`
+key.
+
+`mitotic_gene` is true for a gene whose job is mitosis or its checkpoint (BUB1B,
+PLK1, CDC20 and about seventy others, from a hand-entered set in
+`cellcycle.py`). For such a gene the report adds a caution, and a route through
+a compound that disturbs mitosis directly (tubulin binders and the PLK1, Aurora,
+Eg5, CDK1 and MPS1 inhibitors in `systemic.MITOTIC_DISRUPTORS`) has its `score`
+multiplied by 0.5 and records that in `mitotic_penalty`. A route that is both
+very broad and a mitotic disruptor is halved once. The tier never changes. The
+candidates table marks the compound as a mitotic disruptor.
+
+`brake_exons` lists, for a goal of raising the gene, the exons that
+nonsense-mediated-decay isoforms use and coding isoforms do not, read from the
+Ensembl isoform list. Each candidate has its genomic span, length, kind (a
+novel exon, or an extended or shifted coding exon) and the decay isoforms that
+use it. It is a list of places to look for an antisense oligonucleotide that
+raises output, not a design: an annotated exon is not an included exon. It is
+`{}` when the goal is not to raise the gene and in demo runs, and it carries an
+`error` when the isoforms could not be read, which is not the same as having
+none. The isoform list always comes from Ensembl, even in a run that takes its
+gene models from a local GTF, because the GTF records carry no exon
+coordinates and the GENCODE basic set omits most decay isoforms. An offline run
+without a cached Ensembl response reports the error.
+
+**Compatibility:** `mitotic_penalty` is a new key on every route, and a run for
+a mitotic gene scores routes through mitosis-disrupting compounds at half what
+an earlier version gave them.
+
+`compound_breadth` says how many genes each candidate compound moves in the
+local LINCS signature files, as a caution about specificity. Each signature
+lists the genes one compound moved in one cell line, dose and time, and the
+lists differ in length (median 119 genes up and down together, longest 648).
+A compound's record holds the median length over all its signatures,
+`n_signatures`, and `percentile`, the share of all signatures that moved fewer
+genes. `broad` is true in the top quartile when there are at least three
+signatures; `thin` is true when there are fewer. A compound the files do not
+contain has no record, which is not the same as narrow. The block is `{}`
+when the `.gmt` files are absent. `very_broad` is true in the top decile (the
+90th percentile) with at least three signatures. The block itself is an
+annotation, and `broad` only flags. `very_broad` costs score: a route through
+such a compound has its `score` multiplied by 0.5, records that in
+`breadth_penalty` (null on every other route) and says so in its notes. The
+tier never changes, so the route only moves down within its tier, and the
+candidates table in `summary.md`, which orders by tier and method count, does
+not move. The 0.5 is a judgement, not a calibrated figure. The files hold set
+membership without scores, so they cannot say whether your gene stands out
+among the genes a compound moved, and the length rises with dose and depends
+on the cell line. The candidates table in
+`summary.md` shows it as a Breadth column and marks broad compounds.
 
 `standard_of_care` is the approved treatments for the condition the gene
 causes, or null when the gene has no entry. It is read from a short

@@ -274,7 +274,7 @@ def test_lowering_the_gene_through_an_activator_is_reached_by_an_inhibitory_edge
 # ----------------------------------------- what a whole run says about it
 def _lf_offline_run(tmp_path, monkeypatch, *, edges, library, index=None,
                     index_error=None, chembl=None, ledger_row="upstream",
-                    **run_kw):
+                    full=False, **run_kw):
     from promoter_tf_drugs import eqtl, genes, neighbours
     from promoter_tf_drugs import localdrugs, pipeline
 
@@ -325,6 +325,8 @@ def _lf_offline_run(tmp_path, monkeypatch, *, edges, library, index=None,
                        **run_kw)
     src = res["evidence_sources"]["sources"]
     rows = {r["source"]: r for r in src} if isinstance(src, list) else src
+    if full:
+        return res, rows
     return res["results"][0], rows[ledger_row]
 
 
@@ -429,3 +431,16 @@ def test_a_whole_run_with_no_eligible_receptor_records_the_screen_as_ok(
         ledger_row="screen", screen_receptors=True)
     assert row["ok"] is True and row["yielded"] == 0
     assert "no receptor to screen" in row["detail"]
+
+
+# --------------------------------------- the promoter DNA scan's ledger row
+def test_a_finished_promoter_dna_scan_with_no_candidate_is_not_a_failure(
+        tmp_path, monkeypatch):
+    from promoter_tf_drugs import promoterdna
+    monkeypatch.setattr(promoterdna, "candidates", lambda scan: [])
+    block, row = _lf_offline_run(
+        tmp_path, monkeypatch, edges=_lf_tf_edges(),
+        library=[{"chembl_id": "C1", "name": "x"}], index={},
+        ledger_row="promoter_dna", promoter_dna=True)
+    assert row["ok"] is True and row["yielded"] == 0
+    assert "no sequence feature beat the shuffled null" in row["detail"]

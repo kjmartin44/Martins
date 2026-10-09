@@ -529,3 +529,29 @@ def test_dock_script_exports_the_cuda_libraries_only_when_there_are_some(
     assert script.rstrip().endswith("/home/u/bin/gnina -r a b 3")
     monkeypatch.setattr(wsldock, "library_path", lambda: None)
     assert wsldock.dock_script("/x/vina", ["-r"]) == "/x/vina -r" + NL
+
+
+# ------------------------------------------------ the library limit says so
+def test_a_library_limit_that_drops_drugs_says_it_took_the_start_of_the_list(
+        caplog):
+    """A limit of 600 over an alphabetical table docked A to C and never
+    reached maraviroc, the approved CCR5 drug and the pocket's own ligand."""
+    import logging
+    rows = [f"drug{i:04d}" for i in range(1000)]
+    with caplog.at_level(logging.WARNING):
+        got = dk._limit_library(rows, 600)
+    assert got == rows[:600]
+    msg = " ".join(r.getMessage() for r in caplog.records)
+    assert "first 600 of 1000" in msg
+    assert "not a random sample" in msg and "--library-limit" in msg
+
+
+def test_a_limit_that_drops_nothing_is_silent_and_a_copy(caplog):
+    import logging
+    rows = ["a", "b", "c"]
+    with caplog.at_level(logging.WARNING):
+        got = dk._limit_library(rows, 100000)
+        none = dk._limit_library(rows, None)
+    assert got == rows and none == rows
+    assert got is not rows, "a copy, not the caller's list"
+    assert not caplog.records

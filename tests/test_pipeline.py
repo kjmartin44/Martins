@@ -9282,10 +9282,10 @@ def test_the_reach_column_is_rendered_and_its_absence_is_explained():
     src = inspect.getsource(pl.corroboration_table)
     assert "Reach" in src
     assert "_route_cell" in src
-    # The header, the separator and the cells must all be eleven wide, or
+    # The header, the separator and the cells must all be twelve wide, or
     # markdown drops the trailing columns without complaining.
     sep = [ln for ln in src.splitlines() if "|---|" in ln][0]
-    assert sep.count("---") == 11
+    assert sep.count("---") == 12
 
 
 def test_the_reach_and_pains_footnotes_fire_on_the_right_rows():

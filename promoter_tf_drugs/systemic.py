@@ -241,10 +241,50 @@ _COMPACT: dict[str, SystemicClass] = {
 
 BURDEN_LEVELS = ("low", "moderate", "high", "prohibitive")
 
+# Compounds that disturb mitosis directly: they bind tubulin, or inhibit the
+# kinases or motors that run the spindle. This is a TAG, not a class, because
+# the same compound can also belong to a class above (paclitaxel is
+# cytotoxic, BI-2536 a kinase inhibitor) and the classes must stay disjoint.
+#
+# It matters for one kind of target. For a gene whose job is mitosis, a
+# compound that stalls or scrambles mitosis changes the cell's cycle state and
+# its chromosome count, which is the wrong kind of evidence and the wrong kind
+# of drug. Hand-entered and short: absence is not evidence that a compound
+# leaves mitosis alone.
+MITOTIC_DISRUPTORS = frozenset({
+    # tubulin binders
+    "paclitaxel", "docetaxel", "cabazitaxel", "vincristine", "vinblastine",
+    "vinorelbine", "vinflunine", "eribulin", "ixabepilone", "colchicine",
+    "colcemid", "demecolcine", "podophyllotoxin", "nocodazole",
+    "mebendazole", "albendazole", "combretastatin",
+    # polo-like kinase 1
+    "bi-2536", "volasertib", "gsk-461364", "onvansertib", "rigosertib",
+    # aurora kinases
+    "alisertib", "mln8237", "barasertib", "azd1152", "danusertib",
+    "tozasertib", "vx-680", "mk-0457", "zm-447439", "hesperadin",
+    "mk-5108", "enmd-2076", "cenisertib",
+    # kinesin Eg5, CDK1, MPS1
+    "monastrol", "ispinesib", "filanesib", "ro-3306", "reversine",
+    "nms-p715",
+})
+_MITOTIC_COMPACT = frozenset(m.replace(" ", "").replace("-", "")
+                             for m in MITOTIC_DISRUPTORS)
+
 
 def _compact(name: str) -> str:
     """A name with spaces and hyphens removed, for code-name matching."""
     return name.replace(" ", "").replace("-", "")
+
+
+def is_mitotic_disruptor(drug_name: str) -> bool:
+    """Is this a compound that disturbs mitosis directly?
+
+    Matched on the salt-free name with spaces and hyphens removed, the way
+    `classify` matches code names, so "BI 2536" and "BI-2536" are one.
+    """
+    if not drug_name:
+        return False
+    return _compact(salt_free_name(drug_name)) in _MITOTIC_COMPACT
 
 
 def classify(drug_name: str) -> SystemicClass | None:

@@ -427,12 +427,32 @@ class Route:
     # is unverified, and reading that as "not approved" would empty the
     # report rather than correct it.
     approval_verified: bool | None = None
+    # The multiplier applied to `score` because the compound moves a large
+    # share of the transcriptome in LINCS (see signatures.signature_breadth).
+    # None when no penalty applied, which is the usual case and also the case
+    # for a compound the LINCS files do not contain.
+    breadth_penalty: float | None = None
+    # The multiplier applied because the compound disturbs mitosis and the
+    # gene being treated is a mitotic one (see systemic.MITOTIC_DISRUPTORS).
+    mitotic_penalty: float | None = None
 
     def to_dict(self) -> dict:
         d = asdict(self)
         d["axes"] = self.axes.to_dict()
         d["tier_label"] = TIERS[self.tier]
         return d
+
+
+# A route through a compound in the top decile of LINCS breadth keeps its
+# tier and has its score halved, so within a tier it sits below narrower
+# compounds. Not applied to tier: a broad compound with the best evidence is
+# still the best evidence, and the flag beside it says the cost. The factor is
+# a judgement, not a calibrated figure.
+BROAD_SCORE_FACTOR = 0.5
+# For a mitotic gene, a compound that disturbs mitosis loses score the same
+# way and for the same kind of reason. Applied once: a compound that is both
+# very broad and a mitotic disruptor is halved, not quartered.
+MITOTIC_SCORE_FACTOR = 0.5
 
 
 def _score(r: Route) -> float:
@@ -1231,8 +1251,20 @@ def chromatin_routes(goal: str = "up") -> list[Route]:
 
 # ------------------------------------------------------------------ driver
 def build(result_block: dict, *, goal: str = "up",
-          include_chromatin: bool = True) -> dict:
-    """Assemble every route from one promoter's result block."""
+          include_chromatin: bool = True, breadth: dict | None = None,
+          mitotic_gene: bool = False) -> dict:
+    """Assemble every route from one promoter's result block.
+
+    `breadth` is `signatures.breadth_for`'s output, keyed by
+    `signatures.breadth_key`. A route through a compound marked `very_broad`
+    has its score multiplied by `BROAD_SCORE_FACTOR` and says so in its notes.
+    Without it nothing is penalised, so a run with no LINCS files, and demo
+    mode, score exactly as before.
+
+    `mitotic_gene` says the gene being treated is one whose job is mitosis. A
+    route through a compound that disturbs mitosis then has its score
+    multiplied by `MITOTIC_SCORE_FACTOR` and says so. It never changes a tier.
+    """
     routes: list[Route] = []
     routes += from_direct(result_block.get("direct_therapies") or [])
     routes += from_grades(result_block.get("drug_grades") or [],
@@ -1259,8 +1291,33 @@ def build(result_block: dict, *, goal: str = "up",
     if include_chromatin:
         routes += chromatin_routes(goal)
 
+    if breadth:
+        from .signatures import breadth_key
+    if mitotic_gene:
+        from .systemic import is_mitotic_disruptor
     for r in routes:
         r.score = _score(r)
+        scaled = False
+        if mitotic_gene and is_mitotic_disruptor(r.drug):
+            r.score = round(r.score * MITOTIC_SCORE_FACTOR, 1)
+            r.mitotic_penalty = MITOTIC_SCORE_FACTOR
+            scaled = True
+            r.notes.append(
+                f"score multiplied by {MITOTIC_SCORE_FACTOR}: this compound "
+                f"disturbs mitosis directly, and the gene is one whose job "
+                f"is mitosis, so it moves the gene by changing the cell's "
+                f"cycle, not by treating the cause")
+        rec = breadth.get(breadth_key(r.drug)) if breadth else None
+        if rec and rec.get("very_broad"):
+            if not scaled:
+                r.score = round(r.score * BROAD_SCORE_FACTOR, 1)
+            r.breadth_penalty = BROAD_SCORE_FACTOR
+            r.notes.append(
+                f"score multiplied by {BROAD_SCORE_FACTOR}: this compound "
+                f"moves a median of {rec['median_genes']:.0f} genes across "
+                f"{rec['n_signatures']} LINCS signatures "
+                f"({rec['percentile']:.0f}th percentile), so lowering or "
+                f"raising this gene is one of many changes it makes")
         # One place rather than eleven, so a new collector cannot forget.
         if r.approval_verified is None:
             r.approval_verified = verify_approval(r.drug)

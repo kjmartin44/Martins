@@ -49,6 +49,35 @@ from dataclasses import dataclass, asdict, field
 
 log = logging.getLogger(__name__)
 
+# Genes whose job is mitosis or the checkpoint that guards it. Their
+# transcripts rise and fall with the cell-cycle phase, so a compound that
+# changes the phase mix of a culture moves them without acting on them, and a
+# compound that disturbs mitosis is the wrong kind of candidate for them.
+# A hand-entered set of canonical G2/M and checkpoint genes: not a measurement
+# from the data at hand (the LINCS .gmt files carry no usable G2/M signal, so
+# a data-driven version was tried and could not work), and not exhaustive.
+MITOTIC_GENES = frozenset("""
+BUB1B BUB1 BUB3 MAD1L1 MAD2L1 TTK CDC20 CCNB1 CCNB2 CCNA2 CDK1 CDC25B CDC25C
+PLK1 PLK4 AURKA AURKB INCENP BIRC5 CDCA8 ESPL1 PTTG1 SGO1 SGO2 KNL1 ZWINT
+NDC80 NUF2 SPC24 SPC25 KIF11 KIF14 KIF18A KIF20B KIF23 KIF2C KIF4A CENPA
+CENPE CENPF HJURP TPX2 NUSAP1 UBE2C TOP2A MKI67 HMMR DLGAP5 ECT2 ANLN NEK2
+GTSE1 CKAP2 CKAP2L CKAP5 TACC3 HMGB2 CDCA2 CDCA3 SMC4 NCAPD2 RANGAP1 BORA
+""".split())
+
+MITOTIC_GENE_CAUTION = (
+    "{gene} is a mitotic gene. Its transcript varies with the cell-cycle "
+    "phase, so a compound that changes the phase mix of a culture can move it "
+    "without acting on it: read any RT-qPCR from synchronised or "
+    "phase-resolved cells. Compounds that disturb mitosis directly are marked, "
+    "and their routes score half, because changing the cell's mitosis moves "
+    "this gene for reasons unrelated to treating it.")
+
+
+def is_mitotic_gene(symbol: str | None) -> bool:
+    """Is this gene one whose job is mitosis or its checkpoint?"""
+    return (symbol or "").strip().upper() in MITOTIC_GENES
+
+
 # Approximate fraction of a ~24 h cycle during which the factor is active.
 # Coarse by design: G1 ~46%, S ~33%, G2 ~17%, M ~4%.
 PHASE_DUTY = {

@@ -223,6 +223,14 @@ dissociates in solution and does not bind the receptor, and the extra atoms
 add contacts, charge and size to the score. A bare ion such as `Ca+2` also
 draws RDKit's `UFFTYPER` warning, because it has no force field type.
 
+`--library-limit` takes the first N compounds in the order the table is
+written, and the bundled table is alphabetical. A limit of 600 docks the drugs
+from 2-mercaptoethanesulfonic acid to chlorpropamide and nothing after, so it
+is the start of the alphabet, not a sample. A CCR5 screen run that way never
+docked maraviroc, which sits at position 1,782 and is both the approved CCR5
+drug and the ligand in the pocket being docked. The launcher now docks the
+whole table, and a limit that drops compounds logs a warning saying so.
+
 `--strip-counter-ions` docks the drug alone, with one copy of each remaining
 component. A piece is removed when it has no carbon, when RDKit's default
 salt list recognises it, or when it is on a short list of organic counter-ions
@@ -250,3 +258,45 @@ CNN show the correlation.
 No size correction is applied. Normalising a score to make a ranking look
 better is tuning, and the package does not do it — the caution belongs in
 how you read the order.
+
+## Exploratory docking on an AlphaFold model
+
+The normal stage refuses a target whose pocket cannot recover its own known
+ligands. For a gene with an AlphaFold model, a crystallised relative, and no
+structure of its own with a ligand, `exploratory.py` asks a weaker question:
+does anything in the library fit a model of the pocket.
+
+```bash
+python -m promoter_tf_drugs.exploratory --gene BUB1B --uniprot O60566     --template-pdb 4QPM --template-chain A --template-ligand ADP     --jobs 8 --cpu 4 --reference
+```
+
+It downloads the current model, aligns the template to it on sequence,
+superposes the aligned core, and moves the template ligand into the model's
+frame to place the docking box. It refuses when fewer than 100 residues align,
+identity is under 25 percent, the superposition core is more than 3 A off, or
+the pocket residues average below pLDDT 70. Residues below pLDDT 50 are left
+out of the receptor. The model as a whole may be mostly disordered, as BUB1B is
+(49 percent confidently folded); only the pocket is judged.
+
+Compounds are scored, then ranked by how far each score sits from what its size
+predicts. Only compounds between half and 1.6 times the template ligand's heavy
+atoms are ranked, because a line fitted through every size is pulled around by
+molecules that cannot occupy the pocket. Everything keeps its raw score in
+`exploratory.json`.
+
+The class check is the safeguard. Approved kinase inhibitors in the library
+should rank above the rest. If their size corrected AUC is under 0.6, the
+output says the check failed and the ranking is not a list of what fits.
+`--reference` docks the same compounds into the template's own pocket, which
+shows whether a failure comes from the model. Neither check says anything about
+the target specifically.
+
+On BUB1B with 110 sampled compounds, kinase inhibitors scored worse than chance
+in the AlphaFold pocket (AUC 0.34) and well above chance in the open BUB1
+pocket (0.68 size corrected, 0.80 raw). Eleven of the 27 ADP atoms land inside
+model atoms. The model's pocket is closed to these compounds, and its motif
+reads DFS where BUB1 has DLG. A ranking from it is not usable.
+
+Output is `exploratory.json` and `exploratory.md` under `--out`. Every result
+carries the banner that it is unvalidated. The main pipeline does not call this
+module, and nothing from it enters a candidate table.

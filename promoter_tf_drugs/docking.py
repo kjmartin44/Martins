@@ -726,7 +726,7 @@ Use AlphaFold docking to triage which pockets are worth a real experiment,
 never as evidence of binding.
 """
 
-ALPHAFOLD_FILE = "https://alphafold.ebi.ac.uk/files/AF-{uniprot}-F1-model_v4.pdb"
+ALPHAFOLD_API = "https://alphafold.ebi.ac.uk/api/prediction/{uniprot}"
 
 # Below this mean pLDDT a region is predicted-disordered, not a binding site.
 PLDDT_ORDERED = 70.0
@@ -760,13 +760,26 @@ def residue_plddt(pdb_text: str) -> dict:
     return out
 
 
+def alphafold_url(client, uniprot: str) -> str:
+    """Address of the current AlphaFold model file for a protein.
+
+    The file name carries a model version, and the server removes old
+    versions (the v4 file this module once built the address from now
+    returns 404), so the address is read from the prediction record and not
+    built from a version number. Raises when the record cannot be read.
+    """
+    rec = client.get(ALPHAFOLD_API.format(uniprot=uniprot))
+    entry = rec[0] if isinstance(rec, list) else rec
+    return entry["pdbUrl"]
+
+
 def fetch_alphafold(client, uniprot: str, out_dir) -> "Path | None":
     from pathlib import Path
     out = Path(out_dir) / f"AF-{uniprot}.pdb"
     if out.exists():
         return out
     try:
-        text = client.request(ALPHAFOLD_FILE.format(uniprot=uniprot),
+        text = client.request(alphafold_url(client, uniprot),
                               parse_json=False)
     except Exception as exc:                              # noqa: BLE001
         log.warning("AlphaFold fetch failed for %s: %s", uniprot, exc)
@@ -2194,6 +2207,25 @@ def annotate_directions(run, symbol: str, labelled: list, *,
     return out
 
 
+def _limit_library(rows: list, limit: int) -> list:
+    """The first `limit` rows, saying so when that drops any.
+
+    The rows are taken in the order the table is written, and the bundled
+    approved-drug table is alphabetical. A limit of 600 therefore docks the
+    drugs from "2-mercaptoethanesulfonic acid" to "chlorpropamide" and
+    nothing after: a CCR5 screen run that way never saw maraviroc, which is
+    the approved CCR5 drug and the ligand in the pocket being docked. A cut
+    like that is the head of the alphabet, not a sample, and the log says so.
+    """
+    if limit is None or limit >= len(rows):
+        return list(rows)
+    log.warning("docking only the first %d of %d compounds, in the order the "
+                "table is written (alphabetical for the bundled one), so "
+                "this is the start of the alphabet and not a random sample. "
+                "Raise --library-limit to dock them all.", limit, len(rows))
+    return list(rows[:limit])
+
+
 def dock_screen_for_target(client, symbol: str, uniprot: str, library: list,
                            *, actives: list, decoys: list | None = None,
                            work_dir="docking_work", top_n: int = 25,
@@ -2443,7 +2475,7 @@ def write_bundle(client, symbol: str, uniprot: str, out_dir, *,
     if local_rows:
         actives = ld.actives_for(symbol, local_rows)
         library = [{"name": d["name"], "smiles": d["smiles"]}
-                   for d in local_rows[:library_limit]]
+                   for d in _limit_library(local_rows, library_limit)]
         log.info("using a local drug table: %d library compound(s), "
                  "%d known ligand(s) for %s", len(library), len(actives),
                  symbol)
@@ -2453,7 +2485,8 @@ def write_bundle(client, symbol: str, uniprot: str, out_dir, *,
                    for a in ld.read_table(actives_file, approved_only=False)]
     if not library:
         library = [{"name": d.get("name"), "smiles": d["smiles"]}
-                   for d in approved_library(client)[:library_limit]
+                   for d in _limit_library(approved_library(client),
+                                           library_limit)
                    if d.get("smiles")]
     if not actives:
         tids = _chembl_targets(client, symbol, uniprot)
@@ -2856,9 +2889,11 @@ def main(argv=None) -> int:
                    help="docking search effort; 8 is the usual default, 16 "
                         "is slower and steadier (default 8)")
     p.add_argument("--library-limit", type=int, default=600,
-                   help="how many approved drugs to dock. Each one is "
-                        "seconds of CPU, so the full library is an "
-                        "overnight job (default 600)")
+                   help="how many approved drugs to dock, taken in table "
+                        "order (alphabetical for the bundled table), so a "
+                        "limit below the table's size docks the start of "
+                        "the alphabet and not a sample. The full library is "
+                        "a few hours on a GPU (default 600)")
     p.add_argument("--work-dir", default="docking_work",
                    help="where fetched structures are cached")
     p.add_argument("--out", help="write the result as JSON here")
@@ -3009,11 +3044,12 @@ def main(argv=None) -> int:
     local_rows = ld.library(args.library)
     if local_rows:
         library = [{"name": d["name"], "smiles": d["smiles"]}
-                   for d in local_rows[:args.library_limit]]
+                   for d in _limit_library(local_rows, args.library_limit)]
         print(f"Library from a local table: {len(library)} compound(s)")
     else:
         from .screening import approved_library
-        library = approved_library(client)[:args.library_limit]
+        library = _limit_library(approved_library(client),
+                                 args.library_limit)
     print(f"Approved library: {len(library)} compound(s)")
 
     # The validation set: this receptor's own measured ligands.

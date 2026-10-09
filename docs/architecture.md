@@ -207,6 +207,7 @@ Generated from each module's own first docstring line.
 | `eqtl.py` | Trans-eQTL evidence: does variation in the factor actually move your gene? |
 | `evidence.py` | Orthogonal evidence that a predicted site is real. |
 | `explain.py` | Everything the pipeline knows about one compound, in one place. |
+| `exploratory.py` | Exploratory docking into a pocket that has no co-crystallised ligand. |
 | `genes.py` | Resolve a gene symbol to a transcription start site and pull the promoter. |
 | `genetics.py` | Human genetic evidence, via eQTLs — and what GWAS/PheWAS can and cannot tell you. |
 | `http.py` | Tiny cached HTTP client. Stdlib only, so the package needs only numpy. |
@@ -227,6 +228,7 @@ Generated from each module's own first docstring line.
 | `panel.py` | Compare several candidate genes and narrow to the cleanest route. |
 | `paralogs.py` | How many close relatives share the pocket you are trying to hit? |
 | `pipeline.py` | Orchestration: gene -> promoter -> motifs -> activators -> approved drugs. |
+| `poisonexon.py` | Exons that only decay-prone isoforms use: candidate brakes on output. |
 | `posttranscriptional.py` | Raising a gene's output after transcription has already happened. |
 | `predictions.py` | The headline answer: which medications the model predicts, and why. |
 | `progress.py` | Telling the user what the run is doing while it does it. |
