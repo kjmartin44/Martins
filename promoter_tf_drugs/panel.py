@@ -189,9 +189,17 @@ def merge_results(panel: Panel) -> dict:
     under `panel.per_gene` rather than blended, because merging them would
     silently misattribute one gene's data to another.
     """
+    from . import fda as fda_mod
     blocks, per_gene = [], {}
+    hidden = {"entries": 0, "drugs": set()}
     for g in panel.included:
-        blocks.extend(g.result.get("results") or [])
+        # Only FDA approved drugs enter the funnel when the run asked for
+        # that, so the counts below describe drugs a person could take.
+        shown = fda_mod.apply(g.result)
+        h = (shown.get("fda_filter") or {}).get("hidden") or {}
+        hidden["entries"] += h.get("entries", 0)
+        hidden["drugs"].update(h.get("drugs") or [])
+        blocks.extend(shown.get("results") or [])
         per_gene[g.symbol] = {
             "query": g.query,
             "evidence_verdict": g.verdict,
@@ -207,7 +215,11 @@ def merge_results(panel: Panel) -> dict:
         "query": {"genes": [g.symbol for g in panel.included],
                   "goal": goal, "panel": True,
                   "demo": bool(panel.included
-                               and panel.included[0].query.get("demo"))},
+                               and panel.included[0].query.get("demo")),
+                  "fda_only": any((g.result.get("fda_filter") or {})
+                                  .get("applied") for g in panel.included)},
+        "fda_hidden": {"entries": hidden["entries"],
+                       "drugs": sorted(hidden["drugs"], key=str.lower)},
         "panel": {"per_gene": per_gene,
                   "dropped": [g.to_dict() for g in panel.dropped]},
     }
@@ -614,6 +626,14 @@ def markdown_report(panel: Panel, merged: dict, rows: list, stages: list,
              "recurring drug reads: a compound hitting several of them is "
              "not corroborated, it is unselective.")
     L.append("")
+    fh = merged.get("fda_hidden") or {}
+    if merged.get("query", {}).get("fda_only"):
+        L.append(f"Only FDA approved drugs entered the funnel. "
+                 f"{fh.get('entries', 0)} entries for "
+                 f"{len(fh.get('drugs', []))} compounds that are not in the "
+                 f"FDA Orange Book were left out before the first stage "
+                 f"(`--include-non-fda` keeps them).")
+        L.append("")
 
     # -------------------------------------------- 1. genes in the comparison
     L.append("## Genes in the comparison")

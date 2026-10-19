@@ -235,7 +235,8 @@ def add_analysis_args(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
                         "both the DepMap and PRISM matrices on disk")
     p.add_argument("--prism-file", metavar="CSV",
                    help="PRISM Repurposing LFC matrix. "
-                        "data/Repurposing_Public_24Q2_LFC_COLLAPSED.csv is "
+                        "data/Repurposing_Public_24Q2_Extended_Primary_"
+                        "Data_Matrix.csv is "
                         "picked up automatically if present, and the "
                         "compound list beside it turns BRD ids into drug "
                         "names")
@@ -266,6 +267,13 @@ def add_analysis_args(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
 
     p.add_argument("--include-investigational", action="store_true",
                    help="do not restrict to approved (max_phase 4) drugs")
+    p.add_argument("--include-non-fda", action="store_true",
+                   help="show every compound in the reports. By default "
+                        "they list only drugs in the FDA Orange Book (plus "
+                        "the curated gene therapies), so research "
+                        "compounds, drugs approved only outside the US and "
+                        "biologics are left out. results.json keeps them "
+                        "either way")
     p.add_argument("--no-dgidb", action="store_true", help="ChEMBL only")
     p.add_argument("--find-analogs", action="store_true",
                    help="search ChEMBL for approved drugs chemically similar "
@@ -417,6 +425,7 @@ _NEGATED_ARGS = {
     "no_mechanisms": "compare_mechanisms",
     "no_stabilizers": "include_stabilizers",
     "include_investigational": "approved_only",
+    "include_non_fda": "fda_only",
     "no_dgidb": "use_dgidb",
     "no_opentargets": "use_opentargets",
 }

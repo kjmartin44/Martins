@@ -17,6 +17,9 @@ What this module does
    related protein whose structure holds a ligand. The template and the
    model are aligned on sequence, superposed on the residues that agree, and
    the template ligand's position in the model's frame gives the docking box.
+   The template can be named, or left for `find_template` to choose: it
+   searches the PDB by the model's sequence and keeps the closest chain whose
+   drug sized ligand transplants under the same gates a named one faces.
 3. Docks the library into that box.
 4. Ranks by how well each compound scores for its size, not by raw score.
 5. Checks whether known members of a drug class that binds this kind of
@@ -87,6 +90,7 @@ SIZE_WINDOW = (0.5, 1.6)
 # the size correction. Chance is 0.5. Below it, the pocket does not look like
 # the pocket that class binds, and the ranking is not read as "these fit".
 MIN_CONTROL_AUC = 0.6
+DEFAULT_CONTROL_CLASS = "antineoplastic kinase inhibitor"
 DFG_LIKE = "D[FLWY]G"         # the kinase motif that starts the activation loop
 
 _THREE = {"ALA": "A", "ARG": "R", "ASN": "N", "ASP": "D", "CYS": "C",
@@ -328,6 +332,243 @@ def transplant_site(model_text: str, template_text: str, *,
     return site
 
 
+# ------------------------------------------------------ finding a template
+TEMPLATE_EVALUE = 1e-5
+TEMPLATE_CANDIDATES = 12      # chains compared, best sequence match first
+TEMPLATE_PASSERS = 3          # stop looking after this many pass every gate
+TEMPLATE_LIGANDS_PER_CHAIN = 4
+SITE_SEPARATION = 8.0         # angstroms between pocket centres, or one site
+MAX_TEMPLATE_LIGAND_ATOMS = 80    # larger is a cofactor or a lipid, not a drug
+# Sugar residues. Many are free ligands of lectins, transporters and glycosidases
+# and make a good template. What is excluded is a sugar that is covalently
+# attached to the protein or to another sugar, because that is a glycan on the
+# surface and a box on it docks the outside. ABCA4's structures carry them, and
+# the first search chose NAG. Attachment is read from the LINK records.
+SUGARS = frozenset({
+    "NAG", "NDG", "NGA", "BMA", "MAN", "FUC", "FUL", "GAL", "GLA", "GLC",
+    "BGC", "SIA", "NAA", "XYS", "XYP", "RIB", "ARA", "A2G", "BGC", "MAG",
+    "LAK", "SGN", "IDS", "GCS", "NGZ", "AHR", "SUC", "TRE", "MAL", "CBK",
+})
+RCSB_ENTITY = ("https://data.rcsb.org/rest/v1/core/polymer_entity/"
+               "{entry}/{entity}")
+
+
+def model_sequence(model_text: str) -> str:
+    return "".join(r["aa"] for r in ca_table(model_text))
+
+
+def homologous_entities(client, sequence: str) -> list:
+    """PDB chains whose sequence matches, best first.
+
+    One entry per (PDB id, entity) with the sequence identity and the share of
+    the query the alignment covers. The RCSB sequence search does the work, so
+    a relative with a different name, or a structure of the protein itself,
+    is found whatever the family.
+    """
+    query = {
+        "query": {"type": "terminal", "service": "sequence",
+                  "parameters": {"evalue_cutoff": TEMPLATE_EVALUE,
+                                 "identity_cutoff": MIN_IDENTITY,
+                                 "sequence_type": "protein",
+                                 "value": sequence,
+                                 "target": "pdb_protein_sequence"}},
+        "return_type": "polymer_entity",
+        "request_options": {"paginate": {"start": 0, "rows": 100},
+                            "scoring_strategy": "sequence",
+                            "results_verbosity": "verbose"},
+    }
+    res = client.post(docking.RCSB_SEARCH, query) or {}
+    out = []
+    for hit in res.get("result_set", []):
+        entry, _, entity = str(hit.get("identifier", "")).partition("_")
+        try:
+            ctx = hit["services"][0]["nodes"][0]["match_context"][0]
+            identity = float(ctx["sequence_identity"])
+            coverage = float(ctx["alignment_length"]) / float(ctx["query_length"])
+        except (KeyError, IndexError, TypeError, ValueError, ZeroDivisionError):
+            continue
+        if entry and entity:
+            out.append({"entry": entry.upper(), "entity": entity,
+                        "identity": identity, "coverage": coverage})
+    out.sort(key=lambda h: -(h["identity"] * h["coverage"]))
+    return out
+
+
+def entity_chains(client, entry: str, entity: str) -> list:
+    """The chain letters in the PDB file that belong to one entity."""
+    rec = client.request(RCSB_ENTITY.format(entry=entry, entity=entity)) or {}
+    ids = (rec.get("rcsb_polymer_entity_container_identifiers") or {})
+    return list(ids.get("auth_asym_ids") or [])
+
+
+def attached_sugars(pdb_text: str) -> set:
+    """`(resname, chain, residue number)` of sugars joined to something by a
+    LINK record: a glycan on a protein, or a sugar in a chain of sugars.
+
+    A link to a metal or other solvent word does not count, since a free sugar
+    ligand can coordinate an ion.
+    """
+    out = set()
+    for line in pdb_text.splitlines():
+        if not line.startswith("LINK") or len(line) < 56:
+            continue
+        a = (line[17:20].strip().upper(), line[21], line[22:26].strip())
+        b = (line[47:50].strip().upper(), line[51], line[52:56].strip())
+        for me, other in ((a, b), (b, a)):
+            if me[0] in SUGARS and other[0] not in docking.SOLVENTS:
+                out.add(me)
+    return out
+
+
+def template_ligands(template_text: str, chains) -> list:
+    """Drug-sized ligands on the given chains, one per residue name.
+
+    Solvent, ions, lipids and crystallisation additives are not candidates, and
+    neither is anything larger than a drug: a cofactor or a lipid in the same
+    structure marks a different site than the one a small molecule would use.
+    A glycan, a sugar attached to the protein, is not a ligand either.
+    """
+    out, seen = [], set()
+    glycans = attached_sugars(template_text)
+    for g in docking.hetatm_groups(template_text):
+        if g["chain"] not in chains or g["resname"] in seen:
+            continue
+        if g["resname"] in docking.CRYSTALLISATION_ADDITIVES:
+            continue
+        if (g["resname"], g["chain"], g["resi"]) in glycans:
+            continue
+        if not (docking.MIN_LIGAND_ATOMS <= g["n_atoms"]
+                <= MAX_TEMPLATE_LIGAND_ATOMS):
+            continue
+        seen.add(g["resname"])
+        out.append(g)
+    return out[:TEMPLATE_LIGANDS_PER_CHAIN]
+
+
+def _template_rank(c: dict) -> tuple:
+    """Closest sequence first, then the roomiest pocket, then the best fit.
+
+    Lexicographic on purpose. The three are different kinds of evidence and a
+    weighted sum would need a weight that nothing here could justify.
+    """
+    return (-c["identity"], c["clash_fraction"], c["core_rmsd"])
+
+
+def distinct_sites(candidates: list) -> list:
+    """Candidates best first, one per pocket.
+
+    A pocket is a position in the model's frame. Two templates that put their
+    ligand in the same place (4QPM and 4R8Q both hold ADP in BUB1's ATP site)
+    are one pocket, and the better ranked of them stands for it. A structure
+    with two ligands in different places gives two.
+    """
+    chosen: list = []
+    for c in sorted(candidates, key=_template_rank):
+        if all(sum((a - b) ** 2 for a, b in zip(c["centre"], k["centre"]))
+               ** 0.5 >= SITE_SEPARATION for k in chosen):
+            chosen.append(c)
+    return chosen
+
+
+def find_template(client, model_text: str, out_dir, max_sites: int = 1) -> dict:
+    """Pick a template for a model without being told one.
+
+    Searches the PDB by sequence, and for each close chain asks whether a drug
+    sized ligand on it can be transplanted onto the model under the same gates
+    a named template faces (enough aligned residues, enough identity, a core
+    that superposes, a confidently modelled pocket). Stops after a few pass and
+    takes the closest sequence, then the pocket with the fewest clashes. A
+    structure of the protein itself is a perfectly good template and is
+    found the same way.
+
+    Returns `found`, the choice (`pdb`, `chain`, `ligand`, `identity`) and
+    `tried`, one line per chain compared with why it was or was not used.
+    `sites` lists one template per distinct pocket found, best first, up to
+    `max_sites`; the choice is the first of them. A protein with several
+    ligand sites, such as an ABC transporter with ATP binding domains and a
+    substrate cavity, gives several, because nothing here can say which one a
+    drug would use. Failures come back in `error`; nothing is raised.
+    """
+    out_dir = Path(out_dir)
+    res = {"found": False, "error": None, "tried": []}
+    seq = model_sequence(model_text)
+    if not seq:
+        res["error"] = "no residues could be read from the model"
+        return res
+    try:
+        hits = homologous_entities(client, seq)
+    except Exception as exc:                                  # noqa: BLE001
+        res["error"] = (f"the RCSB sequence search failed: "
+                        f"{str(exc)[:100]}")
+        return res
+    if not hits:
+        res["error"] = (f"no PDB structure matches this sequence at "
+                        f"{MIN_IDENTITY:.0%} identity and e-value "
+                        f"{TEMPLATE_EVALUE:g}, so there is no template to "
+                        f"transplant a pocket from")
+        return res
+
+    passed, every = [], []
+    for h in hits[:TEMPLATE_CANDIDATES]:
+        note = {"entry": h["entry"], "entity": h["entity"],
+                "identity": round(h["identity"], 3), "outcome": None}
+        res["tried"].append(note)
+        tpath = docking.fetch_pdb(client, h["entry"], out_dir)
+        if tpath is None:
+            note["outcome"] = ("no PDB format file; very large complexes are "
+                               "only distributed as mmCIF")
+            continue
+        text = Path(tpath).read_text(encoding="utf-8")
+        try:
+            chains = set(entity_chains(client, h["entry"], h["entity"]))
+        except Exception:                                     # noqa: BLE001
+            chains = set()
+        if not chains:
+            note["outcome"] = "could not tell which chains hold this protein"
+            continue
+        ligands = template_ligands(text, chains)
+        if not ligands:
+            note["outcome"] = "no drug sized ligand on that protein"
+            continue
+        best, why = None, []
+        for g in ligands:
+            site = transplant_site(model_text, text, template_chain=g["chain"],
+                                   template_ligand=g["resname"])
+            if site.get("error"):
+                why.append(f"{g['resname']}: {site['error']}")
+                continue
+            n = max(site["n_ligand_atoms"], 1)
+            cand = {"pdb": h["entry"], "chain": g["chain"],
+                    "ligand": g["resname"], "identity": site["identity"],
+                    "clash_fraction": round(site["n_clashing_atoms"] / n, 3),
+                    "core_rmsd": site["core_rmsd"],
+                    "n_ligand_atoms": site["n_ligand_atoms"],
+                    "centre": site["box"][:3]}
+            every.append(cand)
+            if best is None or _template_rank(cand) < _template_rank(best):
+                best = cand
+        if best is None:
+            note["outcome"] = "; ".join(why)[:240]
+            continue
+        note["outcome"] = (f"usable: {best['ligand']} on chain "
+                           f"{best['chain']}")
+        passed.append(best)
+        if (len(passed) >= TEMPLATE_PASSERS
+                and len(distinct_sites(every)) >= max_sites):
+            break
+
+    if not passed:
+        res["error"] = (f"{len(res['tried'])} related structure(s) were "
+                        f"compared and none had a drug sized ligand whose "
+                        f"pocket transplants onto the model; see the list")
+        return res
+    sites = distinct_sites(every)[:max(1, max_sites)]
+    res.update(sites[0])
+    res["sites"] = sites
+    res["found"] = True
+    return res
+
+
 # ------------------------------------------------------------------ model
 def fetch_model(client, uniprot: str, out_dir) -> tuple:
     """The current AlphaFold model of a protein: (path, url), or (None, why).
@@ -413,13 +654,18 @@ def _round(v):
     return None if v is None else round(v, 3)
 
 
-def class_control(rows: list, class_name: str) -> dict:
+def class_control(rows: list, class_name: str | None) -> dict:
     """Do approved members of a pocket-matched drug class rise to the top?
 
     Reported for both the raw score and the size-corrected residual. This
     tests whether the pocket looks like the pocket that class binds, to the
     scoring function. It cannot say anything about the target specifically.
     """
+    if class_name is None:
+        return {"class": None, "n_members": 0, "n_compared": len(rows),
+                "note": ("No class check applies to this pocket, so nothing "
+                         "here shows the scoring can tell a real binder from "
+                         "the rest.")}
     from . import systemic
     labels, raw, res = [], [], []
     for r in rows:
@@ -443,13 +689,15 @@ def class_control(rows: list, class_name: str) -> dict:
 
 
 # --------------------------------------------------------------------- run
-def run(gene: str, uniprot: str, library: list, *, template_pdb: str,
-        template_chain: str, template_ligand: str, client=None,
+def run(gene: str, uniprot: str, library: list, *,
+        template_pdb: str | None = None, template_chain: str | None = None,
+        template_ligand: str | None = None, client=None,
         model_text: str | None = None, template_text: str | None = None,
         out_dir="exploratory_work", exhaustiveness: int = 16, seed: int = 0,
         jobs: int = 1, cpu: int = 1, strip_counter_ions: bool = False,
         score_fn=None, top_n: int = 25, reference: bool = False,
-        control_class: str = "antineoplastic kinase inhibitor") -> dict:
+        control_class: str | None = DEFAULT_CONTROL_CLASS,
+        max_sites: int = 1) -> dict:
     """Dock a library into a transplanted pocket on an AlphaFold model.
 
     `model_text` and `template_text` are for tests and offline use; without
@@ -458,12 +706,29 @@ def run(gene: str, uniprot: str, library: list, *, template_pdb: str,
     `reference` also docks the same compounds into the template's own pocket,
     which costs as much again and shows whether a failed class check is the
     model's doing. Failures are returned in `error`, never raised.
+
+    Name all three of `template_pdb`, `template_chain` and `template_ligand`,
+    or none. With none, `find_template` chooses (this needs `client`), the
+    search is returned in `template_search`, and the class check is run only
+    when the template is a kinase, since the control class is kinase
+    inhibitors and means nothing for any other pocket. With `max_sites` above
+    one, each further pocket the search found is docked in its own run and
+    returned under `additional_sites`; the top level describes the first.
+    Pass `control_class="auto"` to decide the class check from the template.
     """
+    reference_requested, extra_sites = reference, []
     res = {"gene": gene, "uniprot": uniprot, "status": "unvalidated",
            "banner": BANNER, "usable": False, "error": None, "caveats": [],
            "site": {}, "model": {}, "ranking": [], "class_control": {}}
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    given = (template_pdb, template_chain, template_ligand)
+    auto = all(v is None for v in given)
+    if not auto and any(v is None for v in given):
+        res["error"] = ("name the template PDB id, chain and ligand "
+                        "together, or none of them to have one chosen")
+        return res
 
     if score_fn is None and docking._docking_binary() is None:
         res["error"] = "no docking binary on PATH.\n" + docking.SETUP
@@ -476,6 +741,16 @@ def run(gene: str, uniprot: str, library: list, *, template_pdb: str,
             return res
         model_text = path.read_text(encoding="utf-8")
         res["model"]["source"] = info
+    if auto:
+        found = find_template(client, model_text, out_dir, max_sites)
+        res["template_search"] = found
+        if not found["found"]:
+            res["error"] = found["error"]
+            return res
+        template_pdb, template_chain, template_ligand = (
+            found["pdb"], found["chain"], found["ligand"])
+        template_text = None
+        extra_sites = found.get("sites", [])[1:max(1, max_sites)]
     if template_text is None:
         tpath = docking.fetch_pdb(client, template_pdb, out_dir)
         if tpath is None:
@@ -510,6 +785,25 @@ def run(gene: str, uniprot: str, library: list, *, template_pdb: str,
     if site.get("error"):
         res["error"] = site["error"]
         return res
+    if auto:
+        own = site.get("identity", 0) >= 0.99
+        res["caveats"].append(
+            f"the template was chosen by sequence search, not named: "
+            f"{template_pdb} chain {template_chain}, ligand "
+            f"{template_ligand}, {site.get('identity', 0):.0%} identical"
+            + (", which is the protein's own structure" if own else "")
+            + ". The ligand's site is assumed to be the pocket of interest; "
+              "whether it is the site a drug would use is not tested here.")
+    if auto or control_class == "auto":
+        if site.get("template_dfg"):
+            control_class = DEFAULT_CONTROL_CLASS
+        else:
+            control_class = None
+            reference = False
+            res["caveats"].append(
+                "the template is not a kinase, and the class check compares "
+                "kinase inhibitors, so none was run. Nothing here shows the "
+                "scoring can recognise a real binder in this pocket.")
 
     n_clash, n_lig = site["n_clashing_atoms"], site["n_ligand_atoms"]
     if n_clash:
@@ -578,6 +872,23 @@ def run(gene: str, uniprot: str, library: list, *, template_pdb: str,
         res["reference"] = _reference_control(
             template_text, template_pdb, template_chain, template_ligand,
             names, smiles, window, control_class, out_dir, **dock)
+    if extra_sites:
+        res["additional_sites"] = []
+        for k, s in enumerate(extra_sites, 2):
+            sub = run(gene, uniprot, library, template_pdb=s["pdb"],
+                      template_chain=s["chain"], template_ligand=s["ligand"],
+                      client=client, model_text=model_text,
+                      out_dir=out_dir / f"site{k}", exhaustiveness=exhaustiveness,
+                      seed=seed, jobs=jobs, cpu=cpu,
+                      strip_counter_ions=strip_counter_ions,
+                      score_fn=score_fn, top_n=top_n,
+                      reference=reference_requested, control_class="auto")
+            sub["site_number"] = k
+            sub["caveats"].insert(0, (
+                f"pocket {k} of the sites the template search found: "
+                f"{s['ligand']} in {s['pdb']} chain {s['chain']}, at least "
+                f"{SITE_SEPARATION:g} A from the others"))
+            res["additional_sites"].append(sub)
     return res
 
 
@@ -677,10 +988,20 @@ def markdown(res: dict) -> str:
         L.append(f"- {c}")
     if res.get("caveats"):
         L.append("")
+    ts = res.get("template_search")
+    if ts and ts.get("tried"):
+        L += ["## Template search", "",
+              "Related structures compared, closest sequence first.", ""]
+        for t in ts["tried"]:
+            L.append(f"- {t['entry']} entity {t['entity']} "
+                     f"({t['identity']:.0%} identical): {t['outcome']}")
+        L.append("")
     cc = res.get("class_control") or {}
     if cc:
-        L += ["## Class check", "", f"Class: {cc['class']} "
-              f"({cc['n_members']} of {cc['n_compared']} compounds).", ""]
+        L += ["## Class check", ""]
+        if cc.get("class"):
+            L += [f"Class: {cc['class']} "
+                  f"({cc['n_members']} of {cc['n_compared']} compounds).", ""]
         if res.get("control_passed") is False:
             L += ["**The class check failed.** Approved members of this class "
                   "do not rank above the rest, so the pocket does not look "
@@ -747,6 +1068,13 @@ def markdown(res: dict) -> str:
                      f"{r['residual']} | {r['ligand_efficiency']} | "
                      f"{note} |")
         L.append("")
+    for sub in res.get("additional_sites") or []:
+        L += [f"## Additional pocket {sub['site_number']}", "",
+              "A second ligand site found by the template search, docked on "
+              "its own. Its ranking is not comparable with the one above: "
+              "the pocket, its size window and its class check differ.", ""]
+        body = "\n" + markdown(sub).split("\n", 4)[-1]
+        L.append(body.replace("\n## ", "\n### ").lstrip("\n"))
     return "\n".join(L)
 
 
@@ -757,11 +1085,19 @@ def main(argv=None) -> int:
                      "onto an AlphaFold model. The result is not validated."))
     p.add_argument("--gene", required=True)
     p.add_argument("--uniprot", required=True)
-    p.add_argument("--template-pdb", required=True,
-                   help="a related protein's structure that holds a ligand")
-    p.add_argument("--template-chain", required=True)
-    p.add_argument("--template-ligand", required=True,
+    p.add_argument("--template-pdb", default=None,
+                   help="a related protein's structure that holds a ligand. "
+                        "Leave all three template options out and one is "
+                        "chosen by searching the PDB with the model's "
+                        "sequence")
+    p.add_argument("--template-chain", default=None)
+    p.add_argument("--template-ligand", default=None,
                    help="residue name of that ligand, for example ADP")
+    p.add_argument("--max-sites", type=int, default=3,
+                   help="with no template named, dock up to this many "
+                        "distinct ligand sites that the template search "
+                        "found, each in its own run. Each costs as much "
+                        "time as the first (default: 3)")
     p.add_argument("--library", default=None,
                    help="drug table; the bundled approved library by default")
     p.add_argument("--library-limit", type=int, default=100000)
@@ -778,9 +1114,14 @@ def main(argv=None) -> int:
     p.add_argument("--out", default="results/exploratory")
     p.add_argument("--offline", action="store_true")
     args = p.parse_args(argv)
-    if args.library_limit < 1 or args.exhaustiveness < 1 or args.top < 1:
-        p.error("--library-limit, --exhaustiveness and --top must be at "
-                "least 1")
+    if (args.library_limit < 1 or args.exhaustiveness < 1 or args.top < 1
+            or args.max_sites < 1):
+        p.error("--library-limit, --exhaustiveness, --top and --max-sites "
+                "must be at least 1")
+    named = [args.template_pdb, args.template_chain, args.template_ligand]
+    if any(named) and not all(named):
+        p.error("--template-pdb, --template-chain and --template-ligand "
+                "go together; give all three or none")
 
     from . import localdrugs as ld
     from .http import Client
@@ -801,7 +1142,7 @@ def main(argv=None) -> int:
               exhaustiveness=args.exhaustiveness, seed=args.seed,
               jobs=args.jobs, cpu=args.cpu,
               strip_counter_ions=args.strip_counter_ions, top_n=args.top,
-              reference=args.reference)
+              reference=args.reference, max_sites=args.max_sites)
     out.mkdir(parents=True, exist_ok=True)
     (out / "exploratory.json").write_text(
         json.dumps(res, indent=2, default=str), encoding="utf-8")

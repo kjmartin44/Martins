@@ -267,8 +267,44 @@ structure of its own with a ligand, `exploratory.py` asks a weaker question:
 does anything in the library fit a model of the pocket.
 
 ```bash
-python -m promoter_tf_drugs.exploratory --gene BUB1B --uniprot O60566     --template-pdb 4QPM --template-chain A --template-ligand ADP     --jobs 8 --cpu 4 --reference
+python -m promoter_tf_drugs.exploratory --gene BUB1B --uniprot O60566 --jobs 8 --cpu 4 --reference
 ```
+
+With no template named, it chooses one. It searches the PDB with the model's
+sequence (the RCSB sequence search, 25 percent identity or better, e-value
+1e-5) and goes through the matches from the closest sequence down, 12 chains at
+most. For each chain it takes the drug sized ligands on that protein, from 10
+to 80 heavy atoms, leaving out solvent, ions, lipids and crystallisation
+additives, and glycans. A glycan is a sugar joined to the protein or to
+another sugar by a LINK record. NAG on the surface of ABCA4 is one, and the
+first version of the search chose it. A sugar with no link is a free ligand and
+stays a candidate, since lectins, transporters and glycosidases bind them. It
+tries to transplant each ligand under the gates below. It keeps looking until
+three chains have passed and the requested number of distinct pockets is found,
+and takes the one with the closest sequence, then the fewest ligand atoms inside
+model atoms, then the best superposition.
+A structure of the protein itself is a valid template and is found the same
+way. For BUB1B it picks 4QPM chain A with ADP, the template the earlier
+manual run used. The report lists every chain it compared and why each was or
+was not used.
+
+A protein can have several ligand sites, such as an ABC transporter with ATP
+binding domains and a substrate cavity, and nothing here can say which one a
+drug would use. So the search keeps one template for each distinct pocket, where
+two pockets are distinct when their ligands sit at least 8 A apart in the
+model's frame, and `--max-sites` (3 by default) docks each in its own run. The
+first is described at the top of `exploratory.md` and the others under
+"Additional pocket 2" and so on. Each site has its own size window and class
+check, so their rankings are not comparable with one another. Each costs as much
+time as the first. `--max-sites 1` docks only the best. A site the gates reject
+is not docked, and the template list says why, so a protein with one usable
+pocket gives one. To override the choice, give `--template-pdb`,
+`--template-chain` and `--template-ligand` together, which docks that one site.
+
+The class check compares approved kinase inhibitors, so it runs only when the
+template has a kinase motif (DFG, DLG and similar). For any other template no
+class check is run, the reference dock is skipped, and the report says that
+nothing shows the scoring can recognise a real binder in the pocket.
 
 It downloads the current model, aligns the template to it on sequence,
 superposes the aligned core, and moves the template ligand into the model's

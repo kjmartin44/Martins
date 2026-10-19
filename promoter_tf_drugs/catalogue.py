@@ -588,12 +588,22 @@ def from_grades(grades: list[dict], mechanisms: dict | None = None) -> list[Rout
     for g in grades:
         c = g["components"]
         mech = allosteric.get(g["drug_name"].lower())
+        # Tier 2 is "measured receptor binder" (see TIERS). A graded drug with
+        # a measured potency of at least 1 uM against this factor and a
+        # recorded action is that, exactly as a screen-found ligand is; it
+        # used to be tier 3 only because the factor was not among the few
+        # receptors screened, so the tier followed which screens ran.
+        ev = g.get("evidence") or {}
+        p = ev.get("pchembl_median")
+        measured = (p is not None and p >= MEASURED_BINDING_PCHEMBL
+                    and c.get("action", 0) >= 0.7)
+        tier = 2 if measured else 3
         out.append(Route(
             drug=g["drug_name"],
             category=("TF: allosteric modulator" if mech
                       else "TF: orthosteric ligand"),
             mechanism=mech or "ligand at the transcription factor",
-            acts_on=g["tf_symbol"], tier=3, directness=1,
+            acts_on=g["tf_symbol"], tier=tier, directness=1,
             axes=Axes(round(0.45 * c.get("potency", .5)
                             + 0.3 * c.get("action", .5)
                             + 0.25 * g["tf_confidence"], 3),
@@ -602,9 +612,12 @@ def from_grades(grades: list[dict], mechanisms: dict | None = None) -> list[Rout
                             + 0.25 * c.get("maturity", .5)
                             + 0.2 * c.get("tissue", 1.0)
                             + 0.15 * c.get("evidence_depth", .5), 3),
-                      "predicted"),
+                      "measured binding" if measured else "predicted"),
             approved=True, source="drug_scoring",
-            notes=list(g.get("notes", []))[:2]))
+            notes=(([f"measured: pChEMBL {p} against {g['tf_symbol']} "
+                     f"(n={ev.get('pchembl_n')}), with a recorded action"]
+                    if measured else [])
+                   + list(g.get("notes", []))[:2])))
     return out
 
 
@@ -1133,7 +1146,51 @@ def from_activity_drugs(activity_drugs: dict) -> list[Route]:
     return out
 
 
-def from_screen(screens: dict) -> list[Route]:
+# A measured binder is "measured" for the engagement it shows. pChEMBL 6 is
+# 1 uM, below which the binding is too weak to call the drug engaged at a
+# dose anyone could give.
+MEASURED_BINDING_PCHEMBL = 6.0
+# The weight a drug that is a known binder with no recorded action gets for
+# "action" in a strength: the same 0.40 `drug_scoring` gives an unknown action.
+UNKNOWN_ACTION = 0.40
+
+
+def _potency01(pchembl) -> float:
+    """pChEMBL 5 -> 0 and 9 -> 1, as `drug_scoring._potency` reads it."""
+    if pchembl is None:
+        return 0.5
+    return max(0.0, min(1.0, (float(pchembl) - 5.0) / 4.0))
+
+
+def tf_info_from_tfs(tfs: list) -> dict:
+    """`{symbol: {confidence, role, directions}}` from a result's `tfs` list.
+
+    `confidence` is the factor's own score on 0 to 1, `role` its role at this
+    promoter, and `directions` maps each of its drugs (by normalised name) to
+    the way the drug moves the factor. The pipeline builds the same thing from
+    its ranked factors; this reads it back from a saved result so routes can
+    be rebuilt from one.
+    """
+    from .signatures import breadth_key
+    out = {}
+    for t in tfs or []:
+        out[t["symbol"]] = {
+            "confidence": (t.get("score") or 0.0) / 100.0,
+            "role": t.get("role"),
+            "directions": {breadth_key(d["name"]): d.get("direction")
+                           for d in t.get("drugs", [])}}
+    return out
+
+
+def from_screen(screens: dict, tf_info: dict | None = None,
+                goal: str = "up") -> list[Route]:
+    """Routes from the receptor ligand screens.
+
+    `tf_info` (see `tf_info_from_tfs`) lets an established ligand be scored
+    the way a graded one is: potency from its own measured pChEMBL, the
+    factor's confidence, and whether the drug is known to move the factor the
+    way the goal needs. Without it the routes keep their old constant axes.
+    """
     out = []
     for sym, sc in (screens or {}).items():
         if not (sc.get("enrichment") or {}).get("usable"):
@@ -1151,6 +1208,14 @@ def from_screen(screens: dict) -> list[Route]:
 
         for h in sc.get("hits", []):
             quad = h["quadrant"]
+
+            if (quad == "ESTABLISHED LIGAND, untested on this gene"
+                    and tf_info is not None):
+                route = _established_ligand_route(h, sym, tf_info, goal,
+                                                  bool(family))
+                if route is not None:
+                    out.append(route)
+                continue
 
             if quad == "ESTABLISHED LIGAND, untested on this gene":
                 # Tier 2, not 3. What makes these different from every other
@@ -1226,6 +1291,58 @@ def from_screen(screens: dict) -> list[Route]:
     return out
 
 
+def _established_ligand_route(h: dict, sym: str, tf_info: dict, goal: str,
+                              family: bool) -> Route | None:
+    """A tier-2 route for a receptor's measured ligand, scored like a graded one.
+
+    The strength is the one `from_grades` uses (0.45 potency, 0.30 action, 0.25
+    factor confidence), so the same drug at the same factor scores the same
+    whichever collector found it. Three things were missing before: every such
+    route had strength 0.7 whatever its potency, so dozens tied; a drug known
+    to move the factor the wrong way ranked beside one known to move it the
+    right way; and one with no recorded action ranked as high as a recorded
+    agonist. Returns None for a drug known to move the factor against the
+    goal, which would move the gene the wrong way.
+    """
+    from .drugs import desired_direction
+    from .signatures import breadth_key
+    info = tf_info.get(sym) or {}
+    want = desired_direction(info.get("role") or "unknown", goal)
+    direction = (info.get("directions") or {}).get(breadth_key(h["drug"]))
+    known = direction in ("up", "down")
+    if known and want != "either" and direction != want:
+        return None
+    action = 1.0 if known else UNKNOWN_ACTION
+    conf = info.get("confidence")
+    conf = 0.5 if conf is None else conf
+    pchembl = h.get("measured_pchembl")
+    strength = round(0.45 * _potency01(pchembl) + 0.30 * action
+                     + 0.25 * conf, 3)
+    notes = [f"half-measured: the {h['drug']}-{sym} interaction has assay "
+             f"data behind it"
+             + (f" (pChEMBL {pchembl})" if pchembl is not None else "")
+             + ", so the pharmacology is de-risked. What is untested is "
+             f"whether moving {sym} moves your gene - the one step a binding "
+             f"assay cannot tell you",
+             f"everything else {sym} regulates moves too, which a direct "
+             f"agent on your gene would avoid"]
+    if not known:
+        notes.append(f"which way {h['drug']} moves {sym} is not recorded, so "
+                     f"it may push the gene the wrong way; scored with an "
+                     f"unknown action")
+    if family:
+        notes.append("surfaced by a family model, but the tier rests on the "
+                     "measured binding and not on the model")
+    return Route(
+        drug=h["drug"], category="TF: orthosteric ligand",
+        mechanism=(f"binds {sym} (measured), and {sym} is predicted to act on "
+                   f"this promoter - so the drug would reach your gene "
+                   f"THROUGH {sym}, not by touching it directly"),
+        acts_on=sym, tier=2, directness=1,
+        axes=Axes(strength, 0.5, 0.65, "measured binding"),
+        approved=True, source="screening", notes=notes)
+
+
 def chromatin_routes(goal: str = "up") -> list[Route]:
     """Approved chromatin drugs. They move almost any promoter — which is the
     point, and the problem."""
@@ -1273,7 +1390,9 @@ def build(result_block: dict, *, goal: str = "up",
     routes += from_ligands(result_block.get("ligand_axes") or {})
     routes += from_upstream(result_block.get("upstream") or {})
     routes += from_lincs(result_block.get("lincs") or {})
-    routes += from_screen(result_block.get("screens") or {})
+    routes += from_screen(
+        result_block.get("screens") or {},
+        tf_info=result_block.get("tf_info") or None, goal=goal)
     routes += from_activity_drugs(
         result_block.get("activity_drugs") or {})
     routes += from_docking(result_block.get("docking") or {}, goal=goal,

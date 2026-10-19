@@ -25,7 +25,7 @@ import logging
 from pathlib import Path
 
 from . import (analogs as analog_mod, catalogue as cat_mod,
-               delivery as dlv_mod, drugs as drugs_mod,
+               delivery as dlv_mod, drugs as drugs_mod, fda as fda_mod,
                liabilities as liab_mod, ligands as lig_mod,
                predictions as pred_mod, systemic as sys_mod,
                tfactivity as tfa_mod)
@@ -734,7 +734,7 @@ def _mitotic_gene_section(result: dict) -> list:
 
 
 def markdown_report(result: dict, top_n: int = 25) -> str:
-    result = escape_pipes(result)
+    result = escape_pipes(fda_mod.apply(result))
     q = result["query"]
     goal = q.get("goal", "up")
     verb = "Upregulation" if goal == "up" else "Downregulation"
@@ -744,6 +744,7 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
     L.append(f"Objective: **{'increase' if goal == 'up' else 'decrease'}** "
              f"transcription of {q['gene']}.")
     L.append("")
+    L.extend(fda_mod.notice(result))
     if q["demo"]:
         L.append("> **DEMO MODE.** Synthetic sequence, illustrative matrices and a "
                  "hand-entered drug table. Not usable for real conclusions.")
@@ -2670,6 +2671,9 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
 # fit on one line.
 
 SUMMARY_TOP = 10
+# How many unique routes are read before folding, per row shown, so folding a
+# family still leaves enough distinct drugs to fill the list.
+SUMMARY_POOL = 8
 
 
 def _clip(text: str, limit: int = 58) -> str:
@@ -3201,7 +3205,7 @@ def corroboration_table(result: dict, top_n: int = 20) -> list:
 
 def summary_report(result: dict, top_n: int = SUMMARY_TOP) -> str:
     """A one-page summary. Everything here is also in report.md."""
-    result = escape_pipes(result)
+    result = escape_pipes(fda_mod.apply(result))
     q = result["query"]
     goal = q.get("goal", "up")
     verb = "raise" if goal == "up" else "lower"
@@ -3213,6 +3217,7 @@ def summary_report(result: dict, top_n: int = SUMMARY_TOP) -> str:
              f"{'Demo data - not a real analysis. ' if q.get('demo') else ''}"
              f"Full detail, with every qualification, in `report.md`.")
     L.append("")
+    L.extend(fda_mod.notice(result))
 
     soc = result.get("standard_of_care") or {}
     if soc.get("treatments"):
@@ -3239,26 +3244,50 @@ def summary_report(result: dict, top_n: int = SUMMARY_TOP) -> str:
     preds = []
     for res in result["results"]:
         preds.extend((res.get("all_routes") or {}).get("routes") or [])
-    seen, rows = set(), []
+    # One entry per drug, led by its best route, with every target it acts
+    # through. The same drug reached through two factors is one candidate.
+    from . import signatures as _sg
+    by_drug: dict = {}
     for r in sorted(preds, key=lambda x: (x.get("tier", 9),
                                           -(x.get("score") or 0))):
-        key = (r.get("drug", "").lower(), r.get("acts_on"))
-        if key in seen:
+        dk = _sg.breadth_key(r.get("drug", "")) or r.get("drug", "").lower()
+        if dk in by_drug:
+            if r.get("acts_on"):
+                by_drug[dk]["targets"].add(r["acts_on"])
             continue
-        seen.add(key)
-        rows.append(r)
-        if len(rows) >= top_n:
-            break
+        if len(by_drug) >= top_n * SUMMARY_POOL:
+            continue
+        by_drug[dk] = dict(r, name=r.get("drug", ""),
+                           targets={r["acts_on"]} if r.get("acts_on")
+                           else set())
+    # Close analogues acting through a shared target score alike and would
+    # fill the top with one idea. Each is folded into the best-ranked member.
+    from . import clusters as cl_mod
+    clusters = cl_mod.group(
+        list(by_drug.values()),
+        same_route=lambda a, b: bool(a["targets"] & b["targets"]))[:top_n]
+    rows = [c["leader"] for c in clusters]
+    folded = {c["leader"]["drug"]: c for c in clusters if c["members"]}
 
     if rows:
         from . import indications as ind_mod
+        from . import rationale as rat_mod
+        _gene = q["gene"]
+        _roles = {t["symbol"]: t.get("role")
+                  for res in result["results"] for t in res.get("tfs", [])}
         L.append(f"## Top {len(rows)} to look at first")
         L.append("")
         L.append("Ordered by evidence tier, then score. A tier-1 route with "
-                 "a mediocre score beats a tier-5 route with a great one.")
+                 "a mediocre score beats a tier-5 route with a great one. "
+                 "Close analogues that act through the same target are "
+                 "folded into the best-ranked one, so a family of near "
+                 "identical drugs takes one row.")
         L.append("")
-        L.append("| # | Drug | Approved to treat | Acts on | Tier | Why it "
-                 "is here |")
+        L.append(rat_mod.aim(_gene, goal, result.get("requirement"),
+                             q.get("condition"), q.get("scenario")))
+        L.append("")
+        L.append("| # | Drug | Approved to treat | Acts on | Tier | How it "
+                 "would work |")
         L.append("|---|---|---|---|---|---|")
         _any_broad = False
         _any_mitotic = False
@@ -3276,10 +3305,26 @@ def summary_report(result: dict, top_n: int = SUMMARY_TOP) -> str:
                     and sys_mod.is_mitotic_disruptor(r.get("drug", ""))):
                 _broad += " ⚠mitotic"
                 _any_mitotic = True
-            L.append(f"| {i} | **{r.get('drug')}**{_broad} | {_clip(treats)} | "
-                     f"{r.get('acts_on') or EMDASH} | {r.get('tier')} | "
-                     f"{r.get('category')} |")
+            _fold = folded.get(r.get("drug"))
+            _more = f" (+{len(_fold['members'])} similar)" if _fold else ""
+            _targets = ", ".join(sorted(r["targets"])) or EMDASH
+            L.append(f"| {i} | **{r.get('drug')}**{_broad}{_more} | "
+                     f"{_clip(treats)} | {_targets} | "
+                     f"{r.get('tier')} | "
+                     f"{rat_mod.route_sentence(r, _gene, goal, _roles)} |")
         L.append("")
+        if folded:
+            L.append("**Folded into the rows above** (structure within "
+                     "Tanimoto 0.75 of the leader, same target). They are "
+                     "not duplicates: analogues can differ in potency, "
+                     "selectivity, tissue reach and safety.")
+            L.append("")
+            for i, r in enumerate(rows, 1):
+                c = folded.get(r.get("drug"))
+                if c:
+                    L.append(f"- {i}. {r.get('drug')}: "
+                             f"{cl_mod.names(c, limit=8)}")
+            L.append("")
         if _any_mitotic:
             L.append("⚠mitotic: the compound disturbs mitosis directly "
                      "and this gene is a mitotic one, so it moves the gene "
@@ -3426,7 +3471,7 @@ def write_outputs(result: dict, outdir: str | Path, *, top_n: int = 25) -> list[
     w = csv.writer(buf, delimiter="\t", lineterminator="\n",
                    quoting=csv.QUOTE_MINIMAL)
     w.writerow(cols)
-    for res in result["results"]:
+    for res in fda_mod.apply(result)["results"]:
         for t in res["tfs"]:
             names = "; ".join(d["name"] for d in t["drugs"])
             row = [t.get(c) for c in cols[:-2]] + [len(t["drugs"]), names]

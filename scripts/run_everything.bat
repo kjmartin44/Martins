@@ -7,6 +7,12 @@ REM structure, or a pocket that cannot recover its own known ligands -
 REM writes nothing, and the analysis then proceeds without it rather than
 REM failing. That is the intended behaviour, not a problem to work around.
 REM
+REM After the five stages, two optional steps read the saved results: a dose
+REM check (what blood level a person reaches against the concentration the
+REM evidence was seen at) and, when the gene's own pocket was refused, an
+REM exploratory dock into a pocket copied onto the AlphaFold model from a
+REM related structure that the script finds by itself.
+REM
 REM Usage:  run_everything.bat            (prompts for everything)
 REM         run_everything.bat GENE DIR   (gene and up/down given up front)
 setlocal enabledelayedexpansion
@@ -105,6 +111,93 @@ if not defined HAVEOB (
     )
 )
 
+REM --- GWAS Catalog: which traits variants near the gene are linked to. About
+REM --- 70 MB from EBI as a zip, unpacked to the table the package reads.
+REM --- Without it genetics rests on Open Targets alone.
+set "HAVEGWAS="
+for %%P in (data\gwas_catalog_associations.tsv data\gwas_catalog.tsv) do if exist %%P set "HAVEGWAS=1"
+if not defined HAVEGWAS (
+    echo.
+    echo The GWAS Catalog lists the traits that variants near a gene are linked
+    echo to. It is about 70 MB. Without it the genetics section uses Open
+    echo Targets alone and says so.
+    set "GETGWAS="
+    set /p GETGWAS="Download it? Y/n: "
+    if /i not "!GETGWAS!"=="n" (
+        echo === Downloading the GWAS Catalog associations ^(~70 MB^) ===
+        curl.exe -fL -o data\gwas_catalog_associations.zip "https://ftp.ebi.ac.uk/pub/databases/gwas/releases/latest/gwas-catalog-associations-full.zip"
+        if not errorlevel 1 (
+            "%PY%" scripts\unpack_gwas.py data\gwas_catalog_associations.zip data\gwas_catalog_associations.tsv
+            if not errorlevel 1 set "HAVEGWAS=1"
+        )
+        if not defined HAVEGWAS echo   The GWAS Catalog could not be fetched or read. Genetics uses Open Targets alone.
+        if exist data\gwas_catalog_associations.zip del data\gwas_catalog_associations.zip >nul 2>&1
+    )
+)
+
+REM --- DepMap and PRISM, from figshare, where the Broad posts each release as
+REM --- open data (CC BY 4.0). The DepMap portal itself asks for a browser check,
+REM --- figshare does not. Each file is downloaded under a .part name and kept
+REM --- only if its published MD5 matches, because a dropped connection on a
+REM --- 400 MB file otherwise leaves something that looks like data.
+REM ---
+REM --- Both are needed for the measured phenocopy route. DepMap alone also
+REM --- scores how much each candidate factor is needed by a cell.
+set "HAVEDM0="
+for %%P in (data\CRISPRGeneEffect.csv data\crispr_gene_effect.csv data\depmap_gene_effect.csv) do if exist %%P set "HAVEDM0=1"
+if not defined HAVEDM0 (
+    echo.
+    echo DepMap's CRISPR knockout scores say what a cell loses without each
+    echo candidate factor. The 24Q2 release is about 420 MB ^(plus a 1 MB table of
+    echo cell lines^) from figshare.
+    set "GETDM="
+    set /p GETDM="Download it? Y/n: "
+    if /i not "!GETDM!"=="n" (
+        echo === Downloading DepMap 24Q2 CRISPRGeneEffect.csv ^(~420 MB^) ===
+        curl.exe -fL -o data\CRISPRGeneEffect.csv.part "https://ndownloader.figshare.com/files/46489063"
+        set "DMOK="
+        if not errorlevel 1 (
+            "%PY%" scripts\check_download.py data\CRISPRGeneEffect.csv.part d10d73692672380b3792231549e97d5a
+            if not errorlevel 1 set "DMOK=1"
+        )
+        if defined DMOK (
+            move /y data\CRISPRGeneEffect.csv.part data\CRISPRGeneEffect.csv >nul
+            if not exist data\Model.csv curl.exe -fL -o data\Model.csv "https://ndownloader.figshare.com/files/46489732"
+        ) else (
+            echo   The DepMap table could not be fetched or did not match its checksum. Skipped.
+            del data\CRISPRGeneEffect.csv.part >nul 2>&1
+        )
+    )
+)
+
+set "HAVEPR0="
+for %%P in (data\Repurposing_Public_24Q2_Extended_Primary_Data_Matrix.csv data\Repurposing_Public_24Q2_LFC_COLLAPSED.csv data\Repurposing_Public_LFC.csv data\prism_lfc.csv data\PRISM_Repurposing_Public.csv) do if exist %%P set "HAVEPR0=1"
+if not defined HAVEPR0 (
+    echo.
+    echo PRISM measured how about 6,000 drugs change the growth of the same cell
+    echo lines. It is what finds drugs that behave as though they remove a factor.
+    echo The 24Q2 matrix is about 70 MB from figshare.
+    set "GETPR="
+    set /p GETPR="Download it? Y/n: "
+    if /i not "!GETPR!"=="n" (
+        echo === Downloading PRISM 24Q2 Repurposing_Public_24Q2_Extended_Primary_Data_Matrix.csv ^(~70 MB^) ===
+        curl.exe -fL -o data\Repurposing_Public_24Q2_Extended_Primary_Data_Matrix.csv.part "https://ndownloader.figshare.com/files/46630984"
+        set "PROK="
+        if not errorlevel 1 (
+            "%PY%" scripts\check_download.py data\Repurposing_Public_24Q2_Extended_Primary_Data_Matrix.csv.part 042b15d3ebcc138a80a571b9286451ae
+            if not errorlevel 1 set "PROK=1"
+        )
+        if defined PROK (
+            move /y data\Repurposing_Public_24Q2_Extended_Primary_Data_Matrix.csv.part data\Repurposing_Public_24Q2_Extended_Primary_Data_Matrix.csv >nul
+            REM The compound list turns the BRD ids in that table into drug names.
+            if not exist data\Repurposing_Public_24Q2_Extended_Primary_Compound_List.csv curl.exe -fL -o data\Repurposing_Public_24Q2_Extended_Primary_Compound_List.csv "https://ndownloader.figshare.com/files/46630981"
+        ) else (
+            echo   The PRISM table could not be fetched or did not match its checksum. Skipped.
+            del data\Repurposing_Public_24Q2_Extended_Primary_Data_Matrix.csv.part >nul 2>&1
+        )
+    )
+)
+
 set "REGULON="
 if exist data\trrust.tsv set "REGULON=--regulon-file data\trrust.tsv"
 REM A ChIP-derived table covers far more factors. It is occupancy rather
@@ -154,17 +247,50 @@ set "TISS="
 set /p CNS="Is the target tissue in the CNS? y/N: "
 if /i "!CNS!"=="y" set "TISS=--tissue cns"
 
+REM The dose check is cheap and reads only the finished results, so it is
+REM on unless declined.
+set "DOSECHK=1"
+set /p DOSECHK_ANS="Run the dose check on the candidates at the end? Y/n: "
+if /i "!DOSECHK_ANS!"=="n" set "DOSECHK="
+
 REM --- which tissue to infer factor activity in ------------------------
 REM Spelled as the expression table spells it: "liver", "lymph node",
 REM "skeletal muscle". Left blank, --tf-activity is not passed at all,
 REM because the CLI refuses that combination up front rather than failing
 REM a quarter of an hour into the run.
 set "ACTIVITY="
-set /p ATISSUE="Tissue to infer factor activity in, blank to skip: "
+set "ATISSUE="
+set "APICK="
+set "TISSUETABLE="
+if exist data\rna_tissue_consensus.tsv set "TISSUETABLE=data\rna_tissue_consensus.tsv"
+if defined TISSUETABLE (
+    echo.
+    echo Tissues in the expression table:
+    "%PY%" scripts\tissues.py !TISSUETABLE!
+)
+set /p ATISSUE="Tissue to infer factor activity in, a number or a name, blank to skip: "
+if not "!ATISSUE!"=="" (
+    echo "!ATISSUE!"| findstr /r /c:"^\"[A-Za-z0-9][A-Za-z0-9 -]*\"$" >nul
+    if errorlevel 1 (
+        echo   "!ATISSUE!" is not a tissue name - letters, digits, spaces and hyphens only.
+        set "ATISSUE="
+    )
+)
+if not "!ATISSUE!"=="" (
+    if defined TISSUETABLE (
+        REM Resolved against the table, so the name that reaches the command is
+        REM spelled as the table spells it. A name the table lacks used to log a
+        REM warning and leave the route silently empty.
+        for /f "usebackq delims=" %%T in (`%PY% scripts\tissues.py !TISSUETABLE! --pick "!ATISSUE!"`) do set "APICK=%%T"
+        if not defined APICK echo   Not one tissue in the table - factor activity is skipped.
+    ) else (
+        set "APICK=!ATISSUE!"
+    )
+)
 REM 2000 permutations build an empirical null in place of the analytic one,
 REM which assumes targets are independent and co-expression makes false.
 REM The CLI's own help says to use 2000 or more before relying on a number.
-if not "!ATISSUE!"=="" set "ACTIVITY=--tf-activity --activity-tissue "!ATISSUE!" --activity-permutations 2000"
+if defined APICK set "ACTIVITY=--tf-activity --activity-tissue "!APICK!" --activity-permutations 2000"
 
 REM --- the shape of the dosage problem ---------------------------------
 REM This fixes what counts as enough, and the ranking below cannot tell
@@ -319,9 +445,29 @@ set "LIBRARY="
 if exist data\approved_library.tsv set "LIBRARY=--library data\approved_library.tsv"
 if exist data\repurposing_drugs.txt set "LIBRARY=--library data\repurposing_drugs.txt"
 
+REM The measured phenocopy route needs BOTH the PRISM matrix and the DepMap
+REM knockout matrix, and the factor dependency cost needs DepMap. Neither is
+REM downloaded here (DepMap is about 500 MB and its release names change), so
+REM say what is skipped instead of letting the report simply lack the section.
+set "HAVEPRISM="
+for %%P in (data\Repurposing_Public_24Q2_Extended_Primary_Data_Matrix.csv data\Repurposing_Public_24Q2_LFC_COLLAPSED.csv data\Repurposing_Public_LFC.csv data\prism_lfc.csv data\PRISM_Repurposing_Public.csv) do if exist %%P set "HAVEPRISM=1"
+set "HAVEDEPMAP="
+for %%P in (data\CRISPRGeneEffect.csv data\crispr_gene_effect.csv data\depmap_gene_effect.csv) do if exist %%P set "HAVEDEPMAP=1"
 set "SENS="
-if exist data\prism_lfc.csv set "SENS=--sensitivity-scan"
-if exist data\Repurposing_Public_24Q2_LFC_COLLAPSED.csv set "SENS=--sensitivity-scan"
+if defined HAVEPRISM if defined HAVEDEPMAP set "SENS=--sensitivity-scan"
+if not defined HAVEPRISM echo   ^(no PRISM matrix in data\ - the measured phenocopy route is skipped^)
+if not defined HAVEDEPMAP echo   ^(no DepMap CRISPRGeneEffect.csv in data\ - the phenocopy route is skipped and factor dependency is not scored^)
+set "NEEDDM="
+if not defined HAVEPRISM set "NEEDDM=1"
+if not defined HAVEDEPMAP set "NEEDDM=1"
+if defined NEEDDM (
+    echo   The offers above fetch both from figshare. By hand, DepMap 24Q2 is at
+    echo   https://figshare.com/articles/dataset/DepMap_Public_24Q2/25880521 and
+    echo   PRISM at https://figshare.com/articles/dataset/Repurposing_Public_24Q2/25917643
+    echo   ^(CRISPRGeneEffect.csv and Repurposing_Public_24Q2_Extended_Primary_Data_Matrix.csv in data\^).
+)
+if not defined HAVEGWAS echo   ^(no GWAS Catalog table in data\ - genetics uses Open Targets only^)
+if not defined ACTIVITY echo   ^(no tissue given for factor activity - that route is skipped^)
 
 REM ---------------------------------------------------------------------
 REM 1. Docking, against the gene's own protein.
@@ -363,7 +509,7 @@ REM validated is refused before the library is touched.
 set "LIBLIMIT=100000"
 set "EXH=16"
 
-echo === 1 of 4: docking the !GENE! protein ===
+echo === 1 of 5: docking the !GENE! protein ===
 echo   ^(needs gnina or smina. Skipped cleanly when neither is installed.^)
 echo   !JOBS! compound^(s^) at a time on !CORES! core^(s^) each; the whole
 echo   approved library ^(about 3,300 compounds^) at exhaustiveness !EXH!, which
@@ -384,6 +530,25 @@ if errorlevel 1 (
     echo   Nothing from the product dock. The run continues without it;
     echo   the message above says which of the refusals it was.
     echo.
+)
+
+REM Whether the pocket was refused decides whether the exploratory dock runs.
+REM It runs at the end, with no input from you: it searches the PDB with the
+REM AlphaFold model's sequence, takes the closest structure whose ligand
+REM transplants onto the model, and labels the result unvalidated.
+set "EXPLORE="
+set "XUNI=-"
+set "PSTATE=refused"
+for /f "tokens=1,2" %%A in ('%PY% scripts\product_status.py !DOCKJSON!') do (
+    set "PSTATE=%%A"
+    set "XUNI=%%B"
+)
+if /i "!PSTATE!"=="refused" if not "!XUNI!"=="-" (
+    echo.
+    echo The pocket of the !GENE! protein was refused. An exploratory dock will run
+    echo at the end instead. It finds a related structure that holds a ligand by
+    echo itself and labels the result unvalidated.
+    set "EXPLORE=1"
 )
 
 REM ---------------------------------------------------------------------
@@ -428,7 +593,7 @@ for %%F in ("!DOCKDIR!\*.json") do (
 
 if not "!NTF!"=="0" (
     echo.
-    echo === 2 of 4: finding the factors worth docking ===
+    echo === 2 of 5: finding the factors worth docking ===
     echo   A fast scan, expensive stages off. Two to three minutes.
     "%PY%" -m promoter_tf_drugs --gene !GENE! --direction !DIR! ^
         --pfm-file data\jaspar2024.txt !REGULON! ^
@@ -496,7 +661,7 @@ REM sits at 0.5 so a motif guess cannot carry a grade.
 set "TFW=--tf-weight 0.5"
 if not "!CHIP!"=="--chip-api" set "TFW=--tf-weight 0.7"
 
-echo === 3 of 4: analysing !GENE! ===
+echo === 3 of 5: analysing !GENE! ===
 echo   Thirty minutes to a couple of hours on a first run. Checkpoints print as it goes.
 echo.
 
@@ -531,7 +696,7 @@ REM that keeps as many routes for it as for your gene is not
 REM discriminating, and without a control an empty shortlist and a
 REM misconfigured filter look identical.
 echo.
-echo === 4 of 4: narrowing, against a control ===
+echo === 4 of 5: narrowing, against a control ===
 echo   Puts !GENE! and ACTB through the same funnel.
 echo.
 
@@ -562,6 +727,59 @@ if errorlevel 1 (
     echo   The panel failed. The analysis above is unaffected.
 )
 
+REM ---------------------------------------------------------------------
+REM 5. One ranked list from docking and the rest of the analysis.
+REM ---------------------------------------------------------------------
+REM Docking hits against the gene's own protein enter the main ranking as
+REM tier 4 and sit below every curated factor route however well the pocket
+REM validated. This fuses the rankings instead of comparing their tiers: the
+REM panel's surviving routes, and every docking result whose validation gate
+REM passed (the product dock and each factor dock). A refused dock is listed
+REM with its reason and not used.
+echo.
+echo === 5 of 5: one ranked list from docking and the rest ===
+echo.
+set "DOCKARGS="
+for %%F in ("!DOCKDIR!\*.json") do set "DOCKARGS=!DOCKARGS! --docking "%%F""
+set "COMBPANEL="
+if exist "!OUT!_panel\panel.json" set "COMBPANEL=--panel "!OUT!_panel\panel.json""
+"%PY%" -m promoter_tf_drugs.combined --results "!OUT!\results.json" ^
+    !COMBPANEL! !DOCKARGS! --gene !GENE! --top 40 ^
+    --out "!OUT!_combined"
+if errorlevel 1 (
+    echo   The combined list failed. The analysis above is unaffected.
+)
+
+REM ---------------------------------------------------------------------
+REM Optional: the dose check, and the exploratory dock.
+REM ---------------------------------------------------------------------
+REM Both read what is already written. A failure in either leaves every file
+REM above as it was.
+if defined DOSECHK (
+    echo.
+    echo === Dose check ===
+    set "CMAXARG="
+    if exist data\cmax_table.tsv set "CMAXARG=--cmax-table data\cmax_table.tsv"
+    if not defined CMAXARG echo   ^(no data\cmax_table.tsv - using blood levels ChEMBL holds, which is fewer^)
+    "%PY%" -m promoter_tf_drugs.exposure "!OUT!\results.json" !CMAXARG! !LIBRARY! ^
+        --out "!OUT!_exposure"
+    if errorlevel 1 echo   The dose check failed. The analysis above is unaffected.
+)
+if defined EXPLORE (
+    echo.
+    echo === Exploratory dock for !GENE! ===
+    echo   Not validated. The template structure is chosen by searching the PDB.
+    echo   Up to three distinct ligand sites are docked, each costing as much time as
+    echo   the first. Add --max-sites 1 to the command below to dock only the best.
+    echo   For a kinase the reference dock doubles the time and is what the class
+    echo   check is calibrated on.
+    "%PY%" -m promoter_tf_drugs.exploratory --gene !GENE! --uniprot !XUNI! ^
+        !LIBRARY! --library-limit !LIBLIMIT! --exhaustiveness !EXH! ^
+        --jobs !JOBS! --cpu !CORES! --reference ^
+        --out "!OUT!_exploratory"
+    if errorlevel 1 echo   The exploratory dock failed. The analysis above is unaffected.
+)
+
 echo.
 echo === Done ===
 echo Report:   !OUT!\report.md
@@ -571,6 +789,9 @@ echo Browser:  !OUT!\sites.bed
 if exist "!DOCKALL!" echo Docking:  !DOCKALL!
 if exist "!TFLIST!" echo Factors docked: see !TFLIST!
 if exist "!OUT!_panel\panel.md" echo Funnel:   !OUT!_panel\panel.md
+if exist "!OUT!_combined\combined.md" echo Combined: !OUT!_combined\combined.md
+if defined DOSECHK if exist "!OUT!_exposure" echo Dose:     !OUT!_exposure
+if defined EXPLORE if exist "!OUT!_exploratory" echo Explore:  !OUT!_exploratory ^(not validated^)
 echo.
 echo Read the evidence table at the top of report.md before the ranking
 echo underneath it. A source that failed is recorded as failed and never

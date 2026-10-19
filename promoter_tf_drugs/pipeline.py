@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import (annotate, catalogue as cat_mod, cellcycle, congeners as cong_mod,
-               delivery as dlv_mod,
+               delivery as dlv_mod, fda as fda_mod,
                liabilities as liab_mod,
                sensitivity as sens_mod,
                promoterdna as dna_mod,
@@ -108,6 +108,54 @@ class TFResult:
 SENSITIVITY_FACTORS = 6
 
 ACTIVITY_DRUG_FACTORS = 8
+
+
+def _activity_regulons(regulon_file) -> tuple:
+    """`(signed regulons, the file they came from)` for `--tf-activity`.
+
+    The activity test asks whether a factor's targets moved the way the
+    factor's sign says they should. That needs a table that signs its edges.
+
+    A ChIP occupancy table (ReMap) says a factor was found near a gene and
+    never whether it raises or lowers it, so every edge is unsigned and the
+    test can only ask whether the targets moved at all. The launcher passes
+    one as `--regulon-file` for the regulon breadth count, which used to make
+    it the activity table as well and leave a signed table (CollecTRI, which
+    signs every edge) sitting unused in data/. So when the file given is
+    occupancy and a signed table can be found, the signed one is used for
+    activity and the file given is still used for breadth. A curated or
+    CollecTRI file given on purpose is the user's choice and wins. With no
+    file given, whatever is in data/ is used, CollecTRI first.
+    """
+    if regulon_file and regulon_mod.describe_source(regulon_file)[0] == "chip":
+        auto, auto_path = _optional(
+            "signed regulon autoload", tfa_mod.autoload_regulons, ({}, None))
+        if auto:
+            log.info("--tf-activity uses %s, which signs its edges, instead "
+                     "of %s, which is unsigned occupancy; %s is still used "
+                     "for the regulon breadth count",
+                     auto_path, regulon_file, regulon_file)
+            return auto, auto_path
+        log.warning("--tf-activity was given %s, which is unsigned ChIP "
+                    "occupancy, and no signed table was found, so it can "
+                    "only test whether targets moved, not which way. Put "
+                    "CollecTRI at %s. %s", regulon_file,
+                    " or ".join(tfa_mod.DEFAULT_REGULON_PATHS),
+                    tfa_mod.COLLECTRI_SOURCE)
+    if regulon_file:
+        parsed = _optional(
+            "signed regulon parse",
+            lambda: tfa_mod.load_signed_regulons(regulon_file), None)
+        return parsed, regulon_file
+    found, source = _optional(
+        "signed regulon autoload", tfa_mod.autoload_regulons, ({}, None))
+    if not found:
+        log.warning(
+            "--tf-activity found no regulon table. Pass --regulon-file, or "
+            "put one at %s. %s",
+            " or ".join(tfa_mod.DEFAULT_REGULON_PATHS),
+            tfa_mod.COLLECTRI_SOURCE)
+    return found, source
 
 
 def _optional(name: str, fn, default):
@@ -259,6 +307,7 @@ RUN_SPECS: dict = {
     "upstream_depth": _V("int", minimum=1,
                          why="how many edges upstream to walk."),
     "approved_only": _FLAG,
+    "fda_only": _FLAG,
     "use_dgidb": _FLAG,
     "use_opentargets": _FLAG,
     "find_analogs": _FLAG,
@@ -361,7 +410,8 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         use_genetics: bool = False,
         upstream_network: bool = False,
         upstream_depth: int = 3,
-        approved_only: bool = True, use_dgidb: bool = True,
+        approved_only: bool = True, fda_only: bool = True,
+        use_dgidb: bool = True,
         use_opentargets: bool = True,
         find_analogs: bool = False,
         demo: bool = False, offline: bool = False,
@@ -451,27 +501,8 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                         "no pocket validated, so no docking hit is "
                         "reported"))
 
-    signed_regulons = None
-    regulon_source = None
-    if tf_activity:
-        if regulon_file:
-            signed_regulons = _optional(
-                "signed regulon parse",
-                lambda: tfa_mod.load_signed_regulons(regulon_file), None)
-            regulon_source = regulon_file
-        else:
-            # Fall back to whatever is in data/, preferring CollecTRI. Asking
-            # for --regulon-file when a usable table is sitting in the
-            # default location is friction with no purpose.
-            signed_regulons, regulon_source = _optional(
-                "signed regulon autoload",
-                tfa_mod.autoload_regulons, ({}, None))
-            if not signed_regulons:
-                log.warning(
-                    "--tf-activity found no regulon table. Pass "
-                    "--regulon-file, or put one at %s. %s",
-                    " or ".join(tfa_mod.DEFAULT_REGULON_PATHS),
-                    tfa_mod.COLLECTRI_SOURCE)
+    signed_regulons, regulon_source = (
+        _activity_regulons(regulon_file) if tf_activity else (None, None))
     if lincs_geneinfo:
         # Explicit path wins over the data/ autoload. Loaded before
         # any signature lookup, because the feature space decides the
@@ -1096,7 +1127,11 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         # question, answered rather than approximated - and it covers the
         # factors the curated tables leave at "not counted".
         dependencies: dict = {}
-        _dm_path = depmap_mod.resolve(depmap_file)
+        # Demo mode uses synthetic factors and must not score them against a
+        # real DepMap release that happens to be sitting in data/. A file
+        # named with --depmap-file is still read.
+        _dm_path = (None if demo and not depmap_file
+                    else depmap_mod.resolve(depmap_file))
         if _dm_path:
             # Every ranked factor, not a slice: the file is read in one
             # streaming pass whatever is asked for, so narrowing the
@@ -1554,6 +1589,11 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             "product_screen": product_screen,
             "promoter_dna": promoter_dna_scan,
             "gene_symbol": prom.gene_symbol,
+            # Each factor's confidence, role and the way each of its drugs
+            # moves it, so a ligand found by a screen is scored like a graded
+            # one. Read by `catalogue.from_screen`.
+            "tf_info": cat_mod.tf_info_from_tfs(
+                [r.to_dict() for r in ranked]),
         }
         _mitotic_gene = (cellcycle.is_mitotic_gene(gene)
                          or cellcycle.is_mitotic_gene(prom.gene_symbol))
@@ -1709,6 +1749,9 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         "evidence_verdict": prov_mod.verdict(
             ledger, (outputs[0] or {}).get("scan_quality") if outputs else None),
         "query": query_block(_args, n_motifs=len(motif_set)),
+        # Whether the reports show only FDA approved drugs. The full set
+        # stays in this file; see fda.py.
+        "fda_filter": fda_mod.status(demo=demo, requested=fda_only),
         # How much the gene has to move, and whether its dose is under
         # selection. Both are about the GENE rather than about any
         # route, so they sit beside the query rather than in a block.

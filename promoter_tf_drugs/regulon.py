@@ -88,6 +88,17 @@ def describe_source(path, *, sample: int = 200) -> tuple:
     pmid = chip = other = 0
     try:
         with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            head = fh.readline()
+            cols = [c.strip().strip('"').lower() for c in head.split(sep)]
+            # CollecTRI ships source, target, weight, resources, references.
+            # Its fourth column names databases, not a PubMed id, so the
+            # check below would call it unrecorded provenance.
+            if {"source", "target", "weight", "resources",
+                    "references"} <= set(cols):
+                return "collectri", ("TFs with signed targets collected from "
+                                     "curated and text-mined resources "
+                                     "(CollecTRI)")
+            fh.seek(0)
             for i, line in enumerate(fh):
                 if i >= sample:
                     break

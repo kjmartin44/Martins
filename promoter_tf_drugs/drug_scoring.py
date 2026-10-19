@@ -92,6 +92,12 @@ class DrugEvidence:
     # `black_box` are False by default, so without this a failed lookup
     # reads as "checked, no warning on record".
     safety_lookup_failed: bool = False
+    # How the ChEMBL id was found when the drug arrived without one (see
+    # `chemblid`), and whether it could not be. Unresolved means potency,
+    # selectivity and the safety flags were never looked up, which is not the
+    # same as the drug having none.
+    id_note: str | None = None
+    id_unresolved: bool = False
     properties: dict = field(default_factory=dict)
     source: str = "ChEMBL"
 
@@ -157,11 +163,26 @@ def fetch_evidence(client: Client, drug) -> DrugEvidence:
 
     mol_id = drug.chembl_id
     if not mol_id or not str(mol_id).startswith("CHEMBL"):
-        ev.source = "unavailable"
-        return ev
+        # DGIdb gives some drugs an RxNorm or NCIt id. Every lookup below is
+        # by ChEMBL id, so these used to be given up on and scored as
+        # average. Look the id up by name first.
+        from . import chemblid
+        resolved, how = chemblid.resolve(client, drug.name, mol_id)
+        if resolved is None:
+            ev.source = "unavailable"
+            ev.id_unresolved = True
+            return ev
+        mol_id = resolved
+        ev.id_note = f"ChEMBL id {mol_id} found by {how}"
 
     # Potency against *this* target specifically.
     target_id = getattr(drug, "target_chembl_id", None)
+    if not target_id:
+        # DGIdb supplies no target id, so its drugs never got a potency
+        # against this factor. Find it from the factor's symbol.
+        from . import chemblid
+        target_id = chemblid.target_id(client,
+                                       getattr(drug, "target_symbol", None))
     if target_id:
         try:
             res = client.get(f"{CHEMBL}/activity", {
@@ -403,6 +424,12 @@ def grade_drug(drug, tf_confidence: float, evidence: DrugEvidence, *,
     for key, w in DRUG_WEIGHTS.items():
         quality *= max(components[key], 1e-3) ** (w / total_w)
 
+    if evidence.id_unresolved:
+        notes.append("no ChEMBL id could be found for this drug, so its "
+                     "potency, selectivity and safety flags were not "
+                     "looked up")
+    if evidence.id_note:
+        notes.append(evidence.id_note)
     safety_mult, safety_notes = _safety_multiplier(evidence)
     notes.extend(safety_notes)
     quality *= safety_mult

@@ -586,3 +586,365 @@ def test_the_command_line_passes_the_reference_flag_through(tmp_path,
                     "--out", str(tmp_path)])
     assert code == 0 and seen["reference"] is True
     assert (tmp_path / "G" / "exploratory.json").exists()
+
+
+# --------------------------------------------- choosing the template itself
+def _ligand_points(xyz, first=99):
+    offs = [[2.6, 0, 0], [0, 2.6, 0], [0, 0, 2.6], [-2.6, 0, 0]]
+    return np.array([xyz[first + k % 3] + offs[k % 4] + [0.1 * k, 0, 0]
+                     for k in range(12)])
+
+
+def _hets(resname, pts, chain="A", first=5000):
+    return [_atom("HETATM", first + k, "C1", resname, chain, 900, p, 20.0)
+            for k, p in enumerate(pts)]
+
+
+def _link(res1, chain1, seq1, atom1, res2, chain2, seq2, atom2):
+    """A PDB LINK record joining two residues, in the fixed columns."""
+    line = [" "] * 80
+
+    def put(start, text):
+        for k, ch in enumerate(text):
+            line[start + k] = ch
+    put(0, "LINK")
+    put(12, atom1.ljust(4))
+    put(17, res1)
+    put(21, chain1)
+    put(22, str(seq1).rjust(4))
+    put(42, atom2.ljust(4))
+    put(47, res2)
+    put(51, chain2)
+    put(52, str(seq2).rjust(4))
+    put(59, "1555   1555  1.45")
+    return "".join(line).rstrip()
+
+
+def _world(motif="DFG"):
+    """A model, and a function making templates of the same fold that hold
+    the named ligands."""
+    xyz = _coords()
+    r, t = _rotation(), np.array([40.0, -25.0, 10.0])
+    lig = _ligand_points(xyz)
+    far = _ligand_points(xyz, first=30)         # a second pocket, far away
+    model = _pdb(_sequence(motif=motif), xyz)
+
+    def template(*ligands, motif_t=motif):
+        text = _pdb(_sequence(motif=motif_t), xyz @ r.T + t)
+        extra, links = [], []
+        for item in ligands:
+            name, chain = item[0], item[1]
+            pts = far if len(item) > 2 and item[2] == "far" else lig
+            extra += _hets(name, pts @ r.T + t, chain)
+            if len(item) > 2 and item[2] == "glycan":
+                links.append(_link("ASN", chain, 10, "ND2", name, chain, 900,
+                                   "C1"))
+        head = (chr(10).join(links) + chr(10)) if links else ""
+        return head + text.replace("END\n", chr(10).join(extra)
+                                   + "\nEND\n")
+    return model, template
+
+
+class _Rcsb:
+    """Stands in for the HTTP client: a sequence search, the chains of each
+    entity, and the structure files."""
+
+    def __init__(self, hits, structures, chains=None, search_error=None):
+        self.hits, self.structures = hits, structures
+        self.chains = chains or {}
+        self.search_error = search_error
+        self.fetched = []
+
+    def post(self, url, data, **kw):
+        if self.search_error:
+            raise self.search_error
+        return {"result_set": [
+            {"identifier": f"{e}_{n}", "services": [{"nodes": [{
+                "match_context": [{"sequence_identity": ident,
+                                   "alignment_length": 160,
+                                   "query_length": 160}]}]}]}
+            for e, n, ident in self.hits]}
+
+    def request(self, url, *, parse_json=True, **kw):
+        if "polymer_entity" in url:
+            entry, entity = url.rsplit("/", 2)[-2:]
+            return {"rcsb_polymer_entity_container_identifiers": {
+                "auth_asym_ids": self.chains.get((entry, entity), ["A"])}}
+        entry = url.rsplit("/", 1)[1].split(".")[0]
+        self.fetched.append(entry)
+        return self.structures[entry]
+
+
+def test_the_closest_usable_chain_is_the_template(tmp_path):
+    model, template = _world()
+    client = _Rcsb(
+        hits=[("1AAA", "1", 0.99), ("2BBB", "1", 0.80), ("3CCC", "1", 0.60)],
+        structures={"1AAA": template(("NAG", "A", "glycan")),   # a glycan
+                    "2BBB": template(("ADP", "A")),
+                    "3CCC": template(("ATP", "A"))})
+    got = ex.find_template(client, model, tmp_path)
+    assert got["found"] and (got["pdb"], got["chain"], got["ligand"]) == (
+        "2BBB", "A", "ADP")
+    outcomes = {t["entry"]: t["outcome"] for t in got["tried"]}
+    assert "no drug sized ligand" in outcomes["1AAA"]
+    assert outcomes["2BBB"].startswith("usable")
+    assert "3CCC" in outcomes
+
+
+def test_a_glycan_a_lipid_and_an_oversized_ligand_are_not_templates():
+    _, template = _world()
+    text = template(("NAG", "A", "glycan"), ("OLC", "A"), ("ADP", "A"))
+    got = [g["resname"] for g in ex.template_ligands(text, {"A"})]
+    assert got == ["ADP"]
+    big = _hets("BIG", np.array([[float(i), 0, 0] for i in range(90)]))
+    assert ex.template_ligands(
+        template().replace("END\n", "\n".join(big) + "\nEND\n"), {"A"}) == []
+
+
+def test_a_ligand_on_another_chain_does_not_belong_to_this_protein(tmp_path):
+    model, template = _world()
+    client = _Rcsb(hits=[("1AAA", "1", 0.9)],
+                   structures={"1AAA": template(("ADP", "B"))},
+                   chains={("1AAA", "1"): ["A"]})
+    got = ex.find_template(client, model, tmp_path)
+    assert not got["found"]
+    assert "no drug sized ligand" in got["tried"][0]["outcome"]
+
+
+def test_a_candidate_that_fails_the_gates_is_passed_over_and_says_why(tmp_path):
+    model, template = _world()
+    # an unrelated fold: the sequence differs so the alignment gate refuses it
+    xyz2 = _coords(seed=9)
+    odd = _pdb(_sequence(seed=7), xyz2)
+    odd = odd.replace("END\n", "\n".join(_hets("ADP", xyz2[:12])) + "\nEND\n")
+    client = _Rcsb(hits=[("1AAA", "1", 0.95), ("2BBB", "1", 0.70)],
+                   structures={"1AAA": odd, "2BBB": template(("ADP", "A"))})
+    got = ex.find_template(client, model, tmp_path)
+    assert got["found"] and got["pdb"] == "2BBB"
+    first = got["tried"][0]
+    assert first["entry"] == "1AAA" and "ADP:" in first["outcome"]
+
+
+def test_nothing_usable_returns_the_list_not_an_exception(tmp_path):
+    model, template = _world()
+    client = _Rcsb(hits=[("1AAA", "1", 0.9), ("2BBB", "1", 0.8)],
+                   structures={"1AAA": template(), "2BBB": template()})
+    got = ex.find_template(client, model, tmp_path)
+    assert not got["found"] and len(got["tried"]) == 2
+    assert "none had a drug sized ligand" in got["error"]
+
+
+def test_no_hits_and_a_failed_search_are_reported_as_text(tmp_path):
+    model, _ = _world()
+    got = ex.find_template(_Rcsb([], {}), model, tmp_path)
+    assert not got["found"] and "no PDB structure matches" in got["error"]
+    got = ex.find_template(_Rcsb([], {}, search_error=RuntimeError("503")),
+                           model, tmp_path)
+    assert not got["found"] and "sequence search failed" in got["error"]
+    assert "503" in got["error"]
+
+
+def test_a_structure_with_no_pdb_file_is_skipped_not_fatal(tmp_path):
+    model, template = _world()
+
+    class NoFile(_Rcsb):
+        def request(self, url, **kw):
+            if url.endswith("1AAA.pdb"):
+                raise RuntimeError("404")
+            return super().request(url, **kw)
+    client = NoFile(hits=[("1AAA", "1", 0.99), ("2BBB", "1", 0.8)],
+                    structures={"2BBB": template(("ADP", "A"))})
+    got = ex.find_template(client, model, tmp_path)
+    assert got["found"] and got["pdb"] == "2BBB"
+    assert "mmCIF" in got["tried"][0]["outcome"]
+
+
+def test_the_search_stops_once_enough_candidates_pass(tmp_path):
+    model, template = _world()
+    n = ex.TEMPLATE_PASSERS + 3
+    hits = [(f"{i}AAA", "1", 0.9 - 0.01 * i) for i in range(n)]
+    client = _Rcsb(hits=hits, structures={e: template(("ADP", "A"))
+                                          for e, _, _ in hits})
+    got = ex.find_template(client, model, tmp_path)
+    assert got["found"] and got["pdb"] == "0AAA"
+    assert len(got["tried"]) == ex.TEMPLATE_PASSERS
+
+
+def test_a_run_without_a_template_chooses_one_and_says_so(tmp_path):
+    model, template = _world()
+    client = _Rcsb(hits=[("2BBB", "1", 0.8)],
+                   structures={"2BBB": template(("ADP", "A"))})
+    res = ex.run("G1", "P1", _library(), client=client, model_text=model,
+                 out_dir=tmp_path, score_fn=_score)
+    assert res["usable"] and res["site"]["template_pdb"] == "2BBB"
+    assert res["template_search"]["found"]
+    assert any("chosen by sequence search" in c for c in res["caveats"])
+    md = ex.markdown(res)
+    assert "## Template search" in md and "2BBB entity 1" in md
+
+
+def test_a_kinase_template_keeps_the_class_check(tmp_path):
+    model, template = _world(motif="DFG")
+    client = _Rcsb(hits=[("2BBB", "1", 0.8)],
+                   structures={"2BBB": template(("ADP", "A"))})
+    res = ex.run("G1", "P1", _library(), client=client, model_text=model,
+                 out_dir=tmp_path, score_fn=_score)
+    assert res["class_control"]["class"] == "antineoplastic kinase inhibitor"
+
+
+def test_a_template_that_is_not_a_kinase_gets_no_class_check_and_no_reference(
+        tmp_path, monkeypatch):
+    model, template = _world(motif=None)
+    client = _Rcsb(hits=[("2BBB", "1", 0.8)],
+                   structures={"2BBB": template(("ADP", "A"))})
+    called = []
+    monkeypatch.setattr(ex, "_reference_control",
+                        lambda *a, **k: called.append(1) or {})
+    res = ex.run("G1", "P1", _library(), client=client, model_text=model,
+                 out_dir=tmp_path, score_fn=_score, reference=True)
+    assert res["usable"] and res["class_control"]["class"] is None
+    assert res["control_passed"] is None and not called
+    assert any("not a kinase" in c for c in res["caveats"])
+    assert "No class check applies" in ex.markdown(res)
+
+
+def test_naming_part_of_a_template_is_refused_before_any_work(tmp_path):
+    model, _ = _world()
+    res = ex.run("G1", "P1", _library(), template_pdb="4QPM", model_text=model,
+                 out_dir=tmp_path, score_fn=_score)
+    assert "together, or none" in res["error"] and not res["usable"]
+
+
+def test_the_command_line_takes_all_three_template_options_or_none(
+        tmp_path, monkeypatch, capsys):
+    seen = {}
+
+    def fake(gene, uniprot, library, **kw):
+        seen.update(kw)
+        return {"gene": gene, "banner": ex.BANNER, "error": None,
+                "caveats": []}
+    monkeypatch.setattr(ex, "run", fake)
+    common = ["--gene", "G", "--uniprot", "P", "--library-limit", "5",
+              "--offline", "--out", str(tmp_path)]
+    assert ex.main(common) == 0
+    assert seen["template_pdb"] is None and seen["template_ligand"] is None
+    with pytest.raises(SystemExit):
+        ex.main(common + ["--template-pdb", "4QPM"])
+    assert "go together" in capsys.readouterr().err
+
+
+def test_a_free_sugar_is_a_ligand_and_an_attached_one_is_not():
+    """NAG is a glycan on most membrane proteins and a real ligand of a
+    chitinase. The LINK record is what tells them apart."""
+    _, template = _world()
+    free = template(("NAG", "A"))
+    assert [g["resname"] for g in ex.template_ligands(free, {"A"})] == ["NAG"]
+    attached = template(("NAG", "A", "glycan"))
+    assert ex.template_ligands(attached, {"A"}) == []
+    assert ex.attached_sugars(attached) == {("NAG", "A", "900")}
+    assert ex.attached_sugars(free) == set()
+
+
+def test_a_sugar_joined_only_to_a_metal_is_still_a_free_ligand():
+    _, template = _world()
+    text = _link("ZN", "A", 1, "ZN", "NAG", "A", 900, "O3") + chr(10) \
+        + template(("NAG", "A"))
+    assert ex.attached_sugars(text) == set()
+
+
+def test_a_chain_of_sugars_is_attached_through_its_links():
+    text = _link("NAG", "A", 900, "O4", "NAG", "A", 901, "C1")
+    assert ex.attached_sugars(text) == {("NAG", "A", "900"),
+                                        ("NAG", "A", "901")}
+
+
+# ------------------------------------------------------------ several sites
+def _cand(pdb, ident, centre, clash=0.0, rmsd=1.0):
+    return {"pdb": pdb, "chain": "A", "ligand": "L", "identity": ident,
+            "clash_fraction": clash, "core_rmsd": rmsd, "centre": centre}
+
+
+def test_templates_that_put_the_ligand_in_one_place_are_one_site():
+    got = ex.distinct_sites([
+        _cand("1AAA", 0.9, [0, 0, 0]), _cand("2BBB", 0.8, [1.0, 0, 0]),
+        _cand("3CCC", 0.7, [30, 0, 0]), _cand("4DDD", 0.6, [30.5, 0, 0])])
+    assert [c["pdb"] for c in got] == ["1AAA", "3CCC"], \
+        "the better ranked stands for each pocket"
+    near = ex.SITE_SEPARATION - 0.1
+    assert len(ex.distinct_sites([_cand("a", 0.9, [0, 0, 0]),
+                                  _cand("b", 0.8, [near, 0, 0])])) == 1
+    assert len(ex.distinct_sites([_cand("a", 0.9, [0, 0, 0]),
+                                  _cand("b", 0.8, [ex.SITE_SEPARATION, 0,
+                                                   0])])) == 2
+
+
+def test_one_structure_with_two_ligand_sites_gives_two_sites(tmp_path):
+    model, template = _world()
+    client = _Rcsb(hits=[("1AAA", "1", 0.9)],
+                   structures={"1AAA": template(("ADP", "A"),
+                                                ("XYZ", "A", "far"))})
+    one = ex.find_template(client, model, tmp_path)
+    assert len(one["sites"]) == 1 and one["found"]
+    two = ex.find_template(client, model, tmp_path, max_sites=2)
+    assert [c["ligand"] for c in two["sites"]] == ["ADP", "XYZ"] or \
+        sorted(c["ligand"] for c in two["sites"]) == ["ADP", "XYZ"]
+    assert two["ligand"] == two["sites"][0]["ligand"]
+    a, b = (np.array(c["centre"]) for c in two["sites"])
+    assert np.linalg.norm(a - b) >= ex.SITE_SEPARATION
+
+
+def test_a_run_docks_each_site_and_reports_them_separately(tmp_path):
+    model, template = _world()
+    client = _Rcsb(hits=[("1AAA", "1", 0.9)],
+                   structures={"1AAA": template(("ADP", "A"),
+                                                ("XYZ", "A", "far"))})
+    res = ex.run("G1", "P1", _library(), client=client, model_text=model,
+                 out_dir=tmp_path, score_fn=_score, max_sites=2)
+    assert res["usable"] and len(res["additional_sites"]) == 1
+    sub = res["additional_sites"][0]
+    assert sub["usable"] and sub["site_number"] == 2
+    assert sub["site"]["template_ligand"] != res["site"]["template_ligand"]
+    assert not np.allclose(sub["site"]["box"][:3], res["site"]["box"][:3])
+    assert any("pocket 2 of the sites" in c for c in sub["caveats"])
+    md = ex.markdown(res)
+    assert "## Additional pocket 2" in md and "### Pocket" in md
+    assert md.count("UNVALIDATED") == 1, "the banner is said once"
+
+
+def test_one_site_is_the_default_and_adds_nothing(tmp_path):
+    model, template = _world()
+    client = _Rcsb(hits=[("1AAA", "1", 0.9)],
+                   structures={"1AAA": template(("ADP", "A"),
+                                                ("XYZ", "A", "far"))})
+    res = ex.run("G1", "P1", _library(), client=client, model_text=model,
+                 out_dir=tmp_path, score_fn=_score)
+    assert "additional_sites" not in res
+
+
+def test_a_named_template_is_never_expanded_into_more_sites(tmp_path):
+    model, template = _pair()[0], _pair()[1]
+    res = ex.run("G1", "P1", _library(), template_pdb="T", template_chain="A",
+                 template_ligand="ADP", model_text=model,
+                 template_text=template, out_dir=tmp_path, score_fn=_score,
+                 max_sites=3)
+    assert "additional_sites" not in res
+
+
+def test_the_command_line_passes_max_sites_and_rejects_zero(tmp_path,
+                                                            monkeypatch,
+                                                            capsys):
+    seen = {}
+
+    def fake(gene, uniprot, library, **kw):
+        seen.update(kw)
+        return {"gene": gene, "banner": ex.BANNER, "error": None,
+                "caveats": []}
+    monkeypatch.setattr(ex, "run", fake)
+    common = ["--gene", "G", "--uniprot", "P", "--library-limit", "5",
+              "--offline", "--out", str(tmp_path)]
+    assert ex.main(common) == 0 and seen["max_sites"] == 3
+    assert ex.main(common + ["--max-sites", "1"]) == 0
+    assert seen["max_sites"] == 1
+    with pytest.raises(SystemExit):
+        ex.main(common + ["--max-sites", "0"])
+    assert "--max-sites" in capsys.readouterr().err

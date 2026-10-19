@@ -305,8 +305,8 @@ def test_the_launcher_runs_its_expensive_processes_by_default():
     src = (Path(__file__).resolve().parents[1] / "scripts"
            / "run_everything.bat").read_text(encoding="utf-8")
     assert 'set "LIBLIMIT=100000"' in src and 'set "EXH=16"' in src
-    # both docking commands carry them
-    assert src.count("--library-limit !LIBLIMIT! --exhaustiveness !EXH!") == 2
+    # both docking commands and the exploratory dock carry them
+    assert src.count("--library-limit !LIBLIMIT! --exhaustiveness !EXH!") == 3
     assert 'set "NTF=5"' in src and 'if "!NTF!"=="" set "NTF=5"' in src
     assert "--activity-permutations 2000" in src
     # the permutation flag only exists together with the activity test
@@ -316,3 +316,290 @@ def test_the_launcher_runs_its_expensive_processes_by_default():
     # what the launcher says it will do matches what it does
     assert "the whole" in src and "exhaustiveness !EXH!" in src
     assert "600 compounds" not in src
+
+
+def test_the_launcher_ends_with_a_combined_list_that_uses_only_real_flags():
+    """Stage 5 fuses the docking results with the panel's survivors. It must
+    run after the panel, take the per-target docking files rather than the
+    merged one (which holds the same hits twice), and pass flags the command
+    accepts."""
+    import subprocess
+    import sys
+    bs = chr(92)
+    src = (Path(__file__).resolve().parents[1] / "scripts"
+           / "run_everything.bat").read_text(encoding="utf-8")
+    start = src.index("-m promoter_tf_drugs.combined")
+    optional = src.index("REM Optional: the dose check")
+    block = src[start:src.rindex("REM ---", 0, optional)]
+    assert src.index("promoter_tf_drugs.panel") < start
+    assert f'for %%F in ("!DOCKDIR!{bs}*.json")' in src
+    assert "docking_all.json" not in block
+    assert f'--results "!OUT!{bs}results.json"' in block
+    help_text = subprocess.run(
+        [sys.executable, "-m", "promoter_tf_drugs.combined", "--help"],
+        capture_output=True, text=True, cwd=str(
+            Path(__file__).resolve().parents[1])).stdout
+    flags = {t for t in block.replace("^", " ").split() if t.startswith("--")}
+    flags |= {"--docking", "--panel"}
+    assert flags, "no flags found"
+    for f in flags:
+        assert f in help_text, f"{f} is not a flag of the combined command"
+    assert f"{bs}panel.json" in src and "!OUT!_combined" in src
+
+
+# ------------------------------------------------- stage count and extra steps
+def _launcher():
+    return (Path(__file__).resolve().parents[1] / "scripts"
+            / "run_everything.bat").read_text(encoding="utf-8")
+
+
+def _command_flags(src, module, marker):
+    """Flags the launcher passes to `module`, read from the lines that follow
+    its `-m` call until the next blank or non-continued line."""
+    import re
+    start = src.index(f"-m promoter_tf_drugs.{module}")
+    lines = src[start:].splitlines()
+    block = []
+    for ln in lines:
+        block.append(ln)
+        if not ln.rstrip().endswith("^"):
+            break
+    return set(re.findall(r"--[a-z][a-z0-9-]*", " ".join(block)))
+
+
+def test_the_launcher_counts_five_stages_and_labels_each():
+    src = _launcher()
+    for n in range(1, 6):
+        assert f"=== {n} of 5:" in src, n
+    assert "of 4:" not in src
+
+
+def test_the_launcher_says_which_data_gated_routes_it_will_skip():
+    """A route whose data is not in data/ used to vanish without a word. The
+    measured phenocopy route needs both matrices, so one alone must not turn
+    the flag on."""
+    src = _launcher()
+    assert "if defined HAVEPRISM if defined HAVEDEPMAP set \"SENS=" in src
+    for needle in ("no PRISM matrix", "no DepMap CRISPRGeneEffect.csv",
+                   "no GWAS Catalog table", "no tissue given for factor activity"):
+        assert needle in src, needle
+    # every file name the launcher tests for is one the package also reads
+    from promoter_tf_drugs import depmap, localannot, sensitivity
+    for name in ("Repurposing_Public_24Q2_LFC_COLLAPSED.csv", "prism_lfc.csv"):
+        assert f"data/{name}" in sensitivity.DEFAULT_PRISM_PATHS
+        assert name in src
+    assert "data/CRISPRGeneEffect.csv" in depmap.DEFAULT_EFFECT_PATHS
+    assert "CRISPRGeneEffect.csv" in src
+    assert "data/gwas_catalog_associations.tsv" in localannot.DEFAULT_GWAS_PATHS
+    assert "gwas_catalog_associations.tsv" in src
+
+
+def test_the_optional_steps_run_after_the_combined_list_with_real_flags():
+    import subprocess
+    import sys
+    root = Path(__file__).resolve().parents[1]
+    src = _launcher()
+    assert (src.index("-m promoter_tf_drugs.combined")
+            < src.index("-m promoter_tf_drugs.exposure")
+            < src.index("echo === Done ===")
+            < src.rindex("-m promoter_tf_drugs.exploratory")
+            or src.index("-m promoter_tf_drugs.exploratory")
+            < src.index("echo === Done ==="))
+    for module in ("exposure", "exploratory"):
+        help_text = subprocess.run(
+            [sys.executable, "-m", f"promoter_tf_drugs.{module}", "--help"],
+            capture_output=True, text=True, cwd=str(root)).stdout
+        flags = _command_flags(src, module, module)
+        assert flags, module
+        for f in flags:
+            assert f in help_text, f"{f} is not a flag of {module}"
+    # nothing is asked for: the exploratory dock finds its own template
+    block = src[src.index("-m promoter_tf_drugs.exploratory"):]
+    block = block[:block.index("echo === Done ===")]
+    for flag in ("--template-pdb", "--template-chain", "--template-ligand"):
+        assert flag not in block
+    assert "Template PDB id" not in src and "set /p XPDB" not in src
+    # a declined dose check or a failed optional step leaves the analysis alone
+    assert 'if /i "!DOSECHK_ANS!"=="n" set "DOSECHK="' in src
+    assert "The dose check failed. The analysis above is unaffected." in src
+    assert "The exploratory dock failed. The analysis above is unaffected." in src
+
+
+def test_the_exploratory_mode_runs_only_for_a_refused_product_pocket():
+    src = _launcher()
+    assert 'if /i "!PSTATE!"=="refused" if not "!XUNI!"=="-"' in src
+    assert "scripts" + chr(92) + "product_status.py" in src
+
+
+def test_product_status_reads_usable_refused_and_missing(tmp_path, capsys):
+    mod = _lf_script("product_status")
+    ok = tmp_path / "ok.json"
+    ok.write_text(json.dumps({"target": "G", "uniprot": "P12345",
+                              "usable": True}), encoding="utf-8")
+    refused = tmp_path / "refused.json"
+    refused.write_text(json.dumps({"target": "G", "uniprot": "P78363",
+                                   "usable": False}), encoding="utf-8")
+    nouni = tmp_path / "nouni.json"
+    nouni.write_text(json.dumps({"usable": False}), encoding="utf-8")
+    as_list = tmp_path / "list.json"
+    as_list.write_text(json.dumps([{"uniprot": "Q1", "usable": True}]),
+                       encoding="utf-8")
+    bad = tmp_path / "bad.json"
+    bad.write_text("{not json", encoding="utf-8")
+    assert mod.status(ok) == ("usable", "P12345")
+    assert mod.status(refused) == ("refused", "P78363")
+    assert mod.status(nouni) == ("refused", "-")
+    assert mod.status(as_list) == ("usable", "Q1")
+    assert mod.status(bad) == ("refused", "-")
+    assert mod.status(tmp_path / "missing.json") == ("refused", "-")
+    assert mod.main([str(refused)]) == 0
+    assert capsys.readouterr().out.strip() == "refused P78363"
+    assert mod.main([]) == 2
+
+
+# ------------------------------------------- tissues, GWAS unpack, notices
+def _table(tmp_path, rows, header="Gene\tGene name\tTissue\tNX"):
+    p = tmp_path / "expr.tsv"
+    p.write_text(header + NL + NL.join(rows) + NL, encoding="utf-8")
+    return p
+
+
+def test_tissues_lists_distinct_names_sorted_and_numbered(tmp_path, capsys):
+    mod = _lf_script("tissues")
+    p = _table(tmp_path, ["G1\tA\tliver\t1", "G1\tA\tB-cells\t2",
+                          "G2\tB\tliver\t3", "G2\tB\tlymph node\t4"])
+    assert mod.read_tissues(p) == ["B-cells", "liver", "lymph node"]
+    assert mod.main([str(p)]) == 0
+    out = capsys.readouterr().out.splitlines()
+    assert [ln.split(None, 1) for ln in out] == [
+        ["1", "B-cells"], ["2", "liver"], ["3", "lymph node"]]
+
+
+def test_tissues_pick_by_number_name_or_unique_part(tmp_path, capsys):
+    mod = _lf_script("tissues")
+    p = _table(tmp_path, ["G\tA\tliver\t1", "G\tA\tlymph node\t2",
+                          "G\tA\tthyroid gland\t3", "G\tA\tsalivary gland\t4"])
+    names = mod.read_tissues(p)
+    assert mod.pick(names, "1") == "liver"
+    assert mod.pick(names, "LYMPH NODE") == "lymph node"
+    assert mod.pick(names, "thyroid") == "thyroid gland"
+    for bad, why in (("gland", "2 tissues"), ("retina", "no tissue"),
+                     ("9", "between 1 and 4"), ("", "nothing entered")):
+        with pytest.raises(ValueError, match=why):
+            mod.pick(names, bad)
+    # the launcher reads stdout, so a failed pick prints nothing there
+    assert mod.main([str(p), "--pick", "gland"]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == "" and "matches 2 tissues" in captured.err
+    assert mod.main([str(p), "--pick", "2"]) == 0
+    assert capsys.readouterr().out.strip() == "lymph node"
+
+
+def test_tissues_refuses_a_table_without_a_tissue_column(tmp_path, capsys):
+    mod = _lf_script("tissues")
+    p = _table(tmp_path, ["G\tA\t1"], header="Gene\tGene name\tNX")
+    assert mod.main([str(p)]) == 2
+    assert "no Tissue column" in capsys.readouterr().err
+    assert mod.main([str(tmp_path / "missing.tsv")]) == 2
+
+
+def test_unpack_gwas_writes_the_table_the_loader_reads(tmp_path):
+    import zipfile
+    mod = _lf_script("unpack_gwas")
+    header = "DISEASE/TRAIT\tMAPPED_GENE\tP-VALUE\tPUBMEDID"
+    row = "Stargardt disease\tABCA4\t3e-12\t123"
+    zpath = tmp_path / "g.zip"
+    with zipfile.ZipFile(zpath, "w") as zf:
+        zf.writestr("readme.txt", "not a table")
+        zf.writestr("assoc.tsv", header + NL + row + NL)
+    dest = tmp_path / "out.tsv"
+    assert mod.unpack(zpath, dest) == "assoc.tsv"
+    assert dest.read_text(encoding="utf-8").splitlines()[1] == row
+    from promoter_tf_drugs import localannot
+    assert mod.usable_header(header)
+    saved = (dict(localannot._GWAS), dict(localannot._LOADED))
+    try:
+        localannot._GWAS.clear()
+        assert localannot.load_gwas(dest) == 1
+    finally:
+        localannot._GWAS.clear()
+        localannot._GWAS.update(saved[0])
+        localannot._LOADED.update(saved[1])
+
+
+def test_unpack_gwas_leaves_nothing_when_the_zip_has_no_usable_table(tmp_path,
+                                                                    capsys):
+    import zipfile
+    mod = _lf_script("unpack_gwas")
+    zpath = tmp_path / "bad.zip"
+    with zipfile.ZipFile(zpath, "w") as zf:
+        zf.writestr("page.txt", "<html>captive portal</html>")
+        zf.writestr("other.tsv", "a\tb" + NL + "1\t2" + NL)
+    dest = tmp_path / "out.tsv"
+    assert mod.main([str(zpath), str(dest)]) == 1
+    assert not dest.exists() and not list(tmp_path.glob("*.part"))
+    assert "no table with a gene column" in capsys.readouterr().err
+    notzip = tmp_path / "notzip.zip"
+    notzip.write_text("<html>", encoding="utf-8")
+    assert mod.main([str(notzip), str(dest)]) == 1
+    assert not dest.exists()
+
+
+def test_the_launcher_offers_the_gwas_download_and_the_tissue_list():
+    src = _launcher()
+    bs = chr(92)
+    # the offer runs only when the table is missing, and only after a yes
+    assert "if not defined HAVEGWAS (" in src
+    assert 'if /i not "!GETGWAS!"=="n" (' in src
+    assert "ftp.ebi.ac.uk/pub/databases/gwas/releases/latest/" in src
+    assert f"scripts{bs}unpack_gwas.py" in src
+    # one definition of HAVEGWAS, set before the notices that read it
+    assert src.count('set "HAVEGWAS="') == 1
+    assert src.index('set "HAVEGWAS="') < src.index("no GWAS Catalog table")
+    # the tissue is resolved against the table, and what reaches the command
+    # line is the resolved name
+    assert f"scripts{bs}tissues.py" in src
+    assert '--activity-tissue "!APICK!"' in src
+    assert "--activity-tissue" + ' "!ATISSUE!"' not in src
+    # a declined or failed offer still says where to get the files by hand
+    assert "figshare.com/articles/dataset/DepMap_Public_24Q2/25880521" in src
+    assert "figshare.com/articles/dataset/Repurposing_Public_24Q2/25917643" in src
+
+
+def test_check_download_accepts_a_matching_checksum_and_refuses_the_rest(
+        tmp_path, capsys):
+    import hashlib
+    mod = _lf_script("check_download")
+    f = tmp_path / "t.csv.part"
+    f.write_bytes(b"a,b" + NL.encode() + b"1,2" + NL.encode())
+    good = hashlib.md5(f.read_bytes()).hexdigest()
+    assert mod.main([str(f), good]) == 0
+    assert mod.main([str(f), good.upper()]) == 0
+    assert mod.main([str(f), "0" * 32]) == 1
+    assert "expected" in capsys.readouterr().err
+    assert mod.main([str(tmp_path / "missing"), good]) == 1
+    assert mod.main([str(f)]) == 2
+
+
+def test_the_launcher_fetches_depmap_and_prism_and_keeps_only_verified_files():
+    """The files are downloaded under a .part name and renamed only after the
+    published checksum matches. The checksums below are the ones figshare
+    publishes for DepMap 24Q2 and PRISM 24Q2."""
+    src = _launcher()
+    bs = chr(92)
+    for name, md5 in (
+            ("CRISPRGeneEffect.csv", "d10d73692672380b3792231549e97d5a"),
+            ("Repurposing_Public_24Q2_Extended_Primary_Data_Matrix.csv",
+             "042b15d3ebcc138a80a571b9286451ae")):
+        part = f"data{bs}{name}.part"
+        assert f"-o {part}" in src, name
+        assert f"scripts{bs}check_download.py {part} {md5}" in src, name
+        assert f"move /y {part} data{bs}{name}" in src, name
+        assert f"del {part}" in src, name
+    # the offers sit before the notices that read what is on disk
+    assert (src.index("DepMap's CRISPR knockout scores")
+            < src.index("no DepMap CRISPRGeneEffect.csv"))
+    assert src.count("ndownloader.figshare.com/files/") == 4
+    # the companion tables the package reads beside them
+    assert "Repurposing_Public_24Q2_Extended_Primary_Compound_List.csv" in src
+    assert f"data{bs}Model.csv" in src

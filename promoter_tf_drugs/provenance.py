@@ -112,6 +112,15 @@ IMPACT = {
     "activity_drugs": "No compound was tested against inferred factor "
                       "activity, so that evidence generates no routes of "
                       "its own.",
+    "depmap": "What a cell loses without each factor was not measured, "
+              "so a factor that every cell line needs is not marked as "
+              "a costly target and can rank beside a dispensable one. "
+              "Cancer cell lines say little about a post-mitotic tissue "
+              "even when this does run.",
+    "sensitivity": "No drug was matched against a factor's knockout "
+                   "profile, so the measured phenocopy route is absent: a "
+                   "compound that behaves as though it removes the factor "
+                   "but has no annotation anywhere stays unfound.",
 }
 
 

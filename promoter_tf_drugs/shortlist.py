@@ -576,6 +576,8 @@ def main(argv=None) -> int:
     args = p.parse_args(argv)
 
     data = json.loads(Path(args.results).read_text(encoding="utf-8"))
+    from . import fda as fda_mod
+    data = fda_mod.apply(data)
     check_schema(data, "shortlist")
 
     criteria = dict(PRESETS.get(args.preset, {})) if args.preset else {}

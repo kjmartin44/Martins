@@ -209,7 +209,7 @@ All from <https://depmap.org/portal/data_page/>, current release.
 | CRISPR gene effect | `data/CRISPRGeneEffect.csv` |
 | cell line metadata | `data/Model.csv` |
 | common essentials | `data/CRISPRInferredCommonEssentials.csv` |
-| PRISM repurposing LFC | `data/Repurposing_Public_24Q2_LFC_COLLAPSED.csv` |
+| PRISM repurposing data matrix | `data/Repurposing_Public_24Q2_Extended_Primary_Data_Matrix.csv` |
 | PRISM compound list | `data/Repurposing_Public_24Q2_Extended_Primary_Compound_List.csv` |
 | expression matrix | `data/OmicsExpressionProteinCodingGenesTPMLogp1.csv` |
 

@@ -33,10 +33,10 @@ usage: promoter-tf-drugs [-h] --gene GENE [--out OUT] [--top TOP]
                          [--sensitivity-scan] [--prism-file CSV]
                          [--depmap-file CSV] [--activity-permutations N]
                          [--tf-weight TF_WEIGHT] [--chip-bed CHIP_BED]
-                         [--chip-api] [--include-investigational] [--no-dgidb]
-                         [--find-analogs] [--no-opentargets] [--demo]
-                         [--offline] [--cache-dir CACHE_DIR]
-                         [--max-requests N]
+                         [--chip-api] [--include-investigational]
+                         [--include-non-fda] [--no-dgidb] [--find-analogs]
+                         [--no-opentargets] [--demo] [--offline]
+                         [--cache-dir CACHE_DIR] [--max-requests N]
                          [--scenario {haploinsufficiency,hypomorph,toxic_gain,null,silenced_allele,modifier}]
                          [--broken-allele-makes {null,truncated,unknown}]
                          [--target-fraction TARGET_FRACTION]
@@ -234,11 +234,10 @@ options:
                         route here that can surface a compound nobody has
                         linked to the gene. Needs both the DepMap and PRISM
                         matrices on disk (default: False)
-  --prism-file CSV      PRISM Repurposing LFC matrix.
-                        data/Repurposing_Public_24Q2_LFC_COLLAPSED.csv is
-                        picked up automatically if present, and the compound
-                        list beside it turns BRD ids into drug names (default:
-                        None)
+  --prism-file CSV      PRISM Repurposing LFC matrix. data/Repurposing_Public_
+                        24Q2_Extended_Primary_Data_Matrix.csv is picked up
+                        automatically if present, and the compound list beside
+                        it turns BRD ids into drug names (default: None)
   --depmap-file CSV     DepMap CRISPRGeneEffect.csv. Measures what happens to
                         a cell when each factor is knocked out, which is the
                         collateral question the regulon count stands in for.
@@ -265,6 +264,12 @@ options:
   --include-investigational
                         do not restrict to approved (max_phase 4) drugs
                         (default: False)
+  --include-non-fda     show every compound in the reports. By default they
+                        list only drugs in the FDA Orange Book (plus the
+                        curated gene therapies), so research compounds, drugs
+                        approved only outside the US and biologics are left
+                        out. results.json keeps them either way (default:
+                        False)
   --no-dgidb            ChEMBL only (default: False)
   --find-analogs        search ChEMBL for approved drugs chemically similar to
                         this report's own best candidates, subtracting
@@ -361,9 +366,10 @@ usage: promoter-tf-drugs.panel [-h] [--genes GENES] [--gene-file GENE_FILE]
                                [--activity-permutations N]
                                [--tf-weight TF_WEIGHT] [--chip-bed CHIP_BED]
                                [--chip-api] [--include-investigational]
-                               [--no-dgidb] [--find-analogs]
-                               [--no-opentargets] [--demo] [--offline]
-                               [--cache-dir CACHE_DIR] [--max-requests N]
+                               [--include-non-fda] [--no-dgidb]
+                               [--find-analogs] [--no-opentargets] [--demo]
+                               [--offline] [--cache-dir CACHE_DIR]
+                               [--max-requests N]
                                [--scenario {haploinsufficiency,hypomorph,toxic_gain,null,silenced_allele,modifier}]
                                [--broken-allele-makes {null,truncated,unknown}]
                                [--target-fraction TARGET_FRACTION]
@@ -584,10 +590,10 @@ options:
                         route here that can surface a compound nobody has
                         linked to the gene. Needs both the DepMap and PRISM
                         matrices on disk
-  --prism-file CSV      PRISM Repurposing LFC matrix.
-                        data/Repurposing_Public_24Q2_LFC_COLLAPSED.csv is
-                        picked up automatically if present, and the compound
-                        list beside it turns BRD ids into drug names
+  --prism-file CSV      PRISM Repurposing LFC matrix. data/Repurposing_Public_
+                        24Q2_Extended_Primary_Data_Matrix.csv is picked up
+                        automatically if present, and the compound list beside
+                        it turns BRD ids into drug names
   --depmap-file CSV     DepMap CRISPRGeneEffect.csv. Measures what happens to
                         a cell when each factor is knocked out, which is the
                         collateral question the regulon count stands in for.
@@ -612,6 +618,11 @@ options:
                         are given
   --include-investigational
                         do not restrict to approved (max_phase 4) drugs
+  --include-non-fda     show every compound in the reports. By default they
+                        list only drugs in the FDA Orange Book (plus the
+                        curated gene therapies), so research compounds, drugs
+                        approved only outside the US and biologics are left
+                        out. results.json keeps them either way
   --no-dgidb            ChEMBL only
   --find-analogs        search ChEMBL for approved drugs chemically similar to
                         this report's own best candidates, subtracting

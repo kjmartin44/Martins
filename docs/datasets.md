@@ -383,7 +383,7 @@ Drugs that behave as though they remove your factor, with no annotation involved
 | | |
 | --- | --- |
 | Supplied | found by name under data/ — `--prism-file` |
-| Looks for | `data/Repurposing_Public_24Q2_LFC_COLLAPSED.csv`, `data/Repurposing_Public_LFC.csv`, `data/prism_lfc.csv`, `data/PRISM_Repurposing_Public.csv` |
+| Looks for | `data/Repurposing_Public_24Q2_Extended_Primary_Data_Matrix.csv`, `data/Repurposing_Public_24Q2_LFC_COLLAPSED.csv`, `data/Repurposing_Public_LFC.csv`, `data/prism_lfc.csv`, `data/PRISM_Repurposing_Public.csv` |
 | Size | 1 GB |
 | Source | <https://depmap.org/portal/download/> |
 | Inventory key | `prism` |

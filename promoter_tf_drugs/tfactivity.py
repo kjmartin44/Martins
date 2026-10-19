@@ -134,7 +134,8 @@ DEFAULT_REGULON_PATHS = (
 
 COLLECTRI_SOURCE = (
     "CollecTRI: https://github.com/saezlab/CollecTRI, or in Python "
-    "`import decoupler as dc; dc.get_collectri(organism='human')` then "
+    "`import decoupler as dc; dc.op.collectri(organism='human')` (decoupler "
+    "2.x; it was `dc.get_collectri` in 1.x) then "
     "`.to_csv('data/collectri.tsv', sep='\\t', index=False)`"
 )
 

@@ -189,8 +189,11 @@ Generated from each module's own first docstring line.
 | `audit.py` | Are the hand-curated tables still true? |
 | `catalogue.py` | Every route that acts on your gene, in one table, on one scale. |
 | `cellcycle.py` | Cell-cycle phase dependence of TF activity — a separate axis from everything else. |
+| `chemblid.py` | Find the ChEMBL id of a drug that arrived without one. |
 | `chipregulon.py` | Regulons built from ChIP peaks, for the factors curation never reached. |
 | `cli.py` | Command-line interface. |
+| `clusters.py` | Fold near-identical drugs into one row of a ranking. |
+| `combined.py` | One ranked list from docking and the rest of the analysis. |
 | `compensation.py` | You may not need to raise your gene at all. |
 | `congeners.py` | Collapse salt forms so the tables show distinct chemistry. |
 | `constraint.py` | How much dosage this gene tolerates, in either direction. |
@@ -208,6 +211,8 @@ Generated from each module's own first docstring line.
 | `evidence.py` | Orthogonal evidence that a predicted site is real. |
 | `explain.py` | Everything the pipeline knows about one compound, in one place. |
 | `exploratory.py` | Exploratory docking into a pocket that has no co-crystallised ligand. |
+| `exposure.py` | Can the drug reach the concentration at which the evidence was seen? |
+| `fda.py` | Show only drugs the FDA has approved. |
 | `genes.py` | Resolve a gene symbol to a transcription start site and pull the promoter. |
 | `genetics.py` | Human genetic evidence, via eQTLs — and what GWAS/PheWAS can and cannot tell you. |
 | `http.py` | Tiny cached HTTP client. Stdlib only, so the package needs only numpy. |
@@ -235,9 +240,11 @@ Generated from each module's own first docstring line.
 | `promoterdna.py` | Small molecules aimed at the promoter DNA rather than at a protein. |
 | `provenance.py` | Did each evidence source actually produce evidence? |
 | `pwm.py` | Position-weight-matrix mathematics. |
+| `rationale.py` | A plain sentence on how a candidate would act on the condition. |
 | `reactivation.py` | Reactivating a silenced allele, which is a different problem from a low gene. |
 | `regulon.py` | How many genes does this TF control? The specificity that actually matters. |
 | `report.py` | Turning a finished run into something a person reads. |
+| `retrospective.py` | Does the pipeline recover drugs already known to move a gene? |
 | `screening.py` | Screen the whole approved-drug library against a receptor. |
 | `screens.py` | Design the experiment that settles what this whole package only predicts. |
 | `sensitivity.py` | Which approved drugs behave as though they act on your factor. |

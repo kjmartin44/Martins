@@ -100,6 +100,7 @@ def warn_empty_table(path) -> None:
 # PRISM ships under several names across releases; all the common
 # spellings are accepted so a download needs no renaming.
 DEFAULT_PRISM_PATHS = (
+    "data/Repurposing_Public_24Q2_Extended_Primary_Data_Matrix.csv",
     "data/Repurposing_Public_24Q2_LFC_COLLAPSED.csv",
     "data/Repurposing_Public_LFC.csv",
     "data/prism_lfc.csv",
@@ -213,8 +214,9 @@ def load_compound_names(path=None) -> dict:
             return None
 
         c_id = col("iduplicate", "broad_id", "column_name", "sample_id",
-                   "id", "drug_id")
-        c_name = col("name", "drug_name", "pert_iname", "compound")
+                   "id", "ids", "drug_id")
+        c_name = col("name", "drug_name", "drug.name", "pert_iname",
+                     "compound")
         if not (c_id and c_name):
             log.warning("%s has no id/name column pair; PRISM columns stay "
                         "as identifiers", Path(p).name)
@@ -229,11 +231,31 @@ def load_compound_names(path=None) -> dict:
     return out
 
 
+_LINE_ID = "ACH-"
+
+
+def _is_long_format(header) -> bool:
+    """True for the one-row-per-well table that ships beside the matrix."""
+    names = {(c or "").strip().lower() for c in header}
+    return "row_id" in names and "lfc" in names
+
+
+def _lines_are_columns(columns, models) -> bool:
+    """True when the column headers are cell line ids and the rows are not."""
+    def share(ids):
+        ids = [i for i in ids if i]
+        return sum(i.startswith(_LINE_ID) for i in ids) / len(ids) if ids else 0.0
+    return share(columns) >= 0.5 and share(models) < 0.5
+
+
 def load_prism(path=None) -> dict:
     """The PRISM matrix as `{models, columns, values}`.
 
     `values` is a float array, cell lines by compounds, with NaN where a
-    compound was not screened in a line. The whole matrix is kept because
+    compound was not screened in a line. Either layout is read: cell lines
+    in rows (the older releases) or in columns (the 24Q2 matrix), and the
+    result is the same. The long one-row-per-well table is refused, since
+    averaging wells is a choice this loader does not make for you. The whole matrix is kept because
     every column is a candidate: unlike the gene-effect loader, there is
     no short list of columns to select.
 
@@ -258,6 +280,12 @@ def load_prism(path=None) -> dict:
         columns = [c.strip() for c in header[1:]]
         if not columns:
             return {}
+        if _is_long_format(header):
+            log.warning(
+                "%s is the long format, one row per well, and not a matrix. "
+                "Use Repurposing_Public_24Q2_Extended_Primary_Data_Matrix.csv "
+                "from the same release. PRISM is not assessed.", Path(p).name)
+            return {}
         for row in reader:
             if not row:
                 continue
@@ -276,6 +304,11 @@ def load_prism(path=None) -> dict:
     if not rows:
         return {}
     values = np.vstack(rows)
+    if _lines_are_columns(columns, models):
+        # The 24Q2 matrix has a row per compound and a column per cell line.
+        # Everything downstream wants cell lines by compounds, as the older
+        # releases were laid out, so turn it round here and nowhere else.
+        models, columns, values = columns, models, values.T
     log.info("PRISM: %d cell line(s) x %d compound(s) from %s",
              values.shape[0], values.shape[1], Path(p).name)
     return {"models": models, "columns": columns, "values": values}

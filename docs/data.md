@@ -782,6 +782,61 @@ when the local drug table is present, so a run with `--upstream-network` can
 return upstream routes that an earlier version did not. The routes are real
 paths but often three steps from the factor, so read the hop count.
 
+Routes for the factors' drugs are scored more consistently than they were.
+Three changes affect saved results.
+
+- A drug that arrived with an RxNorm (`rxcui:`) or NCIt (`ncit:`) id used to
+  skip every ChEMBL lookup and score as average, because the lookups are by
+  ChEMBL id. About half of the factor drugs in saved runs were in that group.
+  The id is now found by name (the approved drug table first, then an exact
+  ChEMBL name match) and moved to the parent molecule, and the target id is
+  found from the factor's gene symbol, since DGIdb supplies none. In each
+  `drug_grades` entry, `evidence.id_note` says how an id was found and
+  `evidence.id_unresolved` is true when none could be, in which case the
+  grade's notes say potency, selectivity and the safety flags were not looked
+  up. A drug withdrawn from the market could previously pass that gap with
+  nothing said.
+- A ligand found by a receptor screen is scored with the same strength formula
+  as a graded drug (0.45 potency, 0.30 action, 0.25 factor confidence) instead
+  of a constant 0.7, so the routes no longer tie. A ligand known to move the
+  factor against the goal is no longer a route. One with no recorded action
+  scores as an unknown action and says so. The block the catalogue reads has a
+  new key, `tf_info`, with each factor's confidence, role and the direction of
+  each of its drugs.
+- A graded route whose drug has a measured potency of at least 1 uM (pChEMBL 6)
+  against the factor and a recorded action is tier 2, as a screen-found ligand
+  is. It was tier 3 only when the factor had not been among the few receptors
+  screened. Its axes evidence reads "measured binding".
+
+`summary.md` folds close analogues in its top list: a family of near identical
+drugs that act through the same target takes one row, marked "(+N similar)",
+and the folded drugs are listed under the table. A drug reached through two
+factors is one row naming both. The table has a "How it would work" column
+with one sentence per row and a paragraph above it on the aim. `report.md` and
+`results.json` are unchanged, so the full list is still there.
+
+`--tf-activity` takes its regulons from a table that signs every edge. With
+`data/collectri.tsv` present it is used automatically, and when the launcher's
+`--regulon-file` is the unsigned ChIP table (ReMap occupancy), the activity test
+uses CollecTRI instead and the ChIP table is kept for the regulon breadth count.
+An explicit TRRUST or CollecTRI file still wins. Without a signed table the test
+can only ask whether a factor's targets moved, not which way, and the factor's
+direction column is a dash. In bone marrow, ChIP gives 581 testable factors and
+no direction, TRRUST 190 testable with 176 directional, and CollecTRI 563
+testable, all directional. Fetch the table with
+`dc.op.collectri(organism='human')` from decoupler 2.x (`dc.get_collectri` in
+1.x) and save it with `.to_csv('data/collectri.tsv', sep='\t', index=False)`.
+It has 42,990 edges, 37,168 activating and 5,822 repressing, over 1,185
+factors, 759 of them with five or more targets (TRRUST has 329). CollecTRI
+combines curated resources with text-mined ones, so an edge is a literature
+claim and not a measurement.
+
+**Compatibility:** scores, tiers and ranks of factor routes change. More routes
+are tier 2, within tier 2 the order now follows potency, and many drugs that
+scored as average now have a measured potency. None of this was tuned against
+an answer key; see [Checks on candidate drugs](checks.md) for what the answer
+keys can and cannot show.
+
 In each `drug_grades` entry, `evidence.safety_lookup_failed` is true when the
 ChEMBL drug-warning lookup did not complete. `withdrawn` and `black_box` are
 false in that case because nothing was read, not because the drug is clear,
@@ -810,6 +865,21 @@ For a negative-strand promoter, the exporter reverses the motif strand and maps
 the interval back to the forward genomic coordinate system. For example, on a
 promoter spanning bases 101–120, sequence interval `[2, 7)` maps to BED
 `[102, 107)` on a positive-strand gene or `[113, 118)` on a negative-strand gene.
+
+## FDA filter
+
+`report.md`, `summary.md`, `tf_summary.tsv`, the panel, the combined list and the
+dose check list only FDA approved drugs by default. See
+[how it works](how-it-works.md#the-stages-in-order) for the rule.
+
+**Compatibility:** `results.json` has a new top-level `fda_filter` key
+(`requested`, `applied`, `note`) and `query.fda_only`. Nothing is removed from
+`results.json`: every route and compound is still there, so a script that reads
+it sees what it saw before. What changes is the rendered reports, which now omit
+non-approved compounds and say how many they left out. `--include-non-fda`
+restores the old reports. Counts inside a report, such as the number of routes,
+are counts after the removal. With no Orange Book on disk, or in demo mode, the
+filter is not applied and the report says why.
 
 ## HTTP cache
 

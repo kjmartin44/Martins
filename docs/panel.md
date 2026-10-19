@@ -112,3 +112,59 @@ nothing, so the easiest gene to drug cannot quietly win the argument.
 
 Individual flags override a preset. See the [command
 reference](cli.md#python--m-promoter_tf_drugspanel) for every option.
+
+## One list from docking and the rest
+
+The run ranks routes by tier and then score. Docking hits against the gene's
+own protein enter that ranking as tier 4, below every curated factor route
+however well the pocket validated (for CCR5 the pocket recovered its own known
+ligands at AUC 0.93). The two kinds of evidence answer different questions, so
+`combined` keeps them as separate rankings and fuses them:
+
+```bash
+python -m promoter_tf_drugs.combined --results results/CCR5_down/results.json \
+    --panel results/CCR5_down_panel/panel.json \
+    --docking results/CCR5_down/docking/product.json --top 40
+```
+
+`--docking` can be repeated, and the launcher passes the product dock and each
+factor dock. The routes list is the panel's surviving routes when a panel file
+is given, since the funnel has already applied its off-target criteria, and
+otherwise every route in the run. Routes made by docking are left out of it so
+docking is not counted twice. A docking result whose validation gate did not
+pass is not used and is listed with its reason.
+
+A drug's score is the sum of `1 / (60 + rank)` over the lists it is in
+(reciprocal rank fusion). It uses only ranks, so the different scales never
+meet. The constant 60 is the conventional one and is not tuned here, no list is
+weighted, and tied drugs share the best rank of their group. A drug in two lists
+beats one in a single list at the same rank.
+
+Close analogues are folded into the best-ranked one so a family does not fill
+the top. Two drugs are folded when their structures, without counter-ions, have
+a Tanimoto similarity of at least 0.75 on Morgan fingerprints (radius 2, 2,048
+bits), or when one is the same drug under an ester name. The leader is the
+better-ranked member, a drug joins only the first leader it is close to, and a
+chain of analogues does not merge into one row. The folded drugs are named
+beside the leader with their own ranks, and the full list stays in
+`combined.json`. `--similarity` changes the cut and `--no-fold` lists every
+drug. Similar structure is not equivalent behaviour: analogues can differ in
+potency, selectivity, tissue reach and safety, so a folded drug is a neighbour
+to check, not a duplicate to drop. A compound with no structure in the approved
+drug table stays on its own.
+
+Each row has one sentence on how that drug would act on the gene, written from
+the route's own fields (what it acts on, whether its binding is measured, the
+factor's role at the promoter). It states the mechanism the route assumes. For
+most routes the step from the drug's target to the gene is not measured, and
+the sentence says so. The paragraph above the table gives the dosage
+requirement when the run declared a scenario. Nothing in it says that moving
+the gene treats the condition.
+
+The score orders drugs and is not a probability. A drug high in both lists is
+high in two rankings, each as weak as it was alone, and lists that share an
+input are not independent. Every docking row says binding is not direction
+unless the run recovered the conformation, and a drug found only by docking
+carries its systemic class if it has one. The command writes `combined.md`,
+`combined.json` and `combined.tsv`. The launcher runs it last and writes
+`results/GENE_DIR_combined`.

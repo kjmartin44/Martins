@@ -221,6 +221,12 @@ def load(path=None) -> int:
     return len(_PRODUCTS)
 
 
+def ingredients() -> list:
+    """The collapsed active ingredient keys, or an empty list with no table."""
+    load()
+    return list(_PRODUCTS)
+
+
 def product_count() -> int:
     load()
     return sum(r["n_products"] for r in _PRODUCTS.values())
