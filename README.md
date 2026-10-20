@@ -5,6 +5,33 @@ factor binding sites and candidate drugs that may raise or lower gene expression
 It combines motif scans, annotations, optional experimental evidence, and heuristic
 rankings. Results are hypotheses for further study, not validated treatment advice.
 
+## The pipeline
+
+One run, from a gene and a direction to ranked drug hypotheses. The [compact flowchart](docs/pipeline_detail.mmd) adds the branches and checks, and [how it works](docs/how-it-works.md) explains each step.
+
+```mermaid
+timeline
+    title promoter-tf-drugs: one run, from a gene and a direction to ranked drug hypotheses
+    section Before
+        Setup : setup_data.bat fetches reference files : Input is a gene, raise or lower, a dosage scenario
+    section Factor route
+        1 Promoter : Ensembl or GENCODE : One window per start
+        2 Scan : JASPAR at p 1e-5 : Chance measured on shuffled windows : Rescans wider if no signal
+        3-4 Factors : GO role per factor : ReMap ChIP peaks : Neighbouring genes
+        5-7 Drugs : Rank the factors : Approved drugs by direction : Grade each pair
+    section Beside it
+        8 Twelve routes : Own product : Upstream network : LINCS : Docking : Known regulators : Genetics and CTD as evidence
+    section Merge
+        9 Catalogue : Tier 1 to 5, three axes : Tier orders first
+        10-11 Verdict and files : Ledger marks each source : FDA approved only shown : report, summary, results.json
+    section After
+        Checks : Retrospective against CTD : Where drugs are lost : Dose check
+    section What each route returns
+        Rows in the list : a Own product, tier 1 drug on the gene or RNA : b Upstream, tier 4 drug with its path : c LINCS, tier 2 to 4 compounds that moved the gene : d Factor activity, tier 3 compounds : e Screens, tier 2 ligands and tier 5 hypotheses : f Docking, tier 4 binders if the pocket validates : i DepMap and PRISM, tier 4 phenocopy drugs : l Known regulators, tier 4 drug at a regulator
+        Evidence only : g Genetics, support for moving the gene : h CTD, known or novel label : k Dosage, how far and which way
+        Own section : j Modalities, a designed ASO or CRISPRa sketch
+```
+
 ## Quick start
 
 Requires Python 3.10 or later. From this checkout:

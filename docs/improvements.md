@@ -17,8 +17,10 @@ sections below.
   reach about 10 percent of the approved drugs recorded as raising a gene, and rank
   them no better than chance once a drug's fame is held equal. Starting from known
   regulators reaches more, at a direction rate that is not separated from chance.
-- **The 36 saved runs predate the motif scan correction**, so the figures above
-  describe the earlier scan. See [checks](checks.md#what-it-cannot-show).
+- **The 36-gene figures were rerun with the corrected code** (lean options, no
+  docking), and the share of wanted drugs with a route rose from 8.6% to 14.4%. The
+  rerun used the same genes the fixes were tried on, so it is not a held-out result.
+  See [checks](checks.md#wider-promoter-windows-and-the-fate-numbers-after-the-fixes).
 - **A drug that ChEMBL does not record at a factor cannot be found there**, unless
   `--regulator-measured` is used. Rifampicin at PXR is the example, and CYP3A4 is the
   gene it would matter for. That option finds it and reached 22.7% of the wanted drugs

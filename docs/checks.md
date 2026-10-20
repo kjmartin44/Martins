@@ -378,6 +378,54 @@ that, and it makes the list much longer: about 80 more drugs per gene on average
 by default and the launcher does not pass it. Like the two-step option it was tried on
 the same 36 genes it was scored on, so it is not a held-out result.
 
+## Wider promoter windows, and the fate numbers after the fixes
+
+**Five genes, four windows.** FXN, ABCD2, LPL, CYP24A1 and BUB1B were scanned at four
+window sizes with the corrected chance estimate (20 shuffled copies). Sites above chance
+rise with the window for most genes (ABCD2 0, 19, 20, 83; CYP24A1 2, 12, 48, 68; BUB1B 9,
+13, 40, 75 at -1000/+200, -2000/+500, -5000/+1000 and -10000/+1000), but the enrichment
+ratio stays at 1.4 to 2.1 and the chance share at 40% to 55%. A wider window finds more real
+sites and more chance ones in about the same proportion.
+
+**All 36 genes, two windows.** Each gene was run at -1000/+200 and at -5000/+1000 with
+the options that drive drug recovery (scan, ChIP, factor drugs, upstream network, two-step
+known regulators, LINCS) and none of the slow extras, then scored against CTD with the
+cleaner key (1,489 wanted drugs). `scripts/window_comparison.py` runs and scores it.
+
+| Arm | Wanted drugs with a route | Mean AUC, right direction | Mean AUC, reported or not |
+|---|---|---|---|
+| -1000/+200 | 214 (14.4%) | 0.531 | 0.572 |
+| -5000/+1000 | 241 (16.2%) | 0.536 | 0.571 |
+| Adaptive: the narrow window, the wide one where the narrow scan shows no signal | 224 (15.0%) | 0.534 | 0.573 |
+
+The wide window reaches 27 more wanted drugs and does not move the AUC. By scan verdict,
+19 of the 36 genes show no signal at -1000/+200, 11 weak and 6 enriched; at -5000/+1000
+it is 18, 16 and 2. The adaptive rule switched 7 genes (ABCB1, CDKN1A, CYP24A1, CYP3A4,
+GCLC, HMGCR and MMP9). That rule is on by default (`--no-widen` turns it off). The
+evidence for it is a small gain in drugs reached and an honest scan verdict, not a better
+ranking.
+
+**The fate funnel, before and after.** The same funnel (`scripts/positive_fate.py`) on the
+new runs at the default window:
+
+| Stage | Before: 1,677 drugs | After: 1,494 drugs |
+|---|---|---|
+| found | 144 (8.6%) | 215 (14.4%) |
+| acts on a found factor | 3 (0.2%) | 0 |
+| in reach upstream | 598 (35.7%) | 445 (29.8%) |
+| factor not found | 1 (0.1%) | 7 (0.5%) |
+| too far upstream | 291 (17.4%) | 278 (18.6%) |
+| not in the network | 265 (15.8%) | 227 (15.2%) |
+| no target recorded | 375 (22.4%) | 322 (21.6%) |
+
+Found rose from 8.6% to 14.4%. Part of that is the cleaner CTD key: its 1,489 wanted drugs
+are fewer than the old 1,666, and the old routes reach 146 of them (9.8%). The rest, 9.8% to
+14.4%, comes from the changes made to the routes. At the wide window found is 241 (16.1%).
+The runs differ in two ways besides the fixes: the new ones used the lean option set, and
+every fix was tried on these same genes, so it is not a held-out improvement. The share
+with no target recorded fell by under a point. Many of those drugs act on bacterial,
+viral or non-protein targets, or have no recorded mechanism, which no route here can reach.
+
 ## The motif scan's chance estimate
 
 The reports say what share of the motif sites called would be expected by chance.
@@ -543,11 +591,10 @@ citations. Read it critically and change it in `POSITIVE_CONTROLS`.
   with signature data somewhere upstream. That is not traced.
 - **The 36 saved runs predate two corrections.** They were made before the
   motif scan stopped calling matrices that cannot reach the requested p-value and
-  before CTD's sentences were read, so a rerun of the same genes would list
-  different sites and factors, and the figures in this section would move. The
-  CTD half is measured above (9.8% of the drugs reached against 8.6% with the
-  cleaner key, on the saved routes). The scan half is not: rerunning all 36 genes
-  with the corrected scan has not been done, and it takes many hours.
+  before CTD's sentences were read, so the figures in this section describe the
+  earlier code. The 36 genes were rerun with the corrected scan, the cleaner key
+  and the later route fixes; see "Wider promoter windows, and the fate numbers after
+  the fixes" below, where found rose from 8.6% to 14.4%.
 
 ## First results
 

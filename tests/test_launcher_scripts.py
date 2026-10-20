@@ -673,3 +673,17 @@ def test_the_launcher_offers_the_knockout_libraries_and_keeps_only_good_files():
     from promoter_tf_drugs import knockout
     for name in ("knockout_lincs_crispr_ko.gmt", "knockout_tf_perturbations.gmt"):
         assert f"data/{name}" in knockout.DEFAULT_KNOCKOUT_PATHS
+
+
+def test_the_readme_embeds_the_current_pipeline_diagram():
+    """The README carries a copy of docs/pipeline.mmd, and a copy drifts."""
+    import re
+    root = Path(__file__).resolve().parents[1]
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    m = re.search(r"```mermaid\r?\n(.*?)\r?\n```", readme, re.S)
+    assert m, "README.md has no mermaid block"
+    source = (root / "docs" / "pipeline.mmd").read_text(encoding="utf-8")
+    keep = lambda t: [ln.rstrip() for ln in t.splitlines()
+                      if ln.strip() and not ln.lstrip().startswith("%%")]
+    assert keep(m.group(1)) == keep(source), (
+        "update the README block from docs/pipeline.mmd")
