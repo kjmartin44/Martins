@@ -266,14 +266,18 @@ MITOTIC_DISRUPTORS = frozenset({
     # kinesin Eg5, CDK1, MPS1
     "monastrol", "ispinesib", "filanesib", "ro-3306", "reversine",
     "nms-p715",
+    # tubulin binders that CTD records raising BUB1B protein, added because a
+    # report of that kind can be mitotic arrest and not the promoter
+    "benomyl", "carbendazim", "rotenone",
+    "2'-fluoro-6,7-methylenedioxy-2-phenyl-4-quinolone",
 })
-_MITOTIC_COMPACT = frozenset(m.replace(" ", "").replace("-", "")
+_MITOTIC_COMPACT = frozenset(m.replace(" ", "").replace("-", "").replace(",", "")
                              for m in MITOTIC_DISRUPTORS)
 
 
 def _compact(name: str) -> str:
-    """A name with spaces and hyphens removed, for code-name matching."""
-    return name.replace(" ", "").replace("-", "")
+    """A name with spaces, hyphens and commas removed, for code-name matching."""
+    return name.replace(" ", "").replace("-", "").replace(",", "")
 
 
 def is_mitotic_disruptor(drug_name: str) -> bool:

@@ -171,6 +171,11 @@ _ACTION_OF = {"up": "increases^expression", "down": "decreases^expression",
 # Forms of the gene's expression that count as transcription. A sentence that
 # does not say which form is read as the transcript, as CTD's own summary does.
 TRANSCRIPT_FORMS = ("mRNA", None)
+# The protein form: "results in increased expression of G protein". Protein
+# level can move while the transcript does not (stability, translation,
+# secretion), so these are kept apart from the transcript reports and are never
+# read as evidence that the promoter is involved.
+PROTEIN_FORMS = ("protein",)
 
 
 def expression_effects(chemical: str, interaction: str, gene: str) -> list:
@@ -307,6 +312,27 @@ def ctd_expression_papers(client: Client, gene: str) -> dict:
         return {}
     rows = res if isinstance(res, list) else res.get("data", []) or []
     return {c: len(p) for c, p in expression_papers(rows).items()}
+
+
+def ctd_protein_effects(client: Client, gene: str) -> dict | None:
+    """What CTD records for this gene's protein level, read from the sentences.
+
+    `{"links": {chemical_lower: [actions]}, "papers": {chemical_lower: n}}`, or
+    `None` when the lookup failed (an empty `links` means CTD was searched and
+    holds nothing). Only a sentence that names the protein form counts; the
+    transcript reports are `ctd_expression_links`. It asks the same question as
+    that function, so the answer is already in the request cache.
+    """
+    try:
+        res = client.get(CTD_BATCH, {
+            "inputType": "gene", "inputTerms": gene.upper(),
+            "report": "cgixns", "format": "json", "actionTypes": "ANY"})
+    except HttpError:
+        return None
+    rows = res if isinstance(res, list) else res.get("data", []) or []
+    return {"links": strict_expression_links(rows, forms=PROTEIN_FORMS),
+            "papers": {c: len(p) for c, p in
+                       expression_papers(rows, forms=PROTEIN_FORMS).items()}}
 
 
 def ctd_expression_links(client: Client, gene: str, *, strict: bool = True
@@ -679,6 +705,8 @@ def discover(client: Client, gene: str, grades, tf_results, direct_hits,
     link_summary = summarise_links(links, goal, {c.name for c in candidates})
     papers = (ctd_expression_papers(client, gene)
               if (links and not demo) else {})
+    protein = (None if (demo or not check_ctd)
+               else ctd_protein_effects(client, gene))
 
     return {
         "gene": gene,
@@ -704,6 +732,13 @@ def discover(client: Client, gene: str, grades, tf_results, direct_hits,
         "ctd_links_found": len(links or {}),
         # Papers behind each chemical's record, for the literature route.
         "ctd_papers": papers,
+        # What CTD records for the protein level, kept apart from the
+        # transcript. None when not looked up or the lookup failed.
+        "reported_protein_links": (
+            summarise_links(protein["links"], goal,
+                            {c.name for c in candidates})
+            if protein else None),
+        "ctd_protein_papers": (protein or {}).get("papers") or {},
         # Whether the literature was searched at all. Without this a
         # failed lookup and a genuinely empty answer both arrive as
         # zero, and every candidate then reads as novel.

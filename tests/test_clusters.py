@@ -163,3 +163,59 @@ def test_a_drug_close_to_two_leaders_joins_only_the_better_ranked_one():
     assert [c["leader"]["name"] for c in got] == ["methyl", "pentyl"]
     assert [m["name"] for m in got[0]["members"]] == ["ethyl"]
     assert got[1]["members"] == []
+
+
+# ------------------------------------------------------- mechanism families
+def _route(category, acts_on):
+    return {"category": category, "acts_on": acts_on}
+
+
+def test_a_family_is_the_same_factor_reached_the_same_way():
+    keys = cl.family_keys([_route("TF: orthosteric ligand", "VDR"),
+                           _route("TF: known regulator", "VDR")])
+    assert keys == {("TF: orthosteric ligand", "VDR"),
+                    ("TF: known regulator", "VDR")}
+
+
+def test_inferred_changes_and_upstream_nodes_make_no_family():
+    routes = [_route("TF: abundance change", "STAT3"),
+              _route("TF: inferred activity change", "STAT3"),
+              _route("upstream signalling", "AKT1")]
+    assert cl.family_keys(routes) == set()
+
+
+def test_routes_that_name_no_factor_or_act_on_the_product_make_no_family():
+    routes = [_route("literature: reported effect", "not stated"),
+              _route("direct: gene product", "CCR5"),
+              _route("TF: known regulator", "not stated"),
+              _route("chromatin-level", "chromatin (genome-wide)"),
+              _route("TF: orthosteric ligand", "")]
+    assert cl.family_keys(routes) == set()
+
+
+def test_drugs_of_one_family_fold_whatever_their_structures():
+    items = [{"name": "methyl", "f": {("c", "VDR")}},
+             {"name": "aspirin", "f": {("c", "VDR")}},
+             {"name": "hexyl", "f": {("c", "RXRA")}}]
+    smiles = _smiles({**BENZOATES, "aspirin": "CC(=O)Oc1ccccc1C(=O)O"})
+    got = cl.group(items, smiles_of=smiles,
+                   same_family=lambda a, b: bool(a["f"] & b["f"]))
+    assert [c["leader"]["name"] for c in got] == ["methyl", "hexyl"]
+    first = got[0]
+    assert [m["name"] for m in first["members"]][0] == "aspirin"
+    assert first["basis"]["aspirin"] == "family"
+    assert first["similarity"]["aspirin"] < cl.SIMILARITY
+
+
+def test_a_different_factor_keeps_two_drugs_apart():
+    items = [{"name": "methyl", "f": {("c", "VDR")}},
+             {"name": "aspirin", "f": {("c", "RXRA")}}]
+    got = cl.group(items, smiles_of=_smiles({"methyl": BENZOATES["methyl"]}),
+                   same_family=lambda a, b: bool(a["f"] & b["f"]))
+    assert len(got) == 2 and not got[0]["members"]
+
+
+def test_a_close_analogue_is_recorded_as_a_structure_fold():
+    got = cl.group(_items("pentyl", "hexyl"), smiles_of=_smiles(BENZOATES),
+                   same_family=lambda a, b: True)
+    assert got[0]["basis"] == {"hexyl": "structure"}

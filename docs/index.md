@@ -6,8 +6,8 @@ inputs and inspect the evidence behind each route.
 
 - [How the pipeline works](how-it-works.md): one run from the question to the
   output files, and every database it reads and why.
-- [Pipeline timeline](pipeline.mmd): the whole run on one screen, as a Mermaid
-  timeline. [The flowchart](pipeline_detail.mmd) shows the same steps as a diagram.
+- [Pipeline overview](pipeline.mmd): the six steps of a run, as a short Mermaid
+  flowchart. [The detailed flowchart](pipeline_detail.mmd) shows the branches.
 - [A full workup](workflow.md): the five steps, end to end, with the
   commands and what would make you stop at each one.
 - [Installation](installation.md): environments, extras, and Windows launchers.

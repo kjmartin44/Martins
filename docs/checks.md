@@ -556,6 +556,41 @@ different directions for some, so counts such as "77 move it the way you want" f
 Saved results keep what they recorded. `discovery.ctd_expression_links(client, gene,
 strict=False)` returns the earlier reading.
 
+## When CTD records the opposite direction
+
+A route predicts that a drug acting on a factor should move the gene the wanted way.
+CTD records which way someone measured it, and LINCS which way a set of cell lines did.
+The three were kept apart, so a drug could rank second while CTD recorded it lowering a
+gene the run was trying to raise. The run now compares them and shows the result.
+
+- **Beside the drug.** A ranked drug that CTD records moving the gene the other way carries
+  "CTD records the opposite direction" in its notes, a marker in the summary, and a row in
+  the **Where the sources disagree** section of `report.md`. When the route's own direction
+  at its factor is also not recorded, the caution says so.
+- **CTD against LINCS.** The same section lists drugs for which both give a direction and the
+  directions differ, with the number they agree on. LINCS covers few CTD drugs, so the count
+  is often small. For BUB1B it was 1.
+- **Nothing is demoted.** No tier or score changes. CTD pools cell types, doses and assays,
+  and a drug can raise a gene in one and lower it in another.
+
+**Should an unknown direction plus a CTD report of the opposite demote the route?** The
+evidence says it should lose its tier, and the change is left for you to decide. A route
+with no recorded direction at its factor is a coin flip on direction. CTD's direction held
+against LINCS for 24 of the 37 drugs it recorded moving a gene the wanted way and that LINCS
+also called (65%, a small count). A CTD record of the opposite way is therefore somewhat
+better than chance at saying the route points the wrong way, and the tier of such a route
+rests only on binding. A route with a recorded direction that CTD contradicts is a
+disagreement between two measurements and stays flagged only.
+
+**Spindle poisons on a mitotic gene.** A mitotic gene's mRNA and protein are highest in
+cells held in mitosis, so a compound that arrests cells there (paclitaxel, benomyl,
+rotenone and a 2-phenyl-4-quinolone antimitotic were the CTD protein reports for BUB1B) can
+raise the gene without acting on its promoter. Routes through such compounds already had
+their score halved. Their route notes, and the CTD tables in `report.md`, now say that a
+report of this kind can be mitotic arrest. The compounds are marked "halts mitosis", which
+says they are suspected to hold cells in mitosis instead of letting them proceed. The list
+is in `systemic.py`, is entered by hand, and is short.
+
 ## Retrospective check
 
 ```bash

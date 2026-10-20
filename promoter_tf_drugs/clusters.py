@@ -25,6 +25,12 @@ act through the same target, since the same structure acting through different
 factors is two routes. The combined list folds on structure alone, because a
 drug found only by docking has no route to compare.
 
+A caller may also pass `same_family`, which folds two drugs whatever their
+structures when it returns True. The summary uses it for one mechanism family:
+drugs that reach the gene through the same factor by the same kind of route
+(see `family_keys`). Six unrelated chemotypes that all push one receptor the
+right way are one idea for choosing what to test first, and take one row.
+
 What it does not do
 -------------------
 **Similar structure is not equivalent behaviour.** Close analogues can differ in
@@ -57,6 +63,31 @@ log = logging.getLogger(__name__)
 SIMILARITY = 0.75
 RADIUS = 2
 N_BITS = 2048
+
+# Routes where the drug is recorded as acting on the factor in one way. Other
+# categories do not qualify: an abundance or activity change is inferred from
+# signatures, so unrelated drugs land there for unrelated reasons, and upstream
+# signalling names a node, not a mechanism. Two drugs there stay two rows.
+FAMILY_CATEGORIES = ("TF: orthosteric ligand", "TF: allosteric modulator",
+                     "TF: endogenous ligand", "TF: stabiliser or glue",
+                     "TF: degradation blocker", "TF: known regulator")
+NO_FACTOR = {"", "not stated", "(unknown / whole cell)", "promoter DNA",
+             "chromatin (genome-wide)"}
+
+
+def family_keys(routes: list) -> set:
+    """The (route category, factor) pairs a drug reaches the gene through.
+
+    Two drugs with a pair in common are in one mechanism family. Routes whose
+    category does not name a factor give no pair, so they never fold this way.
+    """
+    out = set()
+    for r in routes or []:
+        cat = r.get("category") or ""
+        tgt = r.get("acts_on") or ""
+        if cat in FAMILY_CATEGORIES and tgt not in NO_FACTOR:
+            out.add((cat, tgt))
+    return out
 
 _SMILES: dict = {"index": None}
 _FP: dict = {}
@@ -129,18 +160,22 @@ def tanimoto(a, b) -> float:
 
 
 # ------------------------------------------------------------------ grouping
-def group(items: list, *, smiles_of=None, same_route=None,
+def group(items: list, *, smiles_of=None, same_route=None, same_family=None,
           threshold: float = SIMILARITY) -> list:
     """Cluster a best-first list of drugs.
 
     `items` are dicts with at least `name`. `smiles_of(item)` gives a SMILES or
     None (default: the approved drug table, by name). `same_route(leader,
     item)` is an extra condition; return False to keep two drugs apart.
+    `same_family(leader, item)` folds two drugs without a structure test when
+    it returns True (after `same_route` has passed).
 
     Returns clusters in the order of their leaders, each
     `{"leader": item, "members": [item, ...], "similarity": {name: value}}`,
     where members exclude the leader and `similarity` is each member's
-    similarity to it (1.0 for a name match).
+    similarity to it (1.0 for a name match, None for a family fold of drugs
+    with no comparable structures). `basis` says why each member was folded:
+    "name", "structure" or "family".
     """
     if smiles_of is None:
         index = smiles_index()
@@ -157,21 +192,24 @@ def group(items: list, *, smiles_of=None, same_route=None,
             leader = cl["leader"]
             if same_route is not None and not same_route(leader, item):
                 continue
-            sim = None
+            sim, basis = None, None
+            s = (tanimoto(fp, cl["fp"])
+                 if fp is not None and cl["fp"] is not None else None)
             if ester_free_name(leader.get("name") or "") == fam and fam:
-                sim = 1.0
-            elif fp is not None and cl["fp"] is not None:
-                s = tanimoto(fp, cl["fp"])
-                if s >= threshold:
-                    sim = s
-            if sim is not None:
+                sim, basis = 1.0, "name"
+            elif s is not None and s >= threshold:
+                sim, basis = s, "structure"
+            elif same_family is not None and same_family(leader, item):
+                sim, basis = s, "family"
+            if basis is not None:
                 cl["members"].append(item)
-                cl["similarity"][name] = round(sim, 3)
+                cl["similarity"][name] = None if sim is None else round(sim, 3)
+                cl["basis"][name] = basis
                 placed = True
                 break
         if not placed:
             clusters.append({"leader": item, "members": [], "similarity": {},
-                             "fp": fp})
+                             "basis": {}, "fp": fp})
     for cl in clusters:
         del cl["fp"]
     return clusters

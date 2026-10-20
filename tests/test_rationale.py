@@ -277,3 +277,68 @@ def test_the_combined_list_takes_its_goal_from_the_panel_when_given_only_that():
     assert res["goal"] == "down"
     assert "lower G1" in res["table"][0]["how"] or "block" in \
         res["table"][0]["how"]
+
+
+# ------------------------------------------- one row per mechanism family
+def _fam_route(drug, tier, score, acts_on="VDR", category="TF: orthosteric "
+               "ligand"):
+    return {"drug": drug, "tier": tier, "score": score, "source": "t",
+            "category": category, "acts_on": acts_on, "mechanism": "m",
+            "axes": {"evidence": "predicted"}}
+
+
+def _shortlist_rows(text):
+    part = text.split("## Top")[1].split("**Every row is off-label")[0]
+    return [ln for ln in part.splitlines()
+            if ln.startswith("| ") and "**" in ln]
+
+
+def test_unrelated_drugs_through_one_factor_take_one_row(structures):
+    from promoter_tf_drugs import report
+    text = report.summary_report(_results(
+        _fam_route("PENTYL", 3, 60), _fam_route("ASPIRIN", 3, 50),
+        _fam_route("OTHER", 3, 40, acts_on="RXRA")))
+    rows = _shortlist_rows(text)
+    assert len(rows) == 2
+    assert "**PENTYL**" in rows[0] and "(+1 similar)" in rows[0]
+    assert "PENTYL: ASPIRIN" in text
+
+
+def test_the_same_factor_by_a_different_kind_of_route_is_another_row(
+        structures):
+    from promoter_tf_drugs import report
+    text = report.summary_report(_results(
+        _fam_route("PENTYL", 3, 60),
+        _fam_route("ASPIRIN", 3, 50, category="TF: known regulator")))
+    assert len(_shortlist_rows(text)) == 2
+
+
+def test_drugs_with_no_stated_factor_are_never_folded_as_a_family(structures):
+    from promoter_tf_drugs import report
+    lit = "literature: reported effect"
+    text = report.summary_report(_results(
+        _fam_route("PENTYL", 4, 60, acts_on="not stated", category=lit),
+        _fam_route("ASPIRIN", 4, 50, acts_on="not stated", category=lit)))
+    assert len(_shortlist_rows(text)) == 2
+
+
+def test_folding_never_drops_a_drug_from_the_summary(structures):
+    """Every drug that reaches the pool is a row or is named under the table."""
+    from promoter_tf_drugs import report
+    drugs = ["PENTYL", "ASPIRIN", "HEXYL", "OTHER"]
+    text = report.summary_report(_results(
+        _fam_route("PENTYL", 3, 60), _fam_route("ASPIRIN", 3, 50),
+        _fam_route("HEXYL", 3, 45), _fam_route("OTHER", 3, 40,
+                                              acts_on="RXRA")))
+    rows = " ".join(_shortlist_rows(text))
+    folded = text.split("**Folded into the rows above**")[1]
+    for d in drugs:
+        assert f"**{d}**" in rows or d in folded, f"{d} vanished"
+
+
+def test_a_folded_drug_stays_in_the_full_results(structures):
+    from promoter_tf_drugs import report
+    res = _results(_fam_route("PENTYL", 3, 60), _fam_route("ASPIRIN", 3, 50))
+    report.summary_report(res)
+    kept = [r["drug"] for r in res["results"][0]["all_routes"]["routes"]]
+    assert kept == ["PENTYL", "ASPIRIN"], "folding only changes the summary"

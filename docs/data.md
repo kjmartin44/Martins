@@ -713,11 +713,12 @@ key.
 `mitotic_gene` is true for a gene whose job is mitosis or its checkpoint (BUB1B,
 PLK1, CDC20 and about seventy others, from a hand-entered set in
 `cellcycle.py`). For such a gene the report adds a caution, and a route through
-a compound that disturbs mitosis directly (tubulin binders and the PLK1, Aurora,
-Eg5, CDK1 and MPS1 inhibitors in `systemic.MITOTIC_DISRUPTORS`) has its `score`
+a compound suspected to hold cells in mitosis instead of letting them proceed (tubulin
+binders and the PLK1, Aurora, Eg5, CDK1 and MPS1 inhibitors in
+`systemic.MITOTIC_DISRUPTORS`) has its `score`
 multiplied by 0.5 and records that in `mitotic_penalty`. A route that is both
-very broad and a mitotic disruptor is halved once. The tier never changes. The
-candidates table marks the compound as a mitotic disruptor.
+very broad and on that list is halved once. The tier never changes. The
+candidates table and the summary mark the compound "halts mitosis".
 
 `brake_exons` lists, for a goal of raising the gene, the exons that
 nonsense-mediated-decay isoforms use and coding isoforms do not, read from the
@@ -817,9 +818,16 @@ Three changes affect saved results.
   is. It was tier 3 only when the factor had not been among the few receptors
   screened. Its axes evidence reads "measured binding".
 
-`summary.md` folds close analogues in its top list: a family of near identical
-drugs that act through the same target takes one row, marked "(+N similar)",
-and the folded drugs are listed under the table. A drug reached through two
+`summary.md` folds drugs into one row per family in its top list, marked
+"(+N similar)", with the folded drugs listed under the table. Two drugs are one
+family when they reach the gene through the same factor by the same kind of route
+(an orthosteric ligand, allosteric modulator, endogenous ligand, stabiliser,
+degradation blocker or known regulator of that factor), whatever their structures,
+or when their structures are close (Tanimoto 0.75) and they share a target. Drugs
+whose route is an inferred abundance or activity change, an upstream node, the
+literature or chromatin are folded by structure only, since they land there for
+unrelated reasons. In a CYP24A1 run six vitamin D analogues took one row where
+they had taken four. A drug reached through two
 factors is one row naming both. The table has a "How it would work" column
 with one sentence per row and a paragraph above it on the aim. `report.md` and
 `results.json` are unchanged, so the full list is still there.
@@ -943,6 +951,22 @@ route per chemical CTD records as moving the gene the wanted way, with `source` 
 the route is on by default, so a run lists more rows than an earlier one (about 40 more
 chemicals per gene, of which the approved ones are shown), and the retrospective check
 ignores them.
+
+Each result block also carries `crosscheck`, or `null` when CTD was not read: `ctd_opposite`
+and `ctd_wanted` (drug names), `lincs` (`checked`, `reason`, and the counts of drugs LINCS
+calls each way), `n_compared`, `n_agree` and `conflicts` (`drug`, `ctd`, `lincs`, each "up"
+or "down"). A route for a drug in `ctd_opposite` has a note saying so. No tier or score
+depends on it. The routes of compounds in the mitotic list gain a note when CTD reported
+them for a mitotic gene.
+
+`improvements.reported_protein_links` has the same shape as `reported_links` for
+sentences that name the gene's protein form, and `improvements.ctd_protein_papers` is
+the paper count for each chemical. Both are new and are `null` or empty when the lookup
+was not made or failed. A literature route's `mechanism` reads "reported to raise G
+mRNA", "mRNA and protein" or "protein", and a protein-only route carries a note that
+the protein level can move without any change at the promoter. In the 36 saved genes the
+protein reports add few approved drugs beyond the mRNA ones (none for CYP24A1 and CCR5,
+four for LDLR, one for FXN).
 
 `scan_quality.window_widened` is `None` unless the requested window showed no signal.
 Then it holds `from` and `to` (bases before and after the start), `sites_before`,

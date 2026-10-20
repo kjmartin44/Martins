@@ -1061,7 +1061,7 @@ def markdown(res: dict) -> str:
         for r in res["ranking"]:
             note = "; ".join(x for x in (
                 r.get("class"),
-                "mitotic disruptor" if r.get("mitotic_disruptor") else None)
+                "halts mitosis" if r.get("mitotic_disruptor") else None)
                 if x)
             L.append(f"| {r['rank']} | {r['name'].replace('|', '/')} | "
                      f"{r['affinity']} | {r['heavy_atoms']} | "

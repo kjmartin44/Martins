@@ -223,3 +223,80 @@ def test_the_run_and_the_command_line_can_turn_the_route_off():
     kw = cli.run_kwargs_from_args(cli.build_parser().parse_args(
         ["--gene", "X", "--no-ctd-route"]))
     assert kw["ctd_route"] is False
+
+
+# ------------------------------------------------------------ protein level
+def test_the_protein_form_is_read_apart_from_the_transcript():
+    rows = [
+        {"ChemicalName": "A", "GeneSymbol": "G1", "InteractionActions":
+         "increases^expression", "PubMedIDs": "1|2",
+         "Interaction": "A results in increased expression of G1 protein"},
+        {"ChemicalName": "B", "GeneSymbol": "G1", "InteractionActions":
+         "increases^expression", "PubMedIDs": "3",
+         "Interaction": "B results in increased expression of G1 mRNA"}]
+
+    class Client_:
+        def get(self, url, params=None, **kw):
+            return rows
+    got = d.ctd_protein_effects(Client_(), "G1")
+    assert got["links"] == {"a": ["increases^expression"]}
+    assert got["papers"] == {"a": 2}
+    assert "a" not in d.strict_expression_links(rows), (
+        "a protein report is not a transcript report")
+
+
+def test_a_failed_protein_lookup_is_none_and_an_empty_one_is_not():
+    class Boom:
+        def get(self, *a, **k):
+            raise d.HttpError("down")
+
+    class Empty:
+        def get(self, *a, **k):
+            return []
+    assert d.ctd_protein_effects(Boom(), "G1") is None
+    assert d.ctd_protein_effects(Empty(), "G1") == {"links": {}, "papers": {}}
+
+
+def _plit(mrna, protein, opposite_m=(), opposite_p=(), pp=None, mp=None):
+    def side(want, opp):
+        return {"wanted_direction": [_entry(n) for n in want],
+                "opposite_direction": [_entry(n) for n in opp]}
+    return {"gene": "G1", "reported_links": side(mrna, opposite_m),
+            "protein_links": side(protein, opposite_p),
+            "papers": mp or {}, "protein_papers": pp or {}}
+
+
+def test_a_protein_only_report_is_a_route_that_says_so():
+    routes = cat.from_ctd(_plit([], ["Prot"], pp={"prot": 2}), "up")
+    assert [r.drug for r in routes] == ["Prot"]
+    r = routes[0]
+    assert r.mechanism == "reported to raise G1 protein"
+    assert r.tier == 4 and r.axes.strength == 0.5
+    assert any("without any change at the promoter" in n for n in r.notes)
+    assert any("G1 protein the way the goal needs, in 2 papers" in n
+               for n in r.notes)
+
+
+def test_a_drug_reported_at_both_levels_is_one_route():
+    routes = cat.from_ctd(_plit(["Both", "Rna"], ["Both"], mp={"both": 1},
+                                pp={"both": 1}), "up")
+    assert [r.drug for r in routes] == ["Both", "Rna"]
+    both = routes[0]
+    assert both.mechanism == "reported to raise G1 mRNA and protein"
+    assert both.axes.strength == 0.5, "papers at both levels are added"
+    assert not any("without any change" in n for n in both.notes)
+    assert routes[1].mechanism == "reported to raise G1 mRNA"
+
+
+def test_a_report_the_other_way_at_the_other_level_is_noted():
+    routes = cat.from_ctd(_plit(["X"], [], opposite_p=["X"]), "up")
+    assert any("protein the other way" in n for n in routes[0].notes)
+    routes = cat.from_ctd(_plit([], ["Y"], opposite_m=["Y"]), "up")
+    assert any("mRNA the other way" in n for n in routes[0].notes)
+
+
+def test_a_literature_block_from_before_protein_reports_still_builds():
+    lit = {"gene": "G1", "reported_links": {"wanted_direction": [
+        _entry("Old")]}, "papers": {"old": 1}}
+    assert [r.mechanism for r in cat.from_ctd(lit, "up")] == [
+        "reported to raise G1 mRNA"]

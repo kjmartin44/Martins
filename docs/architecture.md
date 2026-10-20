@@ -198,6 +198,7 @@ Generated from each module's own first docstring line.
 | `congeners.py` | Collapse salt forms so the tables show distinct chemistry. |
 | `constraint.py` | How much dosage this gene tolerates, in either direction. |
 | `corpora.py` | Other perturbation corpora, and what agreement between them is worth. |
+| `crosscheck.py` | Where CTD and LINCS speak about the same drug, and where either contradicts a route. |
 | `datasets.py` | Every table the analysis can read: where it comes from, and whether you have it. |
 | `delivery.py` | Does the drug reach the cells that express your gene? |
 | `demo_data.py` | Self-contained fixtures so the pipeline runs with zero network access. |

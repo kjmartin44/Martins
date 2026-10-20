@@ -8,6 +8,7 @@ import math
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import crosscheck
 from . import (annotate, catalogue as cat_mod, cellcycle, congeners as cong_mod,
                delivery as dlv_mod, fda as fda_mod, knockout as knockout_mod,
                liabilities as liab_mod,
@@ -1795,13 +1796,27 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             if _idx:
                 _chromatin_extra = cat_mod.chromatin_agents_from_index(_idx)
 
+        # Where CTD and LINCS disagree, and which ranked drugs CTD records
+        # moving the gene the other way. Changes no tier or score.
+        _crosscheck = None
+        if not demo and improvements:
+            _crosscheck = _optional(
+                "CTD and LINCS cross-check",
+                lambda: crosscheck.build(
+                    prom.gene_symbol, goal, improvements,
+                    use_lincs=bool(use_lincs or lincs_file or lincs_gmt)),
+                None)
+
         block_for_catalogue = {
+            "crosscheck": _crosscheck,
             "chromatin_extra": _chromatin_extra,
             # What CTD records for this gene, for the literature route.
             "literature": ({
                 "gene": prom.gene_symbol,
                 "reported_links": improvements.get("reported_links"),
-                "papers": improvements.get("ctd_papers")}
+                "papers": improvements.get("ctd_papers"),
+                "protein_links": improvements.get("reported_protein_links"),
+                "protein_papers": improvements.get("ctd_protein_papers")}
                 if (ctd_route and improvements) else None),
             "direct_therapies": [t.to_dict() for t in direct_hits],
             "drug_grades": [g.to_dict() for g in grades],
@@ -1903,6 +1918,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             "outcome_estimates": estimates,
             "knockout": knockout_results,
             "improvements": improvements,
+            "crosscheck": _crosscheck,
             "all_routes": all_routes,
             "mechanisms": mechanisms,
             "upstream": upstream_hits,

@@ -67,7 +67,8 @@ def test_a_mitotic_disruptor_loses_half_its_score_for_a_mitotic_gene(
                  and r["category"] == a["category"])
         assert a["score"] == round(b["score"] * cat.MITOTIC_SCORE_FACTOR, 1)
         assert a["mitotic_penalty"] == 0.5 and a["tier"] == b["tier"]
-        assert any("disturbs mitosis directly" in n for n in a["notes"])
+        assert any("suspected to hold cells in mitosis" in n
+                   for n in a["notes"])
     others = [(r["drug"], r["score"]) for r in hit["routes"]
               if r["drug"] != target["drug"]]
     assert others == [(r["drug"], r["score"]) for r in base["routes"]
@@ -118,9 +119,9 @@ def test_the_candidate_table_and_summary_mark_a_mitotic_disruptor(monkeypatch):
     monkeypatch.setattr(systemic, "is_mitotic_disruptor",
                         lambda n: (n or "").lower() in names)
     text = report.summary_report(res)
-    assert "+ mitotic disruptor" in text
-    assert f"**{first['drug']}** ⚠mitotic" in text
-    assert "⚠mitotic: the compound disturbs mitosis directly" in text
+    assert "+ halts mitosis" in text
+    assert f"**{first['drug']}** ⚠halts mitosis" in text
+    assert "⚠halts mitosis: the compound is suspected to hold cells" in text
 
 
 # ------------------------------------------------------- brake exons

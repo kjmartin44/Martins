@@ -210,7 +210,7 @@ def flags(row: dict) -> list:
     if r.get("breadth_penalty"):
         out.append("moves many genes")
     if r.get("mitotic_penalty"):
-        out.append("disturbs mitosis")
+        out.append("halts mitosis")
     if str(r.get("burden") or "") in ("high", "prohibitive"):
         out.append(f"{r['burden']} clinical burden")
     # A drug that arrived by docking alone has no route record, so the

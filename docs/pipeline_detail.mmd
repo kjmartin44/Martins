@@ -1,4 +1,14 @@
-%% The same run as a flowchart. The one-screen timeline is pipeline.mmd. Source of truth: docs/how-it-works.md.
+---
+config:
+  theme: base
+  themeVariables:
+    fontSize: 18px
+    primaryColor: "#f6f8fa"
+    primaryTextColor: "#1f2328"
+    primaryBorderColor: "#57606a"
+    lineColor: "#57606a"
+---
+%% The same run in more detail. The short version is pipeline.mmd. Source of truth: docs/how-it-works.md.
 flowchart TD
     START["Choose a gene<br/>and a direction"] --> PROM["Find its promoter"]
     PROM --> SCAN["Scan for spots where<br/>regulating proteins could bind"]
@@ -15,6 +25,3 @@ flowchart TD
 
     RANK --> REPORT["Write up<br/>show approved drugs<br/>say what ran and what failed<br/>save everything"]
     REPORT --> TEST["Test it<br/>compare with what is already known"]
-
-    classDef gate fill:#f8dedb,stroke:#b3261e;
-    class Q gate;

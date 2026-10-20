@@ -726,6 +726,17 @@ def _brake_exon_section(result: dict) -> list:
     return L
 
 
+def _crosscheck_section(result: dict) -> list:
+    """Where CTD and LINCS disagree, and ranked drugs CTD records the other way."""
+    from . import crosscheck as xc_mod
+    for blk in result.get("results") or []:
+        xc = blk.get("crosscheck")
+        if xc:
+            ranked = (blk.get("all_routes") or {}).get("routes") or []
+            return xc_mod.markdown(xc, ranked)
+    return []
+
+
 def _mitotic_gene_section(result: dict) -> list:
     """A short caution for a gene whose job is mitosis."""
     if not result.get("mitotic_gene"):
@@ -733,6 +744,14 @@ def _mitotic_gene_section(result: dict) -> list:
     from .cellcycle import MITOTIC_GENE_CAUTION
     return ["## A mitotic gene", "",
             MITOTIC_GENE_CAUTION.format(gene=result["query"]["gene"]), ""]
+
+
+_MITOTIC_REPORT_NOTE = (
+    "⚠halts mitosis: the compound is suspected to hold cells in mitosis "
+    "instead of letting them proceed, and {gene} is a mitotic gene. A report "
+    "that it raises {gene} (mRNA or protein) can reflect cells held in "
+    "mitosis, where such genes are at their highest, and not a switch at the "
+    "promoter.")
 
 
 def markdown_report(result: dict, top_n: int = 25) -> str:
@@ -903,6 +922,7 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
 
     L.extend(_standard_of_care_section(result))
     L.extend(_mitotic_gene_section(result))
+    L.extend(_crosscheck_section(result))
     L.extend(_brake_exon_section(result))
 
     # ------------------------------------- the headline answer, up front
@@ -2097,6 +2117,11 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
 
             rl = imp.get("reported_links") or {}
             rc = rl.get("counts") or {}
+
+            def _mit(e, _on=bool(result.get("mitotic_gene"))):
+                return (" ⚠halts mitosis" if _on
+                        and sys_mod.is_mitotic_disruptor(
+                    e.get("chemical", "")) else "")
             if rc.get("total"):
                 L.append("#### Compounds already reported to change this gene")
                 L.append("")
@@ -2164,11 +2189,43 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                             mark = "**yes**"
                         else:
                             mark = "no"
-                        L.append(f"| {e['chemical']} | {kind} | {mark} | "
-                                 f"{e['actions']} |")
+                        L.append(f"| {e['chemical']}{_mit(e)} | {kind} | "
+                                 f"{mark} | {e['actions']} |")
                     if len(want) > top_n:
                         L.append(f"| … {len(want) - top_n} more | | | |")
                     L.append("")
+                    if any(_mit(e) for e in want[:top_n]):
+                        L.append(_MITOTIC_REPORT_NOTE.format(gene=q["gene"]))
+                        L.append("")
+
+                pl = imp.get("reported_protein_links") or {}
+                pwant = [e for e in pl.get("wanted_direction") or []
+                         if e.get("kind") == "chemical"]
+                if pwant:
+                    pc = pl.get("counts") or {}
+                    L.append(f"**Reported to move {q['gene']} protein "
+                             f"{'UP' if goal == 'up' else 'DOWN'}** "
+                             f"({len(pwant)} compounds of {pc.get('total', 0)} "
+                             f"with a protein report). The protein level can "
+                             f"change through stability, translation or "
+                             f"secretion with no change at the promoter, so "
+                             f"these are not evidence that the promoter is "
+                             f"involved. A compound that also appears above "
+                             f"is reported at both levels.")
+                    L.append("")
+                    L.append("| Chemical | Predicted by this run? | "
+                             "CTD actions |")
+                    L.append("|---|---|---|")
+                    for e in pwant[:top_n]:
+                        L.append(f"| {e['chemical']}{_mit(e)} | "
+                                 f"{'**yes**' if e['in_candidates'] else 'no'}"
+                                 f" | {e['actions']} |")
+                    if len(pwant) > top_n:
+                        L.append(f"| … {len(pwant) - top_n} more | | |")
+                    L.append("")
+                    if any(_mit(e) for e in pwant[:top_n]):
+                        L.append(_MITOTIC_REPORT_NOTE.format(gene=q["gene"]))
+                        L.append("")
 
                 only = rl.get("reported_but_not_predicted") or []
                 if only:
@@ -3086,7 +3143,7 @@ def corroboration_table(result: dict, top_n: int = 20) -> list:
     for r in rows:
         sys_cell = r["systems"] or "no systemic class flagged"
         if r.get("mitotic_disruptor"):
-            sys_cell += " + mitotic disruptor"
+            sys_cell += " + halts mitosis"
         what = r["what_it_is"] or r["mechanism"] or "\u2014"
         tag = ("measured" if "MEASURED" in r["expected_basis"]
                else "established" if "established" in r["expected_basis"]
@@ -3299,6 +3356,7 @@ def summary_report(result: dict, top_n: int = SUMMARY_TOP) -> str:
         preds.extend((res.get("all_routes") or {}).get("routes") or [])
     # One entry per drug, led by its best route, with every target it acts
     # through. The same drug reached through two factors is one candidate.
+    from . import clusters as cl_mod
     from . import signatures as _sg
     by_drug: dict = {}
     for r in sorted(preds, key=lambda x: (x.get("tier", 9),
@@ -3307,18 +3365,22 @@ def summary_report(result: dict, top_n: int = SUMMARY_TOP) -> str:
         if dk in by_drug:
             if r.get("acts_on"):
                 by_drug[dk]["targets"].add(r["acts_on"])
+            by_drug[dk]["families"] |= cl_mod.family_keys([r])
             continue
         if len(by_drug) >= top_n * SUMMARY_POOL:
             continue
         by_drug[dk] = dict(r, name=r.get("drug", ""),
                            targets={r["acts_on"]} if r.get("acts_on")
-                           else set())
-    # Close analogues acting through a shared target score alike and would
-    # fill the top with one idea. Each is folded into the best-ranked member.
-    from . import clusters as cl_mod
+                           else set(),
+                           families=cl_mod.family_keys([r]))
+    # Drugs of one mechanism family (the same factor, reached the same way)
+    # are one idea to test first, so each family takes one row, led by its
+    # best-ranked member. Close analogues acting through a shared target fold
+    # in the same way. Every drug stays in the full table in report.md.
     clusters = cl_mod.group(
         list(by_drug.values()),
-        same_route=lambda a, b: bool(a["targets"] & b["targets"]))[:top_n]
+        same_route=lambda a, b: bool(a["targets"] & b["targets"]),
+        same_family=lambda a, b: bool(a["families"] & b["families"]))[:top_n]
     rows = [c["leader"] for c in clusters]
     folded = {c["leader"]["drug"]: c for c in clusters if c["members"]}
 
@@ -3332,9 +3394,10 @@ def summary_report(result: dict, top_n: int = SUMMARY_TOP) -> str:
         L.append("")
         L.append("Ordered by evidence tier, then score. A tier-1 route with "
                  "a mediocre score beats a tier-5 route with a great one. "
-                 "Close analogues that act through the same target are "
-                 "folded into the best-ranked one, so a family of near "
-                 "identical drugs takes one row.")
+                 "Drugs that reach the gene through the same factor by the "
+                 "same kind of route, and close analogues acting through a "
+                 "shared target, are folded into the best-ranked one, so "
+                 "each family takes one row.")
         L.append("")
         L.append(rat_mod.aim(_gene, goal, result.get("requirement"),
                              q.get("condition"), q.get("scenario")))
@@ -3344,6 +3407,10 @@ def summary_report(result: dict, top_n: int = SUMMARY_TOP) -> str:
         L.append("|---|---|---|---|---|---|")
         _any_broad = False
         _any_mitotic = False
+        from . import crosscheck as xc_mod
+        _xc = next((b.get("crosscheck") for b in result["results"]
+                    if b.get("crosscheck")), None)
+        _ctd_opposite: list = []
         for i, r in enumerate(rows, 1):
             d = ind_mod.describe(
                 r.get("drug", ""),
@@ -3356,10 +3423,15 @@ def summary_report(result: dict, top_n: int = SUMMARY_TOP) -> str:
             _any_broad = _any_broad or bool(_broad)
             if (result.get("mitotic_gene")
                     and sys_mod.is_mitotic_disruptor(r.get("drug", ""))):
-                _broad += " ⚠mitotic"
+                _broad += " ⚠halts mitosis"
                 _any_mitotic = True
             _fold = folded.get(r.get("drug"))
             _more = f" (+{len(_fold['members'])} similar)" if _fold else ""
+            for _m in [r] + (_fold["members"] if _fold else []):
+                if xc_mod.cautions_for(_m, _xc):
+                    _ctd_opposite.append(_m.get("drug"))
+            if xc_mod.cautions_for(r, _xc):
+                _broad += " ⚠CTD opposite"
             _targets = ", ".join(sorted(r["targets"])) or EMDASH
             L.append(f"| {i} | **{r.get('drug')}**{_broad}{_more} | "
                      f"{_clip(treats)} | {_targets} | "
@@ -3367,10 +3439,12 @@ def summary_report(result: dict, top_n: int = SUMMARY_TOP) -> str:
                      f"{rat_mod.route_sentence(r, _gene, goal, _roles)} |")
         L.append("")
         if folded:
-            L.append("**Folded into the rows above** (structure within "
-                     "Tanimoto 0.75 of the leader, same target). They are "
-                     "not duplicates: analogues can differ in potency, "
-                     "selectivity, tissue reach and safety.")
+            L.append("**Folded into the rows above** (the same factor "
+                     "reached the same way, or structure within Tanimoto "
+                     "0.75 of the leader with a shared target). They are "
+                     "not duplicates: members of a family can differ in "
+                     "potency, selectivity, tissue reach and safety, and "
+                     "each has its own row in `report.md`.")
             L.append("")
             for i, r in enumerate(rows, 1):
                 c = folded.get(r.get("drug"))
@@ -3378,10 +3452,25 @@ def summary_report(result: dict, top_n: int = SUMMARY_TOP) -> str:
                     L.append(f"- {i}. {r.get('drug')}: "
                              f"{cl_mod.names(c, limit=8)}")
             L.append("")
+        if _ctd_opposite:
+            L.append(f"⚠CTD opposite: CTD records "
+                     f"{', '.join(dict.fromkeys(_ctd_opposite))} moving "
+                     f"{q['gene']} the other way. Nothing is demoted for "
+                     f"it; CTD mixes cell types and doses, so check it before "
+                     f"testing the drug. `report.md` lists them all.")
+            L.append("")
+        if _xc and _xc.get("conflicts"):
+            _cn = [c["drug"] for c in _xc["conflicts"]]
+            L.append(f"**CTD and LINCS disagree on {len(_cn)} drugs** (they "
+                     f"agree on {_xc['n_agree']} of {_xc['n_compared']} "
+                     f"they both call): {', '.join(_cn[:8])}"
+                     f"{' and more' if len(_cn) > 8 else ''}.")
+            L.append("")
         if _any_mitotic:
-            L.append("⚠mitotic: the compound disturbs mitosis directly "
-                     "and this gene is a mitotic one, so it moves the gene "
-                     "by changing the cell's cycle. Its route is scored at "
+            L.append("⚠halts mitosis: the compound is suspected to hold "
+                     "cells in mitosis instead of letting them proceed, and "
+                     "this gene is a mitotic one, so it moves the gene by "
+                     "changing the cell's cycle. Its route is scored at "
                      "half.")
             L.append("")
         if _any_broad:

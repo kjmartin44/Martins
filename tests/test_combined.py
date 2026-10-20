@@ -138,7 +138,7 @@ def test_route_cautions_reach_the_row():
     r = _route("A", breadth_penalty=0.5, mitotic_penalty=0.5, burden="high")
     rows = _fuse([r], [])
     f = cb.flags(rows[0])
-    assert "moves many genes" in f and "disturbs mitosis" in f
+    assert "moves many genes" in f and "halts mitosis" in f
     assert "high clinical burden" in f and "one source only" in f
 
 

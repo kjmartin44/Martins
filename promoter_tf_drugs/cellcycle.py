@@ -68,8 +68,8 @@ MITOTIC_GENE_CAUTION = (
     "{gene} is a mitotic gene. Its transcript varies with the cell-cycle "
     "phase, so a compound that changes the phase mix of a culture can move it "
     "without acting on it: read any RT-qPCR from synchronised or "
-    "phase-resolved cells. Compounds that disturb mitosis directly are marked, "
-    "and their routes score half, because changing the cell's mitosis moves "
+    "phase-resolved cells. Compounds suspected to hold cells in mitosis are "
+    "marked \"halts mitosis\", and their routes score half, because changing the cell's mitosis moves "
     "this gene for reasons unrelated to treating it.")
 
 

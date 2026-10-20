@@ -5,27 +5,38 @@ factor binding sites and candidate drugs that may raise or lower gene expression
 It combines motif scans, annotations, optional experimental evidence, and heuristic
 rankings. Results are hypotheses for further study, not validated treatment advice.
 
+It was made for the Rare Disease, Real Kid: The MVA Hackathon 2026. The hackathon
+asks the research community to help understand Mosaic Variegated Aneuploidy (MVA),
+an ultra-rare genetic condition with no established treatment, through the genome and
+clinical story of one child. Nothing here has been shown to help with MVA.
+
 ## The pipeline
 
 One run, from a gene and a direction to ranked drug hypotheses. The [flowchart](docs/pipeline_detail.mmd) shows the same steps as a diagram, and [how it works](docs/how-it-works.md) covers the data each step reads.
 
 ```mermaid
-timeline
-    title How one run works
-    section Start
-        Choose : A gene : Raise it or lower it
-    section Find the factors
-        1 Find the promoter : The stretch of DNA that switches the gene on
-        2 Scan it : Look for spots where regulating proteins could bind : Search wider if nothing stands out
-        3 Check the spots : Say what each protein does : See whether it is really found there
-    section Find the drugs
-        4 Match drugs : Find approved drugs that push those proteins the right way
-        5 Try other routes : Drugs on the gene itself : On proteins further upstream : On known regulators : Reported in the literature
-    section Report
-        6 Rank : Order every route by how strong its evidence is
-        7 Write up : Show approved drugs : Say what ran and what failed : Save everything
-    section Check
-        8 Test it : Compare the results with what is already known
+---
+config:
+  theme: base
+  themeVariables:
+    fontSize: 20px
+    primaryColor: "#f6f8fa"
+    primaryTextColor: "#1f2328"
+    primaryBorderColor: "#57606a"
+    lineColor: "#57606a"
+  flowchart:
+    wrappingWidth: 460
+    rankSpacing: 28
+    padding: 14
+---
+flowchart TB
+    A["<b>1 Choose</b><br/>a gene, and whether to raise or lower it"]
+    B["<b>2 Scan</b><br/>find the promoter and its binding spots,<br/>searching wider if none stand out"]
+    C["<b>3 Check</b><br/>what each protein does, and whether<br/>it is really bound there"]
+    D["<b>4 Match</b><br/>drugs that push those proteins the right way,<br/>plus other routes to the same effect"]
+    E["<b>5 Report</b><br/>rank by evidence, show approved drugs,<br/>and say what ran and what failed"]
+    F["<b>6 Test</b><br/>compare with what is already known"]
+    A --> B --> C --> D --> E --> F
 ```
 
 ## Quick start

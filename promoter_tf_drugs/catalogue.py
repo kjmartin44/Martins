@@ -744,9 +744,14 @@ def from_upstream(upstream: dict) -> list[Route]:
 def from_ctd(literature: dict | None, goal: str = "up") -> list[Route]:
     """One route per chemical CTD records as moving this gene the wanted way.
 
-    `literature` is `{"gene", "reported_links", "papers"}` from `discovery`.
-    Only entries that are chemicals (not exposures or MeSH headings) and whose
-    direction is the goal's count. The route is tier 4 and sits two steps out,
+    `literature` is `{"gene", "reported_links", "papers", "protein_links",
+    "protein_papers"}` from `discovery`. The reports on the gene's mRNA and on
+    its protein level make one route per chemical, so a drug in both is one
+    row, and the notes say which form each report concerns. A protein report
+    alone does not say the promoter is involved: protein level can change
+    through stability or translation, and the route says so. Only entries that
+    are chemicals (not exposures or MeSH headings) and whose direction is the
+    goal's count. The route is tier 4 and sits two steps out,
     because the path from the drug to the gene is unknown, and its strength is
     fixed by the paper count (0.5 for two or more, 0.35 for one), which is not
     calibrated and which a check against LINCS found does not predict
@@ -754,26 +759,57 @@ def from_ctd(literature: dict | None, goal: str = "up") -> list[Route]:
     answer key there.
     """
     lit = literature or {}
-    reported = (lit.get("reported_links") or {}).get("wanted_direction") or []
+    mrna = lit.get("reported_links") or {}
+    protein = lit.get("protein_links") or {}
     papers = lit.get("papers") or {}
+    ppapers = lit.get("protein_papers") or {}
     gene = lit.get("gene") or "the gene"
     verb = "raise" if goal == "up" else "lower"
+    # One entry per chemical, in the order first seen, mRNA reports first.
+    names: dict = {}
+    for src in (mrna, protein):
+        for e in src.get("wanted_direction") or []:
+            if e.get("kind") == "chemical":
+                names.setdefault(e["chemical"].lower(), e["chemical"])
+    m_want = {e["chemical"].lower() for e in mrna.get("wanted_direction") or []}
+    p_want = {e["chemical"].lower()
+              for e in protein.get("wanted_direction") or []}
+    m_opp = {e["chemical"].lower()
+             for e in mrna.get("opposite_direction") or []}
+    p_opp = {e["chemical"].lower()
+             for e in protein.get("opposite_direction") or []}
     out = []
-    for e in reported:
-        if e.get("kind") != "chemical":
-            continue
-        name = e["chemical"]
-        n = papers.get(name.lower())
-        strength = 0.5 if (n or 0) >= 2 else 0.35
-        notes = [
-            f"CTD records it as moving {gene} mRNA the way the goal needs"
-            + (f", in {n} paper{'s' if n != 1 else ''}" if n else ""),
+    for key, name in names.items():
+        forms = [f for f, w in (("mRNA", key in m_want),
+                                ("protein", key in p_want)) if w]
+        n_m, n_p = papers.get(key) or 0, ppapers.get(key) or 0
+        n = (n_m if "mRNA" in forms else 0) + (n_p if "protein" in forms else 0)
+        strength = 0.5 if n >= 2 else 0.35
+        notes = []
+        for form, count in (("mRNA", n_m), ("protein", n_p)):
+            if form in forms:
+                notes.append(
+                    f"CTD records it as moving {gene} {form} the way the goal "
+                    f"needs" + (f", in {count} paper{'s' if count != 1 else ''}"
+                                if count else ""))
+        if forms == ["protein"]:
+            notes.append(
+                "only the protein level is reported: it can move through "
+                "stability or translation without any change at the promoter")
+        if "mRNA" in forms and key in p_opp:
+            notes.append(f"CTD also records it moving {gene} protein the "
+                         "other way")
+        if "protein" in forms and key in m_opp:
+            notes.append(f"CTD also records it moving {gene} mRNA the other "
+                         "way")
+        notes.append(
             "an observation from the literature, not a prediction: the dose, "
             "cell type and species are not shown here, and no mechanism is "
-            "stated"]
+            "stated")
+        what = " and ".join(forms)
         out.append(Route(
             drug=name, category="literature: reported effect",
-            mechanism=f"reported to {verb} {gene} mRNA",
+            mechanism=f"reported to {verb} {gene} {what}",
             acts_on="not stated", tier=4, directness=2,
             axes=Axes(strength, 0.5, 0.5, "measured"),
             approved=bool(verify_approval(name)), source="ctd", notes=notes))
@@ -1607,6 +1643,7 @@ def build(result_block: dict, *, goal: str = "up",
         from .signatures import breadth_key
     if mitotic_gene:
         from .systemic import is_mitotic_disruptor
+    xc = result_block.get("crosscheck")
     for r in routes:
         r.score = _score(r)
         scaled = False
@@ -1616,9 +1653,21 @@ def build(result_block: dict, *, goal: str = "up",
             scaled = True
             r.notes.append(
                 f"score multiplied by {MITOTIC_SCORE_FACTOR}: this compound "
-                f"disturbs mitosis directly, and the gene is one whose job "
-                f"is mitosis, so it moves the gene by changing the cell's "
-                f"cycle, not by treating the cause")
+                f"is suspected to hold cells in mitosis instead of letting "
+                f"them proceed, and the gene is one whose job is mitosis, so "
+                f"it moves the gene by changing the cell's cycle, not by "
+                f"treating the cause")
+            if r.source == "ctd":
+                r.notes.append(
+                    "a report that this compound raises a mitotic gene's "
+                    "mRNA or protein can reflect cells held in mitosis, where "
+                    "such genes are at their highest, and not a switch at "
+                    "the promoter")
+        if xc:
+            from .crosscheck import cautions_for
+            r.notes.extend(cautions_for({"drug": r.drug,
+                                         "category": r.category,
+                                         "notes": r.notes}, xc))
         rec = breadth.get(breadth_key(r.drug)) if breadth else None
         if rec and rec.get("very_broad"):
             if not scaled:

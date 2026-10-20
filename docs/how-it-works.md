@@ -106,7 +106,7 @@ distance from the gene. Within a tier the score is
 `100 x (0.4 strength + 0.35 specificity + 0.25 efficiency) / (1 + 0.25 x distance)`.
 Tier decides the order first, so a weak tier-1 route beats a strong tier-5 one.
 Compounds that move a large share of the transcriptome in LINCS, and compounds
-that disturb mitosis when the gene is mitotic, have their score halved within
+suspected of holding cells in mitosis when the gene is mitotic, have their score halved within
 the tier. A factor's ligand found by a screen is scored like a graded one, and a
 graded drug with measured binding of 1 uM or better and a recorded action is tier
 2.
@@ -118,7 +118,7 @@ on whether a pillar of the analysis is missing, and the motif scan's own quality
 is part of it.
 
 **11. Write the outputs.** `report.md` is the full account, `summary.md` the one
-page (a top list with close analogues folded into one row and a sentence on how
+page (a top list with one row per mechanism family and a sentence on how
 each would act), `results.json` everything, `tf_summary.tsv` the factor table,
 `sites.bed` the sites for a genome browser.
 
@@ -448,8 +448,15 @@ left out), at tier 4 and a distance of 2 because the path from the drug to the g
 unknown. Its strength is 0.5 for two or more papers and 0.35 for one, which is a fixed
 rule and not a calibration. It says what somebody saw and cannot name a drug nobody
 has tested on this gene. It is left out of the retrospective check, since CTD is the
-answer key there, and `--no-ctd-route` turns it off. See
-[checks](checks.md#using-ctd-directly).
+answer key there, and `--no-ctd-route` turns it off. CTD's reports on the gene's
+protein level ("increased expression of the protein") are read too, as a separate
+stream. A chemical reported at both levels is one row, a chemical reported only for
+the protein is a row that says so, and it is not read as a sign that the promoter is
+involved, since protein level can change through stability or translation. See
+[checks](checks.md#using-ctd-directly). The run then compares CTD with LINCS and with the
+routes: a ranked drug that CTD records moving the gene the other way is marked, and drugs on
+which the two sources give opposite directions are listed. Nothing is demoted for it. See
+[checks](checks.md#when-ctd-records-the-opposite-direction).
 
 CTD does not change another route's score. It does set the label of receptor-screen
 hits: an established ligand that CTD already links to the gene is labelled as

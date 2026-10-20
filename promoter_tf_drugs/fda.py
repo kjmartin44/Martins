@@ -79,6 +79,7 @@ PATHS = (
     ("product_screen.hits", "drug"),
     ("improvements.*", "name"),
     ("improvements.reported_links.*", "chemical"),
+    ("improvements.reported_protein_links.*", "chemical"),
     ("screen_plan.compounds.cherry_pick", "compound"),
     ("tfs.[].drugs", "name"),
     ("upstream.*.[].drugs", "name"),

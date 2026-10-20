@@ -139,7 +139,7 @@ measured. Checking the premise directly for BUB1B also found no pattern: 1 of
 468 mitotic-disruptor signatures has BUB1B in its up list (0.21%), against 19
 of 32,665 others (0.06%), and only 20 compounds in all of LINCS raise it. What
 was kept instead is the principled part: a curated tag for compounds that
-disturb mitosis, scored down for mitotic genes, and a plain caution that a
+halt mitosis, scored down for mitotic genes, and a plain caution that a
 mitotic transcript moves with the phase mix of the culture.
 
 ## Proposed: reading the conformation beyond nuclear receptors
