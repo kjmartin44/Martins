@@ -1,99 +1,16 @@
-%% promoter-tf-drugs: one run from a gene and a direction to a ranked list of drug hypotheses.
-%% Render with any Mermaid viewer (mermaid.live, GitHub, VS Code). Source of truth: docs/how-it-works.md.
-flowchart TD
-    SETUP["Before the first run<br/>scripts/setup_data.bat fetches the git-ignored reference files into data/"]
-    IN["Input<br/>gene symbol, goal (raise or lower), dosage scenario, tissue, scan p-value"]
-
-    SETUP --> IN
-
-    subgraph FACTOR["Factor route: stages 1 to 7"]
-        direction TB
-        S1["1 Resolve gene, pull promoter<br/>Ensembl or GENCODE; one window per start with --all-tss"]
-        S2["2 Scan for motifs<br/>JASPAR, p 1e-5, a threshold per strand,<br/>chance share measured on 30 shuffled windows"]
-        W{"Scan shows<br/>no signal?"}
-        WIDE["Rescan at -5000/+1000<br/>keep it only if it shows signal"]
-        S3["3 Say what each factor does<br/>GO annotation: activator, repressor, both, unknown"]
-        S4["4 Look for measured binding<br/>ReMap ChIP peaks, neighbouring genes"]
-        S5["5 Rank the factors<br/>motif, sites, distance, role, ChIP, drug exists"]
-        S6["6 Find approved drugs per factor<br/>ChEMBL mechanisms, DGIdb, Open Targets,<br/>direction must match the goal"]
-        S7["7 Grade each factor and drug pair<br/>potency, selectivity, regulon size, maturity"]
-        S1 --> S2 --> W
-        W -- yes --> WIDE --> S3
-        W -- no --> S3
-        S3 --> S4 --> S5 --> S6 --> S7
-    end
-
-    IN --> S1
-
-    subgraph PARALLEL["Stage 8: twelve searches that run beside the factor route"]
-        direction TB
-        R1["a Drugs on the gene's own product<br/>curated ASO, siRNA, gene therapy; ChEMBL"]
-        R2["b Upstream network<br/>OmniPath signed paths, 3 hops,<br/>family and group targets included"]
-        R3["c LINCS signatures<br/>compounds measured to move the gene"]
-        R4["d Factor activity<br/>inferred from target expression"]
-        R5["e Receptor ligand screens<br/>established ligands and new hypotheses"]
-        R6["f Docking<br/>gated by recovery of known ligands"]
-        R7["g Genetics<br/>Open Targets, GWAS, eQTL: evidence only"]
-        R8["h CTD<br/>sentences read, marks known links: evidence only"]
-        R9["i DepMap and PRISM<br/>dependency and measured phenocopy"]
-        R10["j Designed modalities<br/>own section, no tier"]
-        R11["k Dosage constraint<br/>gnomAD and ClinGen: evidence only"]
-        R12["l Known regulators<br/>CollecTRI and knockout data, then drugs<br/>--regulator-route, 1 or 2 steps"]
-    end
-
-    IN --> PARALLEL
-
-    KO[("Knockout libraries<br/>does the gene move when the factor is lost")]
-    KO -.-> S7
-    KO -.-> R12
-
-    CAT["9 Catalogue<br/>every route gets a tier 1 to 5, three axes and a distance;<br/>tier orders first, score second"]
-    S7 --> CAT
-    R1 --> CAT
-    R2 --> CAT
-    R3 --> CAT
-    R4 --> CAT
-    R5 --> CAT
-    R6 --> CAT
-    R9 --> CAT
-    R12 --> CAT
-    R7 -.-> CAT
-    R8 -.-> CAT
-    R11 -.-> CAT
-    R10 -.-> OUT
-
-    LEDGER["10 Ledger and verdict<br/>each source: ok, nothing found, or FAILED;<br/>run is interpretable or degraded"]
-    CAT --> LEDGER
-
-    FDA{"FDA Orange Book<br/>filter"}
-    LEDGER --> FDA
-    FDA -->|"approved, shown"| OUT
-    FDA -->|"everything kept"| JSON[("results.json")]
-
-    OUT["11 Outputs<br/>report.md, summary.md, tf_summary.tsv, sites.bed"]
-    OUT --> JSON
-
-    subgraph LAUNCHER["scripts/run_everything.bat: five stages"]
-        direction LR
-        L1["1 Dock the gene's own protein"] --> L2["2 Dock the top factors"] --> L3["3 The analysis<br/>stages 1 to 11"] --> L4["4 Narrowing funnel<br/>beside a control gene"] --> L5["5 Combined list<br/>funnel survivors and docking"]
-        L5 --> L6["Dose check<br/>on by default"]
-        L5 -.-> L7["Exploratory AlphaFold dock<br/>only if you ask"]
-    end
-
-    subgraph CHECKS["Checks on saved results"]
-        direction TB
-        C1["retrospective<br/>routes against CTD and LINCS, with a fame control"]
-        C2["positive_fate and upstream_misses<br/>where the literature's drugs are lost"]
-        C3["regulator_gain and ctd_check<br/>the regulators route and CTD's sentences"]
-        C4["drug_trace<br/>why one drug is missing"]
-        C5["exposure<br/>can a person reach the concentration"]
-    end
-
-    JSON --> CHECKS
-
-    classDef evidence fill:#f6f0d4,stroke:#857410;
-    classDef store fill:#e8eef2,stroke:#4a5b68;
-    classDef gate fill:#f8dedb,stroke:#b3261e;
-    class R7,R8,R11,KO evidence;
-    class JSON store;
-    class W,FDA gate;
+timeline
+    title promoter-tf-drugs: one run, from a gene and a direction to ranked drug hypotheses
+    section Before
+        Setup : setup_data.bat fetches reference files : Input is a gene, raise or lower, a dosage scenario
+    section Factor route
+        1 Promoter : Ensembl or GENCODE : One window per start
+        2 Scan : JASPAR at p 1e-5 : Chance measured on shuffled windows : Rescans wider if no signal
+        3-4 Factors : GO role per factor : ReMap ChIP peaks : Neighbouring genes
+        5-7 Drugs : Rank the factors : Approved drugs by direction : Grade each pair
+    section Beside it
+        8 Twelve routes : Own product : Upstream network : LINCS : Docking : Known regulators : Genetics and CTD as evidence
+    section Merge
+        9 Catalogue : Tier 1 to 5, three axes : Tier orders first
+        10-11 Verdict and files : Ledger marks each source : FDA approved only shown : report, summary, results.json
+    section After
+        Checks : Retrospective against CTD : Where drugs are lost : Dose check
