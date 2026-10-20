@@ -12,9 +12,10 @@ usage: promoter-tf-drugs [-h] --gene GENE [--out OUT] [--top TOP]
                          [--upstream UPSTREAM] [--downstream DOWNSTREAM]
                          [--all-tss] [--pvalue PVALUE] [--min-ic MIN_IC]
                          [--pfm-file PFM_FILE] [--matrix-id MATRIX_IDS]
-                         [--no-mask-repeats] [--no-widen] [--no-grade]
-                         [--predict-direction] [--regulon-file REGULON_FILE]
-                         [--no-direct] [--design-modality] [--design-screen]
+                         [--no-mask-repeats] [--no-ctd-route] [--no-widen]
+                         [--no-grade] [--predict-direction]
+                         [--regulon-file REGULON_FILE] [--no-direct]
+                         [--design-modality] [--design-screen]
                          [--no-stabilizers] [--cell-type-check] [--lincs]
                          [--gtf GTF] [--has-ptc] [--genome GENOME]
                          [--promoter-fasta PROMOTER_FASTA]
@@ -79,6 +80,10 @@ options:
   --no-mask-repeats     scan repeat-masked (lowercase) sequence too; off by
                         default because Alu/simple repeats generate large
                         numbers of spurious hits (default: False)
+  --no-ctd-route        do not list the chemicals CTD records as moving the
+                        gene as routes. They are reported effects with no
+                        mechanism, and the CTD lookup itself still runs
+                        (default: False)
   --no-widen            do not retry a no-signal promoter scan at -5000/+1000.
                         By default a window with no signal above chance is
                         rescanned wider and the wider one is kept if it shows
@@ -393,8 +398,8 @@ usage: promoter-tf-drugs.panel [-h] [--genes GENES] [--gene-file GENE_FILE]
                                [--downstream DOWNSTREAM] [--all-tss]
                                [--pvalue PVALUE] [--min-ic MIN_IC]
                                [--pfm-file PFM_FILE] [--matrix-id MATRIX_IDS]
-                               [--no-mask-repeats] [--no-widen] [--no-grade]
-                               [--predict-direction]
+                               [--no-mask-repeats] [--no-ctd-route]
+                               [--no-widen] [--no-grade] [--predict-direction]
                                [--regulon-file REGULON_FILE] [--no-direct]
                                [--design-modality] [--design-screen]
                                [--no-stabilizers] [--cell-type-check]
@@ -505,6 +510,9 @@ options:
   --no-mask-repeats     scan repeat-masked (lowercase) sequence too; off by
                         default because Alu/simple repeats generate large
                         numbers of spurious hits
+  --no-ctd-route        do not list the chemicals CTD records as moving the
+                        gene as routes. They are reported effects with no
+                        mechanism, and the CTD lookup itself still runs
   --no-widen            do not retry a no-signal promoter scan at -5000/+1000.
                         By default a window with no signal above chance is
                         rescanned wider and the wider one is kept if it shows

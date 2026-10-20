@@ -9,6 +9,6 @@ git ignores it); the other files of each run are here.
 | `demo/` | The offline demo on synthetic data: `python -m promoter_tf_drugs --demo --gene DEMOGENE --out results/demo`. Nothing in it is a real finding. |
 | `CYP24A1_up/` | A real run, raising CYP24A1, with live services and the full reference set. Read its README first. |
 
-Both were made on 20 October 2026 from an uncommitted working tree of version
-0.1.0. A real run uses live services, so rerunning it later can give a different
+The demo was made on 20 October 2026 and the CYP24A1 run on 21 October 2026, from an
+uncommitted working tree of version 0.1.0. A real run uses live services, so rerunning it later can give a different
 list.

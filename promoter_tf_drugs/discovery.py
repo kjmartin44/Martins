@@ -269,6 +269,46 @@ def strict_expression_links(rows: list, forms=TRANSCRIPT_FORMS) -> dict:
     return links
 
 
+def expression_papers(rows: list, forms=TRANSCRIPT_FORMS) -> dict:
+    """`{chemical_lower: {PubMed ids}}` for the rows `strict_expression_links`
+    counts, so a link can say how many papers stand behind it."""
+    out: dict = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        chem = str(row.get("ChemicalName") or "").strip().lower()
+        actions = str(row.get("InteractionActions") or "")
+        if not chem or "expression" not in actions.lower():
+            continue
+        text = row.get("Interaction")
+        if text:
+            gene = row.get("GeneSymbol") or row.get("Input") or ""
+            ok = any(role in ("direct", "modulated") and form in forms
+                     for _, form, role in expression_effects(chem, text, gene))
+        else:
+            ok = True
+        if ok:
+            ids = {p for p in str(row.get("PubMedIDs") or "").split("|") if p}
+            out.setdefault(chem, set()).update(ids)
+    return out
+
+
+def ctd_expression_papers(client: Client, gene: str) -> dict:
+    """`{chemical_lower: number of papers}`, or {} when the lookup fails.
+
+    Asks the same question as `ctd_expression_links`, so the answer is already in
+    the request cache.
+    """
+    try:
+        res = client.get(CTD_BATCH, {
+            "inputType": "gene", "inputTerms": gene.upper(),
+            "report": "cgixns", "format": "json", "actionTypes": "ANY"})
+    except HttpError:
+        return {}
+    rows = res if isinstance(res, list) else res.get("data", []) or []
+    return {c: len(p) for c, p in expression_papers(rows).items()}
+
+
 def ctd_expression_links(client: Client, gene: str, *, strict: bool = True
                          ) -> dict[str, list[str]] | None:
     """{chemical_name_lower: [actions]} for curated expression effects.
@@ -637,6 +677,8 @@ def discover(client: Client, gene: str, grades, tf_results, direct_hits,
     novel_no_win = [c for c in novel_all if not c.wins_on]
 
     link_summary = summarise_links(links, goal, {c.name for c in candidates})
+    papers = (ctd_expression_papers(client, gene)
+              if (links and not demo) else {})
 
     return {
         "gene": gene,
@@ -660,6 +702,8 @@ def discover(client: Client, gene: str, grades, tf_results, direct_hits,
             "novel_no_advantage": len(novel_no_win),
         },
         "ctd_links_found": len(links or {}),
+        # Papers behind each chemical's record, for the literature route.
+        "ctd_papers": papers,
         # Whether the literature was searched at all. Without this a
         # failed lookup and a genuinely empty answer both arrive as
         # zero, and every candidate then reads as novel.

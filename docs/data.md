@@ -936,6 +936,14 @@ requested p-value in the window, and each strand has its own threshold, so a rer
 a gene lists fewer sites than before and its factor ranking can change. See
 [checks](checks.md#the-motif-scans-chance-estimate).
 
+`improvements.ctd_papers` is `{chemical: number of papers}` for the chemicals CTD records
+as changing the gene's mRNA, and the new category `literature: reported effect` lists one
+route per chemical CTD records as moving the gene the wanted way, with `source` `ctd` and
+`acts_on` "not stated". `query.ctd_route` records whether it was on. **Compatibility:**
+the route is on by default, so a run lists more rows than an earlier one (about 40 more
+chemicals per gene, of which the approved ones are shown), and the retrospective check
+ignores them.
+
 `scan_quality.window_widened` is `None` unless the requested window showed no signal.
 Then it holds `from` and `to` (bases before and after the start), `sites_before`,
 `sites_after`, `chance_after`, `verdict_after` and `kept`. When `kept` is true the block's
@@ -970,6 +978,10 @@ n_responses, n_against, disagree, drugs, n_drugs}}`. Routes appear in
 `all_routes` under the category `TF: known regulator`, always at tier 4. The
 evidence ledger's `regulators` row says how many regulators had no route yet and
 how many have a drug. Demo mode never runs it.
+
+A known regulator route is tier 3 when the factor is a direct regulator that CollecTRI and the
+knockout data both name with the same sign and the drug has a recorded mechanism at it, and tier 4
+otherwise, so a run can list the same drug at two tiers over two factors.
 
 **Compatibility:** `query.regulator_route`, `query.regulator_steps` (1 or 2) and
 `query.regulator_measured` are new, and the route is off unless requested, so saved

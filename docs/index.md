@@ -7,10 +7,12 @@ inputs and inspect the evidence behind each route.
 - [How the pipeline works](how-it-works.md): one run from the question to the
   output files, and every database it reads and why.
 - [Pipeline timeline](pipeline.mmd): the whole run on one screen, as a Mermaid
-  timeline. [The compact flowchart](pipeline_detail.mmd) adds the branches and checks.
+  timeline. [The flowchart](pipeline_detail.mmd) shows the same steps as a diagram.
 - [A full workup](workflow.md): the five steps, end to end, with the
   commands and what would make you stop at each one.
 - [Installation](installation.md): environments, extras, and Windows launchers.
+- [Running it from the command line](cli-guide.md): what is required, what has a
+  default, and what each switch costs.
 - [Usage](usage.md): analysis, directions, offline runs, and saved-result tools.
 - [Setting up the data](data-setup.md): a walkthrough from an empty `data/`
   folder to a full run, with every download command and a check for each file.

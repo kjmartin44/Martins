@@ -314,6 +314,7 @@ RUN_SPECS: dict = {
     "upstream_depth": _V("int", minimum=1,
                          why="how many edges upstream to walk."),
     "widen_no_signal": _FLAG,
+    "ctd_route": _FLAG,
     "null_shuffles": _V("int", minimum=0,
                         why="shuffled copies of each window used to estimate "
                             "how many motif sites are chance; 0 uses the "
@@ -438,6 +439,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         upstream_depth: int = 3,
         null_shuffles: int = motifs_mod.NULL_SHUFFLES,
         widen_no_signal: bool = True,
+        ctd_route: bool = True,
         upstream_factors: int = net_mod.UPSTREAM_FACTORS,
         upstream_drugs_per_node: int = net_mod.UPSTREAM_DRUGS_PER_NODE,
         regulator_route: bool = False,
@@ -1795,6 +1797,12 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
 
         block_for_catalogue = {
             "chromatin_extra": _chromatin_extra,
+            # What CTD records for this gene, for the literature route.
+            "literature": ({
+                "gene": prom.gene_symbol,
+                "reported_links": improvements.get("reported_links"),
+                "papers": improvements.get("ctd_papers")}
+                if (ctd_route and improvements) else None),
             "direct_therapies": [t.to_dict() for t in direct_hits],
             "drug_grades": [g.to_dict() for g in grades],
             "mechanisms": mechanisms,

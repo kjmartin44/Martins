@@ -92,8 +92,9 @@ then multiplied down for a withdrawn drug or a boxed warning. The drug score and
 the factor score are combined with `--tf-weight` (0.5, or 0.7 when ChIP data is
 present).
 
-**8. Look for routes that skip the factor.** Twelve further searches run next
-to the factor route, among them the upstream network and the known regulators. Most produce routes that go into the same ranked list;
+**8. Look for routes that skip the factor.** Thirteen further searches run next
+to the factor route, among them the upstream network, the known regulators and the
+CTD literature record. Most produce routes that go into the same ranked list;
 three (genetics, CTD and the dosage constraint) produce evidence that is
 attached to the list instead, and the designed modalities produce a separate
 section. [The next section](#the-other-routes-in-detail) takes each in turn.
@@ -151,7 +152,8 @@ lands.
 |---|---|---|---|---|
 | Drugs on the gene's own protein or transcript | direct: gene product, or gene or transcript | 1 if approved, else 3 | 0.85 if it raises the protein, 0.55 if only activity | 0 |
 | Upstream network | upstream signalling | 4 | confidence of the best path | 1 plus the hops |
-| Known regulators (`--regulator-route`) | TF: known regulator | 4 | 0.5 for a CollecTRI edge, 0.6 with knockout support, 0.35 from knockout data alone | 1 |
+| CTD literature record | literature: reported effect | 4 | 0.5 for two or more papers, 0.35 for one | 2 |
+| Known regulators (`--regulator-route`) | TF: known regulator | 4, or 3 for a direct regulator that CollecTRI and the knockout data both name with the same sign | 0.5 for a CollecTRI edge, 0.6 with knockout support, 0.35 from knockout data alone | 1 |
 | LINCS signature on the gene | empirical signature | 2 if the gene was measured, 3 if imputed, 4 otherwise | size of the signature score | 0 |
 | LINCS effect on a factor's own transcript | TF: abundance change | 3 if the factor's value was measured or well imputed, else 4 | how many signatures agree | 1 |
 | Inferred factor activity | TF: inferred activity change | 3 | median z of the regulon | 1 |
@@ -259,8 +261,13 @@ regulator that ChEMBL's mechanism table gives no drug for, approved drugs with a
 measured activity at it. The records give no direction and name many unrelated
 drugs, so it is off by default. Against CTD it reached 22.7% of the wanted drugs in the 36-gene check, at about 80 more drugs per gene.
 
-In the list these are category TF: known regulator, tier 4, at a distance of 1.
-Checked against CTD on 36 genes, 55% of the drugs it found had the right direction
+In the list these are category TF: known regulator, at a distance of 1. Most are tier 4.
+A direct regulator that CollecTRI and the knockout data both name with the same sign is
+tier 3, provisionally: in the later 36-gene runs those drugs had the right direction 78%
+of the time (32 against 9, so a small group), against 69% for the other predicted routes
+and 59% for a random approved drug. The promotion was found on the genes it was tuned on
+and has not been tested on held-out genes. Checked against CTD on 36 genes, 55% of the
+drugs the route found had the right direction
 (CollecTRI) and 67% (knockout data, 21 drugs), where an approved drug picked at random
 has 48%. Resampling the genes gives intervals for the gain that include zero, so it
 widens the list and has not been shown to sort it. CollecTRI and CTD share
@@ -435,7 +442,16 @@ another gene's expression (8%) and effects through another gene (3%). Only the f
 counts as a direction. A chemical that modulates another's effect is kept as a known
 link with no direction. See [checks](checks.md#what-ctds-expression-record-contains).
 
-CTD does not change a route's score. It does set the label of receptor-screen
+CTD also supplies a route of its own, **literature: reported effect**: one row for
+each chemical CTD records as moving this gene the wanted way (exposures and MeSH headings
+left out), at tier 4 and a distance of 2 because the path from the drug to the gene is
+unknown. Its strength is 0.5 for two or more papers and 0.35 for one, which is a fixed
+rule and not a calibration. It says what somebody saw and cannot name a drug nobody
+has tested on this gene. It is left out of the retrospective check, since CTD is the
+answer key there, and `--no-ctd-route` turns it off. See
+[checks](checks.md#using-ctd-directly).
+
+CTD does not change another route's score. It does set the label of receptor-screen
 hits: an established ligand that CTD already links to the gene is labelled as
 confirming a reported link and is not offered as a new route. Its records cover
 toxicology doses and exposures as readily as clinical findings, so a link here

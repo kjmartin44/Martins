@@ -127,6 +127,11 @@ def route_sentence(route: dict, gene: str, goal: str,
     if cat in ("TF: degradation blocker", "TF: stabiliser or glue"):
         return (f"Changes how long {tf} lasts in the cell"
                 f"{f' ({mech})' if mech else ''}, which should {verb} {gene}.")
+    if cat == "literature: reported effect":
+        return (f"CTD records it as "
+                f"{'raising' if verb == 'raise' else 'lowering'} {gene} mRNA in published "
+                f"experiments. How it does so is not known, and the dose, "
+                f"cell type and species are in the papers, not here.")
     if cat == "TF: known regulator":
         return (f"Acts on {tf}, which is recorded as regulating {gene}, so "
                 f"changing {tf} activity should {verb} {gene}. The record "

@@ -305,6 +305,50 @@ The classification describes each drug's targets. It does not prove why a route
 was missed, and an early version of this script counted failed ChEMBL requests
 as "no target" and put 40% there. It now retries and keeps failures out.
 
+## Which known regulators are tier 3
+
+Direction share of the drugs the known regulators route found, by the evidence behind the
+regulator, in the later 36-gene runs (drugs CTD has an opinion on; a random approved drug
+scores 59%):
+
+| Group | Drugs | Right-direction share |
+|---|---|---|
+| Direct, CollecTRI and knockout data agree | 299 | 78% (32 against 9) |
+| Direct, CollecTRI only | 820 | 71% (56 against 23) |
+| Direct, knockout data only | 49 | 2 against 0 |
+| Two steps removed | 690 | 65% (31 against 17) |
+| Other predicted routes | 2,689 | 69% (122 against 55) |
+
+Only the first group is tier 3, and only provisionally. It is 41 drugs with a CTD opinion,
+the gap to the other routes (78% against 69%) is within what a group that size gives, and it
+was picked on the genes it was measured on. The others stay at tier 4: CollecTRI alone and the
+two-step group are not clearly better than the existing routes, and a drug with only a
+measured activity at the factor was not in the measured group. Held-out genes would settle it.
+
+## Using CTD directly
+
+CTD could be the suggestion list: for the median gene it records about 40 approved drugs
+as moving it the wanted way. It is now a route (**literature: reported effect**), with
+the limits below, which were measured across the 36 genes (1,494 drug-gene pairs from the
+sentence reading, `scripts/ctd_check.py` and the analysis behind this section).
+
+- **Thin support.** 72% of the pairs rest on one paper.
+- **Fame.** 75% of the pairs come from 205 drugs that CTD records for three or more of the
+  36 genes, so the list is mostly well-studied drugs. A popularity list scores about as
+  well as the routes once fame is held equal.
+- **Reproducibility.** Of 710 pairs that LINCS also covers, LINCS agrees on 24 (3%),
+  contradicts 13, is unclear on 46 and shows no movement on 627 (88%). More papers do not
+  change that: 4% agreement with one paper, 3% with two and 4% with three or more. LINCS
+  is a weak judge, since its lists hold only the top changed genes, so this is evidence that
+  CTD's own confidence is not usable as a filter and not evidence that its records are false.
+- **No novelty.** It lists only chemicals somebody tested on the gene.
+- **No mechanism.** Most of what it holds is stress, feedback and toxicity, which the other
+  routes cannot explain. That is also why it finds drugs they miss.
+
+On FXN the route lists 29 chemicals, 12 of them approved: clofibrate and valproic acid with
+two papers each, and single-paper records such as dexamethasone, cisplatin and dimethyl
+sulfoxide. Read it as a list of leads with a paper count, not as predictions.
+
 ## Rare disease genes whose drugs are known
 
 Three genes where an existing drug is known to act through a factor, raised with all

@@ -2,7 +2,7 @@
 
 Objective: **increase** transcription of CYP24A1.
 
-> **Only FDA approved drugs are shown.** 798 entries are left out. 262 compounds are not in the FDA Orange Book: research compounds, drugs approved only outside the United States, and biologics, which the Orange Book does not list. A further 42 are FDA approved only for local use (topical, eye, inhaled and the like) and are hidden unless the target tissue is skin; `--tissue skin` or `--include-local-only` shows them. `results.json` keeps all of them, and `--include-non-fda` shows everything.
+> **Only FDA approved drugs are shown.** 1129 entries are left out. 232 compounds are not in the FDA Orange Book: research compounds, drugs approved only outside the United States, and biologics, which the Orange Book does not list. A further 22 are FDA approved only for local use (topical, eye, inhaled and the like) and are hidden unless the target tissue is skin; `--tissue skin` or `--include-local-only` shows them. `results.json` keeps all of them, and `--include-non-fda` shows everything.
 
 ## What would have to happen
 
@@ -14,27 +14,27 @@ Objective: **increase** transcription of CYP24A1.
 
 **⚠ DEGRADED** — Read the ranking as a reading order, not as evidence. At least one pillar of the analysis is missing. Measured evidence that DID arrive: chip, lincs, ctd, genetics.
 
-- the motif scan is 'no signal' — about 86% of the hit list is expected to be chance (range 46% to 100%)
+- the motif scan is 'weak' — about 73% of the hit list is expected to be chance (range 55% to 92%)
 
 | Source | State | What it returned |
 |---|---|---|
-| chip | ok | local BED: peaks for 145 factor(s) over the window |
+| chip | ok | local BED: peaks for 421 factor(s) over the window |
 | ctd | ok | 180 chemical(s) with curated expression effects on this gene; 85 move it the way you want |
-| depmap | ok | 14 of 14 factor(s) scored in CRISPRGeneEffect.csv |
-| direction_model | ok, nothing found | 0 of 1 grade(s) got a model call; too few labelled agonists and antagonists to train |
+| depmap | ok | 80 of 81 factor(s) scored in CRISPRGeneEffect.csv |
+| direction_model | ok, nothing found | 0 of 3 grade(s) got a model call; too few labelled agonists and antagonists to train |
 | expression | ok | 16 tissue(s) for CYP24A1 |
-| factor_abundance | ok | 24 compound(s) move a factor's own transcript the needed way; 0 factor(s) skipped for an unrecorded role |
+| factor_abundance | ok | 48 compound(s) move a factor's own transcript the needed way; 1 factor(s) skipped for an unrecorded role |
 | genetics | ok | 13 associated phenotype(s) (Open Targets); 206 genome-wide significant GWAS Catalog association(s), mapped or nearest gene, which is weaker than fine-mapped support |
-| knockout | ok | 5 of 14 factor(s) were perturbed in the knockout data; the gene moved for 2 |
+| knockout | ok | 41 of 81 factor(s) were perturbed in the knockout data; the gene moved for 6 |
 | lincs | ok | 3 signature hit(s) for this gene |
 | product_screen | ok | 1 unannotated candidate(s) at the CYP24A1 protein, cross-validated AUC 1.0 |
-| promoter_dna | ok | 3 sequence feature(s) enriched over 200 shuffles; 9 agent(s) prefer them |
-| regulators | ok | 19 recorded regulator(s) of the gene had no drug route yet; 2 have an approved drug that moves them the needed way (13 route(s)) |
+| promoter_dna | ok | 4 sequence feature(s) enriched over 200 shuffles; 12 agent(s) prefer them |
+| regulators | ok | 170 recorded regulator(s) of the gene had no drug route yet; 7 have an approved drug that moves them the needed way (48 route(s)) |
 | regulon | ok | 590 TFs with targets called from ChIP occupancy. A peak near a gene is binding, not regulation |
-| screen | ok | no factor has an approved drug that names its target, so there was no receptor to screen |
-| sensitivity | ok | 2 correlated compound(s) across 6 of 6 factor(s) scanned |
+| screen | ok, nothing found | no factor has an approved drug that names its target, so there was no receptor to screen |
+| sensitivity | ok | 7 correlated compound(s) across 6 of 6 factor(s) scanned |
 | trans_eqtl | ok, nothing found | 0 of 6 factor(s) have trans-eQTL support |
-| upstream | ok | druggable routes for 4 factor(s); 2059 of 2974 reachable upstream node(s) checked across 8 factor(s) |
+| upstream | ok | druggable routes for 7 factor(s); 3668 of 7138 reachable upstream node(s) checked across 8 factor(s) |
 
 ## Drugs targeting CYP24A1 directly
 
@@ -54,16 +54,16 @@ Compounds this analysis predicts would **raise** CYP24A1, with the reasoning for
 
 | # | Medication | What it is | Approved to treat | Acts on | BBB? | Tier | Grade | Score |
 |---|---|---|---|---|---|---|---|---|
-| 1 | **vorinostat** | histone deacetylase inhibitor | cutaneous T-cell lymphoma | NFIB | — | 3 | — | 54.6 |
-| 2 | **vemurafenib** | raises SOX2 transcript in 5 profile(s) | not established here | SOX2 | — | 3 | — | 38.6 |
-| 3 | **Vorinostat** | histone deacetylase inhibitor | cutaneous T-cell lymphoma | chromatin (genome-wide) | — | 3 | — | 23.4 |
-| 4 | **Romidepsin** | histone deacetylase inhibitor | cutaneous and peripheral T-cell lymphoma | chromatin (genome-wide) | — | 3 | — | 23.4 |
-| 5 | **Belinostat** | HDAC inhibitor | not established here | chromatin (genome-wide) | — | 3 | — | 23.4 |
-| 6 | **Panobinostat** | HDAC inhibitor | not established here | chromatin (genome-wide) | — | 3 | — | 23.4 |
-| 7 | **Valproic acid** | weak HDAC inhibitor | not established here | chromatin (genome-wide) | — | 3 | — | 23.4 |
-| 8 | **Azacitidine** | DNA methyltransferase inhibitor | myelodysplastic syndrome, acute myeloid leukaemia | chromatin (genome-wide) | — | 3 | — | 23.4 |
-| 9 | **Decitabine** | DNA methyltransferase inhibitor | myelodysplastic syndrome | chromatin (genome-wide) | — | 3 | — | 23.4 |
-| 10 | **Tazemetostat** | EZH2 inhibitor | not established here | chromatin (genome-wide) | — | 3 | — | 23.4 |
+| 1 | **Cholecalciferol** | vitamin D3, a precursor requiring activation | vitamin D deficiency and supplementation | VDR | — | 3 | — | 45.2 |
+| 2 | **Paricalcitol** | selective VDR activator | secondary hyperparathyroidism in chronic kidney disease | VDR | — | 3 | — | 45.2 |
+| 3 | **Doxercalciferol** | vitamin D prodrug | secondary hyperparathyroidism in dialysis | VDR | — | 3 | — | 45.2 |
+| 4 | **Ergocalciferol** | vitamin D receptor agonist class | secondary hyperparathyroidism in renal disease, osteoporosis, and plaque psoriasis topically | VDR | — | 3 | — | 45.2 |
+| 5 | **Calcifediol** | 25-hydroxyvitamin D | vitamin D deficiency | VDR | — | 3 | — | 45.2 |
+| 6 | **Calcitriol** | active vitamin D, VDR agonist | hypocalcaemia and secondary hyperparathyroidism in renal failure | VDR | — | 3 | — | 45.2 |
+| 7 | **vorinostat** | histone deacetylase inhibitor | cutaneous T-cell lymphoma | FOSL2 | — | 3 | — | 44.8 |
+| 8 | **mitoxantrone** | topoisomerase II inhibitor, DNA intercalator | acute myeloid leukaemia, prostate cancer, multiple sclerosis | FOS | — | 3 | — | 44.8 |
+| 9 | **mitoxantrone** | topoisomerase II inhibitor, DNA intercalator | acute myeloid leukaemia, prostate cancer, multiple sclerosis | JUNB | — | 3 | — | 44.8 |
+| 10 | **mitoxantrone** | topoisomerase II inhibitor, DNA intercalator | acute myeloid leukaemia, prostate cancer, multiple sclerosis | FOSL2 | — | 3 | — | 44.8 |
 
 **Every row is off-label.** The drug was approved for what the fourth column says, and is listed here for something else. That column is the baseline this proposal departs from, and the distance between it and your gene is part of what you are judging - a topical acne gel and an infused cytotoxic can sit on adjacent rows with similar scores.
 
@@ -75,54 +75,67 @@ Every route below is **evidence tier 3** — a human curator annotated this mech
 
 **The direction rule**, which applies to every group below: you want to raise the gene, so you agonise an activator and block a repressor.
 
-#### Through **NFIB**
-
-- Role: **activator**
-- Binding: 1 predicted site(s), the best scoring 0.846 -935 bp from the TSS; **no ChIP peak over this promoter**, although ChIP data was available — the motif is unconfirmed.
-
-1. **vorinostat**
-   - ⚠ measured against NFIB's own transcript, not against your gene. That NFIB controls your gene is the inference this route rests on
-
-#### Through **SOX2**
-
-- Role: **activator**
-- Binding: 2 predicted site(s), the best scoring 0.911 +134 bp from the TSS; **1 ChIP peak(s) confirm it actually binds here** — the strongest link in this chain.
-
-2. **vemurafenib**
-   - ⚠ measured against SOX2's own transcript, not against your gene. That SOX2 controls your gene is the inference this route rests on
-
-#### Through **chromatin (genome-wide)** — 8 candidates
+#### Through **VDR** — 6 candidates
 
 - The factor has no activator/repressor annotation, so the direction of its effect on your gene is assumed, not known.
+- Family: VDR shares its structurally diverse lipophiles pocket with NR1I2, NR1I3, so a ligand here will tend to engage them too — though subtype selectivity has been achieved (calcitriol (VDR, does not meaningfully engage PXR/CAR)).
 
-- ⚠ acts genome-wide: will move thousands of promoters including yours. Useful as a positive control that your reporter CAN be induced; almost never an acceptable therapeutic route on specificity grounds
+- ⚠ 1 knockout experiment(s) agree and 0 disagree
+- ⚠ VDR raises the gene according to CollecTRI and knockout data
 
-3. **Vorinostat** — HDAC inhibitor
-4. **Romidepsin** — HDAC inhibitor
-5. **Belinostat** — HDAC inhibitor
-6. **Panobinostat** — HDAC inhibitor
-7. **Valproic acid** — weak HDAC inhibitor
-8. **Azacitidine** — DNMT inhibitor
-9. **Decitabine** — DNMT inhibitor
-10. **Tazemetostat** — EZH2 inhibitor
+1. **Cholecalciferol**
+2. **Paricalcitol**
+3. **Doxercalciferol**
+4. **Ergocalciferol**
+5. **Calcifediol**
+6. **Calcitriol**
+
+#### Through **FOSL2** — 2 candidates
+
+- Role: **activator**
+- Binding: 4 predicted site(s), the best scoring 1.0 -4812 bp from the TSS; **4 ChIP peak(s) confirm it actually binds here** — the strongest link in this chain.
+
+- ⚠ measured against FOSL2's own transcript, not against your gene. That FOSL2 controls your gene is the inference this route rests on
+
+7. **vorinostat** — raises FOSL2 transcript in 88 profile(s)
+   - ⚠ moves 4 of the 7 factors asked about, so it is not a regulator of any one of them. Compounds that shut down transcription or proteostasis broadly - HSP90 and CDK inhibitors above all - produce this pattern
+8. **mitoxantrone** — raises FOSL2 transcript in 21 profile(s)
+   - ⚠ moves 5 of the 7 factors asked about, so it is not a regulator of any one of them. Compounds that shut down transcription or proteostasis broadly - HSP90 and CDK inhibitors above all - produce this pattern
+
+#### Through **FOS**
+
+- Role: **activator**
+- Binding: 3 predicted site(s), the best scoring 1.0 -4811 bp from the TSS; **1 ChIP peak(s) confirm it actually binds here** — the strongest link in this chain.
+
+9. **mitoxantrone**
+   - ⚠ moves 5 of the 7 factors asked about, so it is not a regulator of any one of them. Compounds that shut down transcription or proteostasis broadly - HSP90 and CDK inhibitors above all - produce this pattern
+
+#### Through **JUNB**
+
+- Role: **activator**
+- Binding: 5 predicted site(s), the best scoring 1.0 -4811 bp from the TSS; **5 ChIP peak(s) confirm it actually binds here** — the strongest link in this chain.
+
+10. **mitoxantrone**
+   - ⚠ moves 5 of the 7 factors asked about, so it is not a regulator of any one of them. Compounds that shut down transcription or proteostasis broadly - HSP90 and CDK inhibitors above all - produce this pattern
 
 *Not medical advice. "Approved" means approved for its own indication — using one of these to move an unrelated gene is off-label repurposing with the full systemic pharmacology attached. The experimental sections at the end of this report are how you would actually test any of it.*
+
+> **⚠ These promoter windows overlap each other.** these two TSS windows share 3966 bp (66%) — largely one analysis counted twice, which inflates this gene's route count Counts and route lists below are therefore not independent across the windows.
 
 ## Promoter of CYP24A1 (ENST00000395954)
 
 - Transcript chosen: **distinct TSS**
 - Assembly: from GTF  |  Strand: -
 - TSS: chr20:54171953
-- Window: chr20:54171754-54172953 (-1000 / +200, 1200 bp)
+- Window: chr20:54170954-54176953 (-5000 / +1000, 6000 bp)
 - Motifs scanned: 879 at p ≤ 1e-05 per position
-- 321 of those motifs were not scanned: in this window their best possible match is more common than p = 1e-05, so any hit would be a chance match at a higher rate than stated. A looser `--pvalue` scans them, with more chance hits.
-- Non-redundant sites: 13 across 14 TFs
+- **The window was widened.** The requested window (-1000/+200) showed no signal above chance (13 sites), so it was rescanned at -5000/+1000, which gave 89 sites against about 65.0 expected by chance. Sites further out say less about this gene than core promoter sites do. `--no-widen` keeps the requested window.
+- 322 of those motifs were not scanned: in this window their best possible match is more common than p = 1e-05, so any hit would be a chance match at a higher rate than stated. A looser `--pvalue` scans them, with more chance hits.
+- Non-redundant sites: 89 across 81 TFs
 
-> **⚠ This scan found no signal.** 13 sites is what chance alone predicts (11 over 851 scannable bases). This scan found nothing. Tighten to --pvalue 1e-6, or narrow the window (--upstream 1000 --downstream 200), or both — and use --chip-bed so ranking rests on measured binding rather than sequence.
->
-> Everything below is ranked from a list of chance matches. Fix the scan before reading any of it.
+> **⚠ Weak scan.** 89 sites against 65 expected by chance over 4600 scannable bases. Most of this list is noise; treat only the highest-scoring sites with ChIP support as real.
 
-*about 86% of these 13 sites (range 46% to 100%) would be expected on shuffled sequence of this window, so roughly 2 are above chance; among the best-scoring sites the share is lower: 77% of the top 5, 62% of the top 10. Estimated from 30 shuffled copies that keep the repeat mask and every dinucleotide count. The formula that assumes each motif matches at exactly its stated p-value would expect 9 and is not used. Nothing here says which sites are real; only ChIP evidence separates them.*
+*about 73% of these 89 sites (range 55% to 92%) would be expected on shuffled sequence of this window, so roughly 24 are above chance; among the best-scoring sites the share is lower: 100% of the top 5, 83% of the top 10, 100% of the top 20. Estimated from 30 shuffled copies that keep the repeat mask and every dinucleotide count. The formula that assumes each motif matches at exactly its stated p-value would expect 51 and is not used. Nothing here says which sites are real; only ChIP evidence separates them.*
 
 #### What else is in this window
 
@@ -142,11 +155,11 @@ The window overlaps 1 other transcription unit(s), including ENSG00000286587 on 
 
 #### Why the drug tables below look the way they do
 
-**14 factor(s) had predicted sites here. 0 of them have an approved drug (0 of those are nuclear receptors).**
+**81 factor(s) had predicted sites here. 0 of them have an approved drug (0 of those are nuclear receptors).**
 
 Roughly 48 of the ~1,600 human transcription factors have a ligand-binding pocket, and the steroid, retinoid, thyroid and vitamin-D families are most of them. So the drug tables are not a ranking that hormone drugs won — they are what is left after every factor without a ligand has been dropped.
 
-**14 of the top 25 factors by score have no drug and appear in no drug table:** SOX2, POU5F1, POU2F1, ZNF530, EBF2, EBF4, MTF1, NFIB, ZNF707, ZNF320, ZNF410, KLF9 ….
+**25 of the top 25 factors by score have no drug and appear in no drug table:** SOX2, POU2F1, FOS, JUNB, JUND, FOSL2, JUN, KLF5, STAT3, NFYB, FOSB, CEBPA ….
 
 That is where the gene-specific signal is. A half-site like AGGTCA occurs every few kilobases by chance, so nuclear receptors surface for almost any promoter; these factors surfaced for *this* one. The routes that can reach them are the upstream-network, stabilisation and protein-level sections, not the ligand tables.
 
@@ -154,26 +167,37 @@ That is where the gene-specific signal is. A half-site like AGGTCA occurs every 
 
 | Rank | TF | Role | NR | Other genes it controls | Cells need it? | Sites | Best rel. score | Offset | ChIP | Approved drugs | Score |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | SOX2 | activator |  | ~1200 | a few lines | 2 | 0.911 | +134 | 1 | 0 | 79.7 |
-| 2 | POU5F1 | repressor |  | ~1200 | a few lines | 1 | 0.911 | +134 | 1 | 0 | 65.9 |
-| 3 | POU2F1 | activator |  | not counted | some lines | 1 | 0.882 | +133 | 0 | 0 | 55.6 |
-| 4 | ZNF530 | repressor |  | 253 | no | 1 | 0.922 | -16 | 0 | 0 | 49.9 |
-| 5 | EBF2 | activator |  | not counted | a few lines | 1 | 0.954 | -868 | 0 | 0 | 48.7 |
-| 6 | EBF4 | activator |  | not counted | no | 1 | 0.898 | -869 | 0 | 0 | 47.0 |
-| 7 | MTF1 | activator |  | not counted | some lines | 1 | 0.848 | -757 | 0 | 0 | 46.0 |
-| 8 | NFIB | activator |  | not counted | a few lines | 1 | 0.846 | -935 | 0 | 0 | 45.2 |
-| 9 | ZNF707 | unknown |  | 348 | no | 1 | 0.836 | -15 | 0 | 0 | 42.8 |
-| 10 | ZNF320 | unknown |  | 2148 | a few lines | 1 | 0.835 | -29 | 0 | 0 | 42.3 |
-| 11 | ZNF410 | unknown |  | 676 | a few lines | 1 | 0.89 | -429 | 0 | 0 | 35.2 |
-| 12 | KLF9 | unknown |  | not counted | a few lines | 1 | 0.937 | -716 | 0 | 0 | 34.0 |
-| 13 | EBF3 | unknown |  | not counted | a few lines | 1 | 0.958 | -868 | 0 | 0 | 33.8 |
-| 14 | ZNF816 | unknown |  | 590 | a few lines | 1 | 0.869 | -503 | 0 | 0 | 33.7 |
+| 1 | SOX2 | activator |  | ~1200 | a few lines | 2 | 0.913 | +134 | 2 | 0 | 79.8 |
+| 2 | POU2F1 | activator |  | not counted | some lines | 1 | 0.883 | +133 | 2 | 0 | 75.6 |
+| 3 | FOS | activator |  | ~5000 | a few lines | 3 | 1.0 | -4811 | 1 | 0 | 75.0 |
+| 4 | JUNB | activator |  | ~5000 | some lines | 5 | 1.0 | -4811 | 5 | 0 | 75.0 |
+| 5 | JUND | activator |  | not counted | a few lines | 3 | 1.0 | -4811 | 6 | 0 | 75.0 |
+| 6 | FOSL2 | activator |  | not counted | some lines | 4 | 1.0 | -4812 | 4 | 0 | 75.0 |
+| 7 | JUN | dual |  | ~5000 | some lines | 3 | 1.0 | -4811 | 8 | 0 | 69.0 |
+| 8 | KLF5 | activator |  | ~5000 | some lines | 1 | 1.0 | -1675 | 1 | 0 | 68.5 |
+| 9 | STAT3 | activator |  | ~1200 | a few lines | 1 | 1.0 | -1725 | 5 | 0 | 68.5 |
+| 10 | NFYB | activator |  | ~5000 | yes, most | 1 | 1.0 | -2093 | 2 | 0 | 68.4 |
+| 11 | FOSB | activator |  | 189 | a few lines | 1 | 1.0 | -4811 | 3 | 0 | 68.3 |
+| 12 | CEBPA | activator |  | not counted | a few lines | 1 | 0.947 | -2405 | 2 | 0 | 66.8 |
+| 13 | E2F4 | activator |  | ~5000 | a few lines | 1 | 0.915 | -1359 | 2 | 0 | 66.3 |
+| 14 | POU5F1 | repressor |  | ~1200 | a few lines | 1 | 0.913 | +134 | 6 | 0 | 65.9 |
+| 15 | HOXB13 | repressor |  | not counted | a few lines | 1 | 0.96 | +193 | 1 | 0 | 65.9 |
+| 16 | NFIB | activator |  | not counted | a few lines | 1 | 0.84 | -935 | 1 | 0 | 65.0 |
+| 17 | ETV2 | activator |  | 1979 | a few lines | 3 | 0.96 | +193 | 0 | 0 | 63.1 |
+| 18 | BACH1 | dual |  | not counted | a few lines | 1 | 1.0 | -4811 | 1 | 0 | 62.3 |
+| 19 | SOX6 | repressor |  | not counted | a few lines | 1 | 0.976 | +456 | 1 | 0 | 61.9 |
+| 20 | FOSL1 | unknown |  | not counted | some lines | 3 | 1.0 | -4811 | 1 | 0 | 60.0 |
+| 21 | GLIS3 | dual |  | not counted | no | 1 | 0.864 | -2293 | 1 | 0 | 58.3 |
+| 22 | CTCF | repressor |  | ~5000 | yes, nearly all | 2 | 0.803 | -1506 | 4 | 0 | 55.6 |
+| 23 | KLF9 | unknown |  | not counted | a few lines | 1 | 0.938 | -716 | 1 | 0 | 54.0 |
+| 24 | ERF | repressor |  | not counted | no | 1 | 0.852 | -2465 | 1 | 0 | 53.4 |
+| 25 | STAT1 | unknown |  | ~1200 | no | 1 | 1.0 | -4754 | 4 | 0 | 53.3 |
 
 **Other genes it controls** is the collateral question. A drug acting through a factor moves everything that factor regulates, so this column says how wide the effect will be. Read it against the score: a strong route through a factor that controls two thousand genes is a worse starting point than a weaker route through one that controls thirty.
 
-A count written `~N` is a bundled estimate for a factor the regulon file does not list (2 here), not a count of curated edges. Treat it as an order of magnitude.
+A count written `~N` is a bundled estimate for a factor the regulon file does not list (11 here), not a count of curated edges. Treat it as an order of magnitude.
 
-`not counted` means the regulon table has no entry and there is no bundled estimate either (7 here). It is not a small number. Most of the roughly 1,600 human transcription factors have no curated regulon at all.
+`not counted` means the regulon table has no entry and there is no bundled estimate either (46 here). It is not a small number. Most of the roughly 1,600 human transcription factors have no curated regulon at all.
 
 Counts come from literature curation, so they measure what has been published as much as what the factor does. SP1 has thousands of recorded targets partly because it regulates many genes and partly because thousands of people assayed it.
 
@@ -183,24 +207,35 @@ The regulon column counts how many genes a factor controls, from literature cura
 
 It also reaches factors the curated tables cannot. A factor nobody has written a regulon for still has a knockout phenotype here.
 
-14 of 14 factor(s) were scored in DepMap. 11 (EBF2, EBF3, KLF9, MTF1, NFIB) show a dependency confined to a minority of lines, which is the informative case: the requirement has a context, and whether your tissue shares it is the question to ask next. 3 (EBF4, ZNF530, ZNF707) were dispensable throughout. That bounds the proliferative cost of removing them and says nothing about a differentiated tissue.
+80 of 81 factor(s) were scored in DepMap. 1 (CTCF) is needed by nearly every cell line tested, so strong inhibition is likely cytotoxic. 62 (BACH1, BACH2, CEBPA, DRGX, E2F4) show a dependency confined to a minority of lines, which is the informative case: the requirement has a context, and whether your tissue shares it is the question to ask next. 14 (ERF, FIGLA, GLIS1, GLIS3, NHLH1) were dispensable throughout. That bounds the proliferative cost of removing them and says nothing about a differentiated tissue.
 
 | Factor | Cells need it? | Mean effect | Lines dependent | Most dependent lineage |
 |---|---|---|---|---|
+| CTCF | essential in nearly every line | -1.68 | 1147/1150 (100%) | Biliary Tract (-1.80) |
+| NFYB | essential in most lines | -0.70 | 961/1150 (84%) | Thyroid (-0.84) |
+| KLF5 | essential in a substantial minority | -0.41 | 307/1150 (27%) | Bowel (-0.99) |
+| FOSL1 | essential in a substantial minority | -0.41 | 368/1150 (32%) | Pancreas (-0.64) |
+| TFAP4 | essential in a minority of lines | -0.35 | 263/1150 (23%) | Myeloid (-0.54) |
 | POU2F1 | essential in a minority of lines | -0.34 | 146/1150 (13%) | Kidney (-0.44) |
+| GLI1 | essential in a minority of lines | -0.30 | 85/1150 (7%) | Soft Tissue (-0.43) |
+| JUN | essential in a minority of lines | -0.29 | 192/1150 (17%) | Pleura (-0.54) |
+| JUNB | essential in a minority of lines | -0.27 | 163/1150 (14%) | Pancreas (-0.43) |
+| TCF7L1 | essential in a handful of lines | -0.26 | 36/1150 (3%) | Biliary Tract (-0.32) |
+| STAT5A | essential in a handful of lines | -0.25 | 50/1150 (4%) | Peripheral Nervous System (-0.31) |
+| MGA | essential in a handful of lines | -0.21 | 44/1150 (4%) | Head and Neck (-0.29) |
 | MTF1 | essential in a minority of lines | -0.21 | 110/1150 (10%) | Myeloid (-0.43) |
+| STAT3 | essential in a handful of lines | -0.19 | 39/1150 (3%) | Cervix (-0.31) |
+| STAT5B | essential in a handful of lines | -0.19 | 27/1150 (2%) | Myeloid (-0.49) |
+| FOSL2 | essential in a minority of lines | -0.17 | 60/1150 (5%) | Ovary/Fallopian Tube (-0.29) |
+| TBX3 | essential in a handful of lines | -0.16 | 50/1150 (4%) | Prostate (-0.53) |
+| JUND | essential in a handful of lines | -0.16 | 28/1150 (2%) | Thyroid (-0.25) |
+| PATZ1 | essential in a handful of lines | -0.15 | 9/1150 (1%) | Peripheral Nervous System (-0.29) |
+| E2F4 | essential in a handful of lines | -0.13 | 14/1150 (1%) | Lymphoid (-0.20) |
+| STAT6 | essential in a handful of lines | -0.12 | 3/1150 (0%) | Eye (-0.20) |
 | POU5F1 | essential in a handful of lines | -0.11 | 17/1150 (2%) | Biliary Tract (-0.17) |
-| KLF9 | essential in a handful of lines | -0.08 | 2/1150 (0%) | CNS/Brain (-0.11) |
-| ZNF320 | essential in a handful of lines | -0.07 | 5/1150 (0%) | Eye (-0.15) |
-| SOX2 | essential in a handful of lines | -0.06 | 53/1150 (5%) | Esophagus/Stomach (-0.18) |
-| ZNF816 | essential in a handful of lines | -0.04 | 3/1150 (0%) | Bone (-0.10) |
-| ZNF707 | dispensable across the panel | -0.03 | 0/1150 (0%) | — |
-| ZNF410 | essential in a handful of lines | -0.02 | 1/1150 (0%) | Myeloid (-0.06) |
-| EBF2 | essential in a handful of lines | -0.02 | 2/1150 (0%) | Pancreas (-0.05) |
-| NFIB | essential in a handful of lines | -0.01 | 16/1150 (1%) | Prostate (-0.10) |
-| ZNF530 | dispensable across the panel | +0.02 | 0/1150 (0%) | — |
-| EBF4 | dispensable across the panel | +0.03 | 0/1150 (0%) | — |
-| EBF3 | essential in a handful of lines | +0.06 | 4/1150 (0%) | Peripheral Nervous System (-0.06) |
+| ZNF281 | essential in a handful of lines | -0.11 | 29/1150 (2%) | Myeloid (-0.26) |
+| FIGLA | dispensable across the panel | -0.10 | 0/1150 (0%) | — |
+| ZNF684 | essential in a handful of lines | -0.10 | 8/1150 (1%) | Head and Neck (-0.19) |
 
 **Mean effect** is on DepMap's own scale: 0 means knockout changed nothing, and -1 is the median of known common-essential genes. A line counts as dependent below -0.5.
 
@@ -211,37 +246,41 @@ It also reaches factors the curated tables cannot. A factor nobody has written a
 - **Nothing here is about your gene.** This bounds the cost of acting on a factor. Whether acting on it moves your gene is the rest of the report.
 - **A dispensable result is not permission.** It bounds the proliferative cost and nothing else.
 
-**The selective ones are the interesting ones.** EBF2, EBF3, KLF9, MTF1, NFIB, POU2F1 matter in a minority of lines rather than all of them, so the requirement has a context. The lineage column is where to look for what that context is, and whether your tissue shares it is the question this panel cannot answer.
+**The selective ones are the interesting ones.** BACH1, BACH2, CEBPA, DRGX, E2F4, EBF2 matter in a minority of lines rather than all of them, so the requirement has a context. The lineage column is where to look for what that context is, and whether your tissue shares it is the question this panel cannot answer.
 
 ### Drugs that behave like losing the factor
 
 Every other route in this report starts from something somebody wrote down - a curated ligand, a motif, a structure, a signed edge. None of them can surface a drug nobody has connected to the factor. This one reads a measured phenotype instead: if a compound hurts the same cell lines that knocking the factor out hurts, it behaves as though it removes the factor.
 
-| Factor | Drug | Partial r | Raw r | Lines | q | Behaves as |
-|---|---|---|---|---|---|---|
-| ZNF530 | **GANCICLOVIR** | 0.2307 | 0.2179 | 460 | 0.003978 | phenocopies |
-
-**Partial r** controls for how easily each cell line dies under the whole panel. Some lines die under almost anything and those same lines suffer most knockouts, which puts a correlation between almost any drug and almost any gene. The control moves a number either way - it removes a shared component that can inflate a correlation or mask one - so where the two columns differ a lot the raw value was mostly about the cell lines. Estimates use at least 25 shared lines.
-
-**This is not a target.** A correlated drug may act on the factor, on anything else the same lines need, or on a pathway the factor sits in, and the first is the least likely of the three for any one hit. Nothing here records any of them binding anything: the finding is a reason to run a binding assay, not a result from one.
-
-**A proliferation readout.** Both panels score growth of transformed cells in a dish, so a factor whose role is in a differentiated or post-mitotic cell looks silent here for reasons that have nothing to do with its importance.
+40740 compound(s) were correlated across 6 factor(s) and none cleared |r| >= 0.2 at q <= 0.1. That is the common outcome. It bounds what this method contributes here rather than saying no such drug exists: the panel is proliferating cancer lines, and a factor that matters elsewhere leaves no trace in it.
 
 ### Every route that acts on this gene
 
-106 routes across 7 mechanism categories, pooled from every method in this run and sorted by **evidence tier first**, score second.
+235 routes across 7 mechanism categories, pooled from every method in this run and sorted by **evidence tier first**, score second.
 
 A tier-1 route with a mediocre score beats a tier-5 route with a great one. These are not the same kind of claim and averaging them would destroy the information you need.
 
 **Why established binders sit at tier 2, just under the direct agents.** A drug already measured to bind one of your factors has half its chain settled: the drug-to-receptor step has assay data behind it, so the pharmacology is de-risked and only the receptor-to-gene step is a hypothesis. A curated tier-3 ligand is annotation on *both* halves. But they stay below tier 1, because a direct agent acts on your gene itself and skips the receptor-to-gene inference entirely — a stronger claim however well-characterised the binder is. The cost of the indirect route is in the row: everything else that factor regulates moves with your gene.
 
-- 10 × curated — mechanism annotated by a human curator
-- 92 × predicted — a model says so
-- 4 × hypothesis — generated, untested
+- 23 × curated — mechanism annotated by a human curator
+- 207 × predicted — a model says so
+- 5 × hypothesis — generated, untested
 
 | Tier | Route | Drug | Acts on | Steps | Mechanism | Str | Spec | Eff | Score |
 |---|---|---|---|---|---|---|---|---|---|
-| 3 | TF: abundance change | vorinostat | NFIB | 1 | raises NFIB transcript in 123 profile(s) | 1.0 | 0.45 | 0.5 | 54.6 |
+| 3 | TF: known regulator | Cholecalciferol | VDR | 1 | activate VDR, a recorded regulator of the gen | 0.6 | 0.5 | 0.6 | 45.2 |
+| 3 | TF: known regulator | Paricalcitol | VDR | 1 | activate VDR, a recorded regulator of the gen | 0.6 | 0.5 | 0.6 | 45.2 |
+| 3 | TF: known regulator | Doxercalciferol | VDR | 1 | activate VDR, a recorded regulator of the gen | 0.6 | 0.5 | 0.6 | 45.2 |
+| 3 | TF: known regulator | Ergocalciferol | VDR | 1 | activate VDR, a recorded regulator of the gen | 0.6 | 0.5 | 0.6 | 45.2 |
+| 3 | TF: known regulator | Calcifediol | VDR | 1 | activate VDR, a recorded regulator of the gen | 0.6 | 0.5 | 0.6 | 45.2 |
+| 3 | TF: known regulator | Calcitriol | VDR | 1 | activate VDR, a recorded regulator of the gen | 0.6 | 0.5 | 0.6 | 45.2 |
+| 3 | TF: abundance change | vorinostat | FOSL2 | 1 | raises FOSL2 transcript in 88 profile(s) | 1.0 | 0.1 | 0.5 | 44.8 |
+| 3 | TF: abundance change | mitoxantrone | FOS | 1 | raises FOS transcript in 29 profile(s) | 1.0 | 0.1 | 0.5 | 44.8 |
+| 3 | TF: abundance change | mitoxantrone | JUNB | 1 | raises JUNB transcript in 28 profile(s) | 1.0 | 0.1 | 0.5 | 44.8 |
+| 3 | TF: abundance change | mitoxantrone | FOSL2 | 1 | raises FOSL2 transcript in 21 profile(s) | 1.0 | 0.1 | 0.5 | 44.8 |
+| 3 | TF: abundance change | mitoxantrone | JUND | 1 | raises JUND transcript in 14 profile(s) | 1.0 | 0.1 | 0.5 | 44.8 |
+| 3 | TF: abundance change | vorinostat | JUND | 1 | raises JUND transcript in 13 profile(s) | 1.0 | 0.1 | 0.5 | 44.8 |
+| 3 | TF: abundance change | mitoxantrone | KLF5 | 1 | raises KLF5 transcript in 9 profile(s) | 0.9 | 0.1 | 0.5 | 41.6 |
 | 3 | TF: abundance change | vemurafenib | SOX2 | 1 | raises SOX2 transcript in 5 profile(s) | 0.5 | 0.45 | 0.5 | 38.6 |
 | 3 | chromatin-level | Vorinostat | chromatin (genome-wide) | 3 | HDAC inhibitor | 0.7 | 0.05 | 0.45 | 23.4 |
 | 3 | chromatin-level | Romidepsin | chromatin (genome-wide) | 3 | HDAC inhibitor | 0.7 | 0.05 | 0.45 | 23.4 |
@@ -251,38 +290,26 @@ A tier-1 route with a mediocre score beats a tier-5 route with a great one. Thes
 | 3 | chromatin-level | Azacitidine | chromatin (genome-wide) | 3 | DNMT inhibitor | 0.7 | 0.05 | 0.45 | 23.4 |
 | 3 | chromatin-level | Decitabine | chromatin (genome-wide) | 3 | DNMT inhibitor | 0.7 | 0.05 | 0.45 | 23.4 |
 | 3 | chromatin-level | Tazemetostat | chromatin (genome-wide) | 3 | EZH2 inhibitor | 0.7 | 0.05 | 0.45 | 23.4 |
-| 4 | TF: known regulator | Cholecalciferol | VDR | 1 | activate VDR, a recorded regulator of the gen | 0.6 | 0.5 | 0.6 | 45.2 |
-| 4 | TF: known regulator | Paricalcitol | VDR | 1 | activate VDR, a recorded regulator of the gen | 0.6 | 0.5 | 0.6 | 45.2 |
-| 4 | TF: known regulator | Doxercalciferol | VDR | 1 | activate VDR, a recorded regulator of the gen | 0.6 | 0.5 | 0.6 | 45.2 |
-| 4 | TF: known regulator | Ergocalciferol | VDR | 1 | activate VDR, a recorded regulator of the gen | 0.6 | 0.5 | 0.6 | 45.2 |
-| 4 | TF: known regulator | Calcifediol | VDR | 1 | activate VDR, a recorded regulator of the gen | 0.6 | 0.5 | 0.6 | 45.2 |
-| 4 | TF: known regulator | Calcitriol | VDR | 1 | activate VDR, a recorded regulator of the gen | 0.6 | 0.5 | 0.6 | 45.2 |
+| 3 | chromatin-level | Givinostat Hydrochloride | chromatin (genome-wide) | 3 | HDAC inhibitor | 0.7 | 0.05 | 0.45 | 23.4 |
+| 4 | upstream signalling | Testosterone Propionate | AR | 2 | activate AR → JUN (1 hop) | 0.75 | 0.513 | 0.6 | 42.0 |
+| 4 | upstream signalling | Testosterone Enanthate | AR | 2 | activate AR → JUN (1 hop) | 0.75 | 0.513 | 0.6 | 42.0 |
+| 4 | upstream signalling | Oxandrolone | AR | 2 | activate AR → JUN (1 hop) | 0.75 | 0.513 | 0.6 | 42.0 |
+| 4 | upstream signalling | Nandrolone Phenpropionate | AR | 2 | activate AR → JUN (1 hop) | 0.75 | 0.513 | 0.6 | 42.0 |
+| 4 | upstream signalling | Oxymetholone | AR | 2 | activate AR → JUN (1 hop) | 0.75 | 0.513 | 0.6 | 42.0 |
 | 4 | TF: known regulator | Bexarotene | RXRA | 1 | activate RXRA, a recorded regulator of the ge | 0.5 | 0.5 | 0.6 | 42.0 |
 | 4 | TF: known regulator | Acitretin | RXRA | 1 | activate RXRA, a recorded regulator of the ge | 0.5 | 0.5 | 0.6 | 42.0 |
-| 4 | TF: known regulator | Etretinate | RXRA | 1 | activate RXRA, a recorded regulator of the ge | 0.5 | 0.5 | 0.6 | 42.0 |
-| 4 | upstream signalling | Acitretin | RARG | 3 | activate RARG → SOX2 (2 hops) | 0.562 | 0.556 | 0.6 | 32.5 |
-| 4 | upstream signalling | Palovarotene | RARG | 3 | activate RARG → SOX2 (2 hops) | 0.562 | 0.556 | 0.6 | 32.5 |
-| 4 | upstream signalling | Tretinoin | RARG | 3 | activate RARG → SOX2 (2 hops) | 0.562 | 0.556 | 0.6 | 32.5 |
-| 4 | upstream signalling | Acitretin | RARB | 3 | activate RARB → SOX2 (2 hops) | 0.562 | 0.543 | 0.6 | 32.3 |
-| 4 | upstream signalling | Tretinoin | RARB | 3 | activate RARB → SOX2 (2 hops) | 0.562 | 0.543 | 0.6 | 32.3 |
-| 4 | upstream signalling | Ramelteon | MTNR1A | 3 | activate MTNR1A → POU5F1 (2 hops) | 0.562 | 0.532 | 0.6 | 32.1 |
-| 4 | upstream signalling | Tasimelteon | MTNR1A | 3 | activate MTNR1A → POU5F1 (2 hops) | 0.562 | 0.532 | 0.6 | 32.1 |
-| 4 | upstream signalling | Misoprostol | PTGER3 | 3 | activate PTGER3 → SOX2 (2 hops) | 0.562 | 0.51 | 0.6 | 31.6 |
-| 4 | upstream signalling | Acitretin | RARA | 3 | activate RARA → SOX2 (2 hops) | 0.562 | 0.455 | 0.6 | 30.5 |
-| 4 | upstream signalling | Tretinoin | RARA | 3 | activate RARA → SOX2 (2 hops) | 0.562 | 0.455 | 0.6 | 30.5 |
-| 4 | upstream signalling | Bexarotene | RXRA | 3 | activate RXRA → POU5F1 (2 hops) | 0.562 | 0.403 | 0.6 | 29.5 |
 
 Best in each category:
 
-- **TF: abundance change** — vorinostat (tier 3, score 54.6)
+- **TF: known regulator** — Cholecalciferol (tier 3, score 45.2)
+- **TF: abundance change** — vorinostat (tier 3, score 44.8)
 - **chromatin-level** — Vorinostat (tier 3, score 23.4)
-- **TF: known regulator** — Cholecalciferol (tier 4, score 45.2)
-- **upstream signalling** — Acitretin (tier 4, score 32.5)
-- **measured phenocopy** — GANCICLOVIR (tier 4, score 28.6)
+- **upstream signalling** — Testosterone Propionate (tier 4, score 42.0)
+- **literature: reported effect** — Acetaminophen (tier 4, score 33.3)
 - **direct: predicted product binder** — PARICALCITOL (tier 5, score 62.3)
-- **promoter DNA binder** — Mitoxantrone (tier 5, score 31.2)
+- **promoter DNA binder** — Plicamycin (tier 5, score 31.2)
 
-*No route found in: direct: gene or transcript, direct: gene product, TF: orthosteric ligand, TF: inferred activity change, TF: predicted pocket binder, TF: allosteric modulator, TF: stabiliser or glue, TF: endogenous ligand, TF: degradation blocker, off-pathway pocket binder, empirical signature, virtual screen hypothesis. An absent category is usually a real gap in the pharmacology, but check you enabled the relevant flag (--lincs, --screen, --upstream-network).*
+*No route found in: direct: gene or transcript, direct: gene product, TF: orthosteric ligand, TF: inferred activity change, TF: predicted pocket binder, TF: allosteric modulator, TF: stabiliser or glue, TF: endogenous ligand, TF: degradation blocker, off-pathway pocket binder, measured phenocopy, empirical signature, virtual screen hypothesis. An absent category is usually a real gap in the pharmacology, but check you enabled the relevant flag (--lincs, --screen, --upstream-network).*
 
 *Steps = how far the drug acts from your gene: 0 on the gene or transcript, 1 on a TF that binds the promoter, 2+ upstream of that TF. Each step costs specificity.*
 
@@ -292,55 +319,55 @@ Several of these sound alike and behave very differently. The distinction that m
 
 | Category | What it changes | Your drugs in it | Assay that sees it |
 |---|---|---|---|
-| TF: abundance change | **abundance** | vorinostat, vemurafenib | RT-qPCR and a western for the FACTOR first, then RT-qPCR for your gene |
-| chromatin-level | **abundance, genome-wide** | Vorinostat, Romidepsin, Belinostat, Panobinostat … +4 | RT-qPCR plus a housekeeping panel; if everything moved, nothing specific happened |
-| TF: known regulator | **abundance** | Cholecalciferol, Paricalcitol, Doxercalciferol, Ergocalciferol … +5 | RT-qPCR for your gene after treatment; check the factor's own activity (a reporter or a known target) moved first |
-| upstream signalling | **abundance** | Acitretin, Palovarotene, Tretinoin, Ramelteon … +52 | RT-qPCR then western/ELISA; confirm the pathway node moved too, or you cannot attribute the effect |
-| measured phenocopy | **abundance** | GANCICLOVIR | a binding assay against the factor, then a reporter, then RT-qPCR for your gene - the correlation names a candidate and establishes none of those steps |
+| TF: known regulator | **abundance** | Cholecalciferol, Paricalcitol, Doxercalciferol, Ergocalciferol … +30 | RT-qPCR for your gene after treatment; check the factor's own activity (a reporter or a known target) moved first |
+| TF: abundance change | **abundance** | vorinostat, mitoxantrone, vemurafenib | RT-qPCR and a western for the FACTOR first, then RT-qPCR for your gene |
+| chromatin-level | **abundance, genome-wide** | Vorinostat, Romidepsin, Belinostat, Panobinostat … +5 | RT-qPCR plus a housekeeping panel; if everything moved, nothing specific happened |
+| upstream signalling | **abundance** | Testosterone Propionate, Testosterone Enanthate, Oxandrolone, Nandrolone Phenpropionate … +59 | RT-qPCR then western/ELISA; confirm the pathway node moved too, or you cannot attribute the effect |
+| literature: reported effect | **abundance (reported)** | Acetaminophen, Calcifediol, Calcitriol, Cholecalciferol … +14 | RT-qPCR in your cells; read the paper for the dose, cell type and species first |
 | direct: predicted product binder | **activity** | PARICALCITOL | a binding assay against the protein first, then a functional assay for direction - RT-qPCR will not see this route at all, and a western blot reads it as no effect |
-| promoter DNA binder | **abundance** | Mitoxantrone, Doxorubicin, Pentamidine | an EMSA or footprint on this promoter first, then a reporter, then RT-qPCR - and a counter-screen on an unrelated promoter carrying the same feature, because selectivity is the whole question here |
+| promoter DNA binder | **abundance** | Plicamycin, Mitoxantrone, Doxorubicin, Pentamidine | an EMSA or footprint on this promoter first, then a reporter, then RT-qPCR - and a counter-screen on an unrelated promoter carrying the same feature, because selectivity is the whole question here |
 
 *Every category present here works through transcription, so all of them move your gene's product **abundance** and an RT-qPCR is the right first readout. The one exception in the taxonomy — a drug on the gene product itself, which changes activity only — did not appear in this run.*
 
-**TF: abundance change** (2 found)
+**TF: known regulator** (36 found)
 
-- *Yours:* vorinostat, vemurafenib
-- A compound measured to change how much of the factor's own transcript exists, rather than what the factor does.
-- *Why:* The only route here that needs the factor to be expressed rather than druggable, so it reaches factors with no ligand, no structure and no curated upstream kinase - which is most of them.
-- *Cost:* More factor is not more factor ACTIVITY. For a ligand-activated receptor the two are nearly unrelated, and transcript is not protein. Broad agents that shut down transcription move every factor and are flagged.
-- *Differs:* Unlike 'empirical signature', which is a compound measured against YOUR GENE, this was measured against the FACTOR - one further inferential step from what you care about.
-
-**chromatin-level** (8 found)
-
-- *Yours:* Vorinostat, Romidepsin, Belinostat, Panobinostat, Valproic acid, Azacitidine, Decitabine, Tazemetostat
-- HDAC, DNMT and EZH2 inhibitors — genome-wide transcriptional effects.
-- *Why:* Reliable positive control that your reporter *can* be induced.
-- *Cost:* Specificity ~0.05. These move thousands of promoters. Almost never an acceptable therapeutic route on that basis alone.
-- *Differs:* Not targeted at your gene in any sense; it is in the table so you can see what a non-specific option scores.
-
-**TF: known regulator** (9 found)
-
-- *Yours:* Cholecalciferol, Paricalcitol, Doxercalciferol, Ergocalciferol, Calcifediol, Calcitriol, Bexarotene, Acitretin … +1 more
+- *Yours:* Cholecalciferol, Paricalcitol, Doxercalciferol, Ergocalciferol, Calcifediol, Calcitriol, Bexarotene, Acitretin … +26 more
 - Drugs that act on a factor CollecTRI or perturbation data records as raising or lowering your gene, whether or not the motif scan ranked that factor.
 - *Why:* Reaches factors the motif scan misses, such as those that bind through a partner or a distant enhancer.
 - *Cost:* The link comes from a database or a knockout in other cells, so it may not hold in yours. The drug's effect on the factor is taken from its recorded action.
 - *Differs:* Starts from the literature on your gene, not from its promoter sequence. CollecTRI and CTD share sources, so agreement between them is not independent.
 
-**upstream signalling** (82 found)
+**TF: abundance change** (8 found)
 
-- *Yours:* Acitretin, Palovarotene, Tretinoin, Ramelteon, Tasimelteon, Misoprostol, Bexarotene, Etretinate … +48 more
+- *Yours:* vorinostat, mitoxantrone, vemurafenib
+- A compound measured to change how much of the factor's own transcript exists, rather than what the factor does.
+- *Why:* The only route here that needs the factor to be expressed rather than druggable, so it reaches factors with no ligand, no structure and no curated upstream kinase - which is most of them.
+- *Cost:* More factor is not more factor ACTIVITY. For a ligand-activated receptor the two are nearly unrelated, and transcript is not protein. Broad agents that shut down transcription move every factor and are flagged.
+- *Differs:* Unlike 'empirical signature', which is a compound measured against YOUR GENE, this was measured against the FACTOR - one further inferential step from what you care about.
+
+**chromatin-level** (9 found)
+
+- *Yours:* Vorinostat, Romidepsin, Belinostat, Panobinostat, Valproic acid, Azacitidine, Decitabine, Tazemetostat … +1 more
+- HDAC, DNMT and EZH2 inhibitors — genome-wide transcriptional effects.
+- *Why:* Reliable positive control that your reporter *can* be induced.
+- *Cost:* Specificity ~0.05. These move thousands of promoters. Almost never an acceptable therapeutic route on that basis alone.
+- *Differs:* Not targeted at your gene in any sense; it is in the table so you can see what a non-specific option scores.
+
+**upstream signalling** (159 found)
+
+- *Yours:* Testosterone Propionate, Testosterone Enanthate, Oxandrolone, Nandrolone Phenpropionate, Oxymetholone, Raloxifene Hydrochloride, Diethylstilbestrol Diphosphate, Estramustine Phosphate Sodium … +55 more
 - Drugs a kinase, phosphatase or receptor upstream of the transcription factor.
 - *Why:* Turns 'this factor has no drugs' into a real list. Most TFs are only reachable this way.
 - *Cost:* Specificity falls with every step: a node three hops up reaches your gene through one branch and thousands of other genes through the rest.
 - *Differs:* The only category where the drug never touches your gene or its TF — read the printed path and judge it yourself.
 
-**measured phenocopy** (1 found)
+**literature: reported effect** (18 found)
 
-- *Yours:* GANCICLOVIR
-- A compound whose effect on cell viability across the DepMap panel tracks what happens when this factor is knocked out, so it behaves as though it removes the factor.
-- *Why:* It needs no annotation of any kind. Every other route here starts from something a curator, a motif or a structure already asserted, so none of them can surface a drug nobody has connected to the factor. This one can, because it reads a measured phenotype.
-- *Cost:* Correlation across cell lines, not target engagement. A hit may act on the factor, on anything else the same lines need, or on a pathway the factor sits in, and the first is the least likely of the three. Both panels score proliferation of transformed cells, so a factor that matters in a differentiated cell leaves no trace.
-- *Differs:* Unlike 'empirical signature', nothing was measured about your gene or about transcription at all - the readout is whether cells live.
+- *Yours:* Acetaminophen, Calcifediol, Calcitriol, Cholecalciferol, Dexamethasone, Ketoconazole, Leflunomide, Rifampin … +10 more
+- A chemical CTD records as raising or lowering this gene's mRNA, with no mechanism stated.
+- *Why:* It is the only route that can name a drug nothing here can explain, which includes most of what CTD holds: stress, feedback and toxicity effects.
+- *Cost:* Most records rest on one paper, often at a toxicology dose in one cell type. Across 36 genes only about 3% of them were reproduced in LINCS, and more papers did not raise that. Famous drugs are over-represented.
+- *Differs:* Every other category predicts an effect from a mechanism. This reports an effect somebody saw, and cannot suggest a drug nobody has tested on this gene.
 
 **direct: predicted product binder** (1 found)
 
@@ -350,9 +377,9 @@ Several of these sound alike and behave very differently. The distinction that m
 - *Cost:* Predicted binding and nothing more. The model is refused below a cross-validated AUC floor, which bounds how badly it can be ranking, but a hit is a hypothesis for a binding assay. Direction is separate again: whether binding inhibits or activates the protein decides whether it serves your goal.
 - *Differs:* Unlike 'direct: gene product', nothing was measured or curated for this compound at this protein - that category is annotation, this is a model. Unlike 'TF: predicted pocket binder', the pocket is on the gene's own product, so no inference about a factor controlling the gene is involved.
 
-**promoter DNA binder** (3 found)
+**promoter DNA binder** (4 found)
 
-- *Yours:* Mitoxantrone, Doxorubicin, Pentamidine
+- *Yours:* Plicamycin, Mitoxantrone, Doxorubicin, Pentamidine
 - A small molecule with a documented preference for a sequence feature this promoter carries - a quadruplex, a GC-box, an AT tract - proposed because the feature is enriched against shuffles of this same sequence.
 - *Why:* It is the only route that acts on the promoter itself rather than on a protein, so it needs no druggable factor and no annotation. Where a promoter depends on one feature, occupying it is a direct intervention.
 - *Cost:* Sequence preference is not selectivity. These agents bind the feature wherever it occurs and most of the genome's copies are not in your gene, so the dose that engages your promoter engages thousands of others. Nearly every approved member is cytotoxic, which is how it works rather than a side effect. And a motif is not a folded structure in a cell.
@@ -370,6 +397,7 @@ Not found here, and what you would be missing:
 - **TF: endogenous ligand** — Changes how much natural ligand exists, by drugging the enzyme that makes or destroys it.
 - **TF: degradation blocker** — Stops the factor being destroyed, so more of it accumulates.
 - **off-pathway pocket binder** — A docking run against a protein that is not one of the factors found at this promoter. Usually an upstream node someone chose to dock by hand.
+- **measured phenocopy** — A compound whose effect on cell viability across the DepMap panel tracks what happens when this factor is knocked out, so it behaves as though it removes the factor.
 - **empirical signature** — A compound observed to move your gene in a cell-based transcriptomic assay, mechanism unknown.
 - **virtual screen hypothesis** — An approved drug predicted to bind one of your TFs, never tested against it.
 
@@ -381,11 +409,14 @@ Every route in this report is off-label by construction: the drug was approved f
 |---|---|---|
 | Acitretin | retinoid | severe psoriasis |
 | Azacitidine | DNA methyltransferase inhibitor | myelodysplastic syndrome, acute myeloid leukaemia |
+| Beclomethasone | glucocorticoid class | inflammation and immune suppression - asthma, autoimmune disease, transplant rejection, some leukaemias |
 | Bexarotene | RXR-selective agonist (rexinoid) | cutaneous T-cell lymphoma |
 | Calcifediol | 25-hydroxyvitamin D | vitamin D deficiency |
 | Calcitriol | active vitamin D, VDR agonist | hypocalcaemia and secondary hyperparathyroidism in renal failure |
 | Cholecalciferol | vitamin D3, a precursor requiring activation | vitamin D deficiency and supplementation |
+| Clofibrate | PPAR agonist class | type 2 diabetes (thiazolidinediones) and hypertriglyceridaemia (fibrates) |
 | Decitabine | DNA methyltransferase inhibitor | myelodysplastic syndrome |
+| Dexamethasone | potent glucocorticoid receptor agonist | inflammation, cerebral oedema, myeloma, and as an antiemetic |
 | Dextrothyroxine Sodium | T4 stereoisomer | formerly hyperlipidaemia - withdrawn for cardiac mortality |
 | Diethylstilbestrol Diphosphate | sex steroid class | contraception, hormone replacement, and hormone-sensitive cancers |
 | Doxercalciferol | vitamin D prodrug | secondary hyperparathyroidism in dialysis |
@@ -395,25 +426,46 @@ Every route in this report is off-label by construction: the drug was approved f
 | Estradiol Acetate | sex steroid class | contraception, hormone replacement, and hormone-sensitive cancers |
 | Estradiol Cypionate | sex steroid class | contraception, hormone replacement, and hormone-sensitive cancers |
 | Etretinate | retinoid | severe psoriasis - WITHDRAWN, teratogenic |
+| Fenofibrate | PPARalpha agonist | hypertriglyceridaemia |
+| Gemfibrozil | PPARalpha agonist | hypertriglyceridaemia |
+| Hydrocortisone | glucocorticoid and mineralocorticoid | adrenal insufficiency; topical dermatitis |
+| Hydrocortisone Acetate | glucocorticoid class | inflammation and immune suppression - asthma, autoimmune disease, transplant rejection, some leukaemias |
+| Isotretinoin | retinoid | severe nodular acne |
+| Leflunomide | broad immunosuppressant class | transplant rejection and autoimmune disease |
 | Lenalidomide Hydrochloride Monohydrate | cereblon modulator | multiple myeloma, MDS |
 | Levothyroxine Sodium | synthetic T4 | hypothyroidism |
 | Liothyronine Sodium | synthetic T3 | hypothyroidism, myxoedema coma |
-| Mitoxantrone | topoisomerase II inhibitor, DNA intercalator | acute myeloid leukaemia, prostate cancer, multiple sclerosis |
+| Mometasone Furoate | glucocorticoid class | inflammation and immune suppression - asthma, autoimmune disease, transplant rejection, some leukaemias |
 | Nandrolone Phenpropionate | sex steroid class | contraception, hormone replacement, and hormone-sensitive cancers |
 | Oxandrolone | sex steroid class | contraception, hormone replacement, and hormone-sensitive cancers |
 | Palovarotene | retinoid class | acne, psoriasis and other keratinisation disorders topically; acute promyelocytic leukaemia and cutaneous lymphoma systemically |
 | Paricalcitol | selective VDR activator | secondary hyperparathyroidism in chronic kidney disease |
+| Plicamycin | RNA synthesis inhibitor, binds GC-rich DNA | formerly hypercalcaemia of malignancy - withdrawn |
+| Prednisolone Acetate | glucocorticoid class | inflammation and immune suppression - asthma, autoimmune disease, transplant rejection, some leukaemias |
 | Raloxifene Hydrochloride | selective oestrogen receptor modulator | osteoporosis; breast cancer risk reduction |
 | Romidepsin | histone deacetylase inhibitor | cutaneous and peripheral T-cell lymphoma |
-| Seladelpar | PPAR agonist class | type 2 diabetes (thiazolidinediones) and hypertriglyceridaemia (fibrates) |
+| Testosterone | androgen receptor agonist | male hypogonadism |
 | Testosterone Enanthate | sex steroid class | contraception, hormone replacement, and hormone-sensitive cancers |
 | Testosterone Propionate | sex steroid class | contraception, hormone replacement, and hormone-sensitive cancers |
 | Tretinoin | RAR agonist, all-trans retinoic acid | acute promyelocytic leukaemia; acne topically |
+| mitoxantrone | topoisomerase II inhibitor, DNA intercalator | acute myeloid leukaemia, prostate cancer, multiple sclerosis |
 | vorinostat | histone deacetylase inhibitor | cutaneous T-cell lymphoma |
 
-**No description established for 34**: Acetaminophen, Avatrombopag, Belinostat, Chenodiol, Chlorotrianisene, Cinacalcet Hydrochloride, Dronabinol, Eltrombopag Olamine, Estramustine Phosphate Sodium, Etrasimod, Fingolimod Hydrochloride, Fingolimod Lauryl Sulfate, GANCICLOVIR, Lusutrombopag, Midodrine Hydrochloride, Misoprostol, Nabilone, Obeticholic Acid, Oxymetholone, Ozanimod Hydrochloride, Panobinostat, Pentamidine, Phenylephrine Hydrochloride, Phenylpropanolamine Hydrochloride, Ponesimod…. That means this package could not find one offline, not that the compound has no approved use. Several are environmental agents and research chemicals from the CTD tables, which have no indication because they are not drugs.
+**No description established for 56**: Acetaminophen, Adenosine, Almotriptan Malate, Avatrombopag, Bazedoxifene Acetate, Belinostat, Bethanechol Chloride, Carboprost Tromethamine, Cevimeline Hydrochloride, Chenodiol, Chlorotrianisene, Choline Fenofibrate, Cinacalcet Hydrochloride, Copper Sulfate, Dinoprost Tromethamine, Docetaxel Anhydrous, Eletriptan Hydrobromide, Eltrombopag Olamine, Estramustine Phosphate Sodium, Etrasimod, Fenofibric Acid, Fingolimod Hydrochloride, Fingolimod Lauryl Sulfate, Givinostat Hydrochloride, Iloprost…. That means this package could not find one offline, not that the compound has no approved use. Several are environmental agents and research chemicals from the CTD tables, which have no indication because they are not drugs.
 
-Descriptions come from: 11 class, 20 curated, 34 unknown. None of these is a label. The curated text is a summary written for orientation, ChEMBL's indication list includes uses studied but never approved, and a class line gives the kind of drug rather than its indication. Check the prescribing information before acting on any row.
+Descriptions come from: 16 class, 27 curated, 56 unknown. None of these is a label. The curated text is a summary written for orientation, ChEMBL's indication list includes uses studied but never approved, and a class line gives the kind of drug rather than its indication. Check the prescribing information before acting on any row.
+
+### Cell-cycle compatibility
+
+Tissue proliferation state: **unknown**
+
+1 factor(s) here are cell-cycle restricted (E2F4). Set --proliferation to have this scored rather than just flagged.
+
+| TF | Phase | Duty cycle | Effect multiplier |
+|---|---|---|---|
+| E2F4 | G1 | 46% | 1.0 |
+
+*A partial duty cycle dilutes the population-level effect in asynchronous cells: per-cell efficacy can be much higher than a bulk RT-qPCR suggests. Synchronise or use a phase-resolved readout before calling it a failure.*
 
 ### Upstream routes to factors with no direct drug
 
@@ -440,25 +492,6 @@ Distance buys druggability and spends selectivity: a node three hops up reaches 
 - ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 2 downstream branches
 - ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 4 downstream branches
 
-**POU5F1** (no direct pharmacology)
-
-| Upstream target | Hops | Fan-out | Path | Act on it | Drugs | Score |
-|---|---|---|---|---|---|---|
-| MTNR1A | 2 | 7 | MTNR1A --> MAPK1 —\| POU5F1 | inhibit | Ramelteon, Tasimelteon | 30.3 |
-| NOD2 | 2 | 9 | NOD2 --> MAPK1 —\| POU5F1 | inhibit | — | 29.2 |
-| RXRA | 2 | 22 | RXRA —\| CTNNB1 --> POU5F1 | inhibit | Bexarotene, Acitretin, Etretinate | 22.8 |
-| TRPV1 | 3 | 1 | TRPV1 --> PRKCB --> MAPK3 —\| POU5F1 | inhibit | Acetaminophen | 18.7 |
-| NR1H4 | 3 | 1 | NR1H4 --> RXRA —\| CTNNB1 --> POU5F1 | inhibit | Ursodiol, Chenodiol, Obeticholic Acid | 18.7 |
-| PPARD | 3 | 4 | PPARD --> RXRA —\| CTNNB1 --> POU5F1 | inhibit | Seladelpar, Elafibranor, Seladelpar Lysine | 17.4 |
-| THRB | 3 | 6 | THRB --> RXRA —\| CTNNB1 --> POU5F1 | inhibit | Liothyronine Sodium, Liothyronine, Levothyroxine Sodium | 16.7 |
-| RBX1 | 3 | 7 | RBX1 --> CUL1 —\| CTNNB1 --> POU5F1 | inhibit | Lenalidomide Hydrochloride Monohydrate | 16.3 |
-| THRA | 3 | 8 | THRA --> RXRA —\| CTNNB1 --> POU5F1 | inhibit | Liothyronine Sodium, Liothyronine, Levothyroxine Sodium | 16.0 |
-| VDR | 3 | 9 | VDR --> RXRA —\| CTNNB1 --> POU5F1 | inhibit | Cholecalciferol, Paricalcitol, Doxercalciferol | 15.7 |
-
-- ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 1 downstream branches
-- ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 4 downstream branches
-- ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 6 downstream branches
-
 **POU2F1** (no direct pharmacology)
 
 | Upstream target | Hops | Fan-out | Path | Act on it | Drugs | Score |
@@ -474,23 +507,81 @@ Distance buys druggability and spends selectivity: a node three hops up reaches 
 - ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 12 downstream branches
 - ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 15 downstream branches
 
-**MTF1** (no direct pharmacology)
+**FOS** (no direct pharmacology)
 
 | Upstream target | Hops | Fan-out | Path | Act on it | Drugs | Score |
 |---|---|---|---|---|---|---|
-| P2RY4 | 3 | 6 | P2RY4 --> GNA13 —\| LATS1 —\| MTF1 | activate | — | 16.7 |
-| S1PR2 | 3 | 8 | S1PR2 --> GNA13 —\| LATS1 —\| MTF1 | activate | Fingolimod Lauryl Sulfate, Fingolimod Hydrochloride | 16.1 |
-| P2RY2 | 3 | 9 | P2RY2 --> GNA13 —\| LATS1 —\| MTF1 | activate | — | 15.7 |
-| ADRA1A | 3 | 10 | ADRA1A --> GNA13 —\| LATS1 —\| MTF1 | activate | Phenylephrine Hydrochloride, Midodrine Hydrochloride, Phenylpropanolamine Hydrochloride | 15.4 |
-| P2RY6 | 3 | 10 | P2RY6 --> GNA13 —\| LATS1 —\| MTF1 | activate | — | 15.4 |
-| CNR1 | 3 | 10 | CNR1 --> GNA13 —\| LATS1 —\| MTF1 | activate | Nabilone, Dronabinol | 15.4 |
-| P2RY1 | 3 | 11 | P2RY1 --> GNA13 —\| LATS1 —\| MTF1 | activate | — | 15.1 |
-| HTR6 | 3 | 11 | HTR6 --> GNA13 —\| LATS1 —\| MTF1 | activate | — | 15.1 |
-| S1PR3 | 3 | 12 | S1PR3 --> GNA13 —\| LATS1 —\| MTF1 | activate | Fingolimod Lauryl Sulfate, Fingolimod Hydrochloride | 14.8 |
+| MTNR1A | 2 | 7 | MTNR1A --> MAPK1 --> FOS | activate | Ramelteon, Tasimelteon | 30.2 |
+| NOD2 | 2 | 9 | NOD2 --> MAPK14 --> FOS | activate | — | 29.2 |
+| PTGER3 | 2 | 9 | PTGER3 --> SRC --> FOS | activate | Misoprostol | 28.9 |
+| S1PR1 | 2 | 12 | S1PR1 --> SRC --> FOS | activate | Ponesimod, Siponimod, Etrasimod | 27.3 |
+| TRPV1 | 3 | 1 | TRPV1 --> PRKCB --> MAPK1 --> FOS | activate | Acetaminophen | 18.7 |
+| ESR1 | 2 | 37 | ESR1 --> SRC --> FOS | activate | Estradiol Acetate, Diethylstilbestrol Diphosphate, Toremifene Citrate | 18.4 |
+| CASR | 3 | 2 | CASR --> FYN --> MAPK14 --> FOS | activate | Cinacalcet Hydrochloride | 18.3 |
+| S1PR5 | 3 | 2 | S1PR5 --> GNAI1 --> SRC --> FOS | activate | Ozanimod, Etrasimod Arginine, Fingolimod Lauryl Sulfate | 18.3 |
+| ADORA3 | 3 | 2 | ADORA3 --> GNAI1 --> SRC --> FOS | activate | Adenosine | 18.3 |
+| HTR1F | 3 | 2 | HTR1F --> GNAI1 --> SRC --> FOS | activate | Almotriptan Malate, Eletriptan Hydrobromide, Lasmiditan | 18.3 |
 
-- ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 10 downstream branches
-- ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 11 downstream branches
+- ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 1 downstream branches
+- ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 2 downstream branches
+- ⚠ path passes through hub(s): MAPK1
+
+**JUNB** (no direct pharmacology)
+
+| Upstream target | Hops | Fan-out | Path | Act on it | Drugs | Score |
+|---|---|---|---|---|---|---|
+| NOD2 | 2 | 9 | NOD2 --> MAPK8 --> JUNB | activate | — | 30.9 |
+| PTGIR | 2 | 7 | PTGIR --> STAT3 --> JUNB | activate | Treprostinil, Treprostinil Diolamine, Selexipag | 30.3 |
+| TRPV1 | 3 | 1 | TRPV1 --> PRKCB --> MAPK8 --> JUNB | activate | Acetaminophen | 18.7 |
+| MPL | 3 | 2 | MPL --> JAK2 --> STAT3 --> JUNB | activate | Avatrombopag, Avatrombopag Maleate, Lusutrombopag | 18.3 |
+| CASR | 3 | 2 | CASR --> FYN —\| ITCH —\| JUNB | activate | Cinacalcet Hydrochloride | 18.3 |
+| GHR | 3 | 4 | GHR --> JAK2 --> STAT3 --> JUNB | activate | — | 17.5 |
+| CXCR4 | 3 | 5 | CXCR4 --> JAK2 --> STAT3 --> JUNB | activate | Plerixafor | 17.1 |
+| RARG | 3 | 5 | RARG --> AKT1 --> STAT3 --> JUNB | activate | Acitretin, Palovarotene, Tretinoin | 17.1 |
+| CHRM3 | 3 | 5 | CHRM3 --> GNAQ —\| GSK3B —\| JUNB | activate | Pilocarpine Hydrochloride, Bethanechol Chloride | 17.1 |
+| HTR2B | 3 | 5 | HTR2B --> GNAQ —\| GSK3B —\| JUNB | activate | Methylergonovine Maleate | 17.1 |
+
+- ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 1 downstream branches
+- ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 2 downstream branches
+- ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 4 downstream branches
+
+**JUND** (no direct pharmacology)
+
+| Upstream target | Hops | Fan-out | Path | Act on it | Drugs | Score |
+|---|---|---|---|---|---|---|
+| MTNR1A | 2 | 7 | MTNR1A --> MAPK1 --> JUND | activate | Ramelteon, Tasimelteon | 30.4 |
+| NOD2 | 2 | 9 | NOD2 --> MAPK8 --> JUND | activate | — | 30.3 |
+| TRPV1 | 3 | 1 | TRPV1 --> PRKCB --> MAPK8 --> JUND | activate | Acetaminophen | 18.8 |
+| RARG | 3 | 5 | RARG --> AKT1 --> BLVRA --> JUND | activate | Acitretin, Palovarotene, Tretinoin | 17.1 |
+| RARB | 3 | 6 | RARB --> AKT1 --> BLVRA --> JUND | activate | Acitretin, Tretinoin | 16.8 |
+| PTGIR | 3 | 7 | PTGIR --> STAT3 --> MAPK8 --> JUND | activate | Treprostinil, Treprostinil Diolamine, Selexipag | 16.3 |
+| PTGER3 | 3 | 9 | PTGER3 --> SRC --> MAPK1 --> JUND | activate | Misoprostol | 15.7 |
+| S1PR1 | 3 | 12 | S1PR1 --> LYN --> MAPK3 --> JUND | activate | Ponesimod, Siponimod, Etrasimod | 14.9 |
+| RARA | 3 | 15 | RARA --> AKT1 --> BLVRA --> JUND | activate | Acitretin, Tretinoin | 14.0 |
+| NR3C1 | 3 | 16 | NR3C1 --> LCK --> MAPK3 --> JUND | activate | Hydrocortisone Acetate, Prednisolone Acetate, Mometasone Furoate | 14.0 |
+
+- ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 1 downstream branches
 - ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 12 downstream branches
+- ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 15 downstream branches
+
+**JUN** (no direct pharmacology)
+
+| Upstream target | Hops | Fan-out | Path | Act on it | Drugs | Score |
+|---|---|---|---|---|---|---|
+| AR | 1 | 38 | AR --> JUN | activate | Testosterone Propionate, Testosterone Enanthate, Oxandrolone | 44.3 |
+| ESR2 | 2 | 4 | ESR2 --> MAPK11 --> JUN | activate | Raloxifene Hydrochloride, Diethylstilbestrol Diphosphate, Estramustine Phosphate Sodium | 32.6 |
+| MTNR1A | 2 | 7 | MTNR1A --> MAPK1 --> JUN | activate | Ramelteon, Tasimelteon | 30.0 |
+| NOD2 | 2 | 9 | NOD2 --> MAPK8 --> JUN | activate | — | 29.2 |
+| NR3C1 | 2 | 16 | NR3C1 --> SMAD3 --> JUN | activate | Hydrocortisone Acetate, Prednisolone Acetate, Mometasone Furoate | 25.7 |
+| RXRA | 2 | 22 | RXRA --> AR --> JUN | activate | Bexarotene, Acitretin, Etretinate | 22.7 |
+| TRPV1 | 3 | 1 | TRPV1 --> PRKCB --> MAPK8 --> JUN | activate | Acetaminophen | 18.7 |
+| NR1H4 | 3 | 1 | NR1H4 --> RXRA --> AR --> JUN | activate | Ursodiol, Chenodiol, Obeticholic Acid | 18.7 |
+| ESR1 | 2 | 37 | ESR1 --> AR --> JUN | activate | Estradiol Acetate, Diethylstilbestrol Diphosphate, Toremifene Citrate | 18.5 |
+| CASR | 3 | 2 | CASR --> FYN --> MAPK14 --> JUN | activate | Cinacalcet Hydrochloride | 18.3 |
+
+- ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 1 downstream branches
+- ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 2 downstream branches
+- ⚠ path passes through hub(s): MAPK1
 
 ### Locking the factor into an active state
 
@@ -498,7 +589,7 @@ Nuclear receptors have a ligand-binding pocket; almost no other TF does, which i
 
 #### No stabilisation route for 8 factor(s)
 
-EBF2, EBF4, MTF1, NFIB, POU2F1, POU5F1, SOX2, ZNF530
+FOS, FOSL2, JUN, JUNB, JUND, KLF5, POU2F1, SOX2
 
 These have no ligand pocket, no direct drug, and **nothing curated against them or their degradation machinery**. For these factors stabilisation is a research programme, not a route you can take: making it real needs the E3 ligase that degrades the factor *and* a ligand for that ligase, and neither is published here.
 
@@ -513,15 +604,15 @@ Three things must overlap: where the drug goes, where the gene is expressed, and
 | TF | Co-expressed with gene | Shared tissues |
 |---|---|---|
 | SOX2 | yes (15) | breast, cervix, uterine, endometrium, esophagus, kidney, lun |
-| POU5F1 | yes (15) | breast, cervix, uterine, endometrium, esophagus, kidney, lun |
 | POU2F1 | yes (16) | breast, cervix, uterine, endometrium, esophagus, kidney, lun |
-| ZNF530 | yes (16) | breast, cervix, uterine, endometrium, esophagus, kidney, lun |
-| EBF2 | yes (11) | breast, cervix, uterine, endometrium, esophagus, lung, prost |
-| EBF4 | yes (14) | breast, cervix, uterine, endometrium, esophagus, kidney, lun |
-| MTF1 | yes (16) | breast, cervix, uterine, endometrium, esophagus, kidney, lun |
-| NFIB | yes (16) | breast, cervix, uterine, endometrium, esophagus, kidney, lun |
-| ZNF707 | yes (16) | breast, cervix, uterine, endometrium, esophagus, kidney, lun |
-| ZNF320 | yes (16) | breast, cervix, uterine, endometrium, esophagus, kidney, lun |
+| FOS | yes (15) | breast, cervix, uterine, endometrium, esophagus, kidney, lun |
+| JUNB | yes (16) | breast, cervix, uterine, endometrium, esophagus, kidney, lun |
+| JUND | yes (16) | breast, cervix, uterine, endometrium, esophagus, kidney, lun |
+| FOSL2 | yes (16) | breast, cervix, uterine, endometrium, esophagus, kidney, lun |
+| JUN | yes (16) | breast, cervix, uterine, endometrium, esophagus, kidney, lun |
+| KLF5 | yes (15) | breast, cervix, uterine, endometrium, esophagus, kidney, lun |
+| STAT3 | yes (16) | breast, cervix, uterine, endometrium, esophagus, kidney, lun |
+| NFYB | yes (16) | breast, cervix, uterine, endometrium, esophagus, kidney, lun |
 
 ### Human genetic evidence
 
@@ -549,7 +640,7 @@ The strongest evidence available anywhere in this report. A motif says a factor 
 
 **No factor can be supported this way for CYP24A1.** CYP24A1 has no significant trans-eQTL in eQTLGen at all, so the test returns nothing for every factor here. That is a property of the dataset's power and of the tissue (whole blood), not evidence that CYP24A1 is unregulated.
 
-*No factor tested (SOX2, POU5F1, POU2F1, ZNF530, EBF2, EBF4) has trans-eQTL support for this gene.*
+*No factor tested (SOX2, POU2F1, FOS, JUNB, JUND, FOSL2) has trans-eQTL support for this gene.*
 
 *eQTLGen is whole blood at n=31,684, FDR<0.05. A hit is strong causal evidence. **Absence is weak** — trans effects are small and detecting them needs enormous power, so a null overwhelmingly means underpowered rather than unregulated, and a relationship operating outside blood would not appear at all.*
 
@@ -656,21 +747,38 @@ There is no incumbent here, so nothing was filtered out for failing to beat one 
 
 ### Drug–gene links with no recorded direction
 
-9 interaction(s) across 2 factor(s) come from curated sources that record a drug–gene relationship **without saying which way it goes**. They are held back from the recommendations above, because the entire question here is direction and an undirected link cannot answer it.
+66 interaction(s) across 20 factor(s) come from curated sources that record a drug–gene relationship **without saying which way it goes**. They are held back from the recommendations above, because the entire question here is direction and an undirected link cannot answer it.
 
 They are still leads — someone curated a real relationship — but they need a literature check, not a prediction. Many are chemotherapeutics or broad stressors whose association with a transcription factor reflects cell-wide perturbation rather than a specific mechanism.
 
 | TF | Drug | Reported by | DGIdb score |
 |---|---|---|---|
+| STAT5A | Tofacitinib | DTC | 2.34 |
+| CTCF | Capivasertib | PRISM | 2.04 |
+| KLF5 | Secnidazole | PRISM | 1.95 |
+| STAT5B | Tofacitinib | DTC | 1.56 |
+| ETV1 | Trametinib Dimethyl Sulfoxide | CIViC | 1.51 |
+| ETV5 | Trametinib Dimethyl Sulfoxide | CIViC | 1.51 |
 | NFIB | Paliperidone | ClinPGx | 1.11 |
+| TFAP4 | Azacitidine | PRISM | 1.09 |
+| STAT6 | Esomeprazole Sodium | ClinPGx | 0.99 |
+| JUND | Clozapine | NCI | 0.94 |
+| JUN | Copper Chloride | DTC | 0.9 |
 | POU5F1 | Allopurinol | ClinPGx | 0.73 |
 | POU5F1 | Phenytoin Sodium | ClinPGx | 0.56 |
+| NHLH1 | Cisplatin | ClinPGx | 0.55 |
+| JUNB | Brigatinib | PRISM | 0.53 |
 | POU5F1 | Carbamazepine | ClinPGx | 0.48 |
+| FOS | Bromocriptine Mesylate | NCI | 0.47 |
+| E2F4 | Crizotinib | PRISM | 0.46 |
+| JUN | Atomoxetine Hydrochloride | DTC | 0.45 |
 | NFIB | Clozapine | ClinPGx | 0.39 |
 | NFIB | Methylphenidate | ClinPGx | 0.37 |
-| POU5F1 | Dehydrated Alcohol | NCI | 0.3 |
-| NFIB | Risperidone | ClinPGx | 0.22 |
-| NFIB | Vincristine | ClinPGx | 0.13 |
+| STAT5B | Dasatinib Anhydrous | Drug Repurposing Hub; TEND; TdgClinicalTrial | 0.34 |
+| FOS | Pilocarpine Hydrochloride | NCI | 0.33 |
+| FOS | Baclofen | NCI | 0.31 |
+| JUN | Bupropion Hydrochloride | DTC | 0.3 |
+| … 41 more | | | |
 
 *Pass `--include-unknown-direction` to fold these into the main tables anyway — but every such row will read UNKNOWN / unclear, which is what they are.*
 
@@ -683,16 +791,15 @@ No approved drug with activating pharmacology was found for any TF matched in th
 - Transcript chosen: **distinct TSS (representing 2 within 500 bp)**
 - Assembly: from GTF  |  Strand: -
 - TSS: chr20:54173986
-- Window: chr20:54173787-54174986 (-1000 / +200, 1200 bp)
+- Window: chr20:54172987-54178986 (-5000 / +1000, 6000 bp)
 - Motifs scanned: 879 at p ≤ 1e-05 per position
-- 243 of those motifs were not scanned: in this window their best possible match is more common than p = 1e-05, so any hit would be a chance match at a higher rate than stated. A looser `--pvalue` scans them, with more chance hits.
-- Non-redundant sites: 16 across 17 TFs
+- **The window was widened.** The requested window (-1000/+200) showed no signal above chance (16 sites), so it was rescanned at -5000/+1000, which gave 107 sites against about 60.6 expected by chance. Sites further out say less about this gene than core promoter sites do. `--no-widen` keeps the requested window.
+- 311 of those motifs were not scanned: in this window their best possible match is more common than p = 1e-05, so any hit would be a chance match at a higher rate than stated. A looser `--pvalue` scans them, with more chance hits.
+- Non-redundant sites: 107 across 89 TFs
 
-> **⚠ This scan found no signal.** 16 sites is what chance alone predicts (14 over 1077 scannable bases). This scan found nothing. Tighten to --pvalue 1e-6, or narrow the window (--upstream 1000 --downstream 200), or both — and use --chip-bed so ranking rests on measured binding rather than sequence.
->
-> Everything below is ranked from a list of chance matches. Fix the scan before reading any of it.
+> **⚠ Weak scan.** 107 sites against 61 expected by chance over 4358 scannable bases. Most of this list is noise; treat only the highest-scoring sites with ChIP support as real.
 
-*about 89% of these 16 sites (range 50% to 100%) would be expected on shuffled sequence of this window, so roughly 2 are above chance; among the best-scoring sites the share is lower: 100% of the top 5, 100% of the top 10. Estimated from 30 shuffled copies that keep the repeat mask and every dinucleotide count. The formula that assumes each motif matches at exactly its stated p-value would expect 14 and is not used. Nothing here says which sites are real; only ChIP evidence separates them.*
+*about 57% of these 107 sites (range 46% to 72%) would be expected on shuffled sequence of this window, so roughly 46 are above chance; among the best-scoring sites the share is lower: 75% of the top 5, 100% of the top 10, 93% of the top 20. Estimated from 30 shuffled copies that keep the repeat mask and every dinucleotide count. The formula that assumes each motif matches at exactly its stated p-value would expect 49 and is not used. Nothing here says which sites are real; only ChIP evidence separates them.*
 
 #### What else is in this window
 
@@ -710,13 +817,23 @@ The window overlaps 1 other transcription unit(s), including ENSG00000286587 on 
 
 *This checks annotation, not sequence uniqueness. BLAT the window if you need to know it appears nowhere else in the genome.*
 
+### Ligand-activated (nuclear) receptors with sites here
+
+These are the directly druggable ones.
+
+| TF | Role | Sites | Best rel. score | Best site (vs TSS) | ChIP peaks | Score |
+|---|---|---|---|---|---|---|
+| HNF4A | activator | 1 | 1.0 | CAAAGTCCA (-3680) | 4 | 78.3 |
+| ESRRB | activator | 1 | 0.94 | ACAAGGTCAT (-3640) | 0 | 56.5 |
+| HNF4G | activator | 1 | 1.0 | CAAAGTCCA (-3680) | 0 | 48.3 |
+
 #### Why the drug tables below look the way they do
 
-**17 factor(s) had predicted sites here. 1 of them have an approved drug (0 of those are nuclear receptors).**
+**89 factor(s) had predicted sites here. 2 of them have an approved drug, and all 2 are nuclear receptors.**
 
 Roughly 48 of the ~1,600 human transcription factors have a ligand-binding pocket, and the steroid, retinoid, thyroid and vitamin-D families are most of them. So the drug tables are not a ranking that hormone drugs won — they are what is left after every factor without a ligand has been dropped.
 
-**16 of the top 25 factors by score have no drug and appear in no drug table:** NFYB, CEBPD, CEBPA, TBX2, ELK1, GLIS3, FOXO1, TBX3, STAT1, GLIS1, PRDM4, PAX6 ….
+**24 of the top 25 factors by score have no drug and appear in no drug table:** NFYB, KLF5, STAT3, FOS, JUNB, JUND, FOSL2, WT1, CEBPA, JUN, E2F4, ELK1 ….
 
 That is where the gene-specific signal is. A half-site like AGGTCA occurs every few kilobases by chance, so nuclear receptors surface for almost any promoter; these factors surfaced for *this* one. The routes that can reach them are the upstream-network, stabilisation and protein-level sections, not the ligand tables.
 
@@ -724,29 +841,37 @@ That is where the gene-specific signal is. A half-site like AGGTCA occurs every 
 
 | Rank | TF | Role | NR | Other genes it controls | Cells need it? | Sites | Best rel. score | Offset | ChIP | Approved drugs | Score |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | NFYB | activator |  | ~5000 | yes, most | 1 | 1.0 | -60 | 1 | 0 | 81.2 |
-| 2 | CEBPD | activator |  | not counted | a few lines | 2 | 1.0 | -886 | 1 | 0 | 73.3 |
-| 3 | CEBPA | activator |  | not counted | a few lines | 1 | 0.938 | -372 | 2 | 0 | 72.4 |
-| 4 | TBX2 | repressor |  | not counted | a few lines | 1 | 0.969 | +53 | 1 | 0 | 70.0 |
-| 5 | ELK1 | activator |  | ~5000 | a few lines | 1 | 0.875 | -652 | 1 | 0 | 67.5 |
-| 6 | GLIS3 | dual |  | not counted | no | 1 | 0.877 | -260 | 1 | 0 | 66.5 |
-| 7 | FOXO1 | dual |  | ~1200 | a few lines | 1 | 0.875 | -652 | 1 | 0 | 61.5 |
-| 8 | NFE2L2 | activator |  | ~1200 | some lines | 1 | 0.895 | -656 | 0 | 1 | 58.1 |
-| 9 | TBX3 | dual |  | 3222 | a few lines | 1 | 0.957 | +53 | 0 | 0 | 54.2 |
-| 10 | STAT1 | unknown |  | ~1200 | no | 1 | 0.869 | -544 | 2 | 0 | 53.3 |
-| 11 | GLIS1 | activator |  | not counted | no | 1 | 0.851 | -260 | 0 | 0 | 51.7 |
-| 12 | PRDM4 | activator |  | not counted | a few lines | 1 | 0.907 | -913 | 0 | 0 | 47.1 |
-| 13 | PAX6 | dual |  | 1892 | a few lines | 1 | 0.853 | -817 | 0 | 0 | 39.9 |
-| 14 | STAT2 | unknown |  | 1536 | a few lines | 1 | 0.869 | -544 | 0 | 0 | 33.3 |
-| 15 | IRF7 | unknown |  | not counted | a few lines | 1 | 0.859 | -544 | 0 | 0 | 33.0 |
-| 16 | ZNF677 | unknown |  | 823 | no | 1 | 0.894 | -867 | 0 | 0 | 31.9 |
-| 17 | PRDM9 | unknown |  | not counted | a few lines | 1 | 0.873 | -848 | 0 | 0 | 31.3 |
+| 1 | NFYB | activator |  | ~5000 | yes, most | 1 | 1.0 | -60 | 2 | 0 | 81.2 |
+| 2 | HNF4A | activator | yes | ~300 | a few lines | 1 | 1.0 | -3680 | 4 | 0 | 78.3 |
+| 3 | KLF5 | activator |  | ~5000 | some lines | 2 | 0.997 | +359 | 1 | 0 | 77.7 |
+| 4 | STAT3 | activator |  | ~1200 | a few lines | 1 | 1.0 | +309 | 5 | 0 | 75.3 |
+| 5 | FOS | activator |  | ~5000 | a few lines | 3 | 1.0 | -2778 | 1 | 0 | 75.0 |
+| 6 | JUNB | activator |  | ~5000 | some lines | 5 | 1.0 | -2778 | 4 | 0 | 75.0 |
+| 7 | JUND | activator |  | not counted | a few lines | 3 | 1.0 | -2778 | 3 | 0 | 75.0 |
+| 8 | FOSL2 | activator |  | not counted | some lines | 4 | 0.998 | -2779 | 3 | 0 | 75.0 |
+| 9 | WT1 | activator |  | not counted | a few lines | 1 | 0.921 | -320 | 1 | 0 | 72.7 |
+| 10 | CEBPA | activator |  | not counted | a few lines | 1 | 0.947 | -372 | 2 | 0 | 72.7 |
+| 11 | JUN | dual |  | ~5000 | some lines | 3 | 1.0 | -2778 | 5 | 0 | 69.0 |
+| 12 | E2F4 | activator |  | ~5000 | a few lines | 1 | 0.916 | +675 | 2 | 0 | 68.6 |
+| 13 | ELK1 | activator |  | ~5000 | a few lines | 1 | 0.904 | -652 | 1 | 0 | 68.4 |
+| 14 | FOSB | activator |  | 189 | a few lines | 1 | 1.0 | -2778 | 2 | 0 | 68.3 |
+| 15 | SP1 | activator |  | ~5000 | some lines | 1 | 1.0 | -4929 | 6 | 0 | 68.3 |
+| 16 | ONECUT1 | activator |  | not counted | a few lines | 1 | 0.968 | -4472 | 1 | 0 | 67.4 |
+| 17 | GATA1 | activator |  | ~300 | a few lines | 1 | 0.926 | -4827 | 1 | 0 | 66.1 |
+| 18 | GLIS3 | dual |  | not counted | no | 1 | 0.863 | -260 | 1 | 0 | 66.1 |
+| 19 | FOXO1 | dual |  | ~1200 | a few lines | 2 | 0.977 | -3548 | 2 | 0 | 65.0 |
+| 20 | CTCF | repressor |  | ~5000 | yes, nearly all | 3 | 0.804 | +528 | 3 | 0 | 62.6 |
+| 21 | BACH1 | dual |  | not counted | a few lines | 1 | 1.0 | -2778 | 1 | 0 | 62.3 |
+| 22 | ERF | repressor |  | not counted | no | 2 | 0.856 | -432 | 1 | 0 | 61.9 |
+| 23 | SP2 | repressor |  | not counted | some lines | 2 | 1.0 | -4929 | 2 | 0 | 61.2 |
+| 24 | KLF1 | unknown |  | not counted | a few lines | 1 | 1.0 | -312 | 1 | 0 | 60.2 |
+| 25 | FOSL1 | unknown |  | not counted | some lines | 3 | 1.0 | -2778 | 1 | 0 | 60.0 |
 
 **Other genes it controls** is the collateral question. A drug acting through a factor moves everything that factor regulates, so this column says how wide the effect will be. Read it against the score: a strong route through a factor that controls two thousand genes is a worse starting point than a weaker route through one that controls thirty.
 
-A count written `~N` is a bundled estimate for a factor the regulon file does not list (5 here), not a count of curated edges. Treat it as an order of magnitude.
+A count written `~N` is a bundled estimate for a factor the regulon file does not list (14 here), not a count of curated edges. Treat it as an order of magnitude.
 
-`not counted` means the regulon table has no entry and there is no bundled estimate either (8 here). It is not a small number. Most of the roughly 1,600 human transcription factors have no curated regulon at all.
+`not counted` means the regulon table has no entry and there is no bundled estimate either (55 here). It is not a small number. Most of the roughly 1,600 human transcription factors have no curated regulon at all.
 
 Counts come from literature curation, so they measure what has been published as much as what the factor does. SP1 has thousands of recorded targets partly because it regulates many genes and partly because thousands of people assayed it.
 
@@ -756,27 +881,35 @@ The regulon column counts how many genes a factor controls, from literature cura
 
 It also reaches factors the curated tables cannot. A factor nobody has written a regulon for still has a knockout phenotype here.
 
-17 of 17 factor(s) were scored in DepMap. 12 (CEBPA, CEBPD, ELK1, FOXO1, IRF7) show a dependency confined to a minority of lines, which is the informative case: the requirement has a context, and whether your tissue shares it is the question to ask next. 4 (GLIS1, GLIS3, STAT1, ZNF677) were dispensable throughout. That bounds the proliferative cost of removing them and says nothing about a differentiated tissue.
+88 of 89 factor(s) were scored in DepMap. 1 (CTCF) is needed by nearly every cell line tested, so strong inhibition is likely cytotoxic. 65 (BACH1, BACH2, CEBPA, CUX1, E2F4) show a dependency confined to a minority of lines, which is the informative case: the requirement has a context, and whether your tissue shares it is the question to ask next. 19 (ERF, ESRRB, FIGLA, GLIS1, GLIS3) were dispensable throughout. That bounds the proliferative cost of removing them and says nothing about a differentiated tissue.
 
 | Factor | Cells need it? | Mean effect | Lines dependent | Most dependent lineage |
 |---|---|---|---|---|
+| CTCF | essential in nearly every line | -1.68 | 1147/1150 (100%) | Biliary Tract (-1.80) |
 | NFYB | essential in most lines | -0.70 | 961/1150 (84%) | Thyroid (-0.84) |
-| NFE2L2 | essential in a minority of lines | -0.24 | 109/1150 (10%) | Pleura (-0.38) |
+| KLF5 | essential in a substantial minority | -0.41 | 307/1150 (27%) | Bowel (-0.99) |
+| FOSL1 | essential in a substantial minority | -0.41 | 368/1150 (32%) | Pancreas (-0.64) |
+| TFAP4 | essential in a minority of lines | -0.35 | 263/1150 (23%) | Myeloid (-0.54) |
+| GLI1 | essential in a minority of lines | -0.30 | 85/1150 (7%) | Soft Tissue (-0.43) |
+| JUN | essential in a minority of lines | -0.29 | 192/1150 (17%) | Pleura (-0.54) |
+| SPIC | essential in a minority of lines | -0.28 | 66/1150 (6%) | Prostate (-0.36) |
+| JUNB | essential in a minority of lines | -0.27 | 163/1150 (14%) | Pancreas (-0.43) |
+| SP2 | essential in a minority of lines | -0.26 | 100/1150 (9%) | Bladder/Urinary Tract (-0.34) |
+| STAT5A | essential in a handful of lines | -0.25 | 50/1150 (4%) | Peripheral Nervous System (-0.31) |
+| MGA | essential in a handful of lines | -0.21 | 44/1150 (4%) | Head and Neck (-0.29) |
+| STAT3 | essential in a handful of lines | -0.19 | 39/1150 (3%) | Cervix (-0.31) |
+| STAT5B | essential in a handful of lines | -0.19 | 27/1150 (2%) | Myeloid (-0.49) |
 | ELK1 | essential in a handful of lines | -0.17 | 3/1150 (0%) | Ovary/Fallopian Tube (-0.21) |
-| TBX3 | essential in a handful of lines | -0.16 | 50/1150 (4%) | Prostate (-0.53) |
-| CEBPD | essential in a handful of lines | -0.15 | 16/1150 (1%) | Prostate (-0.25) |
+| FOSL2 | essential in a minority of lines | -0.17 | 60/1150 (5%) | Ovary/Fallopian Tube (-0.29) |
+| JUND | essential in a handful of lines | -0.16 | 28/1150 (2%) | Thyroid (-0.25) |
+| KLF1 | essential in a handful of lines | -0.15 | 17/1150 (2%) | Myeloid (-0.26) |
+| PATZ1 | essential in a handful of lines | -0.15 | 9/1150 (1%) | Peripheral Nervous System (-0.29) |
+| KLF10 | essential in a handful of lines | -0.14 | 33/1150 (3%) | Eye (-0.25) |
 | FOXO1 | essential in a handful of lines | -0.13 | 29/1150 (2%) | Lymphoid (-0.30) |
-| STAT2 | essential in a handful of lines | -0.12 | 8/1150 (1%) | Uterus (-0.17) |
-| CEBPA | essential in a handful of lines | -0.07 | 22/1150 (2%) | Myeloid (-0.36) |
-| TBX2 | essential in a handful of lines | -0.06 | 17/1150 (2%) | Skin (-0.15) |
-| STAT1 | dispensable across the panel | -0.01 | 0/1150 (0%) | — |
-| PRDM4 | essential in a handful of lines | -0.00 | 1/1150 (0%) | Prostate (-0.11) |
-| IRF7 | essential in a handful of lines | +0.01 | 1/1150 (0%) | Peripheral Nervous System (-0.03) |
-| GLIS1 | dispensable across the panel | +0.03 | 0/1150 (0%) | — |
-| PAX6 | essential in a handful of lines | +0.05 | 1/1150 (0%) | Eye (+0.01) |
-| ZNF677 | dispensable across the panel | +0.08 | 0/1150 (0%) | — |
-| PRDM9 | essential in a handful of lines | +0.16 | 1/1150 (0%) | Soft Tissue (+0.12) |
-| GLIS3 | dispensable across the panel | +0.17 | 0/1150 (0%) | — |
+| E2F4 | essential in a handful of lines | -0.13 | 14/1150 (1%) | Lymphoid (-0.20) |
+| STAT6 | essential in a handful of lines | -0.12 | 3/1150 (0%) | Eye (-0.20) |
+| ZNF281 | essential in a handful of lines | -0.11 | 29/1150 (2%) | Myeloid (-0.26) |
+| NFATC4 | essential in a handful of lines | -0.11 | 2/1150 (0%) | Myeloid (-0.15) |
 
 **Mean effect** is on DepMap's own scale: 0 means knockout changed nothing, and -1 is the median of known common-essential genes. A line counts as dependent below -0.5.
 
@@ -787,7 +920,7 @@ It also reaches factors the curated tables cannot. A factor nobody has written a
 - **Nothing here is about your gene.** This bounds the cost of acting on a factor. Whether acting on it moves your gene is the rest of the report.
 - **A dispensable result is not permission.** It bounds the proliferative cost and nothing else.
 
-**The selective ones are the interesting ones.** CEBPA, CEBPD, ELK1, FOXO1, IRF7, NFE2L2 matter in a minority of lines rather than all of them, so the requirement has a context. The lineage column is where to look for what that context is, and whether your tissue shares it is the question this panel cannot answer.
+**The selective ones are the interesting ones.** BACH1, BACH2, CEBPA, CUX1, E2F4, EBF2 matter in a minority of lines rather than all of them, so the requirement has a context. The lineage column is where to look for what that context is, and whether your tissue shares it is the question this panel cannot answer.
 
 ### Drugs that behave like losing the factor
 
@@ -795,7 +928,12 @@ Every other route in this report starts from something somebody wrote down - a c
 
 | Factor | Drug | Partial r | Raw r | Lines | q | Behaves as |
 |---|---|---|---|---|---|---|
-| CEBPD | **ABEMACICLIB** | -0.2171 | -0.1749 | 462 | 0.017208 | opposes |
+| KLF5 | **GEFITINIB** | 0.319 | 0.3006 | 459 | 1e-06 | phenocopies |
+| KLF5 | **LAPATINIB** | 0.3143 | 0.2865 | 465 | 1e-06 | phenocopies |
+| KLF5 | **OSIMERTINIB** | 0.3046 | 0.273 | 466 | 1e-06 | phenocopies |
+| KLF5 | **IBRUTINIB** | 0.3002 | 0.2699 | 460 | 1e-06 | phenocopies |
+| KLF5 | **MOBOCERTINIB** | 0.2776 | 0.2609 | 703 | 1e-06 | phenocopies |
+| KLF5 | **ALPELISIB** | 0.2622 | 0.2397 | 465 | 2e-06 | phenocopies |
 
 **Partial r** controls for how easily each cell line dies under the whole panel. Some lines die under almost anything and those same lines suffer most knockouts, which puts a correlation between almost any drug and almost any gene. The control moves a number either way - it removes a shared component that can inflate a correlation or mask one - so where the two columns differ a lot the raw value was mostly about the cell lines. Estimates use at least 25 shared lines.
 
@@ -805,29 +943,36 @@ Every other route in this report starts from something somebody wrote down - a c
 
 ### Every route that acts on this gene
 
-128 routes across 9 mechanism categories, pooled from every method in this run and sorted by **evidence tier first**, score second.
+225 routes across 7 mechanism categories, pooled from every method in this run and sorted by **evidence tier first**, score second.
 
 A tier-1 route with a mediocre score beats a tier-5 route with a great one. These are not the same kind of claim and averaging them would destroy the information you need.
 
 **Why established binders sit at tier 2, just under the direct agents.** A drug already measured to bind one of your factors has half its chain settled: the drug-to-receptor step has assay data behind it, so the pharmacology is de-risked and only the receptor-to-gene step is a hypothesis. A curated tier-3 ligand is annotation on *both* halves. But they stay below tier 1, because a direct agent acts on your gene itself and skips the receptor-to-gene inference entirely — a stronger claim however well-characterised the binder is. The cost of the indirect route is in the row: everything else that factor regulates moves with your gene.
 
-- 19 × curated — mechanism annotated by a human curator
-- 105 × predicted — a model says so
-- 4 × hypothesis — generated, untested
+- 27 × curated — mechanism annotated by a human curator
+- 193 × predicted — a model says so
+- 5 × hypothesis — generated, untested
 
 | Tier | Route | Drug | Acts on | Steps | Mechanism | Str | Spec | Eff | Score |
 |---|---|---|---|---|---|---|---|---|---|
-| 3 | TF: degradation blocker | Dimethyl fumarate | KEAP1 | 1 | degradation blocker | 0.75 | 0.65 | 0.7 | 56.2 |
-| 3 | TF: degradation blocker | Omaveloxolone | KEAP1 | 1 | degradation blocker | 0.75 | 0.65 | 0.7 | 56.2 |
-| 3 | TF: degradation blocker | Monomethyl fumarate | KEAP1 | 1 | degradation blocker | 0.75 | 0.65 | 0.7 | 56.2 |
-| 3 | TF: orthosteric ligand | Omaveloxolone | NFE2L2 | 1 | ligand at the transcription factor | 0.595 | 0.42 | 0.725 | 45.3 |
-| 3 | TF: abundance change | vorinostat | ELK1 | 1 | raises ELK1 transcript in 139 profile(s) | 1.0 | 0.1 | 0.5 | 44.8 |
-| 3 | TF: abundance change | dasatinib | CEBPD | 1 | raises CEBPD transcript in 51 profile(s) | 1.0 | 0.1 | 0.5 | 44.8 |
-| 3 | TF: abundance change | mitoxantrone | CEBPA | 1 | raises CEBPA transcript in 10 profile(s) | 1.0 | 0.1 | 0.5 | 44.8 |
-| 3 | TF: abundance change | sirolimus | TBX2 | 1 | lowers TBX2 transcript in 3 profile(s) | 0.3 | 0.45 | 0.5 | 32.2 |
-| 3 | TF: abundance change | dasatinib | TBX2 | 1 | lowers TBX2 transcript in 6 profile(s) | 0.6 | 0.1 | 0.5 | 32.0 |
-| 3 | TF: abundance change | vorinostat | NFE2L2 | 1 | raises NFE2L2 transcript in 4 profile(s) | 0.4 | 0.1 | 0.5 | 25.6 |
-| 3 | TF: abundance change | selumetinib | TBX2 | 1 | lowers TBX2 transcript in 4 profile(s) | 0.4 | 0.1 | 0.5 | 25.6 |
+| 3 | TF: abundance change | teniposide | STAT3 | 1 | raises STAT3 transcript in 10 profile(s) | 1.0 | 0.45 | 0.5 | 54.6 |
+| 3 | TF: abundance change | selumetinib | STAT3 | 1 | raises STAT3 transcript in 10 profile(s) | 1.0 | 0.45 | 0.5 | 54.6 |
+| 3 | TF: known regulator | Cholecalciferol | VDR | 1 | activate VDR, a recorded regulator of the gen | 0.6 | 0.5 | 0.6 | 45.2 |
+| 3 | TF: known regulator | Paricalcitol | VDR | 1 | activate VDR, a recorded regulator of the gen | 0.6 | 0.5 | 0.6 | 45.2 |
+| 3 | TF: known regulator | Doxercalciferol | VDR | 1 | activate VDR, a recorded regulator of the gen | 0.6 | 0.5 | 0.6 | 45.2 |
+| 3 | TF: known regulator | Ergocalciferol | VDR | 1 | activate VDR, a recorded regulator of the gen | 0.6 | 0.5 | 0.6 | 45.2 |
+| 3 | TF: known regulator | Calcifediol | VDR | 1 | activate VDR, a recorded regulator of the gen | 0.6 | 0.5 | 0.6 | 45.2 |
+| 3 | TF: known regulator | Calcitriol | VDR | 1 | activate VDR, a recorded regulator of the gen | 0.6 | 0.5 | 0.6 | 45.2 |
+| 3 | TF: abundance change | dasatinib | STAT3 | 1 | raises STAT3 transcript in 7 profile(s) | 0.7 | 0.45 | 0.5 | 45.0 |
+| 3 | TF: abundance change | vorinostat | FOSL2 | 1 | raises FOSL2 transcript in 88 profile(s) | 1.0 | 0.1 | 0.5 | 44.8 |
+| 3 | TF: abundance change | mitoxantrone | FOS | 1 | raises FOS transcript in 29 profile(s) | 1.0 | 0.1 | 0.5 | 44.8 |
+| 3 | TF: abundance change | mitoxantrone | JUNB | 1 | raises JUNB transcript in 28 profile(s) | 1.0 | 0.1 | 0.5 | 44.8 |
+| 3 | TF: abundance change | mitoxantrone | FOSL2 | 1 | raises FOSL2 transcript in 21 profile(s) | 1.0 | 0.1 | 0.5 | 44.8 |
+| 3 | TF: abundance change | mitoxantrone | JUND | 1 | raises JUND transcript in 14 profile(s) | 1.0 | 0.1 | 0.5 | 44.8 |
+| 3 | TF: abundance change | vorinostat | JUND | 1 | raises JUND transcript in 13 profile(s) | 1.0 | 0.1 | 0.5 | 44.8 |
+| 3 | TF: abundance change | vorinostat | STAT3 | 1 | raises STAT3 transcript in 10 profile(s) | 1.0 | 0.1 | 0.5 | 44.8 |
+| 3 | TF: abundance change | mitoxantrone | KLF5 | 1 | raises KLF5 transcript in 9 profile(s) | 0.9 | 0.1 | 0.5 | 41.6 |
+| 3 | TF: abundance change | mitoxantrone | STAT3 | 1 | raises STAT3 transcript in 8 profile(s) | 0.8 | 0.1 | 0.5 | 38.4 |
 | 3 | chromatin-level | Vorinostat | chromatin (genome-wide) | 3 | HDAC inhibitor | 0.7 | 0.05 | 0.45 | 23.4 |
 | 3 | chromatin-level | Romidepsin | chromatin (genome-wide) | 3 | HDAC inhibitor | 0.7 | 0.05 | 0.45 | 23.4 |
 | 3 | chromatin-level | Belinostat | chromatin (genome-wide) | 3 | HDAC inhibitor | 0.7 | 0.05 | 0.45 | 23.4 |
@@ -836,31 +981,22 @@ A tier-1 route with a mediocre score beats a tier-5 route with a great one. Thes
 | 3 | chromatin-level | Azacitidine | chromatin (genome-wide) | 3 | DNMT inhibitor | 0.7 | 0.05 | 0.45 | 23.4 |
 | 3 | chromatin-level | Decitabine | chromatin (genome-wide) | 3 | DNMT inhibitor | 0.7 | 0.05 | 0.45 | 23.4 |
 | 3 | chromatin-level | Tazemetostat | chromatin (genome-wide) | 3 | EZH2 inhibitor | 0.7 | 0.05 | 0.45 | 23.4 |
-| 4 | upstream signalling | Progesterone | PGR | 2 | activate PGR → FOXO1 (1 hop) | 0.75 | 0.976 | 0.6 | 52.8 |
-| 4 | upstream signalling | Norethindrone | PGR | 2 | activate PGR → FOXO1 (1 hop) | 0.75 | 0.976 | 0.6 | 52.8 |
-| 4 | upstream signalling | Ethynodiol Diacetate | PGR | 2 | activate PGR → FOXO1 (1 hop) | 0.75 | 0.976 | 0.6 | 52.8 |
-| 4 | upstream signalling | Hydroxyprogesterone Caproate | PGR | 2 | activate PGR → FOXO1 (1 hop) | 0.75 | 0.976 | 0.6 | 52.8 |
-| 4 | TF: known regulator | Cholecalciferol | VDR | 1 | activate VDR, a recorded regulator of the gen | 0.6 | 0.5 | 0.6 | 45.2 |
-| 4 | TF: known regulator | Paricalcitol | VDR | 1 | activate VDR, a recorded regulator of the gen | 0.6 | 0.5 | 0.6 | 45.2 |
-| 4 | TF: known regulator | Doxercalciferol | VDR | 1 | activate VDR, a recorded regulator of the gen | 0.6 | 0.5 | 0.6 | 45.2 |
-| 4 | TF: known regulator | Ergocalciferol | VDR | 1 | activate VDR, a recorded regulator of the gen | 0.6 | 0.5 | 0.6 | 45.2 |
-| 4 | TF: known regulator | Calcifediol | VDR | 1 | activate VDR, a recorded regulator of the gen | 0.6 | 0.5 | 0.6 | 45.2 |
-| 4 | TF: known regulator | Calcitriol | VDR | 1 | activate VDR, a recorded regulator of the gen | 0.6 | 0.5 | 0.6 | 45.2 |
-| 4 | TF: known regulator | Bexarotene | RXRA | 1 | activate RXRA, a recorded regulator of the ge | 0.5 | 0.5 | 0.6 | 42.0 |
+| 3 | chromatin-level | Givinostat Hydrochloride | chromatin (genome-wide) | 3 | HDAC inhibitor | 0.7 | 0.05 | 0.45 | 23.4 |
+| 4 | upstream signalling | Treprostinil | PTGIR | 2 | activate PTGIR → STAT3 (1 hop) | 0.75 | 0.851 | 0.6 | 49.9 |
+| 4 | upstream signalling | Treprostinil Diolamine | PTGIR | 2 | activate PTGIR → STAT3 (1 hop) | 0.75 | 0.851 | 0.6 | 49.9 |
+| 4 | upstream signalling | Selexipag | PTGIR | 2 | activate PTGIR → STAT3 (1 hop) | 0.75 | 0.851 | 0.6 | 49.9 |
 
 Best in each category:
 
-- **TF: degradation blocker** — Dimethyl fumarate (tier 3, score 56.2)
-- **TF: orthosteric ligand** — Omaveloxolone (tier 3, score 45.3)
-- **TF: abundance change** — vorinostat (tier 3, score 44.8)
+- **TF: abundance change** — teniposide (tier 3, score 54.6)
+- **TF: known regulator** — Cholecalciferol (tier 3, score 45.2)
 - **chromatin-level** — Vorinostat (tier 3, score 23.4)
-- **upstream signalling** — Progesterone (tier 4, score 52.8)
-- **TF: known regulator** — Cholecalciferol (tier 4, score 45.2)
-- **measured phenocopy** — ABEMACICLIB (tier 4, score 28.1)
-- **direct: predicted product binder** — Paricalcitol (tier 5, score 63.8)
+- **upstream signalling** — Treprostinil (tier 4, score 49.9)
+- **literature: reported effect** — Acetaminophen (tier 4, score 33.3)
+- **direct: predicted product binder** — PARICALCITOL (tier 5, score 62.3)
 - **promoter DNA binder** — Plicamycin (tier 5, score 31.2)
 
-*No route found in: direct: gene or transcript, direct: gene product, TF: inferred activity change, TF: predicted pocket binder, TF: allosteric modulator, TF: stabiliser or glue, TF: endogenous ligand, off-pathway pocket binder, empirical signature, virtual screen hypothesis. An absent category is usually a real gap in the pharmacology, but check you enabled the relevant flag (--lincs, --screen, --upstream-network).*
+*No route found in: direct: gene or transcript, direct: gene product, TF: orthosteric ligand, TF: inferred activity change, TF: predicted pocket binder, TF: allosteric modulator, TF: stabiliser or glue, TF: endogenous ligand, TF: degradation blocker, off-pathway pocket binder, measured phenocopy, empirical signature, virtual screen hypothesis. An absent category is usually a real gap in the pharmacology, but check you enabled the relevant flag (--lincs, --screen, --upstream-network).*
 
 *Steps = how far the drug acts from your gene: 0 on the gene or transcript, 1 on a TF that binds the promoter, 2+ upstream of that TF. Each step costs specificity.*
 
@@ -870,85 +1006,67 @@ Several of these sound alike and behave very differently. The distinction that m
 
 | Category | What it changes | Your drugs in it | Assay that sees it |
 |---|---|---|---|
-| TF: degradation blocker | **abundance** | Dimethyl fumarate, Omaveloxolone, Monomethyl fumarate | RT-qPCR for your gene; western for the FACTOR to confirm it accumulated |
-| TF: orthosteric ligand | **abundance** | Omaveloxolone | RT-qPCR then western/ELISA |
-| TF: abundance change | **abundance** | vorinostat, dasatinib, mitoxantrone, sirolimus … +1 | RT-qPCR and a western for the FACTOR first, then RT-qPCR for your gene |
-| chromatin-level | **abundance, genome-wide** | Vorinostat, Romidepsin, Belinostat, Panobinostat … +4 | RT-qPCR plus a housekeeping panel; if everything moved, nothing specific happened |
-| upstream signalling | **abundance** | Progesterone, Norethindrone, Ethynodiol Diacetate, Hydroxyprogesterone Caproate … +56 | RT-qPCR then western/ELISA; confirm the pathway node moved too, or you cannot attribute the effect |
-| TF: known regulator | **abundance** | Cholecalciferol, Paricalcitol, Doxercalciferol, Ergocalciferol … +5 | RT-qPCR for your gene after treatment; check the factor's own activity (a reporter or a known target) moved first |
-| measured phenocopy | **abundance** | ABEMACICLIB | a binding assay against the factor, then a reporter, then RT-qPCR for your gene - the correlation names a candidate and establishes none of those steps |
-| direct: predicted product binder | **activity** | Paricalcitol | a binding assay against the protein first, then a functional assay for direction - RT-qPCR will not see this route at all, and a western blot reads it as no effect |
-| promoter DNA binder | **abundance** | Plicamycin, Mitoxantrone, Doxorubicin | an EMSA or footprint on this promoter first, then a reporter, then RT-qPCR - and a counter-screen on an unrelated promoter carrying the same feature, because selectivity is the whole question here |
+| TF: abundance change | **abundance** | teniposide, selumetinib, dasatinib, vorinostat … +1 | RT-qPCR and a western for the FACTOR first, then RT-qPCR for your gene |
+| TF: known regulator | **abundance** | Cholecalciferol, Paricalcitol, Doxercalciferol, Ergocalciferol … +30 | RT-qPCR for your gene after treatment; check the factor's own activity (a reporter or a known target) moved first |
+| chromatin-level | **abundance, genome-wide** | Vorinostat, Romidepsin, Belinostat, Panobinostat … +5 | RT-qPCR plus a housekeeping panel; if everything moved, nothing specific happened |
+| upstream signalling | **abundance** | Treprostinil, Treprostinil Diolamine, Selexipag, Iloprost … +49 | RT-qPCR then western/ELISA; confirm the pathway node moved too, or you cannot attribute the effect |
+| literature: reported effect | **abundance (reported)** | Acetaminophen, Calcifediol, Calcitriol, Cholecalciferol … +14 | RT-qPCR in your cells; read the paper for the dose, cell type and species first |
+| direct: predicted product binder | **activity** | PARICALCITOL | a binding assay against the protein first, then a functional assay for direction - RT-qPCR will not see this route at all, and a western blot reads it as no effect |
+| promoter DNA binder | **abundance** | Plicamycin, Mitoxantrone, Doxorubicin, Pentamidine | an EMSA or footprint on this promoter first, then a reporter, then RT-qPCR - and a counter-screen on an unrelated promoter carrying the same feature, because selectivity is the whole question here |
 
 *Every category present here works through transcription, so all of them move your gene's product **abundance** and an RT-qPCR is the right first readout. The one exception in the taxonomy — a drug on the gene product itself, which changes activity only — did not appear in this run.*
 
-**TF: degradation blocker** (3 found)
+**TF: abundance change** (13 found)
 
-- *Yours:* Dimethyl fumarate, Omaveloxolone, Monomethyl fumarate
-- Stops the factor being destroyed, so more of it accumulates.
-- *Why:* The class that actually shipped: NRF2 via KEAP1, HIF via PHD inhibitors.
-- *Cost:* Effect is capped by the synthesis rate, and stabilising a factor stabilises it everywhere.
-- *Differs:* Raises protein *abundance*, visible on a western blot — unlike a conformational stabiliser, which does not.
-
-**TF: orthosteric ligand** (1 found)
-
-- *Yours:* Omaveloxolone
-- Binds the transcription factor's natural ligand pocket.
-- *Why:* The best-characterised route, and where nearly all approved TF pharmacology lives.
-- *Cost:* Only ~48 human TFs (the nuclear receptors) have such a pocket, and the factor's whole regulon moves with your gene.
-- *Differs:* Clamps the receptor on or off regardless of endogenous signalling — contrast the allosteric and ligand-axis routes, which scale what is already happening.
-
-**TF: abundance change** (7 found)
-
-- *Yours:* vorinostat, dasatinib, mitoxantrone, sirolimus, selumetinib
+- *Yours:* teniposide, selumetinib, dasatinib, vorinostat, mitoxantrone
 - A compound measured to change how much of the factor's own transcript exists, rather than what the factor does.
 - *Why:* The only route here that needs the factor to be expressed rather than druggable, so it reaches factors with no ligand, no structure and no curated upstream kinase - which is most of them.
 - *Cost:* More factor is not more factor ACTIVITY. For a ligand-activated receptor the two are nearly unrelated, and transcript is not protein. Broad agents that shut down transcription move every factor and are flagged.
 - *Differs:* Unlike 'empirical signature', which is a compound measured against YOUR GENE, this was measured against the FACTOR - one further inferential step from what you care about.
 
-**chromatin-level** (8 found)
+**TF: known regulator** (36 found)
 
-- *Yours:* Vorinostat, Romidepsin, Belinostat, Panobinostat, Valproic acid, Azacitidine, Decitabine, Tazemetostat
-- HDAC, DNMT and EZH2 inhibitors — genome-wide transcriptional effects.
-- *Why:* Reliable positive control that your reporter *can* be induced.
-- *Cost:* Specificity ~0.05. These move thousands of promoters. Almost never an acceptable therapeutic route on that basis alone.
-- *Differs:* Not targeted at your gene in any sense; it is in the table so you can see what a non-specific option scores.
-
-**upstream signalling** (95 found)
-
-- *Yours:* Progesterone, Norethindrone, Ethynodiol Diacetate, Hydroxyprogesterone Caproate, Raloxifene Hydrochloride, Diethylstilbestrol Diphosphate, Estramustine Phosphate Sodium, Toremifene Citrate … +52 more
-- Drugs a kinase, phosphatase or receptor upstream of the transcription factor.
-- *Why:* Turns 'this factor has no drugs' into a real list. Most TFs are only reachable this way.
-- *Cost:* Specificity falls with every step: a node three hops up reaches your gene through one branch and thousands of other genes through the rest.
-- *Differs:* The only category where the drug never touches your gene or its TF — read the printed path and judge it yourself.
-
-**TF: known regulator** (9 found)
-
-- *Yours:* Cholecalciferol, Paricalcitol, Doxercalciferol, Ergocalciferol, Calcifediol, Calcitriol, Bexarotene, Acitretin … +1 more
+- *Yours:* Cholecalciferol, Paricalcitol, Doxercalciferol, Ergocalciferol, Calcifediol, Calcitriol, Bexarotene, Acitretin … +26 more
 - Drugs that act on a factor CollecTRI or perturbation data records as raising or lowering your gene, whether or not the motif scan ranked that factor.
 - *Why:* Reaches factors the motif scan misses, such as those that bind through a partner or a distant enhancer.
 - *Cost:* The link comes from a database or a knockout in other cells, so it may not hold in yours. The drug's effect on the factor is taken from its recorded action.
 - *Differs:* Starts from the literature on your gene, not from its promoter sequence. CollecTRI and CTD share sources, so agreement between them is not independent.
 
-**measured phenocopy** (1 found)
+**chromatin-level** (9 found)
 
-- *Yours:* ABEMACICLIB
-- A compound whose effect on cell viability across the DepMap panel tracks what happens when this factor is knocked out, so it behaves as though it removes the factor.
-- *Why:* It needs no annotation of any kind. Every other route here starts from something a curator, a motif or a structure already asserted, so none of them can surface a drug nobody has connected to the factor. This one can, because it reads a measured phenotype.
-- *Cost:* Correlation across cell lines, not target engagement. A hit may act on the factor, on anything else the same lines need, or on a pathway the factor sits in, and the first is the least likely of the three. Both panels score proliferation of transformed cells, so a factor that matters in a differentiated cell leaves no trace.
-- *Differs:* Unlike 'empirical signature', nothing was measured about your gene or about transcription at all - the readout is whether cells live.
+- *Yours:* Vorinostat, Romidepsin, Belinostat, Panobinostat, Valproic acid, Azacitidine, Decitabine, Tazemetostat … +1 more
+- HDAC, DNMT and EZH2 inhibitors — genome-wide transcriptional effects.
+- *Why:* Reliable positive control that your reporter *can* be induced.
+- *Cost:* Specificity ~0.05. These move thousands of promoters. Almost never an acceptable therapeutic route on that basis alone.
+- *Differs:* Not targeted at your gene in any sense; it is in the table so you can see what a non-specific option scores.
+
+**upstream signalling** (144 found)
+
+- *Yours:* Treprostinil, Treprostinil Diolamine, Selexipag, Iloprost, Iloprost Tromethamine, Avatrombopag, Avatrombopag Maleate, Lusutrombopag … +45 more
+- Drugs a kinase, phosphatase or receptor upstream of the transcription factor.
+- *Why:* Turns 'this factor has no drugs' into a real list. Most TFs are only reachable this way.
+- *Cost:* Specificity falls with every step: a node three hops up reaches your gene through one branch and thousands of other genes through the rest.
+- *Differs:* The only category where the drug never touches your gene or its TF — read the printed path and judge it yourself.
+
+**literature: reported effect** (18 found)
+
+- *Yours:* Acetaminophen, Calcifediol, Calcitriol, Cholecalciferol, Dexamethasone, Ketoconazole, Leflunomide, Rifampin … +10 more
+- A chemical CTD records as raising or lowering this gene's mRNA, with no mechanism stated.
+- *Why:* It is the only route that can name a drug nothing here can explain, which includes most of what CTD holds: stress, feedback and toxicity effects.
+- *Cost:* Most records rest on one paper, often at a toxicology dose in one cell type. Across 36 genes only about 3% of them were reproduced in LINCS, and more papers did not raise that. Famous drugs are over-represented.
+- *Differs:* Every other category predicts an effect from a mechanism. This reports an effect somebody saw, and cannot suggest a drug nobody has tested on this gene.
 
 **direct: predicted product binder** (1 found)
 
-- *Yours:* Paricalcitol
+- *Yours:* PARICALCITOL
 - A compound predicted to bind this gene's own protein and not recorded as acting on it - either because its chemistry resembles the protein's known ligands, or because it docks into the protein's pocket.
 - *Why:* It is the only route here aimed at the gene's own product rather than at a factor upstream of it, so it skips every inference about whether moving a factor moves your gene. And unlike the curated product drugs it can propose a compound no one has annotated.
 - *Cost:* Predicted binding and nothing more. The model is refused below a cross-validated AUC floor, which bounds how badly it can be ranking, but a hit is a hypothesis for a binding assay. Direction is separate again: whether binding inhibits or activates the protein decides whether it serves your goal.
 - *Differs:* Unlike 'direct: gene product', nothing was measured or curated for this compound at this protein - that category is annotation, this is a model. Unlike 'TF: predicted pocket binder', the pocket is on the gene's own product, so no inference about a factor controlling the gene is involved.
 
-**promoter DNA binder** (3 found)
+**promoter DNA binder** (4 found)
 
-- *Yours:* Plicamycin, Mitoxantrone, Doxorubicin
+- *Yours:* Plicamycin, Mitoxantrone, Doxorubicin, Pentamidine
 - A small molecule with a documented preference for a sequence feature this promoter carries - a quadruplex, a GC-box, an AT tract - proposed because the feature is enriched against shuffles of this same sequence.
 - *Why:* It is the only route that acts on the promoter itself rather than on a protein, so it needs no druggable factor and no annotation. Where a promoter depends on one feature, occupying it is a direct intervention.
 - *Cost:* Sequence preference is not selectivity. These agents bind the feature wherever it occurs and most of the genome's copies are not in your gene, so the dose that engages your promoter engages thousands of others. Nearly every approved member is cytotoxic, which is how it works rather than a side effect. And a motif is not a folded structure in a cell.
@@ -958,12 +1076,15 @@ Not found here, and what you would be missing:
 
 - **direct: gene or transcript** — Acts on your gene's own DNA or RNA — siRNA, antisense, splice-switching oligos, gene therapy.
 - **direct: gene product** — Binds the protein your gene encodes — an antibody, enzyme inhibitor or receptor ligand acting on the product itself.
+- **TF: orthosteric ligand** — Binds the transcription factor's natural ligand pocket.
 - **TF: inferred activity change** — A compound whose own LINCS signature moves this factor's known targets, found without any record that it binds the factor.
 - **TF: predicted pocket binder** — A compound predicted by docking to fit the factor's ligand pocket, from a structure rather than from any measured activity.
 - **TF: allosteric modulator** — Binds a site away from the ligand pocket, amplifying or damping the endogenous ligand's effect (PAM/NAM).
 - **TF: stabiliser or glue** — Locks the factor in an active conformation, or glues it to a partner protein.
 - **TF: endogenous ligand** — Changes how much natural ligand exists, by drugging the enzyme that makes or destroys it.
+- **TF: degradation blocker** — Stops the factor being destroyed, so more of it accumulates.
 - **off-pathway pocket binder** — A docking run against a protein that is not one of the factors found at this promoter. Usually an upstream node someone chose to dock by hand.
+- **measured phenocopy** — A compound whose effect on cell viability across the DepMap panel tracks what happens when this factor is knocked out, so it behaves as though it removes the factor.
 - **empirical signature** — A compound observed to move your gene in a cell-based transcriptomic assay, mechanism unknown.
 - **virtual screen hypothesis** — An approved drug predicted to bind one of your TFs, never tested against it.
 
@@ -975,53 +1096,59 @@ Every route in this report is off-label by construction: the drug was approved f
 |---|---|---|
 | Acitretin | retinoid | severe psoriasis |
 | Azacitidine | DNA methyltransferase inhibitor | myelodysplastic syndrome, acute myeloid leukaemia |
+| Beclomethasone | glucocorticoid class | inflammation and immune suppression - asthma, autoimmune disease, transplant rejection, some leukaemias |
 | Bexarotene | RXR-selective agonist (rexinoid) | cutaneous T-cell lymphoma |
 | Calcifediol | 25-hydroxyvitamin D | vitamin D deficiency |
 | Calcitriol | active vitamin D, VDR agonist | hypocalcaemia and secondary hyperparathyroidism in renal failure |
 | Cholecalciferol | vitamin D3, a precursor requiring activation | vitamin D deficiency and supplementation |
+| Clofibrate | PPAR agonist class | type 2 diabetes (thiazolidinediones) and hypertriglyceridaemia (fibrates) |
 | Decitabine | DNA methyltransferase inhibitor | myelodysplastic syndrome |
-| Desoxycorticosterone Acetate | mineralocorticoid class | adrenal insufficiency and salt-wasting states |
-| Desoxycorticosterone Pivalate | mineralocorticoid class | adrenal insufficiency and salt-wasting states |
+| Dexamethasone | potent glucocorticoid receptor agonist | inflammation, cerebral oedema, myeloma, and as an antiemetic |
+| Dextrothyroxine Sodium | T4 stereoisomer | formerly hyperlipidaemia - withdrawn for cardiac mortality |
 | Diethylstilbestrol Diphosphate | sex steroid class | contraception, hormone replacement, and hormone-sensitive cancers |
 | Doxercalciferol | vitamin D prodrug | secondary hyperparathyroidism in dialysis |
 | Doxorubicin | anthracycline topoisomerase II inhibitor | many solid and haematological cancers |
+| Elafibranor | PPAR agonist class | type 2 diabetes (thiazolidinediones) and hypertriglyceridaemia (fibrates) |
 | Ergocalciferol | vitamin D receptor agonist class | secondary hyperparathyroidism in renal disease, osteoporosis, and plaque psoriasis topically |
 | Estradiol Acetate | sex steroid class | contraception, hormone replacement, and hormone-sensitive cancers |
 | Estradiol Cypionate | sex steroid class | contraception, hormone replacement, and hormone-sensitive cancers |
 | Etretinate | retinoid | severe psoriasis - WITHDRAWN, teratogenic |
-| Fludrocortisone Acetate | mineralocorticoid class | adrenal insufficiency and salt-wasting states |
+| Fenofibrate | PPARalpha agonist | hypertriglyceridaemia |
+| Gemfibrozil | PPARalpha agonist | hypertriglyceridaemia |
+| Hydrocortisone | glucocorticoid and mineralocorticoid | adrenal insufficiency; topical dermatitis |
 | Hydrocortisone Acetate | glucocorticoid class | inflammation and immune suppression - asthma, autoimmune disease, transplant rejection, some leukaemias |
-| Lenalidomide Hydrochloride Monohydrate | cereblon modulator | multiple myeloma, MDS |
+| Isotretinoin | retinoid | severe nodular acne |
+| Leflunomide | broad immunosuppressant class | transplant rejection and autoimmune disease |
+| Levothyroxine Sodium | synthetic T4 | hypothyroidism |
+| Liothyronine Sodium | synthetic T3 | hypothyroidism, myxoedema coma |
 | Mometasone Furoate | glucocorticoid class | inflammation and immune suppression - asthma, autoimmune disease, transplant rejection, some leukaemias |
-| Norethindrone | sex steroid class | contraception, hormone replacement, and hormone-sensitive cancers |
 | Palovarotene | retinoid class | acne, psoriasis and other keratinisation disorders topically; acute promyelocytic leukaemia and cutaneous lymphoma systemically |
 | Paricalcitol | selective VDR activator | secondary hyperparathyroidism in chronic kidney disease |
 | Plicamycin | RNA synthesis inhibitor, binds GC-rich DNA | formerly hypercalcaemia of malignancy - withdrawn |
 | Prednisolone Acetate | glucocorticoid class | inflammation and immune suppression - asthma, autoimmune disease, transplant rejection, some leukaemias |
-| Progesterone | sex steroid class | contraception, hormone replacement, and hormone-sensitive cancers |
 | Raloxifene Hydrochloride | selective oestrogen receptor modulator | osteoporosis; breast cancer risk reduction |
 | Romidepsin | histone deacetylase inhibitor | cutaneous and peripheral T-cell lymphoma |
+| Testosterone | androgen receptor agonist | male hypogonadism |
 | Tretinoin | RAR agonist, all-trans retinoic acid | acute promyelocytic leukaemia; acne topically |
 | mitoxantrone | topoisomerase II inhibitor, DNA intercalator | acute myeloid leukaemia, prostate cancer, multiple sclerosis |
 | selumetinib | MEK1/2 inhibitor | neurofibromatosis type 1 plexiform neurofibroma |
-| sirolimus | mTOR inhibitor | transplant rejection prophylaxis, lymphangioleiomyomatosis |
 | vorinostat | histone deacetylase inhibitor | cutaneous T-cell lymphoma |
 
-**No description established for 41**: ABEMACICLIB, Acetaminophen, Alprostadil, Avatrombopag, Belinostat, Bethanechol Chloride, Carboprost Tromethamine, Cevimeline Hydrochloride, Chlorotrianisene, Cinacalcet Hydrochloride, Dimethyl fumarate, Dinoprost Tromethamine, Eltrombopag Olamine, Estramustine Phosphate Sodium, Ethynodiol Diacetate, Etrasimod, Fenfluramine Hydrochloride, Hydroxyprogesterone Caproate, Iloprost, Lusutrombopag, Methylergonovine Maleate, Midodrine Hydrochloride, Misoprostol, Monomethyl fumarate, Omaveloxolone…. That means this package could not find one offline, not that the compound has no approved use. Several are environmental agents and research chemicals from the CTD tables, which have no indication because they are not drugs.
+**No description established for 56**: Acetaminophen, Adenosine, Almotriptan Malate, Avatrombopag, Bazedoxifene Acetate, Belinostat, Bethanechol Chloride, Carboprost Tromethamine, Cevimeline Hydrochloride, Chenodiol, Chlorotrianisene, Choline Fenofibrate, Cinacalcet Hydrochloride, Copper Sulfate, Dinoprost Tromethamine, Docetaxel Anhydrous, Eletriptan Hydrobromide, Eltrombopag Olamine, Estramustine Phosphate Sodium, Etrasimod, Fenofibric Acid, Fingolimod Hydrochloride, Fingolimod Lauryl Sulfate, Givinostat Hydrochloride, Iloprost…. That means this package could not find one offline, not that the compound has no approved use. Several are environmental agents and research chemicals from the CTD tables, which have no indication because they are not drugs.
 
-Descriptions come from: 13 class, 20 curated, 41 unknown. None of these is a label. The curated text is a summary written for orientation, ChEMBL's indication list includes uses studied but never approved, and a class line gives the kind of drug rather than its indication. Check the prescribing information before acting on any row.
+Descriptions come from: 12 class, 27 curated, 56 unknown. None of these is a label. The curated text is a summary written for orientation, ChEMBL's indication list includes uses studied but never approved, and a class line gives the kind of drug rather than its indication. Check the prescribing information before acting on any row.
 
-### Graded candidates
+### Cell-cycle compatibility
 
-Combined = geometric mean of TF confidence and drug quality. A weak TF prediction caps the grade no matter how good the drug.
+Tissue proliferation state: **unknown**
 
-| Grade | Combined | Drug | BBB? | TF | TF conf. | Drug qual. | Potency | Protein select. | Gene select. | Evidence | Flags |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| **B** | 60.4 | Omaveloxolone | no | NFE2L2 | 0.581 | 0.66 | 0.5 | 1.0 | 0.42 | 0.5 | no potency data; scored neutral; thin evidence base (n=0 potency measu |
+1 factor(s) here are cell-cycle restricted (E2F4). Set --proliferation to have this scored rather than just flagged.
 
-**BBB?** is CNS MPO (Wager et al.) against the same scaled threshold the delivery section uses, so a drug cannot read "yes" here and "unlikely" there. It answers whether the molecule can reach brain at all: for a CNS target that decides whether a candidate is usable, and for a peripheral target it decides whether brain exposure is an unwanted side effect rather than the goal.
+| TF | Phase | Duty cycle | Effect multiplier |
+|---|---|---|---|
+| E2F4 | G1 | 46% | 1.0 |
 
-A **no** is the more reliable direction. A molecule failing on size, polarity or lipophilicity does not cross by diffusion, and no formulation fixes that short of bypassing the barrier — intrathecal delivery, convection-enhanced delivery, or focused ultrasound.
+*A partial duty cycle dilutes the population-level effect in asynchronous cells: per-cell efficacy can be much higher than a bulk RT-qPCR suggests. Synchronise or use a phase-resolved readout before calling it a failure.*
 
 ### Upstream routes to factors with no direct drug
 
@@ -1042,103 +1169,122 @@ Distance buys druggability and spends selectivity: a node three hops up reaches 
 - ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 16 downstream branches
 - ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 37 downstream branches
 
-**CEBPD** (no direct pharmacology)
+**KLF5** (no direct pharmacology)
 
 | Upstream target | Hops | Fan-out | Path | Act on it | Drugs | Score |
 |---|---|---|---|---|---|---|
-| CHRM3 | 3 | 5 | CHRM3 --> GNAQ —\| GSK3B —\| CEBPD | activate | Pilocarpine Hydrochloride, Bethanechol Chloride | 17.1 |
-| HTR2B | 3 | 5 | HTR2B --> GNAQ —\| GSK3B —\| CEBPD | activate | Methylergonovine Maleate | 17.1 |
-| HTR2A | 3 | 6 | HTR2A --> GNAQ —\| GSK3B —\| CEBPD | activate | — | 16.7 |
-| CHRM1 | 3 | 6 | CHRM1 --> GNAQ —\| GSK3B —\| CEBPD | activate | Pilocarpine Hydrochloride, Xanomeline, Cevimeline Hydrochloride | 16.7 |
-| MTNR1A | 3 | 7 | MTNR1A --> GNAQ —\| GSK3B —\| CEBPD | activate | Ramelteon, Tasimelteon | 16.4 |
-| PTGFR | 3 | 7 | PTGFR --> GNAQ —\| GSK3B —\| CEBPD | activate | Dinoprost Tromethamine, Carboprost Tromethamine | 16.3 |
-| PTGIR | 3 | 7 | PTGIR --> GNAQ —\| GSK3B —\| CEBPD | activate | Treprostinil, Treprostinil Diolamine, Selexipag | 16.3 |
-| ADRA1D | 3 | 7 | ADRA1D --> GNAQ —\| GSK3B —\| CEBPD | activate | Phenylephrine Hydrochloride, Midodrine Hydrochloride | 16.3 |
-| PTGER1 | 3 | 8 | PTGER1 --> GNAQ —\| GSK3B —\| CEBPD | activate | Alprostadil | 16.0 |
-| HTR2C | 3 | 8 | HTR2C --> GNAQ —\| GSK3B —\| CEBPD | activate | Fenfluramine Hydrochloride | 16.0 |
+| TUBB | 3 | 2 | TUBB —\| SMAD2 --> SMURF2 —\| KLF5 | activate | Docetaxel Anhydrous | 18.3 |
+| CASR | 3 | 2 | CASR --> FYN --> PRKCD --> KLF5 | activate | Cinacalcet Hydrochloride | 18.3 |
+| RARG | 3 | 5 | RARG --> AKT1 --> PRKCD --> KLF5 | activate | Acitretin, Palovarotene, Tretinoin | 17.1 |
+| CHRM3 | 3 | 5 | CHRM3 --> GNAQ —\| GSK3B —\| KLF5 | activate | Pilocarpine Hydrochloride, Bethanechol Chloride | 17.1 |
+| HTR2B | 3 | 5 | HTR2B --> GNAQ —\| GSK3B —\| KLF5 | activate | Methylergonovine Maleate | 17.1 |
+| RARB | 3 | 6 | RARB --> AKT1 --> PRKCD --> KLF5 | activate | Acitretin, Tretinoin | 16.7 |
+| HTR2A | 3 | 6 | HTR2A --> GNAQ —\| GSK3B —\| KLF5 | activate | — | 16.7 |
+| CHRM1 | 3 | 6 | CHRM1 --> GNAQ —\| GSK3B —\| KLF5 | activate | Pilocarpine Hydrochloride, Xanomeline, Cevimeline Hydrochloride | 16.7 |
+| MTNR1A | 3 | 7 | MTNR1A --> GNAQ —\| GSK3B —\| KLF5 | activate | Ramelteon, Tasimelteon | 16.4 |
+| PTGFR | 3 | 7 | PTGFR --> GNAQ —\| GSK3B —\| KLF5 | activate | Dinoprost Tromethamine, Carboprost Tromethamine | 16.3 |
 
+- ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 2 downstream branches
 - ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 5 downstream branches
 - ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 6 downstream branches
-- ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 7 downstream branches
 
-**CEBPA** (no direct pharmacology)
-
-| Upstream target | Hops | Fan-out | Path | Act on it | Drugs | Score |
-|---|---|---|---|---|---|---|
-| RBX1 | 3 | 7 | RBX1 —\| ESR1 --> NR0B2 —\| CEBPA | activate | Lenalidomide Hydrochloride Monohydrate | 16.4 |
-| NOD2 | 3 | 9 | NOD2 --> MAPK14 —\| MAPK3 —\| CEBPA | activate | — | 15.8 |
-
-- ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 7 downstream branches
-- ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 9 downstream branches
-- ⚠ path passes through hub(s): MAPK14, MAPK3
-
-**ELK1** (no direct pharmacology)
+**STAT3** (no direct pharmacology)
 
 | Upstream target | Hops | Fan-out | Path | Act on it | Drugs | Score |
 |---|---|---|---|---|---|---|
-| ESR2 | 2 | 4 | ESR2 --> MAPK11 --> ELK1 | activate | Raloxifene Hydrochloride, Diethylstilbestrol Diphosphate, Estramustine Phosphate Sodium | 34.8 |
-| MTNR1A | 2 | 7 | MTNR1A --> MAPK1 --> ELK1 | activate | Ramelteon, Tasimelteon | 30.2 |
-| NOD2 | 2 | 9 | NOD2 --> MAPK1 --> ELK1 | activate | — | 29.7 |
-| TRPV1 | 3 | 1 | TRPV1 --> PRKCB --> MAPK1 --> ELK1 | activate | Acetaminophen | 18.7 |
-| CASR | 3 | 2 | CASR --> FYN --> MAPK14 --> ELK1 | activate | Cinacalcet Hydrochloride | 18.3 |
-| RARG | 3 | 5 | RARG --> AKT1 --> MAPK1 --> ELK1 | activate | Acitretin, Palovarotene, Tretinoin | 17.1 |
-| RARB | 3 | 6 | RARB --> AKT1 --> MAPK1 --> ELK1 | activate | Acitretin, Tretinoin | 16.7 |
-| PTGIR | 3 | 7 | PTGIR --> STAT3 --> MAPK8 --> ELK1 | activate | Treprostinil, Treprostinil Diolamine, Selexipag | 16.3 |
-| RBX1 | 3 | 7 | RBX1 --> NFKB1 --> CREBBP --> ELK1 | activate | Lenalidomide Hydrochloride Monohydrate | 16.3 |
-| PTGER3 | 3 | 9 | PTGER3 --> SRC --> MAPK1 --> ELK1 | activate | Misoprostol | 15.7 |
+| PTGIR | 1 | 7 | PTGIR --> STAT3 | activate | Treprostinil, Treprostinil Diolamine, Selexipag | 71.4 |
+| MPL | 2 | 2 | MPL --> JAK2 --> STAT3 | activate | Avatrombopag, Avatrombopag Maleate, Lusutrombopag | 33.6 |
+| GHR | 2 | 4 | GHR --> JAK2 --> STAT3 | activate | — | 32.1 |
+| CXCR4 | 2 | 5 | CXCR4 --> JAK2 --> STAT3 | activate | Plerixafor | 31.5 |
+| RARG | 2 | 5 | RARG --> AKT1 --> STAT3 | activate | Acitretin, Palovarotene, Tretinoin | 31.3 |
+| RARB | 2 | 6 | RARB --> AKT1 --> STAT3 | activate | Acitretin, Tretinoin | 30.6 |
+| NOD2 | 2 | 9 | NOD2 --> MAP3K14 --> STAT3 | activate | — | 28.9 |
+| PTGER3 | 2 | 9 | PTGER3 --> EGFR --> STAT3 | activate | Misoprostol | 28.8 |
+| PPARA | 2 | 11 | PPARA —\| FOXO1 —\| STAT3 | activate | Choline Fenofibrate, Elafibranor, Gemfibrozil | 27.6 |
+| S1PR1 | 2 | 12 | S1PR1 --> SRC --> STAT3 | activate | Ponesimod, Siponimod, Etrasimod | 27.6 |
+
+- ⚠ path passes through hub(s): AKT1
+- ⚠ path passes through hub(s): EGFR
+- ⚠ path passes through hub(s): SRC
+
+**FOS** (no direct pharmacology)
+
+| Upstream target | Hops | Fan-out | Path | Act on it | Drugs | Score |
+|---|---|---|---|---|---|---|
+| MTNR1A | 2 | 7 | MTNR1A --> MAPK1 --> FOS | activate | Ramelteon, Tasimelteon | 30.2 |
+| NOD2 | 2 | 9 | NOD2 --> MAPK14 --> FOS | activate | — | 29.2 |
+| PTGER3 | 2 | 9 | PTGER3 --> SRC --> FOS | activate | Misoprostol | 28.9 |
+| S1PR1 | 2 | 12 | S1PR1 --> SRC --> FOS | activate | Ponesimod, Siponimod, Etrasimod | 27.3 |
+| TRPV1 | 3 | 1 | TRPV1 --> PRKCB --> MAPK1 --> FOS | activate | Acetaminophen | 18.7 |
+| ESR1 | 2 | 37 | ESR1 --> SRC --> FOS | activate | Estradiol Acetate, Diethylstilbestrol Diphosphate, Toremifene Citrate | 18.4 |
+| CASR | 3 | 2 | CASR --> FYN --> MAPK14 --> FOS | activate | Cinacalcet Hydrochloride | 18.3 |
+| S1PR5 | 3 | 2 | S1PR5 --> GNAI1 --> SRC --> FOS | activate | Ozanimod, Etrasimod Arginine, Fingolimod Lauryl Sulfate | 18.3 |
+| ADORA3 | 3 | 2 | ADORA3 --> GNAI1 --> SRC --> FOS | activate | Adenosine | 18.3 |
+| HTR1F | 3 | 2 | HTR1F --> GNAI1 --> SRC --> FOS | activate | Almotriptan Malate, Eletriptan Hydrobromide, Lasmiditan | 18.3 |
 
 - ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 1 downstream branches
 - ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 2 downstream branches
-- ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 5 downstream branches
+- ⚠ path passes through hub(s): MAPK1
 
-**GLIS3** (no direct pharmacology)
-
-| Upstream target | Hops | Fan-out | Path | Act on it | Drugs | Score |
-|---|---|---|---|---|---|---|
-| CASR | 3 | 2 | CASR --> FYN —\| ITCH —\| GLIS3 | activate | Cinacalcet Hydrochloride | 18.3 |
-| S1PR1 | 3 | 12 | S1PR1 --> FYN —\| ITCH —\| GLIS3 | activate | Ponesimod, Siponimod, Etrasimod | 14.8 |
-| NR3C1 | 3 | 16 | NR3C1 —\| MAPK8 --> ITCH —\| GLIS3 | activate | Hydrocortisone Acetate, Prednisolone Acetate, Mometasone Furoate | 13.7 |
-
-- ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 12 downstream branches
-- ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 16 downstream branches
-- ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 2 downstream branches
-
-**FOXO1** (no direct pharmacology)
+**JUNB** (no direct pharmacology)
 
 | Upstream target | Hops | Fan-out | Path | Act on it | Drugs | Score |
 |---|---|---|---|---|---|---|
-| PGR | 1 | 1 | PGR --> FOXO1 | activate | Progesterone, Norethindrone, Ethynodiol Diacetate | 98.5 |
-| RXRA | 2 | 22 | RXRA --> NR1I2 --> FOXO1 | activate | Bexarotene, Acitretin, Etretinate | 33.6 |
-| RBX1 | 2 | 7 | RBX1 —\| ESR1 —\| FOXO1 | activate | Lenalidomide Hydrochloride Monohydrate | 30.0 |
-| VDR | 2 | 9 | VDR --> CTNNB1 --> FOXO1 | activate | Cholecalciferol, Paricalcitol, Doxercalciferol | 29.2 |
-| NR3C1 | 2 | 16 | NR3C1 --> CEBPB --> FOXO1 | activate | Hydrocortisone Acetate, Prednisolone Acetate, Mometasone Furoate | 25.8 |
-| ESR1 | 2 | 37 | ESR1 --> PGR --> FOXO1 | activate | Estradiol Acetate, Diethylstilbestrol Diphosphate, Toremifene Citrate | 23.1 |
-| NR3C2 | 3 | 1 | NR3C2 --> NR3C1 --> CEBPB --> FOXO1 | activate | Desoxycorticosterone Acetate, Desoxycorticosterone Pivalate, Fludrocortisone Acetate | 18.7 |
-| MPL | 3 | 2 | MPL --> JAK2 —\| ESR1 —\| FOXO1 | activate | Avatrombopag, Avatrombopag Maleate, Lusutrombopag | 18.3 |
-| CASR | 3 | 2 | CASR --> FYN —\| ITCH —\| FOXO1 | activate | Cinacalcet Hydrochloride | 18.3 |
-| GHR | 3 | 4 | GHR --> JAK2 —\| ESR1 —\| FOXO1 | activate | — | 17.4 |
+| NOD2 | 2 | 9 | NOD2 --> MAPK8 --> JUNB | activate | — | 30.9 |
+| PTGIR | 2 | 7 | PTGIR --> STAT3 --> JUNB | activate | Treprostinil, Treprostinil Diolamine, Selexipag | 30.3 |
+| TRPV1 | 3 | 1 | TRPV1 --> PRKCB --> MAPK8 --> JUNB | activate | Acetaminophen | 18.7 |
+| MPL | 3 | 2 | MPL --> JAK2 --> STAT3 --> JUNB | activate | Avatrombopag, Avatrombopag Maleate, Lusutrombopag | 18.3 |
+| CASR | 3 | 2 | CASR --> FYN —\| ITCH —\| JUNB | activate | Cinacalcet Hydrochloride | 18.3 |
+| GHR | 3 | 4 | GHR --> JAK2 --> STAT3 --> JUNB | activate | — | 17.5 |
+| CXCR4 | 3 | 5 | CXCR4 --> JAK2 --> STAT3 --> JUNB | activate | Plerixafor | 17.1 |
+| RARG | 3 | 5 | RARG --> AKT1 --> STAT3 --> JUNB | activate | Acitretin, Palovarotene, Tretinoin | 17.1 |
+| CHRM3 | 3 | 5 | CHRM3 --> GNAQ —\| GSK3B —\| JUNB | activate | Pilocarpine Hydrochloride, Bethanechol Chloride | 17.1 |
+| HTR2B | 3 | 5 | HTR2B --> GNAQ —\| GSK3B —\| JUNB | activate | Methylergonovine Maleate | 17.1 |
 
 - ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 1 downstream branches
 - ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 2 downstream branches
 - ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 4 downstream branches
 
+**JUND** (no direct pharmacology)
+
+| Upstream target | Hops | Fan-out | Path | Act on it | Drugs | Score |
+|---|---|---|---|---|---|---|
+| MTNR1A | 2 | 7 | MTNR1A --> MAPK1 --> JUND | activate | Ramelteon, Tasimelteon | 30.4 |
+| NOD2 | 2 | 9 | NOD2 --> MAPK8 --> JUND | activate | — | 30.3 |
+| TRPV1 | 3 | 1 | TRPV1 --> PRKCB --> MAPK8 --> JUND | activate | Acetaminophen | 18.8 |
+| RARG | 3 | 5 | RARG --> AKT1 --> BLVRA --> JUND | activate | Acitretin, Palovarotene, Tretinoin | 17.1 |
+| RARB | 3 | 6 | RARB --> AKT1 --> BLVRA --> JUND | activate | Acitretin, Tretinoin | 16.8 |
+| PTGIR | 3 | 7 | PTGIR --> STAT3 --> MAPK8 --> JUND | activate | Treprostinil, Treprostinil Diolamine, Selexipag | 16.3 |
+| PTGER3 | 3 | 9 | PTGER3 --> SRC --> MAPK1 --> JUND | activate | Misoprostol | 15.7 |
+| S1PR1 | 3 | 12 | S1PR1 --> LYN --> MAPK3 --> JUND | activate | Ponesimod, Siponimod, Etrasimod | 14.9 |
+| RARA | 3 | 15 | RARA --> AKT1 --> BLVRA --> JUND | activate | Acitretin, Tretinoin | 14.0 |
+| NR3C1 | 3 | 16 | NR3C1 --> LCK --> MAPK3 --> JUND | activate | Hydrocortisone Acetate, Prednisolone Acetate, Mometasone Furoate | 14.0 |
+
+- ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 1 downstream branches
+- ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 12 downstream branches
+- ⚠ 3 hops upstream: druggable, but it reaches your gene through one of 15 downstream branches
+
+### Mechanism options: orthosteric vs allosteric
+
+Allosteric sites are not constrained to bind the endogenous ligand, so they diverge across a receptor family where the orthosteric pocket cannot. That usually buys subtype selectivity — at the cost of a bounded maximal effect and a hard dependence on endogenous tone.
+
+**HNF4A**
+
+| Mechanism | Drugs | Max effect | Subtype selectivity | Outcompeted by ligand? | Needs endogenous ligand | Examples |
+|---|---|---|---|---|---|---|
+| orthosteric agonist | 1 | full | typically lower | no | no |  |
+
+*No approved allosteric modulator at this target; only orthosteric pharmacology, with the usual subtype-selectivity problem.*
+
+**Before pursuing any allosteric option, verify that the pathway has endogenous tone in your cell type.** A PAM with no ligand to modulate does nothing at all, and that is a measurement, not a prediction — nothing in this package can check it for you.
+
 ### Locking the factor into an active state
 
 Nuclear receptors have a ligand-binding pocket; almost no other TF does, which is why the graded tables keep returning NR agonists. Stabilisation sidesteps the pocket: every factor has protein-protein interfaces and degradation machinery, and both are druggable.
 
-**NFE2L2** — **no ligand pocket** · **a curated route exists**
-
-| Drug | Mechanism | Binds | Raises | Status |
-|---|---|---|---|---|
-| Dimethyl fumarate (2013) | degradation blocker | KEAP1 | abundance | approved |
-| Omaveloxolone (2023) | degradation blocker | KEAP1 | abundance | approved |
-| Monomethyl fumarate (2020) | degradation blocker | KEAP1 | abundance | approved |
-
-- Degradation blockers raise protein LEVELS; conformational stabilisers raise activity with levels unchanged. Pick your assay accordingly — a western blot cannot see the second kind.
-
 #### No stabilisation route for 7 factor(s)
 
-CEBPA, CEBPD, ELK1, FOXO1, GLIS3, NFYB, TBX2
+FOS, FOSL2, JUNB, JUND, KLF5, NFYB, STAT3
 
 These have no ligand pocket, no direct drug, and **nothing curated against them or their degradation machinery**. For these factors stabilisation is a research programme, not a route you can take: making it real needs the E3 ligase that degrades the factor *and* a ligand for that ligase, and neither is published here.
 
@@ -1153,15 +1299,15 @@ Three things must overlap: where the drug goes, where the gene is expressed, and
 | TF | Co-expressed with gene | Shared tissues |
 |---|---|---|
 | NFYB | yes (16) | breast, cervix, uterine, endometrium, esophagus, kidney, lun |
-| CEBPD | yes (16) | breast, cervix, uterine, endometrium, esophagus, kidney, lun |
+| HNF4A | yes (1) | kidney |
+| KLF5 | yes (15) | breast, cervix, uterine, endometrium, esophagus, kidney, lun |
+| STAT3 | yes (16) | breast, cervix, uterine, endometrium, esophagus, kidney, lun |
+| FOS | yes (15) | breast, cervix, uterine, endometrium, esophagus, kidney, lun |
+| JUNB | yes (16) | breast, cervix, uterine, endometrium, esophagus, kidney, lun |
+| JUND | yes (16) | breast, cervix, uterine, endometrium, esophagus, kidney, lun |
+| FOSL2 | yes (16) | breast, cervix, uterine, endometrium, esophagus, kidney, lun |
+| WT1 | yes (7) | cervix, uterine, endometrium, kidney, placenta, seminal vesi |
 | CEBPA | yes (15) | breast, cervix, uterine, endometrium, esophagus, kidney, lun |
-| TBX2 | yes (15) | breast, cervix, uterine, endometrium, esophagus, kidney, lun |
-| ELK1 | yes (16) | breast, cervix, uterine, endometrium, esophagus, kidney, lun |
-| GLIS3 | yes (15) | breast, cervix, uterine, endometrium, esophagus, kidney, lun |
-| FOXO1 | yes (16) | breast, cervix, uterine, endometrium, esophagus, kidney, lun |
-| NFE2L2 | yes (16) | breast, cervix, uterine, endometrium, esophagus, kidney, lun |
-| TBX3 | yes (15) | breast, cervix, uterine, endometrium, esophagus, kidney, lun |
-| STAT1 | yes (16) | breast, cervix, uterine, endometrium, esophagus, kidney, lun |
 
 ### Human genetic evidence
 
@@ -1189,7 +1335,7 @@ The strongest evidence available anywhere in this report. A motif says a factor 
 
 **No factor can be supported this way for CYP24A1.** CYP24A1 has no significant trans-eQTL in eQTLGen at all, so the test returns nothing for every factor here. That is a property of the dataset's power and of the tissue (whole blood), not evidence that CYP24A1 is unregulated.
 
-*No factor tested (NFYB, CEBPD, CEBPA, TBX2, ELK1, GLIS3) has trans-eQTL support for this gene.*
+*No factor tested (NFYB, HNF4A, KLF5, STAT3, FOS, JUNB) has trans-eQTL support for this gene.*
 
 *eQTLGen is whole blood at n=31,684, FDR<0.05. A hit is strong causal evidence. **Absence is weak** — trans effects are small and detecting them needs enormous power, so a null overwhelmingly means underpowered rather than unregulated, and a relationship operating outside blood would not appear at all.*
 
@@ -1237,9 +1383,11 @@ A promoter-level analysis stops at transcription. These act after it, and for so
 
 ### Candidates that may beat the current standard
 
-**No incumbent found.** Nothing in the curated tables or CTD currently controls this gene's expression. There is no bar to clear, so candidates below are ranked on their own merits — check the gap is real rather than a hole in the databases.
+**The bar: strength 0.498, specificity 0.454, efficiency 0.665** (predicted) — the best established value on *each axis*, not one drug's scores. Representative incumbent: Genistein (via TF).
 
-*Accounting for all 1 candidates: 0 already linked, 1 novel and non-dominated, 0 novel but beaten on every axis by another candidate, 0 with no advantage. All of them are in results.json under `improvements.all_candidates`.*
+1 of 3 candidates already have a reported link to this gene (CTD returned 180 chemicals with curated expression effects).
+
+*Accounting for all 3 candidates: 1 already linked, 2 novel and non-dominated, 0 novel but beaten on every axis by another candidate, 0 with no advantage. All of them are in results.json under `improvements.all_candidates`.*
 
 #### Compounds already reported to change this gene
 
@@ -1253,7 +1401,7 @@ These come from CTD's curated chemical–gene interactions: someone measured an 
 - **exposure** (20) — formaldehyde, asbestos, bisphenol, tobacco smoke. Real measured effects on your gene, and not things anyone can be given.
 - **category** (7) — MeSH headings such as "Anti-HIV Agents" or "Plant Extracts". Not compounds at all, so the column is blank rather than no.
 
-Across all three directions, **0 of 180 matched a candidate from this run**. A low number here is the normal result: this report's drug tables are approved pharmacology, and most of CTD is not. It means the two sources are looking at different parts of chemical space, not that either is wrong.
+Across all three directions, **1 of 180 matched a candidate from this run**. A low number here is the normal result: this report's drug tables are approved pharmacology, and most of CTD is not. It means the two sources are looking at different parts of chemical space, not that either is wrong.
 
 **Reported to move CYP24A1 UP** — leads:
 
@@ -1290,96 +1438,50 @@ Ampicillin, Arsenic Trioxide, Ascorbic Acid, Cisplatin, Copper, Flurbiprofen, Ge
 
 *CTD aggregates across cell types, doses and assays. A 'both' or contradictory annotation usually means the effect is context-dependent rather than that the data are wrong — check the underlying study before relying on any single row.*
 
-#### Not previously linked (no incumbent to beat)
+#### No unlinked candidate beat the standard of care
 
-| Candidate | Route | TF | Strength | Specificity | Efficiency | Wins on | Trade-offs |
-|---|---|---|---|---|---|---|---|
-| Omaveloxolone | via TF | NFE2L2 | 0.512 | 0.42 | 0.725 | stronger activation, superior efficiency | none |
-
-*No incumbent exists, so these cleared no bar — they are simply the candidates that scored above 0.5 on at least one axis. Hypotheses to test.*
-
-#### Non-dominated set (nothing beats these on every axis)
-
-- **Omaveloxolone** (NEW link) — no incumbent for this gene; nothing to beat
-
-### Strength of evidence for each factor route
-
-Two links between a drug and your gene come from evidence and differ from row to row: whether the drug engages its target at a dose that can be reached, and whether the factor is likely to act on this promoter. Each is a 0 to 1 heuristic and not a calibrated probability. They are shown as they are, and they are not multiplied into a chance that the gene moves.
-
-| Drug | TF | Drug engagement | Promoter activation | Weaker link | Knockout evidence |
-|---|---|---|---|---|---|
-| Omaveloxolone ★ | NFE2L2 | 0.775 | 0.557 | promoter activation | gene rises when the factor is lost, 1 of 27 |
-
-★ = named in the comparison against the standard of care above, pinned here so the two sections cannot disagree.
-
-**Knockout evidence** says whether your gene is among the genes that changed when the factor was knocked out, knocked down or overexpressed in published experiments. A response shows the factor can move the gene somewhere, not that it will in your cells or that a drug acting on the factor will. "Not among top changes" is weak, because each list holds only the few hundred genes that changed most.
-
-Where the knockout data and the annotated role disagree, one of them is wrong for this gene, and it matters whether the factor is to be activated or blocked:
-
-- NFE2L2: annotated as an activator, yet the gene rises when it is lost in the knockout data
-
-Order candidates by tier and score, as the tables above do. These columns say where the evidence behind a route is thin.
-
-## Virtual screening
-
-A screen needs a model, and a model needs data. This one trains on measured binding at the receptor, so it runs only where ChEMBL holds at least 20 ligands at pChEMBL 6 or better, and only when the trained model separates known actives from decoys at CV AUC 0.7 or above.
-
-**Screened:** NFE2L2.
-
-**This is why the same receptor families appear here whatever gene you run.** The filter selects for how much medicinal chemistry a receptor has attracted, not for anything about your promoter. Nuclear receptors, and the retinoid and steroid receptors above all, have ligand series running to thousands of compounds; most transcription factors have none at all. So a receptor reaching this section means it is well studied, and the drugs listed under it are that receptor's pharmacology, not a result about your gene.
-
-Read these rows as *candidate ligands for a factor that has a site in your promoter*. Whether moving that factor moves your gene is a separate question, and the activity and evidence sections above speak to it. A long list here is evidence about the receptor's chemistry; it is not evidence that the gene will respond.
-
-### Virtual screen of approved drugs against NFE2L2
-
-Binding model, CV AUC 0.994 — trained on 249 measured actives vs 747 decoys, screened 3311 approved drugs.
-
-*Direction not annotated: only 1 drugs at this receptor carry an agonist/antagonist label. The hits below are predicted BINDERS — whether each would activate or inhibit is unknown and needs a functional assay.*
-
-**Screen rejected:** no known actives appear among the top hits — the model is not ranking them above the library, so the novel list cannot be trusted No candidates are reported from it.
+Every candidate that scored well is already a reported regulator of this gene, or failed to clear the per-axis bar by more than the prediction error. This is the common result and it is informative: it says the obvious pharmacology has been explored.
 
 ### Drug–gene links with no recorded direction
 
-133 interaction(s) across 4 factor(s) come from curated sources that record a drug–gene relationship **without saying which way it goes**. They are held back from the recommendations above, because the entire question here is direction and an undirected link cannot answer it.
+75 interaction(s) across 24 factor(s) come from curated sources that record a drug–gene relationship **without saying which way it goes**. They are held back from the recommendations above, because the entire question here is direction and an undirected link cannot answer it.
 
 They are still leads — someone curated a real relationship — but they need a literature check, not a prediction. Many are chemotherapeutics or broad stressors whose association with a transcription factor reflects cell-wide perturbation rather than a specific mechanism.
 
 | TF | Drug | Reported by | DGIdb score |
 |---|---|---|---|
 | ELK1 | Ganciclovir | NCI | 11.71 |
-| TBX2 | Atenolol | ClinPGx | 2.6 |
+| STAT5A | Tofacitinib | DTC | 2.34 |
+| CTCF | Capivasertib | PRISM | 2.04 |
+| KLF5 | Secnidazole | PRISM | 1.95 |
+| STAT5B | Tofacitinib | DTC | 1.56 |
+| ETV1 | Trametinib Dimethyl Sulfoxide | CIViC | 1.51 |
+| ETV5 | Trametinib Dimethyl Sulfoxide | CIViC | 1.51 |
+| TFAP4 | Azacitidine | PRISM | 1.09 |
+| STAT6 | Esomeprazole Sodium | ClinPGx | 0.99 |
+| JUND | Clozapine | NCI | 0.94 |
+| JUN | Copper Chloride | DTC | 0.9 |
+| MEF2A | Metformin | ClinPGx | 0.85 |
+| NHLH1 | Cisplatin | ClinPGx | 0.55 |
+| JUNB | Brigatinib | PRISM | 0.53 |
 | FOXO1 | Epirubicin | ClinPGx | 0.52 |
-| FOXO1 | Cyclophosphamide Anhydrous | ClinPGx | 0.21 |
-| FOXO1 | Fluorouracil | ClinPGx | 0.14 |
-| NFE2L2 | Dimethyl Fumarate | DTC; Drug Repurposing Hub | 0.06 |
-| NFE2L2 | Atorvastatin Calcium | DTC | 0.03 |
-| NFE2L2 | Atovaquone | DTC | 0.03 |
-| NFE2L2 | Furazolidone | DTC | 0.03 |
-| NFE2L2 | Hydrocortisone Acetate | DTC | 0.03 |
-| NFE2L2 | Nandrolone Decanoate | DTC | 0.03 |
-| NFE2L2 | Neostigmine Methylsulfate | DTC | 0.03 |
-| NFE2L2 | Dicumarol | DTC; NCI | 0.02 |
-| NFE2L2 | Adefovir Dipivoxil | DTC | 0.02 |
-| NFE2L2 | Deferoxamine Mesylate | DTC | 0.02 |
-| NFE2L2 | Dydrogesterone | DTC | 0.02 |
-| NFE2L2 | Hydrocortisone Sodium Succinate | DTC | 0.02 |
-| NFE2L2 | Methyclothiazide | DTC | 0.02 |
-| NFE2L2 | Methylprednisolone Acetate | DTC | 0.02 |
-| NFE2L2 | Oxyphenonium Bromide | DTC | 0.02 |
-| NFE2L2 | Pioglitazone Hydrochloride | DTC | 0.02 |
-| NFE2L2 | Pipobroman | DTC | 0.02 |
-| NFE2L2 | Prednisolone Acetate | DTC | 0.02 |
-| NFE2L2 | Rosiglitazone Maleate | DTC | 0.02 |
-| NFE2L2 | Stanozolol | DTC | 0.02 |
-| … 108 more | | | |
+| FOS | Bromocriptine Mesylate | NCI | 0.47 |
+| E2F4 | Crizotinib | PRISM | 0.46 |
+| JUN | Atomoxetine Hydrochloride | DTC | 0.45 |
+| WT1 | Deferoxamine | NCI | 0.45 |
+| WT1 | Dimethyl Sulfoxide | NCI | 0.42 |
+| HNF4A | Urea | NCI | 0.39 |
+| STAT5B | Dasatinib Anhydrous | Drug Repurposing Hub; TEND; TdgClinicalTrial | 0.34 |
+| FOS | Pilocarpine Hydrochloride | NCI | 0.33 |
+| HNF4A | Toremifene Citrate | DTC | 0.33 |
+| FOS | Baclofen | NCI | 0.31 |
+| … 50 more | | | |
 
 *Pass `--include-unknown-direction` to fold these into the main tables anyway — but every such row will read UNKNOWN / unclear, which is what they are.*
 
 ### Approved drugs acting on these factors
 
-| TF | TF role | Do what to this TF | Drug | Action | Drug direction | First approval | Source |
-|---|---|---|---|---|---|---|---|
-| NFE2L2 | activator | increase | Omaveloxolone | ACTIVATOR | up | 2023 | ChEMBL |
+No approved drug with activating pharmacology was found for any TF matched in this promoter. That is the usual result outside the nuclear-receptor family; see the README for indirect strategies.
 
 ---
 
@@ -1431,7 +1533,7 @@ The outcome chain above is almost always limited by *gene responsiveness in your
 
 ### Reporter construct
 
-- Insert: 20:54171754-54172953 (1000 bp upstream / 200 bp downstream of the ENST00000395954 TSS)
+- Insert: 20:54170954-54176953 (5000 bp upstream / 1000 bp downstream of the ENST00000395954 TSS)
 - Vector: promoterless luciferase (pGL4.10-style) or GFP for FACS-based screening; luciferase for arrayed compound screens, GFP for pooled CRISPRa
 - Controls:
   - Promoterless vector: establishes the floor. Without it you cannot tell activation from vector background.
@@ -1443,7 +1545,7 @@ The outcome chain above is almost always limited by *gene responsiveness in your
 ### CRISPRa screen
 
 - Approach: dCas9-VP64 with SAM (MS2-p65-HSF1) or dCas9-VPR for stronger activation
-- Focused library: 14 TFs prioritised by this run (SOX2, POU5F1, POU2F1, ZNF530, EBF2, EBF4, MTF1, NFIB, ZNF707, ZNF320...)
+- Focused library: 20 TFs prioritised by this run (SOX2, POU2F1, FOS, JUNB, JUND, FOSL2, JUN, KLF5, STAT3, NFYB...)
 - Unbiased: ~1,600 human TFs (Calabrese or a TF-focused sublibrary). Run this if the focused set comes back empty — an unbiased screen is the only thing that finds a factor nobody has associated with your promoter.
 - Coverage: 3-5 sgRNAs per gene, >=500 cells per guide at transduction, MOI ~0.3 to keep single integrations
 - Readout: FACS sort GFP-high vs GFP-low, then sequence guide abundance; or arrayed luciferase for a focused set

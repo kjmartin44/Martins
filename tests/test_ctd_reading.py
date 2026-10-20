@@ -133,3 +133,93 @@ def test_a_failed_lookup_is_still_none_not_empty():
         def get(self, *a, **k):
             raise d.HttpError("down")
     assert d.ctd_expression_links(Boom(), "CYP3A4") is None
+
+
+# ------------------------------------------------- the literature route
+from promoter_tf_drugs import catalogue as cat  # noqa: E402
+
+
+def _literature(entries, papers=None, gene="CYP3A4"):
+    return {"gene": gene, "papers": papers or {},
+            "reported_links": {"wanted_direction": entries}}
+
+
+def _entry(name, kind="chemical"):
+    return {"chemical": name, "direction": "up", "kind": kind, "actions": ""}
+
+
+def test_papers_are_counted_for_the_rows_the_links_count():
+    rows = [dict(r, PubMedIDs=p) for r, p in zip(ROWS, [
+        "1|2", "3", "4", "5", "6|7|8", "9", "10"])]
+    got = d.expression_papers(rows)
+    assert got["rifampin"] == {"1", "2"}
+    assert got["ketoconazole"] == {"3"}, "a modulator is still a known link"
+    assert "flame retardant" not in got and "protein only" not in got
+    assert got["no text"] == {"9"}, "a row with no sentence is counted as before"
+
+
+def test_the_papers_lookup_reads_counts_and_survives_a_failed_request():
+    rows = [dict(r, PubMedIDs="1|2") for r in ROWS[:1]]
+
+    class Client_:
+        def get(self, url, params=None, **kw):
+            return rows
+    assert d.ctd_expression_papers(Client_(), "CYP3A4") == {"rifampin": 2}
+
+    class Boom:
+        def get(self, *a, **k):
+            raise d.HttpError("down")
+    assert d.ctd_expression_papers(Boom(), "CYP3A4") == {}
+
+
+def test_each_chemical_ctd_records_the_wanted_way_becomes_a_tier_four_route():
+    lit = _literature([_entry("Rifampin"), _entry("Formaldehyde", "exposure"),
+                       _entry("Anti-HIV Agents", "category"),
+                       _entry("Single")], {"rifampin": 3, "single": 1})
+    routes = cat.from_ctd(lit, "up")
+    assert [r.drug for r in routes] == ["Rifampin", "Single"], (
+        "exposures and headings are not drugs")
+    r = routes[0]
+    assert r.category == "literature: reported effect" and r.tier == 4
+    assert r.directness == 2 and r.source == "ctd" and r.acts_on == "not stated"
+    assert r.mechanism == "reported to raise CYP3A4 mRNA"
+    assert r.axes.strength == 0.5 and routes[1].axes.strength == 0.35
+    assert any("in 3 papers" in n for n in r.notes)
+    assert any("in 1 paper" in n and "papers" not in n for n in routes[1].notes)
+    assert any("not a prediction" in n for n in r.notes)
+    assert cat.from_ctd(lit, "down")[0].mechanism == "reported to lower CYP3A4 mRNA"
+
+
+def test_no_literature_means_no_routes_and_the_category_is_documented():
+    assert cat.from_ctd(None) == [] and cat.from_ctd({}) == []
+    assert "literature: reported effect" in cat.CATEGORIES
+    guide = cat.CATEGORY_GUIDE["literature: reported effect"]
+    assert "3%" in guide["cost"]
+
+
+def test_the_catalogue_builds_them_from_the_result_block():
+    block = {"gene_symbol": "CYP3A4", "literature": _literature(
+        [_entry("Rifampin")], {"rifampin": 2})}
+    out = cat.build(block, goal="up")
+    assert [r["drug"] for r in out["routes"]
+            if r["category"] == "literature: reported effect"] == ["Rifampin"]
+
+
+def test_the_retrospective_never_scores_the_answer_key_against_itself():
+    from promoter_tf_drugs import retrospective as rt
+    routes = [{"drug": "Rifampin", "category": "literature: reported effect",
+               "tier": 4, "score": 50},
+              {"drug": "Other", "category": "TF: known regulator", "tier": 4,
+               "score": 40}]
+    assert [x["drug"] for x in rt.drug_ranking(routes)] == ["Other"]
+    for group in rt.GROUPS:
+        assert rt.breadth_key("Rifampin") not in rt.route_scores(routes, group)
+
+
+def test_the_run_and_the_command_line_can_turn_the_route_off():
+    import inspect
+    from promoter_tf_drugs import cli, pipeline
+    assert inspect.signature(pipeline.run).parameters["ctd_route"].default is True
+    kw = cli.run_kwargs_from_args(cli.build_parser().parse_args(
+        ["--gene", "X", "--no-ctd-route"]))
+    assert kw["ctd_route"] is False

@@ -76,6 +76,7 @@ CATEGORIES = [
     "TF: degradation blocker",
     "TF: known regulator",
     "upstream signalling",
+    "literature: reported effect",
     "off-pathway pocket binder",
     "measured phenocopy",
     "empirical signature",
@@ -378,6 +379,23 @@ CATEGORY_GUIDE = {
                 "genes through the rest.",
         "differs": "The only category where the drug never touches your gene "
                    "or its TF — read the printed path and judge it yourself.",
+    },
+    "literature: reported effect": {
+        "changes": "abundance (reported)",
+        "assay": "RT-qPCR in your cells; read the paper for the dose, cell type "
+                 "and species first",
+        "what": "A chemical CTD records as raising or lowering this gene's "
+                "mRNA, with no mechanism stated.",
+        "why": "It is the only route that can name a drug nothing here can "
+               "explain, which includes most of what CTD holds: stress, "
+               "feedback and toxicity effects.",
+        "cost": "Most records rest on one paper, often at a toxicology dose in "
+                "one cell type. Across 36 genes only about 3% of them were "
+                "reproduced in LINCS, and more papers did not raise that. "
+                "Famous drugs are over-represented.",
+        "differs": "Every other category predicts an effect from a mechanism. "
+                   "This reports an effect somebody saw, and cannot suggest a "
+                   "drug nobody has tested on this gene.",
     },
     "empirical signature": {
         "changes": "abundance (measured)",
@@ -723,18 +741,65 @@ def from_upstream(upstream: dict) -> list[Route]:
     return out
 
 
+def from_ctd(literature: dict | None, goal: str = "up") -> list[Route]:
+    """One route per chemical CTD records as moving this gene the wanted way.
+
+    `literature` is `{"gene", "reported_links", "papers"}` from `discovery`.
+    Only entries that are chemicals (not exposures or MeSH headings) and whose
+    direction is the goal's count. The route is tier 4 and sits two steps out,
+    because the path from the drug to the gene is unknown, and its strength is
+    fixed by the paper count (0.5 for two or more, 0.35 for one), which is not
+    calibrated and which a check against LINCS found does not predict
+    reproducibility. It is left out of the retrospective check, since CTD is the
+    answer key there.
+    """
+    lit = literature or {}
+    reported = (lit.get("reported_links") or {}).get("wanted_direction") or []
+    papers = lit.get("papers") or {}
+    gene = lit.get("gene") or "the gene"
+    verb = "raise" if goal == "up" else "lower"
+    out = []
+    for e in reported:
+        if e.get("kind") != "chemical":
+            continue
+        name = e["chemical"]
+        n = papers.get(name.lower())
+        strength = 0.5 if (n or 0) >= 2 else 0.35
+        notes = [
+            f"CTD records it as moving {gene} mRNA the way the goal needs"
+            + (f", in {n} paper{'s' if n != 1 else ''}" if n else ""),
+            "an observation from the literature, not a prediction: the dose, "
+            "cell type and species are not shown here, and no mechanism is "
+            "stated"]
+        out.append(Route(
+            drug=name, category="literature: reported effect",
+            mechanism=f"reported to {verb} {gene} mRNA",
+            acts_on="not stated", tier=4, directness=2,
+            axes=Axes(strength, 0.5, 0.5, "measured"),
+            approved=bool(verify_approval(name)), source="ctd", notes=notes))
+    return out
+
+
 def from_regulators(regulators: dict) -> list[Route]:
     """Drugs at factors recorded as regulating the gene (see regulators.py).
 
-    Every route is tier 4. Both links are recorded, the factor to the gene
-    and the drug to the factor, but the effect of the drug on the gene is
-    still inferred by multiplying their signs. Checked against CTD on 36
-    saved runs, the drugs found this way had the right direction 55% of the
-    time (CollecTRI) and 67% (knockout data, 21 drugs), against 48% for an
-    approved drug picked at random. Resampling the genes gives intervals for
-    the gain over chance that include zero, so the route earns the tier of a
-    model's prediction and not a curator's, and no more than that. The numbers
-    on the axes are fixed by source and are not calibrated.
+    Most routes are tier 4. Both links are recorded, the factor to the gene and
+    the drug to the factor, but the effect of the drug on the gene is still
+    inferred by multiplying their signs. Checked against CTD on 36 saved runs,
+    the drugs found this way had the right direction 55% of the time (CollecTRI)
+    and 67% (knockout data, 21 drugs), against 48% for an approved drug picked at
+    random, and resampling the genes gave intervals for the gain over chance that
+    include zero.
+
+    One group is tier 3, provisionally: a direct regulator that CollecTRI and the
+    knockout data both name with the same sign, with a drug recorded at the
+    factor. In the later 36-gene runs those drugs had the right direction 78% of
+    the time (32 against 9), against 69% for the other predicted routes and 59%
+    for a random approved drug. That group is small and was found on the same
+    genes it was tuned on, so the promotion has not been tested on genes held
+    out, and the other groups (CollecTRI alone, two steps removed, a measured
+    activity only) stay at tier 4. The numbers on the axes are fixed by source
+    and are not calibrated.
     """
     out = []
     for sym, rec in (regulators or {}).items():
@@ -771,12 +836,22 @@ def from_regulators(regulators: dict) -> list[Route]:
             if d.get("target_type"):
                 nt.append("recorded at a protein family or group that includes "
                           f"{sym}, not at {sym} alone")
+            # Two sources agreeing on a direct regulator is what earned tier 3.
+            confirmed = (curated and knocked and not via
+                         and not rec.get("disagree")
+                         and d.get("action_type") != "MEASURED ACTIVITY")
+            if confirmed:
+                nt.append("tier 3, provisionally: CollecTRI and the knockout "
+                          "data both name this factor with the same sign, and "
+                          "such drugs had the right direction more often than "
+                          "other predicted routes in the 36-gene check")
             out.append(Route(
                 drug=d["name"], category="TF: known regulator",
                 mechanism=(f"{verb} {sym}, which regulates {via}, a recorded "
                            f"regulator of the gene" if via else
                            f"{verb} {sym}, a recorded regulator of the gene"),
-                acts_on=sym, tier=4, directness=2 if via else 1,
+                acts_on=sym, tier=3 if confirmed else 4,
+                directness=2 if via else 1,
                 axes=Axes(strength, 0.5, 0.6, "predicted"),
                 approved=bool(d.get("approved", True)), source="regulators",
                 notes=nt))
@@ -1505,6 +1580,7 @@ def build(result_block: dict, *, goal: str = "up",
     routes += from_stabilisers(result_block.get("stabilisation") or {})
     routes += from_ligands(result_block.get("ligand_axes") or {})
     routes += from_upstream(result_block.get("upstream") or {})
+    routes += from_ctd(result_block.get("literature"), goal)
     routes += from_regulators(result_block.get("regulators") or {})
     routes += from_lincs(result_block.get("lincs") or {})
     routes += from_screen(

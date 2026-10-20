@@ -19,12 +19,14 @@ Run on Windows with Python 3.12, against a working tree that is not committed.
 | Live runs, ABCD2, LPL and FXN raised, with two-step regulators | completed; the expected drugs were found for ABCD2 and LPL, and for FXN all but omaveloxolone. See [checks](checks.md#rare-disease-genes-whose-drugs-are-known) |
 
 The CYP24A1 run is a positive control. The report's verdict is **degraded**: the
-motif scan found 13 sites against about 11 expected from shuffled windows. The vitamin
-D analogues, the textbook answer, are found through the known regulators route and rank
-10 to 15 of 65 approved drugs, behind nine tier-3 routes. That ordering is what the
-retrospective check in [checks](checks.md) predicts: the routes reach about a tenth of
-the approved drugs CTD records as raising a gene, and rank them no better than chance
-once a drug's fame is held equal.
+default window showed no signal (13 sites), and the scan retried at -5000/+1000 shows a weak
+one (89 sites against about 65 expected from shuffled windows). The vitamin D analogues, the
+textbook answer, are found through the known regulators route. In the snapshot made before the
+tier 3 rule they ranked 10 to 15 of 65 approved drugs, behind nine tier-3 routes. In the rerun
+with the rule they rank 1 to 6 of 99. CYP24A1 is one of the genes the rule was chosen on, so
+that is not a test of it. The check in [checks](checks.md) found that the routes reach about
+a tenth of the approved drugs CTD records as raising a gene (14% after the later fixes), and
+rank them no better than chance once a drug's fame is held equal.
 
 What this record does not show. No drug in any list has been shown to change the
 gene. The 36 saved runs behind the figures in `checks.md` predate the motif scan

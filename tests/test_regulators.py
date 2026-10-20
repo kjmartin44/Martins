@@ -258,3 +258,35 @@ def test_the_evaluation_variants_switch_sources_on_and_off():
         "Agonist"]
     assert rg.regulator_routes("baseline", **kw) == []
     assert rg.regulator_routes("knockout, TFs", **kw) == []
+
+
+# ------------------------------------------- the provisional promotion
+def test_a_direct_regulator_both_sources_name_is_tier_three():
+    both = _record(sources=["CollecTRI", "knockout data"], n_responses=2)
+    (r,) = cat.from_regulators(both)
+    assert r.tier == 3 and r.axes.strength == 0.6
+    assert any("tier 3, provisionally" in n for n in r.notes)
+
+
+def test_every_other_kind_of_known_regulator_route_stays_tier_four():
+    def tier(**kw):
+        (r,) = cat.from_regulators(_record(**kw))
+        return r.tier
+    assert tier() == 4, "CollecTRI alone"
+    assert tier(sources=["knockout data"]) == 4, "knockout data alone"
+    assert tier(sources=["CollecTRI, one step removed"], via="AAA") == 4
+    assert tier(sources=["CollecTRI", "knockout data"], via="AAA") == 4, (
+        "two steps removed, whatever the sources")
+    assert tier(sources=["CollecTRI", "knockout data"], disagree=True) == 4, (
+        "the sources disagree on the sign")
+    measured = drug("Binder", "ACT", "unclear").to_dict()
+    measured["action_type"] = "MEASURED ACTIVITY"
+    assert tier(sources=["CollecTRI", "knockout data"], drugs=[measured]) == 4, (
+        "only a measured activity, which the 78% did not include")
+
+
+def test_a_drug_with_an_unclear_recorded_action_still_earns_it():
+    unclear = drug("Vague", "ACT", "unclear").to_dict()
+    (r,) = cat.from_regulators(_record(
+        sources=["CollecTRI", "knockout data"], drugs=[unclear]))
+    assert r.tier == 3, "the measured group included unclear mechanisms"

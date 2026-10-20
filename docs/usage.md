@@ -54,6 +54,7 @@ make all drug, annotation, and curated evidence stages species independent.
 | `--genetics` | Add genetics context and lookup guidance. |
 | `--upstream-network --upstream-depth 3` | Search signed upstream paths. |
 | `--upstream-factors 20 --upstream-drugs-per-node 12` | Search more factors and list more drugs per node (defaults 8 and 5). |
+| `--no-ctd-route` | Do not list the chemicals CTD records as moving the gene as routes. |
 | `--no-widen` | Keep the requested promoter window even when its scan shows no signal. By default that window is retried at -5000/+1000. |
 | `--regulator-route` | List drugs at the factors recorded as regulating the gene. |
 | `--regulator-route --regulator-steps 2` | Also list drugs at the factors that regulate those. |

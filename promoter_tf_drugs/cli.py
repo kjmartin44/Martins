@@ -66,6 +66,10 @@ def add_analysis_args(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
                    help="scan repeat-masked (lowercase) sequence too; off by default "
                         "because Alu/simple repeats generate large numbers of "
                         "spurious hits")
+    p.add_argument("--no-ctd-route", action="store_true",
+                   help="do not list the chemicals CTD records as moving the "
+                        "gene as routes. They are reported effects with no "
+                        "mechanism, and the CTD lookup itself still runs")
     p.add_argument("--no-widen", action="store_true",
                    help="do not retry a no-signal promoter scan at -5000/+1000. "
                         "By default a window with no signal above chance is "
@@ -478,6 +482,7 @@ _NEGATED_ARGS = {
     "no_dgidb": "use_dgidb",
     "no_opentargets": "use_opentargets",
     "no_widen": "widen_no_signal",
+    "no_ctd_route": "ctd_route",
 }
 
 

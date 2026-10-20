@@ -371,7 +371,7 @@ def drug_ranking(routes: list, group: str | None = None) -> list:
         cat = r.get("category") or ""
         if group is not None and not _in_group(cat, group):
             continue
-        if group is None and (cat.startswith("direct:")
+        if group is None and (cat.startswith(("direct:", "literature:"))
                               or cat == "virtual screen hypothesis"):
             continue
         key = breadth_key(r.get("drug") or "")
