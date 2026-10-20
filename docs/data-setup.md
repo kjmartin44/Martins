@@ -368,9 +368,43 @@ motifs, 68,655,741 ReMap peaks, 37 motif hits, 34 candidate factors, and a
 verdict of `interpretable`. If your counts differ, a file is wrong or from another
 release.
 
-On Windows, `scripts\run_everything.bat` fetches the small required files for you
-(JASPAR, TRRUST, ClinGen, and on request gnomAD and the Orange Book), then runs
-docking, the analysis, the funnel and the combined list.
+On Windows, one command fetches every reference file that git does not carry:
+
+```bat
+scripts\setup_data.bat
+```
+
+It lists what is missing, asks once, and fetches the rest. Files already in
+`data/` are left alone, so it is safe to rerun after a failure. Options:
+
+| Option | Effect |
+| --- | --- |
+| `--yes` | Fetch without asking. |
+| `--list` | Show what is present and missing, and stop. |
+| `--small` | Skip the files over about 500 MB (ReMap, BindingDB, DepMap expression). |
+| `--only remap,collectri` | Fetch only the named items. |
+| `--skip bindingdb` | Leave an item out. |
+| `--with-optional` | Also fetch the CREEDS and DrugMatrix signatures. |
+
+The items are JASPAR, TRRUST, CollecTRI, ClinGen, gnomAD, the Orange Book, GENCODE,
+HPA tissue RNA, HGNC, GO annotations, LINCS, the knockout libraries, the approved
+drug library from ChEMBL, DepMap, PRISM, the GWAS Catalog, ReMap, the regulon built
+from ReMap, and BindingDB (about 9 GB while it is unpacked, 270 MB after it is
+distilled). The whole set is roughly 3 GB. Each download goes to a `.part` file and
+is kept only if it passes a check on its content or its published checksum.
+
+Three files are not fetched. The ChEMBL SQLite release and the hg38 genome are
+optional and very large. `fda_label_cmax.tsv` is built from a finished run by
+`scripts/build_fda_cmax.py`, which `run_everything.bat` does at the end.
+
+CollecTRI comes from `decoupler` when it is installed, and otherwise from OmniPath's
+CollecTRI dataset. The OmniPath table has more signed edges (about 58,000 against
+43,000) and agrees with decoupler's table on the sign of 99.9% of the edges they
+share. The script says which source it used. Install `decoupler` first if you need
+the same table as an earlier run.
+
+`scripts\run_everything.bat` offers to run the setup script when a key file is
+missing, then runs docking, the analysis, the funnel and the combined list.
 
 ## Final layout
 

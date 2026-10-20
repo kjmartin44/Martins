@@ -29,8 +29,8 @@ venv/
 .DS_Store
 Thumbs.db
 
-# Downloaded reference data. Re-fetchable (scripts/run_everything.bat pulls
-# them), large, and versioned upstream - so the repo tracks the code that
+# Downloaded reference data. Re-fetchable (scripts/setup_data.bat pulls
+# all of them), large, and versioned upstream - so the repo tracks the code that
 # uses them, not the data itself. remap2022.bed.gz alone is ~1.4 GB and
 # GitHub hard-rejects anything over 100 MB.
 /data/jaspar2024.txt
@@ -39,6 +39,7 @@ Thumbs.db
 # Dosage tolerance: gnomAD constraint (91 MB, over the 100 MB GitHub
 # limit once a release grows) and the ClinGen curation list, which is
 # re-dated weekly upstream.
+/data/fda_label_cmax*.tsv
 /data/gnomad*.tsv
 /data/gnomad*.txt
 /data/gnomad_constraint.tsv
@@ -109,3 +110,7 @@ Thumbs.db
 /data/Products.txt
 /data/EOBZIP.zip
 /data/orange_book_products.txt
+
+# Partial downloads and archives left in data/ by scripts/setup_data.py
+/data/*.part
+/data/*.zip

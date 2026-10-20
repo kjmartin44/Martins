@@ -483,6 +483,10 @@ def grade_all(client: Client, tf_results, *, tissue: str | None = None,
                     pred = agonism.predict_for_drug(client, drug,
                                                     _model_cache=model_cache)
                     g = apply_direction_check(g, pred, goal)
+                    # Kept for the outcome step, which shows a measured
+                    # direction as its own column. Not a dataclass field, so
+                    # it is not written to results.json.
+                    g._prediction = pred
                 except ImportError as exc:
                     g.notes.append(f"direction model unavailable: {exc}")
                 except Exception as exc:              # noqa: BLE001

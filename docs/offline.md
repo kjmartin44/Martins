@@ -239,7 +239,8 @@ files the report says dosage was not assessed.
 | gnomAD v4.1 constraint | `data/gnomad.v4.1.constraint_metrics.tsv` | <https://storage.googleapis.com/gcp-public-data--gnomad/release/4.1/constraint/gnomad.v4.1.constraint_metrics.tsv> |
 | ClinGen dosage curation | `data/ClinGen_gene_curation_list_GRCh38.tsv` | <https://ftp.clinicalgenome.org/ClinGen_gene_curation_list_GRCh38.tsv> |
 
-`scripts/run_everything.bat` fetches both, asking first about gnomAD
+`scripts/setup_data.bat` fetches both, as does `scripts/run_everything.bat`,
+asking first about gnomAD
 because it is 91 MB. ClinGen is 250 KB and re-dated weekly upstream.
 
 Two things about reading them that the files do not announce:

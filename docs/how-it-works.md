@@ -21,6 +21,15 @@ scenario fixes how far and which way the gene has to move, so the ranking can be
 read against a requirement. The package reads no variant, so this is declared by
 you and never inferred.
 
+## Before the first run
+
+The reference files are git-ignored, so a fresh checkout has none of them.
+`scripts\setup_data.bat` lists what is missing and fetches it: motifs, ChIP peaks,
+GENCODE, expression, LINCS, the knockout libraries, DepMap, PRISM, the GWAS
+Catalog, gnomAD, ClinGen, the Orange Book, CollecTRI and BindingDB, plus the
+approved drug library and the regulon built from the ChIP peaks. It leaves files
+you already have alone. See [data setup](data-setup.md).
+
 ## The stages, in order
 
 **1. Resolve the gene and pull its promoter.** The symbol goes to Ensembl (or
@@ -33,9 +42,13 @@ bases before the start and 200 after.
 
 **2. Scan the promoter for motifs.** Position-weight matrices from JASPAR are
 slid along the sequence and a site is called at a p-value of 1e-4 (the command
-default; the launcher uses 1e-5). Overlapping calls are collapsed. The run
-reports how many calls to expect by chance for that window, because at these
-thresholds most calls are noise.
+default; the launcher uses 1e-5). Each strand has its own threshold, and a
+matrix whose best possible match is more common than that p-value in the window
+is not scanned, because every hit it gave would be a chance match at a higher
+rate than stated. Overlapping calls are collapsed. The run reports how many
+calls to expect by chance for that window by scanning 30 shuffled copies of it,
+which keep the repeat mask and every two-base count. At these thresholds many
+calls are noise, and the report says what share.
 
 **3. Say what each factor does.** Gene Ontology annotations decide whether a
 factor is an activator, a repressor, both, or unknown, and a curated list marks
@@ -75,8 +88,8 @@ then multiplied down for a withdrawn drug or a boxed warning. The drug score and
 the factor score are combined with `--tf-weight` (0.5, or 0.7 when ChIP data is
 present).
 
-**8. Look for routes that skip the factor.** Eleven further searches run next
-to the factor route. Most produce routes that go into the same ranked list;
+**8. Look for routes that skip the factor.** Twelve further searches run next
+to the factor route, among them the upstream network and the known regulators. Most produce routes that go into the same ranked list;
 three (genetics, CTD and the dosage constraint) produce evidence that is
 attached to the list instead, and the designed modalities produce a separate
 section. [The next section](#the-other-routes-in-detail) takes each in turn.
@@ -111,7 +124,13 @@ from the LINCS library, drugs approved only outside the United States such as
 pemafibrate, and biologics are left out of `report.md`, `summary.md`,
 `tf_summary.tsv`, the panel funnel, the combined list and the dose check. The
 Orange Book does not list biologics (they are in the Purple Book, which the
-package does not read), so an approved antibody is hidden too. `results.json`
+package does not read), so an approved antibody is hidden too. Drugs the Orange
+Book lists only for local routes (topical, eye, inhaled, nasal, rectal and the
+like) are hidden as well, unless the target tissue is skin: `--tissue skin`, or
+an `--activity-tissue` that names skin, keeps them, and `--include-local-only`
+keeps them for any tissue. A drug with any systemic route, such as tretinoin by
+mouth, stays. This hides an eye drop for a retinal gene too; use
+`--include-local-only` for that case. `results.json`
 keeps every route, and each report says how many entries were left out. With no
 Orange Book on disk the filter is not applied and the report says so. Run with
 `--include-non-fda` to show everything.
@@ -128,6 +147,7 @@ lands.
 |---|---|---|---|---|
 | Drugs on the gene's own protein or transcript | direct: gene product, or gene or transcript | 1 if approved, else 3 | 0.85 if it raises the protein, 0.55 if only activity | 0 |
 | Upstream network | upstream signalling | 4 | confidence of the best path | 1 plus the hops |
+| Known regulators (`--regulator-route`) | TF: known regulator | 4 | 0.5 for a CollecTRI edge, 0.6 with knockout support, 0.35 from knockout data alone | 1 |
 | LINCS signature on the gene | empirical signature | 2 if the gene was measured, 3 if imputed, 4 otherwise | size of the signature score | 0 |
 | LINCS effect on a factor's own transcript | TF: abundance change | 3 if the factor's value was measured or well imputed, else 4 | how many signatures agree | 1 |
 | Inferred factor activity | TF: inferred activity change | 3 | median z of the regulon | 1 |
@@ -201,6 +221,51 @@ In the list these are category upstream signalling, tier 4, with a distance of
 one plus the number of hops. The path is printed beside the route, so you can
 judge whether it is plausible in your cell type. They are real paths in
 literature-curated networks and are often three steps from the factor.
+
+Two details change what the search can return. The index of approved drugs keeps
+drugs ChEMBL records at a protein family (aspirin at cyclooxygenase, haloperidol at
+the dopamine receptors), a group of complexes (hydroxyurea at ribonucleotide
+reductase), a fusion protein (imatinib at BCR and ABL1) or a selectivity group, and
+lists them at every member, marked as acting on the group. And the search covers the first eight ranked factors that have no drug of
+their own and lists five drugs per node, which `--upstream-factors` and
+`--upstream-drugs-per-node` change. Replaying it on 36 saved runs showed that asking
+every ranked factor adds at most 41 drugs, while the limits hide more at busy nodes
+such as NR3C1; see [checks](checks.md#why-the-upstream-group-is-missed).
+
+### Known regulators
+
+The promoter scan starts from the sequence and asks which factors might bind. This
+route starts from the literature and asks which factors are recorded as regulating
+the gene, then what approved drug acts on each. It reaches factors the scan did not
+rank, such as those that bind through a partner or a distant enhancer. It is off
+unless `--regulator-route` is given.
+
+The factors come from CollecTRI, which signs each edge, and from the knockout files,
+where a transcription factor that was lost or raised and moved the gene the same way
+in at least two experiments counts. A factor that already has a drug route from the
+scan is skipped. The drug must move the factor the way the sign and the goal need:
+switch on an activator or block a repressor to raise the gene, and the reverse to
+lower it. A drug recorded with an unclear action is listed and marked.
+
+`--regulator-steps 2` also lists drugs at the factors that regulate those regulators
+in CollecTRI, with the two signs multiplied (a factor whose routes disagree on the
+sign is left out). Those routes sit at a distance of 2 and score lower. The launcher
+uses 2 and the command line defaults to 1. `--regulator-measured` adds, for a
+regulator that ChEMBL's mechanism table gives no drug for, approved drugs with a
+measured activity at it. The records give no direction and name many unrelated
+drugs, so it is off by default. Against CTD it reached 22.7% of the wanted drugs in the 36-gene check, at about 80 more drugs per gene.
+
+In the list these are category TF: known regulator, tier 4, at a distance of 1.
+Checked against CTD on 36 genes, 55% of the drugs it found had the right direction
+(CollecTRI) and 67% (knockout data, 21 drugs), where an approved drug picked at random
+has 48%. Resampling the genes gives intervals for the gain that include zero, so it
+widens the list and has not been shown to sort it. CollecTRI and CTD share
+literature, so agreement between them is not independent. On CYP24A1 the promoter scan
+did not rank VDR, and this route found the vitamin D analogues at VDR itself (the
+upstream search listed some of them only as acting on VDR upstream of other factors).
+It cannot reach a drug that
+ChEMBL does not record at the factor, which is why rifampicin at PXR is missed. See
+[checks](checks.md#what-starting-from-regulators-adds).
 
 ### LINCS signatures
 
@@ -358,6 +423,14 @@ candidates with the best already-linked one on the three axes to say which beat
 what exists. The lookup can be answered "nothing known" or can fail, and those
 are kept apart: a failed lookup means nothing can be called novel.
 
+CTD's own action list names every action in a sentence, not only the ones about the
+gene, so the package reads the sentence. Across 36 genes only 39% of the rows with an
+expression action describe the chemical changing this gene's mRNA. The rest are protein
+expression (26%), a chemical that blocks or promotes another chemical's effect (24%),
+another gene's expression (8%) and effects through another gene (3%). Only the first
+counts as a direction. A chemical that modulates another's effect is kept as a known
+link with no direction. See [checks](checks.md#what-ctds-expression-record-contains).
+
 CTD does not change a route's score. It does set the label of receptor-screen
 hits: an established ligand that CTD already links to the gene is labelled as
 confirming a reported link and is not offered as a new route. Its records cover
@@ -386,6 +459,36 @@ was mostly about the lines. Comparisons across too few lines are refused. These
 become the measured phenocopy routes at tier 4. A drug that phenocopies a
 knockout serves a goal that needs the factor lowered and works against one that
 needs it raised, and routes pointing the wrong way are dropped.
+
+### Knockout signatures
+
+The step from a factor to your gene was the one the package could not see. A
+drug may bind a factor, and the factor may sit on your promoter, and your gene
+may still not respond to it. The knockout libraries from Enrichr say what
+experiments found when a factor was lost or raised: the genes that changed
+most. Two are read, from local files. `LINCS_L1000_CRISPR_KO_Consensus_Sigs`
+has the consensus up and down genes for 5,212 CRISPR knockouts in the L1000
+cell lines. `TF_Perturbations_Followed_by_Expression` has knockouts, knockdowns
+and overexpression of transcription factors from GEO, in human and mouse.
+
+For each factor on the list, the report says whether your gene is among the
+changed genes, and which way. A gene that falls when the factor is lost is one
+the factor activates, and one that rises is one it represses. Overexpression
+reads the other way round. Mutation, truncation and fusion experiments are not
+read, since they can raise or lower activity. The answer is one of three:
+a measured response (with how many experiments and which way), perturbed with
+the gene not among the top changes, or factor not tested. The second is weak,
+because each list holds only a few hundred genes, so a gene can respond and
+not be on it. The cells are cancer lines, embryonic cells and mouse tissue. A
+response says the factor can move the gene somewhere. It does not say that a
+drug acting on the factor will move it in your cells. Where the measured
+direction contradicts the factor's annotated role, the report says so.
+
+This replaces a fixed placeholder for responsiveness (0.40 for every factor).
+The placeholder is still saved in `results.json` and is no longer shown.
+
+The same files are read the other way for the known regulators route: for one gene,
+which factors changed it when they were lost or raised.
 
 ### Designed modalities
 
@@ -436,13 +539,24 @@ to deliver "enough".
 
 `scripts/run_everything.bat` wraps this in five stages. It docks the gene's own
 protein, docks the five best-ranked factors, runs the analysis with the docking
-results folded in, narrows the routes through a funnel against a control gene
-(ACTB) in `panel`, and builds one list from the panel's survivors and every
-validated docking result in `combined`. Two optional steps follow. The dose
-check runs by default and reads the finished results. The exploratory dock runs
-only when the gene's own pocket was refused. It finds its own template structure
-by searching the PDB, so it needs no input from you, and it docks up to three
-distinct ligand sites that the search finds, each as a separate run. Before stage 1 the launcher prints a line for each route that its
+results folded in (the upstream network, the known regulators, LINCS, genetics, the
+virtual screens, the DNA-directed agents and the sensitivity scan all on), narrows
+the routes through a funnel against a control gene (ACTB) in `panel`, and builds one
+list from the panel's survivors and every validated docking result in `combined`.
+Before any of that it checks ten key reference files and offers to run
+`setup_data.bat` when one is missing.
+
+Two optional steps follow the five stages. The dose check runs by default and reads
+the finished results: it builds the FDA label table of peak blood levels for the
+candidates and sets them against the concentration the evidence was seen at. The
+exploratory dock does not run by default. The launcher asks, with an answer of no
+unless you type y, whether to run it when the gene's own pocket is refused. If you
+decline, it prints the command for running it later. When it runs, it finds its own
+template structure by searching the PDB, so it needs no input, and it docks up to
+three distinct ligand sites that the search finds, each as a separate run. The result
+is not validated and takes hours.
+
+Before stage 1 the launcher prints a line for each route that its
 data files rule out: the PRISM and DepMap matrices for the measured phenocopy
 route, the GWAS Catalog table, and a tissue for factor activity. It offers to
 download the GWAS Catalog (about 70 MB) and lists the tissues in the expression
@@ -458,10 +572,18 @@ removed.
 
 - `retrospective` asks whether the routes point at drugs already known to move a
   gene, against CTD and LINCS, with a drug-fame control.
+- `scripts/positive_fate.py` follows each drug CTD records as raising a gene through
+  the pipeline and says where it was lost. `scripts/upstream_misses.py` replays the
+  upstream search to say which filter removed the drugs within reach.
+  `scripts/regulator_gain.py` scores the known regulators route against CTD, with
+  intervals. `scripts/ctd_check.py` sorts CTD's expression rows by what the sentence
+  says. `scripts/drug_trace.py GENE up DRUG` follows one drug through the chain and
+  stops at the first missing link.
 - `exposure` sets a published human blood level against the concentration the
   evidence was seen at.
-- `exploratory` docks into a pocket transplanted onto an AlphaFold model, from a template it finds by sequence search, labelled
-  unvalidated, with a class check that has to pass.
+- `exploratory` docks into a pocket transplanted onto an AlphaFold model, from a
+  template it finds by sequence search, labelled unvalidated, with a class check that
+  has to pass. It is run on request and never by default.
 
 ## Databases it reads, and why
 
@@ -488,9 +610,10 @@ under `data/` that you download once.
 | DepMap and PRISM | local | cell dependency on a factor and drug sensitivity patterns |
 | gnomAD, ClinGen | local | how much dosage change the gene tolerates, and curated dosage sensitivity |
 | eQTLGen, GWAS Catalog | local or live | human genetic evidence that a factor moves the gene |
+| Enrichr knockout libraries (LINCS CRISPR KO, TF perturbations) | local | whether your gene changes when a factor is lost |
 | CTD | live | curated chemical effects on the gene's expression, to mark what is already known |
 | RCSB PDB | live | experimental structures with ligands for docking |
-| AlphaFold DB | live | predicted structures, used only in the exploratory mode |
+| AlphaFold DB | live | predicted structures, used only when the exploratory dock is asked for |
 
 Not every source is read in every run. The command `--check` lists which local
 files are present, and the evidence ledger in each report says which sources

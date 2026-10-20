@@ -23,12 +23,13 @@ not accidentally required. Also exercise each installed command's `--help`.
 ## Structure
 
 [How the package is laid out](architecture.md) is the map: the chain from a
-gene symbol to a ranked table, which of the sixty-one modules owns each step,
+gene symbol to a ranked table, which module owns each step,
 and a table of every module with its purpose.
 
 The short version. `pipeline.py` owns orchestration, report formatting and
-export, and at about 4,600 lines it is the largest file by a wide margin —
-splitting it is the first item under maintainability in the
+export, though the formatting now lives in `report.py`. The file is about 2,000
+lines, most of it one long `run` function that still does the fetching, the scoring
+and the assembly; splitting that is the first item under maintainability in the
 [improvement review](improvements.md). The main CLI translates user options
 into its `run` function, and both CLIs derive those options from `run`'s own
 signature through `cli.run_kwargs_from_args`, so a new flag reaches both

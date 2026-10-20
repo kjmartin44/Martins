@@ -208,3 +208,127 @@ def test_the_combined_list_uses_the_filter_the_run_recorded(table):
     assert "Bexarotene" in text and "Tretinoin" in text
     for gone in ("Pemafibrate", "Pioglitazone", "Rosiglitazone", "Prednisolone"):
         assert gone not in text, gone
+
+
+# ------------------------------------------------------------ local only
+_LOCAL = dict(_RECORD, reach="local only", routes=["TOPICAL"],
+              systemic_routes=[], local_routes=["TOPICAL"])
+
+
+@pytest.fixture
+def table_with_local(monkeypatch):
+    """The three approved drugs, plus two approved only for topical use."""
+    fda.reset()
+    monkeypatch.setattr(fda, "available", lambda: True)
+    local = {"alitretinoin", "tazarotene"}
+    monkeypatch.setattr(orangebook, "ingredients",
+                        lambda: sorted(APPROVED | local))
+    monkeypatch.setattr(
+        orangebook, "lookup",
+        lambda name, path=None: (_LOCAL if name.lower() in local else
+                                 _RECORD if name.lower() in APPROVED
+                                 else None))
+    yield
+    fda.reset()
+
+
+def test_a_drug_with_only_local_routes_is_local_only(table_with_local):
+    assert fda.is_local_only("Alitretinoin") and fda.is_local_only("tazarotene")
+    assert not fda.is_local_only("Tretinoin"), "it has a systemic route"
+    assert not fda.is_local_only("roscovitine"), "unknown is not local"
+    assert fda.is_approved("Alitretinoin")
+
+
+def test_shown_hides_a_local_drug_only_when_asked(table_with_local):
+    assert fda.shown("Tretinoin", True) and fda.shown("Tretinoin", False)
+    assert not fda.shown("Tazarotene", True)
+    assert fda.shown("Tazarotene", False)
+    assert not fda.shown("Pemafibrate", False)
+
+
+def test_the_status_hides_local_drugs_unless_the_target_is_skin(
+        table_with_local):
+    assert fda.status(demo=False)["hide_local_only"] is True
+    assert fda.status(demo=False, tissue="cns")["hide_local_only"] is True
+    assert fda.status(demo=False, tissue="skin")["hide_local_only"] is False
+    assert fda.status(demo=False, activity_tissue="Skin")[
+        "hide_local_only"] is False
+    assert fda.status(demo=False, activity_tissue="skin 1")[
+        "hide_local_only"] is False
+    assert fda.status(demo=False, activity_tissue="liver")[
+        "hide_local_only"] is True
+    assert fda.status(demo=False, include_local_only=True)[
+        "hide_local_only"] is False
+    assert fda.status(demo=True)["hide_local_only"] is False
+    assert fda.status(demo=False, requested=False)["hide_local_only"] is False
+    assert fda.target_is_skin("skin") and not fda.target_is_skin("cns", "liver")
+
+
+def _demo_with_local(hide):
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    res["fda_filter"] = {"requested": True, "applied": True, "note": None,
+                         "hide_local_only": hide}
+    blk = res["results"][0]
+    blk["all_routes"]["routes"][0]["drug"] = "Tazarotene"
+    return res
+
+
+def test_local_drugs_are_hidden_from_the_reports_for_a_non_skin_target(
+        table_with_local):
+    res = _demo_with_local(True)
+    view = fda.apply(res)
+    names = {r["drug"] for r in view["results"][0]["all_routes"]["routes"]}
+    assert "Tazarotene" not in names and "Tretinoin" in names
+    assert "Tazarotene" in view["fda_filter"]["hidden"]["local_only"]
+    assert "Tazarotene" not in report.summary_report(res)
+    note = "\n".join(fda.notice(view))
+    assert "approved only for local use" in note and "--tissue skin" in note
+
+
+def test_local_drugs_stay_when_the_target_is_skin(table_with_local):
+    res = _demo_with_local(False)
+    names = {r["drug"] for r in
+             fda.apply(res)["results"][0]["all_routes"]["routes"]}
+    assert "Tazarotene" in names
+    assert "approved only for local use" not in "\n".join(
+        fda.notice(fda.apply(res)))
+
+
+def test_the_dose_check_leaves_local_drugs_out_unless_asked(table_with_local):
+    block = {"all_routes": {"routes": [
+        {"drug": "Tretinoin", "tier": 2, "score": 5, "approved": True},
+        {"drug": "Tazarotene", "tier": 1, "score": 9, "approved": True}]}}
+    assert [n for _, n in exposure.candidate_drugs(block, 5, True, True)] == [
+        "Tretinoin"]
+    assert len(exposure.candidate_drugs(block, 5, True, False)) == 2
+
+
+def test_the_combined_list_drops_local_docking_hits_for_a_non_skin_target(
+        table_with_local):
+    doc = {"usable": True, "hits": [{"drug": "Tazarotene"},
+                                    {"drug": "Bexarotene"}]}
+    keep = fda.keeper({"applied": True, "hide_local_only": True})
+    assert list(combined.docking_source(doc, "RXRA", keep)["ranks"]) == [
+        "bexarotene"]
+    keep = fda.keeper({"applied": True, "hide_local_only": False})
+    assert len(combined.docking_source(doc, "RXRA", keep)["ranks"]) == 2
+    assert fda.keeper({"applied": False}) is None
+
+
+def test_the_command_line_takes_skin_and_the_local_flag():
+    parser = cli.build_parser()
+    got = cli.run_kwargs_from_args(parser.parse_args(
+        ["--gene", "G", "--tissue", "skin", "--include-local-only"]))
+    assert got["tissue"] == "skin" and got["include_local_only"] is True
+    base = cli.run_kwargs_from_args(parser.parse_args(["--gene", "G"]))
+    assert base["include_local_only"] is False
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--gene", "G", "--tissue", "liver"])
+
+
+def test_a_run_records_whether_local_drugs_are_hidden(monkeypatch):
+    monkeypatch.setattr(fda, "available", lambda: True)
+    got = pipeline.run("DEMOGENE", demo=True, offline=True, tissue="skin",
+                       include_local_only=True)
+    assert got["query"]["include_local_only"] is True
+    assert got["fda_filter"]["hide_local_only"] is False

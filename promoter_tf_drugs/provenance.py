@@ -44,6 +44,8 @@ FLAGS = {
     "upstream": "--upstream-network",
     "screen": "--screen",
     "direction_model": "--predict-direction (needs rdkit + scikit-learn)",
+    "knockout": "--knockout-gmt, or data/knockout_*.gmt from Enrichr",
+    "regulators": "--regulator-route (needs CollecTRI in data/)",
 }
 
 # What you lose when a source is unavailable. Stated per source because
@@ -109,6 +111,12 @@ IMPACT = {
     "trans_eqtl": "No human genetic evidence that natural variation in a "
                   "factor moves this gene, so the factor-to-gene step "
                   "rests on annotation rather than on people.",
+    "regulators": "Factors recorded as regulating your gene were not "
+                  "checked for drugs, so a factor the motif scan did not "
+                  "rank cannot supply a route.",
+    "knockout": "Nothing measured whether your gene changes when a factor "
+                "is lost, so responsiveness stays unmeasured for every "
+                "factor route.",
     "activity_drugs": "No compound was tested against inferred factor "
                       "activity, so that evidence generates no routes of "
                       "its own.",
@@ -242,6 +250,8 @@ def verdict(ledger: Ledger, scan_quality: dict | None = None) -> dict:
     at sites you had no reason to look at.
     """
     fdp = (scan_quality or {}).get("false_discovery_proportion")
+    fdp_range = (scan_quality or {}).get("false_discovery_range")
+    n_sites = (scan_quality or {}).get("observed")
     scan_verdict = (scan_quality or {}).get("verdict")
     n_emp = ledger.empirical_sources_ok()
     failed = [s.name for s in ledger.failures()]
@@ -251,6 +261,8 @@ def verdict(ledger: Ledger, scan_quality: dict | None = None) -> dict:
     if scan_bad:
         extra = (f" — about {fdp:.0%} of the hit list is expected to be chance"
                  if isinstance(fdp, (int, float)) else "")
+        if extra and fdp_range:
+            extra += f" (range {fdp_range[0]:.0%} to {fdp_range[1]:.0%})"
         reasons.append(f"the motif scan is '{scan_verdict}'{extra}")
     if n_emp == 0:
         reasons.append("no source of measured evidence is available "
@@ -284,7 +296,9 @@ def verdict(ledger: Ledger, scan_quality: dict | None = None) -> dict:
             "n_empirical_sources": n_emp,
             "empirical_available": have,
             "scan_verdict": scan_verdict,
-            "false_discovery_proportion": fdp}
+            "scan_sites": n_sites,
+            "false_discovery_proportion": fdp,
+            "false_discovery_range": fdp_range}
 
 
 # ===================================================================== #

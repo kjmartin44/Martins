@@ -351,6 +351,11 @@ def build(*, results: dict | None = None, panel: dict | None = None,
     fda_on = bool(((results or {}).get("fda_filter") or {}).get("applied")) or (
         results is None and bool(((panel or {}).get("query") or {})
                                  .get("fda_only")) and fda_mod.available())
+    keep = fda_mod.keeper((results or {}).get("fda_filter"))
+    if keep is None and fda_on:
+        keep = fda_mod.keeper({
+            "applied": True, "hide_local_only": bool(
+                ((panel or {}).get("query") or {}).get("hide_local_only"))})
     if results is not None:
         results = fda_mod.apply(results)
     gene = gene or ((results or {}).get("query") or {}).get("gene") or (
@@ -367,8 +372,7 @@ def build(*, results: dict | None = None, panel: dict | None = None,
     else:
         routes = {"ranks": {}, "best": {}, "n": 0,
                   "label": "none given"}
-    docs = [docking_source(d, n, fda_mod.is_approved if fda_on else None)
-            for n, d in (dockings or [])]
+    docs = [docking_source(d, n, keep) for n, d in (dockings or [])]
     rows = fuse(routes, docs)
     goal = (((results or {}).get("query") or {}).get("goal")
             or ((panel or {}).get("query") or {}).get("goal") or "up")

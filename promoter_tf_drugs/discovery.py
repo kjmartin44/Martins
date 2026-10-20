@@ -47,6 +47,7 @@ labelled as such.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, asdict, field
 
 from .http import Client, HttpError
@@ -149,7 +150,126 @@ def axes_from_direct(therapy) -> Axes:
 
 
 # ------------------------------------------------------------- novelty test
-def ctd_expression_links(client: Client, gene: str
+# CTD's `InteractionActions` lists every action in a sentence, not the ones
+# that concern this gene. "X results in increased activity of CYP3A4 protein
+# which results in increased expression of CYP2B6 mRNA" carries both
+# `increases^activity` and `increases^expression`, and reading the list alone
+# files X as raising CYP3A4. "Y inhibits the reaction [X results in increased
+# expression of CYP3A4 mRNA]" also lists `increases^expression` for Y, who
+# blocks the increase. On CYP3A4, 27% of the rows with an expression action
+# named another gene's expression, and the reaction forms are about one row in
+# eight across the genes checked. So the sentence is read, not the list.
+_EXPRESSION = re.compile(
+    r"(?P<verb>results in (?P<dir>increased|decreased)|affects the|affects)"
+    r"\s+expression of"
+    r"(?:\s+and\s+(?:results in|affects)(?:\s+(?:increased|decreased))?"
+    r"(?:\s+the)?[^\[\]]*?\bof)*"
+    r"\s+(?P<obj>[^\s\[\]]+)(?:\s+(?P<form>mRNA|protein))?",
+    re.IGNORECASE)
+_ACTION_OF = {"up": "increases^expression", "down": "decreases^expression",
+              "affects": "affects^expression"}
+# Forms of the gene's expression that count as transcription. A sentence that
+# does not say which form is read as the transcript, as CTD's own summary does.
+TRANSCRIPT_FORMS = ("mRNA", None)
+
+
+def expression_effects(chemical: str, interaction: str, gene: str) -> list:
+    """`[(direction, form, role)]` for what one CTD sentence says the
+    chemical does to this gene's expression.
+
+    `direction` is "up", "down" or "affects". `form` is "mRNA", "protein" or
+    None when the sentence does not say. `role` is one of
+
+      direct     the chemical is the subject of the expression clause
+      modulated  the chemical changes another's effect, "inhibits the
+                 reaction [X results in increased expression of G]". It is
+                 read as "affects": blocking an inducer says nothing about
+                 the gene's level without it, and the chemical is still a
+                 known link to the gene
+      indirect   the effect comes through another gene's change, "[A results
+                 in ... of B] which results in ... expression of G"
+      unparsed   the sentence names the gene but not in a shape read here
+
+    A sentence that never mentions this gene's expression gives an empty
+    list, which is how another gene's expression is kept out.
+    """
+    t = str(interaction or "")
+    chem = str(chemical or "").strip().lower()
+    sym = str(gene or "").strip().upper()
+    if not t or not chem or not sym:
+        return []
+    low = t.lower()
+    cpos = low.find(chem)
+    out = []
+    for m in _EXPRESSION.finditer(t):
+        if m.group("obj").rstrip(".,;)").upper() != sym:
+            continue
+        word = (m.group("dir") or "").lower()
+        direction = {"increased": "up", "decreased": "down"}.get(word,
+                                                               "affects")
+        form = m.group("form")
+        form = {"mrna": "mRNA", "protein": "protein"}.get((form or "").lower())
+        start = m.start()
+        before = t[:start]
+        depth = before.count("[") - before.count("]")
+        role = "unparsed"
+        if cpos < 0:
+            pass
+        elif depth <= 0:
+            if re.search(r"\]\s+which\s*$", before, re.IGNORECASE):
+                role = "indirect"
+            elif cpos < start:
+                role = "direct"
+        else:
+            # The innermost bracket still open where the clause begins.
+            opened, stack = -1, []
+            for i, ch in enumerate(before):
+                if ch == "[":
+                    stack.append(i)
+                elif ch == "]" and stack:
+                    stack.pop()
+            opened = stack[-1] if stack else -1
+            if opened < cpos < start:
+                role = "direct"
+            elif 0 <= cpos < opened:
+                lead = low[:opened].rstrip()
+                if lead.endswith(("inhibits the reaction",
+                                  "promotes the reaction",
+                                  "affects the reaction")):
+                    role = "modulated"
+                    direction = "affects"
+        out.append((direction, form, role))
+    return out
+
+
+def strict_expression_links(rows: list, forms=TRANSCRIPT_FORMS) -> dict:
+    """`{chemical_lower: [actions]}` from CTD rows, reading each sentence.
+
+    Only `direct` and `modulated` clauses about the row's own gene count, and
+    only in the requested forms. A row with no sentence falls back to its
+    action list, so a table without the text still reads as before.
+    """
+    links: dict = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        chem = str(row.get("ChemicalName") or "").strip().lower()
+        actions = str(row.get("InteractionActions") or "")
+        if not chem or "expression" not in actions.lower():
+            continue
+        text = row.get("Interaction")
+        if not text:
+            links.setdefault(chem, []).extend(
+                a for a in actions.split("|") if "expression" in a.lower())
+            continue
+        gene = row.get("GeneSymbol") or row.get("Input") or ""
+        for direction, form, role in expression_effects(chem, text, gene):
+            if role in ("direct", "modulated") and form in forms:
+                links.setdefault(chem, []).append(_ACTION_OF[direction])
+    return links
+
+
+def ctd_expression_links(client: Client, gene: str, *, strict: bool = True
                          ) -> dict[str, list[str]] | None:
     """{chemical_name_lower: [actions]} for curated expression effects.
 
@@ -158,6 +278,10 @@ def ctd_expression_links(client: Client, gene: str
     decides whether this package may call a candidate novel: an empty
     mapping says the literature was searched, and `None` says it was
     not.
+
+    With `strict` (the default) each sentence is read for what it says about
+    this gene's transcript; see `expression_effects`. `strict=False` is the
+    earlier reading of the action list, kept to compare the two.
     """
     try:
         res = client.get(CTD_BATCH, {
@@ -169,8 +293,10 @@ def ctd_expression_links(client: Client, gene: str
                     "assessed for this run", gene, exc)
         return None
 
-    links: dict[str, list[str]] = {}
     rows = res if isinstance(res, list) else res.get("data", []) or []
+    if strict:
+        return strict_expression_links(rows)
+    links: dict[str, list[str]] = {}
     for row in rows:
         if not isinstance(row, dict):
             continue

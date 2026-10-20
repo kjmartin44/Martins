@@ -13,7 +13,9 @@ not an external validation of its scientific models or curated claims.
 2. JASPAR position frequency matrices become log-odds motifs. The scanner checks
    both strands and normally skips repeats and ambiguous bases. Overlapping hits
    are collapsed. Its threshold is per position, not a study-wide false discovery
-   rate. The scan-quality summary compares site counts with a rough null estimate.
+   rate. The scan-quality summary compares site counts with the sites found in 30
+   shuffled copies of the window, and gives a range. A matrix that cannot reach the
+   requested p-value in the window is left out and counted.
 3. Annotation identifies TF roles and nuclear receptors. Optional ChIP overlap
    provides another source of evidence. It counts peaks for each factor over the
    whole promoter window, so it says the factor was seen somewhere in the window,
@@ -47,6 +49,7 @@ to identify missing evidence, not to claim a numerical chance of efficacy.
 | --- | --- | --- |
 | Direct routes | Drugs and modalities associated with the gene itself. | Acting on its protein does not necessarily change its transcription. |
 | `--upstream-network` | Signed paths to druggable upstream targets. | Sign and confidence depend on curated edges; longer paths incur penalties. Every reachable node is checked against an index of approved-drug targets built from the local drug table (about 80 ChEMBL requests the first time). Without the table, or if the index fails, each node is asked about separately and the search stops after 100 per factor; the evidence ledger says which. |
+| `--regulator-route` | Approved drugs at factors CollecTRI and the knockout data record as regulating the gene, including factors the motif scan did not rank. | The links come from a database and from knockouts in other cells. CollecTRI and CTD share literature, so agreement between them is not independent. Checked against CTD on 36 genes, 55% of these drugs had the right direction, where 48% would by chance; that gain is within the noise (95% interval -1% to +14%). |
 | Ligand axes | Curated synthesis, catabolism, sequestration, and supplementation routes. | Context and feedback are not quantitatively modeled. |
 | Mechanism comparison | Orthosteric, allosteric, and related mechanism classes. | Class labels do not establish a useful effect in the target tissue. |
 | Stabilization | Curated stabilizers, glues, and degradation-related routes. | Coverage is incomplete and target effects need confirmation. |

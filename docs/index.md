@@ -27,9 +27,12 @@ inputs and inspect the evidence behind each route.
 - [Command reference](cli.md): complete help for all five commands.
 - [Python API](api.md): calling the package from Python.
 - [How the package is laid out](architecture.md): the chain from gene to
-  ranked table, and which of the sixty-one modules owns each step.
+  ranked table, and which module owns each step.
 - [Development](development.md): tests, builds, and repository structure.
-- [Validation record](validation.md): the requested live gene runs and caveats.
+- [Validation record](validation.md): what was run and checked, and what that
+  does not show.
+- [Example outputs](../examples/README.md): saved reports, one synthetic and one
+  real run.
 - [Checks on candidate drugs](checks.md): whether a person reaches the
   effective concentration, and whether the routes recover drugs known to move
   a gene.

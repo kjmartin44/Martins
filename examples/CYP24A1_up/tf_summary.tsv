@@ -1,0 +1,32 @@
+symbol	name	role	nuclear_receptor	n_sites	best_rel_score	best_score_bits	best_site_tss_offset	best_site_sequence	matrix_id	chip_peaks	score	n_drugs	drugs
+SOX2	SRY-box transcription factor 2	activator	False	2	0.911	15.96	134	TATTCTGATGCTAAT	MA0142.1	1	79.7	0	
+POU5F1	POU class 5 homeobox 1	repressor	False	1	0.911	15.96	134	TATTCTGATGCTAAT	MA0142.1	1	65.9	0	
+POU2F1	POU class 2 homeobox 1	activator	False	1	0.882	14.35	133	TATTAGCATCAGAATAT	MA1962.1	0	55.6	0	
+ZNF530	zinc finger protein 530	repressor	False	1	0.922	16.42	-16	GCAGGGAGTGGGGC	MA1981.2	0	49.9	0	
+EBF2	EBF transcription factor 2	activator	False	1	0.954	14.32	-868	CCCCAGGGA	MA1604.2	0	48.7	0	
+EBF4	EBF transcription factor 4	activator	False	1	0.898	13.69	-869	ACCCCAGGGAA	MA2122.1	0	47.0	0	
+MTF1	metal regulatory transcription factor 1	activator	False	1	0.848	14.25	-757	TGTGCACCCAGCAC	MA0863.1	0	46.0	0	
+NFIB	nuclear factor I B	activator	False	1	0.846	13.9	-935	TCTGGCCGCATGCCCAG	MA1643.2	0	45.2	0	
+ZNF707	zinc finger protein 707	unknown	False	1	0.836	13.45	-15	CCCCACTCCCTGCAA	MA1715.1	0	42.8	0	
+ZNF320	zinc finger protein 320	unknown	False	1	0.835	14.41	-29	GTGGGGCTGGGAGGCCTGGG	MA1976.2	0	42.3	0	
+ZNF410	zinc finger protein 410	unknown	False	1	0.89	15.47	-429	ACATCCCATAGTAGCA	MA0752.2	0	35.2	0	
+KLF9	KLF transcription factor 9	unknown	False	1	0.937	15.85	-716	GCCACACCCTC	MA1107.3	0	34.0	0	
+EBF3	EBF transcription factor 3	unknown	False	1	0.958	14.41	-868	CCCCAGGGA	MA1637.2	0	33.8	0	
+ZNF816	zinc finger protein 816	unknown	False	1	0.869	14.58	-503	GGGGGACATGCCTTA	MA1719.2	0	33.7	0	
+NFYB	nuclear transcription factor Y subunit beta	activator	False	1	1.0	15.43	-60	TCATTGGCC	MA0502.3	1	81.2	0	
+CEBPD	CCAAT enhancer binding protein delta	activator	False	2	1.0	15.67	-886	TTGCACAA	MA0836.3	1	73.3	0	
+CEBPA	CCAAT enhancer binding protein alpha	activator	False	1	0.938	15.38	-372	CTTGCACAAT	MA0102.5	2	72.4	0	
+TBX2	T-box transcription factor 2	repressor	False	1	0.969	14.39	53	AGGTGTCAA	MA0688.2	1	70.0	0	
+ELK1	ETS transcription factor ELK1	activator	False	1	0.875	14.06	-652	AACAGCAGGAAGG	MA1954.2	1	67.5	0	
+GLIS3	GLIS family zinc finger 3	dual	False	1	0.877	12.84	-260	TAACCCCCAGGAAG	MA0737.1	1	66.5	0	
+FOXO1	forkhead box O1	dual	False	1	0.875	14.06	-652	AACAGCAGGAAGG	MA1954.2	1	61.5	0	
+NFE2L2	NFE2 like bZIP transcription factor 2	activator	False	1	0.895	13.64	-656	ATGAAACAGCA	MA0150.3	0	58.1	1	Omaveloxolone
+TBX3	T-box transcription factor 3	dual	False	1	0.957	14.99	53	AGGTGTCAA	MA1566.3	0	54.2	0	
+STAT1	signal transducer and activator of transcription 1	unknown	False	1	0.869	13.46	-544	AGTTTGGCTTTCT	MA0517.2	2	53.3	0	
+GLIS1	GLIS family zinc finger 1	activator	False	1	0.851	7.91	-260	ATAACCCCCAGGAAG	MA0735.2	0	51.7	0	
+PRDM4	PR/SET domain 4	activator	False	1	0.907	13.42	-913	GCTTGAAACCA	MA1647.3	0	47.1	0	
+PAX6	paired box 6	dual	False	1	0.853	13.42	-817	TTCAAGCATCGTTG	MA0069.1	0	39.9	0	
+STAT2	signal transducer and activator of transcription 2	unknown	False	1	0.869	13.46	-544	AGTTTGGCTTTCT	MA0517.2	0	33.3	0	
+IRF7	interferon regulatory factor 7	unknown	False	1	0.859	13.1	-544	AGAAAGCCAAACT	MA0772.2	0	33.0	0	
+ZNF677	zinc finger protein 677	unknown	False	1	0.894	14.46	-867	TAGAAGAACAGA	MA2101.1	0	31.9	0	
+PRDM9	PR/SET domain 9	unknown	False	1	0.873	14.37	-848	AGTGGACATAGGGGAGGTGG	MA1723.2	0	31.3	0	

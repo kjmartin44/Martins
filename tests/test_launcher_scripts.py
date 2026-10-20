@@ -241,6 +241,7 @@ def test_prediction_to_dict_writes_the_fields_the_report_reads():
     assert d["p_move"] == 0.4 and d["limiting_step"] == "delivery"
     assert set(d) == {"drug", "target", "bbb", "what_it_is", "treats",
                       "category", "tier", "grade", "score", "p_move",
+                      "p_engages", "p_activates", "knockout",
                       "limiting_step", "why", "caveats", "falsifier"}
     json.dumps(d)
 
@@ -431,6 +432,25 @@ def test_the_exploratory_mode_runs_only_for_a_refused_product_pocket():
     assert "scripts" + chr(92) + "product_status.py" in src
 
 
+def test_the_exploratory_dock_is_off_unless_the_user_says_yes():
+    """It is unvalidated and takes hours, so it must never start by default."""
+    src = _launcher()
+    # the question exists, defaults to no, and comes before any stage runs
+    line = next(ln for ln in src.splitlines() if "set /p XDOCK_ANS=" in ln)
+    assert "y/N" in line
+    assert src.index("set /p XDOCK_ANS=") < src.index("=== 1 of 5")
+    # EXPLORE is set in exactly one place, inside the branch for an explicit y
+    assert src.count('set "EXPLORE=1"') == 1
+    yes = src.index('if /i "!XDOCK_ANS!"=="y" (')
+    assert yes < src.index('set "EXPLORE=1"') < src.index(") else (", yes)
+    # a refused pocket with no yes prints how to run it later
+    assert "is available and is not run" in src
+    assert "python -m promoter_tf_drugs.exploratory --gene !GENE!" in src
+    # nothing else starts it: one command, and it is gated by EXPLORE
+    assert src.count("-m promoter_tf_drugs.exploratory") == 2
+    assert "if defined EXPLORE (" in src
+
+
 def test_product_status_reads_usable_refused_and_missing(tmp_path, capsys):
     mod = _lf_script("product_status")
     ok = tmp_path / "ok.json"
@@ -603,3 +623,53 @@ def test_the_launcher_fetches_depmap_and_prism_and_keeps_only_verified_files():
     # the companion tables the package reads beside them
     assert "Repurposing_Public_24Q2_Extended_Primary_Compound_List.csv" in src
     assert f"data{bs}Model.csv" in src
+
+
+def test_check_gmt_accepts_a_gene_set_library_and_refuses_a_page(tmp_path,
+                                                                  capsys):
+    mod = _lf_script("check_gmt")
+    good = tmp_path / "ok.gmt"
+    good.write_text(NL.join(
+        f"T{i} Up" + chr(9) * 2 + chr(9).join(["G1", "G2"])
+        for i in range(30)) + NL, encoding="utf-8")
+    assert mod.main([str(good), "20"]) == 0
+    assert mod.main([str(good), "31"]) == 1, "too few lines"
+    page = tmp_path / "page.gmt"
+    page.write_text("<html><body>503</body></html>" + NL * 40,
+                    encoding="utf-8")
+    assert mod.main([str(page), "1"]) == 1
+    assert "gene sets" in capsys.readouterr().err
+    assert mod.main([str(tmp_path / "missing.gmt"), "1"]) == 1
+    assert mod.main([str(good)]) == 2 and mod.main([str(good), "x"]) == 2
+
+
+def test_check_gmt_tolerates_a_few_malformed_lines(tmp_path):
+    mod = _lf_script("check_gmt")
+    lines = [f"T{i} Up" + chr(9) * 2 + "G1" for i in range(99)] + ["junk"]
+    p = tmp_path / "m.gmt"
+    p.write_text(NL.join(lines) + NL, encoding="utf-8")
+    assert mod.main([str(p), "50"]) == 0
+    lines = [f"T{i} Up" + chr(9) * 2 + "G1" for i in range(50)] + ["junk"] * 50
+    p.write_text(NL.join(lines) + NL, encoding="utf-8")
+    assert mod.main([str(p), "50"]) == 1
+
+
+def test_the_launcher_offers_the_knockout_libraries_and_keeps_only_good_files():
+    src = _launcher()
+    bs = chr(92)
+    assert "if not defined HAVEKO (" in src
+    assert 'if /i not "!GETKO!"=="n" (' in src
+    for lib, name, floor in (
+            ("LINCS_L1000_CRISPR_KO_Consensus_Sigs",
+             "knockout_lincs_crispr_ko.gmt", "1000"),
+            ("TF_Perturbations_Followed_by_Expression",
+             "knockout_tf_perturbations.gmt", "500")):
+        part = f"data{bs}{name}.part"
+        assert f"libraryName={lib}" in src
+        assert f"scripts{bs}check_gmt.py {part} {floor}" in src
+        assert f"move /y {part} data{bs}{name}" in src
+        assert f"del {part}" in src
+    # the file names the launcher saves are the ones the package looks for
+    from promoter_tf_drugs import knockout
+    for name in ("knockout_lincs_crispr_ko.gmt", "knockout_tf_perturbations.gmt"):
+        assert f"data/{name}" in knockout.DEFAULT_KNOCKOUT_PATHS

@@ -227,16 +227,23 @@ def render(found: dict) -> str:
             L.append("")
 
         for o in b.get("outcomes", []):
-            L.append(f"**Predicted outcome**: P(gene moves) = "
-                     f"**{o['p_point']}** ({o['p_low']}–{o['p_high']}) — "
-                     f"{o['verdict']}")
+            from . import outcome as outcome_mod
+            keys = outcome_mod.shown_links([o])
+            weak = min(keys, key=lambda k: o[k])
+            L.append(f"**Strength of evidence**: drug engagement "
+                     f"{o['p_engages']}, promoter activation "
+                     f"{o['p_activates']}")
             L.append("")
-            L.append(f"- engages {o['p_engages']} × direction "
-                     f"{o['p_direction']} × promoter {o['p_activates']} × "
-                     f"responsive {o['p_responsive']}")
-            L.append(f"- **Limiting step**: {o['limiting_step']}")
-            if o.get("next_experiment"):
-                L.append(f"- Next experiment: {o['next_experiment']}")
+            L.append(f"- **Weaker link**: {outcome_mod.LINK_LABEL[weak]}")
+            L.append(f"- Next experiment: {outcome_mod.experiment_for(weak)}")
+            ko = o.get("knockout")
+            if ko:
+                from . import knockout as ko_mod
+                L.append(f"- **Knockout evidence**: {ko_mod.cell(ko)}")
+                for x in ko.get("experiments") or []:
+                    L.append(f"  - {x['experiment']} ({x['reads']})")
+            for c in outcome_mod.knockout_caveat([o]):
+                L.append(f"- {c}")
             if o.get("tissue_dependent"):
                 L.append("- ⚠ tissue-dependent direction (SERM regime)")
             L.append("")

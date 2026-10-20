@@ -2,6 +2,40 @@
 
 [Documentation index](index.md)
 
+## Current record, 20 October 2026
+
+Run on Windows with Python 3.12, against a working tree that is not committed.
+
+| Check | Result |
+| --- | --- |
+| Offline test suite | 1,821 passed |
+| The same suite in a copy holding only what a commit would contain (no `data/`, empty cache) | 1,811 passed, 10 skipped; the skipped tests need data files |
+| Wheel built, installed with NumPy only into a new environment, then the demo, the panel demo and `--help` for the four installed commands, all run outside the checkout | all ran |
+| Python 3.10 grammar | every file in the package, scripts and tests parses |
+| Linux, and Python 3.10 and 3.14 | not run here; the CI matrix covers them |
+| `approved_library.tsv` rebuilt from ChEMBL by `setup_data.py` | identical to the existing file for 3,311 molecules; ChEMBL no longer lists the other 4 |
+| Reference files fetched by `setup_data.py` into an empty folder (JASPAR, TRRUST, CollecTRI, ClinGen, HPA, HGNC, GO, LINCS, knockout libraries) | all fetched and passed their checks. ReMap, BindingDB, DepMap, PRISM and the GWAS Catalog were checked for their addresses and checksums, not downloaded |
+| Live run, CYP24A1 raised, current code, full options without docking | completed; sample output in `examples/CYP24A1_up` |
+| Live runs, ABCD2, LPL and FXN raised, with two-step regulators | completed; the expected drugs were found for ABCD2 and LPL, and for FXN all but omaveloxolone. See [checks](checks.md#rare-disease-genes-whose-drugs-are-known) |
+
+The CYP24A1 run is a positive control. The report's verdict is **degraded**: the
+motif scan found 13 sites against about 11 expected from shuffled windows. The vitamin
+D analogues, the textbook answer, are found through the known regulators route and rank
+10 to 15 of 65 approved drugs, behind nine tier-3 routes. That ordering is what the
+retrospective check in [checks](checks.md) predicts: the routes reach about a tenth of
+the approved drugs CTD records as raising a gene, and rank them no better than chance
+once a drug's fame is held equal.
+
+What this record does not show. No drug in any list has been shown to change the
+gene. The 36 saved runs behind the figures in `checks.md` predate the motif scan
+correction. The BUB1B and CYP3A4 runs made earlier in the same week also predate it, so
+they are not part of this record. See [improvements](improvements.md#open-at-the-time-of-writing)
+for the open items.
+
+## Earlier record, 30 September 2026
+
+This predates the motif scan correction, so its site counts describe the earlier scan.
+
 Validation on Windows with Python 3.12.12, 2026-09-30. Live checks below used
 the current public services, the checkout's 879 JASPAR matrices, its TRRUST file,
 the default 1,000/200-base promoter window, and `pvalue=1e-4`. These were real

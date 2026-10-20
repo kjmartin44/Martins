@@ -571,6 +571,42 @@ def registry() -> tuple:
             counter=_count_orangebook,
         ),
         Dataset(
+            key="knockout",
+            title="Factor knockout signatures (Enrichr)",
+            buys="whether your gene changes when a factor is lost, which "
+                 "replaces a fixed placeholder for responsiveness",
+            supply=AUTO,
+            paths=_paths("knockout", "DEFAULT_KNOCKOUT_PATHS"),
+            flag="--knockout-gmt",
+            url="https://maayanlab.cloud/Enrichr/geneSetLibrary?mode=text"
+                "&libraryName=LINCS_L1000_CRISPR_KO_Consensus_Sigs",
+            size="16 MB + 3 MB",
+            without="the report says responsiveness is not measured for "
+                    "every factor",
+            notes=("Two libraries: LINCS_L1000_CRISPR_KO_Consensus_Sigs "
+                   "(data/knockout_lincs_crispr_ko.gmt) and "
+                   "TF_Perturbations_Followed_by_Expression "
+                   "(data/knockout_tf_perturbations.gmt). Each list holds "
+                   "only the few hundred genes that changed most.",),
+            counter=_count_lines,
+        ),
+        Dataset(
+            key="fda_label_cmax",
+            title="Human peak plasma levels from FDA labels",
+            buys="a human exposure to set against the concentration the "
+                 "evidence was seen at, which ChEMBL has for few drugs",
+            supply=BUILT,
+            paths=_paths("exposure", "DEFAULT_CMAX_PATHS"),
+            build="python scripts/build_fda_cmax.py",
+            size="under 100 KB",
+            without="the dose check uses ChEMBL's human Cmax records, which "
+                    "exist for few approved drugs, and a table you name",
+            notes=("Built from openFDA label text. Most labels give no "
+                   "usable number, so most drugs get no row; those are "
+                   "listed in fda_label_cmax_review.tsv.",),
+            counter=_count_lines,
+        ),
+        Dataset(
             key="genome",
             title="hg38 genome FASTA",
             buys="promoter sequence without calling Ensembl",

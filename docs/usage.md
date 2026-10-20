@@ -53,6 +53,10 @@ make all drug, annotation, and curated evidence stages species independent.
 | `--lincs` | Query expression signatures from a service. |
 | `--genetics` | Add genetics context and lookup guidance. |
 | `--upstream-network --upstream-depth 3` | Search signed upstream paths. |
+| `--upstream-factors 20 --upstream-drugs-per-node 12` | Search more factors and list more drugs per node (defaults 8 and 5). |
+| `--regulator-route` | List drugs at the factors recorded as regulating the gene. |
+| `--regulator-route --regulator-steps 2` | Also list drugs at the factors that regulate those. |
+| `--regulator-route --regulator-measured` | Also list drugs with a measured activity at a regulator that has no curated drug. Leads to test, with no direction. |
 | `--predict-direction` | Fit optional receptor direction models when data permits. |
 | `--screen` | Run optional virtual screening; can require many requests. |
 | `--design-screen` / `--design-modality` | Add experimental or sequence-design suggestions. |
@@ -118,17 +122,25 @@ on your promoter -> which direction that moves your gene -> how confident,
 and what would falsify it
 ```
 
-Each row carries its predicted P(gene moves), the limiting step, the regulon
-and clinical-burden collateral, the receptor family, and the single
-experiment that would disprove it. Direction reasoning inverts correctly with
+Each row carries its two evidence links (drug engagement and promoter
+activation), the weaker of them, the regulon and clinical-burden collateral,
+the receptor family, and the single experiment that would disprove it. Direction reasoning inverts correctly with
 `--direction`, and a **dual-role factor is stated as unsettled** rather than
 assigned a direction the annotation does not support.
 
-P(gene moves) is deliberately *not* a column in the ranked table. Two of its
-four factors are constants across candidates - direction defaults to 0.75
-without `--predict-direction`, and responsiveness is fixed at 0.40 because
-nothing here can measure it - so the spread is about 0.05 and it conveys
-magnitude, not rank. It is stated once as a band, and per drug in the detail.
+The reports no longer print a chance that the gene moves. That number was
+the product of four links, and two of them are one value for every candidate:
+direction is the database label (0.75) unless a model predicted it, and
+responsiveness is a fixed placeholder (0.40) because nothing here can measure
+it. A constant cannot separate candidates, and an interval built on it only
+looked like a measurement. The reports show drug engagement and promoter
+activation, which come from evidence. Direction appears as its own column only
+when a model predicted it, and knockout evidence as its own column only when the
+knockout files are present. Where there is no data for a link, the report says
+nothing about it. Responsiveness is shown from knockout experiments when the
+Enrichr knockout files are in `data/` (see "Knockout signatures" in
+[how it works](how-it-works.md)). `results.json` still carries `p_point` and
+all four links.
 
 Every row is a **hypothesis generated from annotation**, not a
 recommendation, and the section says so. If the run's evidence verdict is

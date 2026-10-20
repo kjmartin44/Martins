@@ -31,6 +31,18 @@ module builds a view of a result with the non-approved drugs removed, and the
 reports render that view. Counts inside the view, such as "271 routes", are
 counts after the removal, and the report says how many entries were hidden.
 
+Drugs approved only for local use are hidden as well, unless the target tissue
+is skin. A topical retinoid, an eye drop, an inhaler or a suppository acts where
+it is applied, so for a gene in the liver or the retina's neighbours it is not a
+route to the gene. The Orange Book gives each ingredient's approved routes
+(`orangebook.lookup`, field `reach`), and a drug whose routes are all local is
+"local only". A drug with any systemic route, tretinoin by mouth as well as on
+the skin, stays. The tissue comes from `--tissue skin` or an `--activity-tissue`
+that names skin, and `--include-local-only` keeps them regardless. Skin is the
+one exception because a topical drug reaches skin. Eye, lung and the others are
+not exceptions here: an intravitreal drug for a retinal gene is hidden unless
+you ask for it back.
+
 If there is no Orange Book on disk the filter cannot tell approved from not,
 and it is not applied. It never empties a report because a file is missing,
 and the report says so.
@@ -156,24 +168,71 @@ def is_approved(name: str) -> bool:
     return ok
 
 
-def status(*, demo: bool, requested: bool = True) -> dict:
+def is_local_only(name: str) -> bool:
+    """True when the Orange Book lists the drug only for local routes."""
+    key = (name or "").strip().lower()
+    if not key:
+        return False
+    ck = ("local", key)
+    if ck in _CACHE:
+        return _CACHE[ck]
+    from . import orangebook
+    rec = orangebook.lookup(key)
+    if rec is None:
+        # Matched by base name only: ask again under the salt form's spelling.
+        base = base_name(key)
+        rec = orangebook.lookup(base) if base != key else None
+    ok = bool(rec) and rec.get("reach") == "local only"
+    _CACHE[ck] = ok
+    return ok
+
+
+def target_is_skin(tissue=None, activity_tissue=None) -> bool:
+    """Whether the run named skin as the target tissue."""
+    return any((t or "").strip().lower().startswith("skin")
+               for t in (tissue, activity_tissue))
+
+
+def shown(name: str, hide_local_only: bool = False) -> bool:
+    """Whether a drug may appear in a report under the recorded filter."""
+    return is_approved(name) and not (hide_local_only and is_local_only(name))
+
+
+def keeper(flt: dict | None):
+    """A name test for a recorded filter, or None when nothing is filtered."""
+    flt = flt or {}
+    if not flt.get("applied"):
+        return None
+    hide = bool(flt.get("hide_local_only"))
+    return lambda name: shown(name, hide)
+
+
+def status(*, demo: bool, requested: bool = True, tissue=None,
+           activity_tissue=None, include_local_only: bool = False) -> dict:
     """What a run records about the filter: asked for, applied, and why not.
 
     Demo data is synthetic and its drug names are not real products, so the
-    filter is never applied to it.
+    filter is never applied to it. `hide_local_only` is True when drugs
+    approved only for local use are hidden: always, unless the target tissue
+    is skin or the person asked for them.
     """
     if not requested:
         return {"requested": False, "applied": False,
+                "hide_local_only": False,
                 "note": "shown with every compound, as requested"}
     if demo:
-        return {"requested": True, "applied": False,
+        return {"requested": True, "applied": False, "hide_local_only": False,
                 "note": "not applied to demo data, whose drugs are synthetic"}
     if not available():
-        return {"requested": True, "applied": False, "note": NOTE_NO_TABLE}
-    return {"requested": True, "applied": True, "note": None}
+        return {"requested": True, "applied": False, "hide_local_only": False,
+                "note": NOTE_NO_TABLE}
+    hide = not include_local_only and not target_is_skin(tissue,
+                                                         activity_tissue)
+    return {"requested": True, "applied": True, "hide_local_only": hide,
+            "note": None}
 
 
-def _walk(node, tokens: list, key: str, drop: set) -> int:
+def _walk(node, tokens: list, key: str, drop: set, ok=None) -> int:
     """Remove non-approved entries at `tokens` below `node`; return how many."""
     if not tokens:
         if not isinstance(node, list):
@@ -183,7 +242,7 @@ def _walk(node, tokens: list, key: str, drop: set) -> int:
             # `key` None means the list holds the names themselves.
             nm = (item if key is None else
                   item.get(key) if isinstance(item, dict) else None)
-            if isinstance(nm, str) and nm and not is_approved(nm):
+            if isinstance(nm, str) and nm and not (ok or is_approved)(nm):
                 drop.add(nm)
                 gone += 1
             else:
@@ -192,13 +251,14 @@ def _walk(node, tokens: list, key: str, drop: set) -> int:
         return gone
     head, rest = tokens[0], tokens[1:]
     if head == "[]":
-        return sum(_walk(x, rest, key, drop) for x in node) \
+        return sum(_walk(x, rest, key, drop, ok) for x in node) \
             if isinstance(node, list) else 0
     if not isinstance(node, dict):
         return 0
     if head == "*":
-        return sum(_walk(v, rest, key, drop) for v in list(node.values()))
-    return _walk(node.get(head), rest, key, drop) if head in node else 0
+        return sum(_walk(v, rest, key, drop, ok) for v in list(node.values()))
+    return (_walk(node.get(head), rest, key, drop, ok)
+            if head in node else 0)
 
 
 def _rebuild_routes(block: dict) -> None:
@@ -236,17 +296,18 @@ def apply(result: dict) -> dict:
         return result
     out = copy.deepcopy(result)
     dropped: set = set()
+    ok = keeper(flt)
     n = 0
     for block in out.get("results") or []:
         routes_before = len((block.get("all_routes") or {}).get("routes") or [])
         for path, key in PATHS:
-            n += _walk(block, path.split("."), key, dropped)
+            n += _walk(block, path.split("."), key, dropped, ok)
         # all_routes is not in PATHS: its removals feed the summaries below.
         ar = block.get("all_routes")
         if isinstance(ar, dict) and isinstance(ar.get("routes"), list):
             keep = []
             for r in ar["routes"]:
-                if is_approved(r.get("drug") or ""):
+                if ok(r.get("drug") or ""):
                     keep.append(r)
                 else:
                     dropped.add(r.get("drug") or "?")
@@ -256,11 +317,13 @@ def apply(result: dict) -> dict:
     dt = out.get("direct_therapies")
     if isinstance(dt, list):
         keep = [t for t in dt if not isinstance(t, dict)
-                or is_approved(t.get("drug") or "")]
+                or ok(t.get("drug") or "")]
         n += len(dt) - len(keep)
         out["direct_therapies"] = keep
-    out["fda_filter"] = dict(flt, hidden={"entries": n,
-                                          "drugs": sorted(dropped, key=str.lower)})
+    local = sorted((d for d in dropped if is_approved(d)), key=str.lower)
+    out["fda_filter"] = dict(flt, hidden={
+        "entries": n, "drugs": sorted(dropped, key=str.lower),
+        "local_only": local})
     return out
 
 
@@ -272,9 +335,17 @@ def notice(result: dict) -> list:
     if not flt.get("applied"):
         return [f"> **FDA filter not applied:** {flt.get('note')}", ""]
     h = flt.get("hidden") or {}
+    n_local = len(h.get("local_only", []))
+    n_other = len(h.get("drugs", [])) - n_local
+    local = ""
+    if flt.get("hide_local_only"):
+        local = (f" A further {n_local} are FDA approved only for local use "
+                 f"(topical, eye, inhaled and the like) and are hidden unless "
+                 f"the target tissue is skin; `--tissue skin` or "
+                 f"`--include-local-only` shows them.")
     return [f"> **Only FDA approved drugs are shown.** {h.get('entries', 0)} "
-            f"entries for {len(h.get('drugs', []))} compounds that are not in "
-            f"the FDA Orange Book were left out: research compounds, drugs "
-            f"approved only outside the United States, and biologics, which "
-            f"the Orange Book does not list. `results.json` keeps all of "
-            f"them. `--include-non-fda` shows everything.", ""]
+            f"entries are left out. {n_other} compounds are not in the FDA "
+            f"Orange Book: research compounds, drugs approved only outside "
+            f"the United States, and biologics, which the Orange Book does "
+            f"not list.{local} `results.json` keeps all of them, and "
+            f"`--include-non-fda` shows everything.", ""]

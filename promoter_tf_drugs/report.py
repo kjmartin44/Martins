@@ -27,7 +27,9 @@ from pathlib import Path
 from . import (analogs as analog_mod, catalogue as cat_mod,
                delivery as dlv_mod, drugs as drugs_mod, fda as fda_mod,
                liabilities as liab_mod, ligands as lig_mod,
-               predictions as pred_mod, systemic as sys_mod,
+               knockout as ko_mod, outcome as outcome_mod,
+               predictions as pred_mod,
+               systemic as sys_mod,
                tfactivity as tfa_mod)
 
 log = logging.getLogger(__name__)
@@ -938,6 +940,14 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
         L.append(f"- Window: chr{p['chrom']}:{p['start']}-{p['end']} "
                  f"(-{p['upstream']} / +{p['downstream']}, {p['sequence_length']} bp)")
         L.append(f"- Motifs scanned: {q['n_motifs']} at p ≤ {q['pvalue']:g} per position")
+        qs = res.get("scan_quality") or {}
+        if qs.get("motifs_unreachable"):
+            L.append(
+                f"- {qs['motifs_unreachable']} of those motifs were not "
+                f"scanned: in this window their best possible match is more "
+                f"common than p = {q['pvalue']:g}, so any hit would be a "
+                f"chance match at a higher rate than stated. A looser "
+                f"`--pvalue` scans them, with more chance hits.")
         L.append(f"- Non-redundant sites: {res['n_sites']} across {res['n_tfs']} TFs")
         L.append("")
         q2 = res.get("scan_quality") or {}
@@ -2241,12 +2251,15 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                 L.append("")
 
         if res.get("outcome_estimates"):
-            L.append("### Predicted transcriptional outcome")
+            L.append("### Strength of evidence for each factor route")
             L.append("")
-            L.append("P(gene moves) = P(engages) x P(direction) x P(activates here) "
-                     "x P(responsive). Four uncertain links multiply, so these "
-                     "numbers are small by construction — a chain at 0.7 per link "
-                     "lands near 0.24. Anything reporting 0.9 here has hidden a link.")
+            L.append("Two links between a drug and your gene come from "
+                     "evidence and differ from row to row: whether the drug "
+                     "engages its target at a dose that can be reached, and "
+                     "whether the factor is likely to act on this promoter. "
+                     "Each is a 0 to 1 heuristic and not a calibrated "
+                     "probability. They are shown as they are, and they are "
+                     "not multiplied into a chance that the gene moves.")
             L.append("")
             # Anything named above (the discovery winner, the non-dominated
             # set, the incumbent) must appear here regardless of truncation.
@@ -2258,44 +2271,58 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                 highlighted.add(imp2["baseline"]["name"].lower())
 
             ests = res["outcome_estimates"]
+            keys = outcome_mod.shown_links(ests)
             pinned = [e for e in ests if e["drug"].lower() in highlighted]
             rest = [e for e in ests if e["drug"].lower() not in highlighted]
             shown = pinned + rest[:max(top_n - len(pinned), 0)]
 
-            L.append("| Drug | TF | P(engage) | P(direction) | P(promoter) | "
-                     "P(responsive) | **P(gene moves)** | Verdict | Limiting step |")
-            L.append("|---|---|---|---|---|---|---|---|---|")
+            has_ko = any(e.get("knockout") is not None for e in ests)
+            heads = ["Drug", "TF"] + [outcome_mod.LINK_LABEL[k].capitalize()
+                                      for k in keys] + ["Weaker link"]
+            if has_ko:
+                heads.append("Knockout evidence")
+            L.append("| " + " | ".join(heads) + " |")
+            L.append("|" + "---|" * len(heads))
             for e in shown:
                 serm = " ⚠tissue-dependent" if e["tissue_dependent"] else ""
                 star = " ★" if e["drug"].lower() in highlighted else ""
-                L.append(f"| {e['drug']}{star}{serm} | {e['tf_symbol']} | "
-                         f"{e['p_engages']} | "
-                         f"{e['p_direction']} | {e['p_activates']} | "
-                         f"{e['p_responsive']} | **{e['p_point']}** "
-                         f"({e['p_low']}–{e['p_high']}) | {e['verdict']} | "
-                         f"{e['limiting_step']} |")
+                cells = [f"{e['drug']}{star}{serm}", e["tf_symbol"]]
+                cells += [str(e[k]) for k in keys]
+                cells.append(outcome_mod.weaker_link(e, keys))
+                if has_ko:
+                    cells.append(ko_mod.cell(e.get("knockout")))
+                L.append("| " + " | ".join(cells) + " |")
             L.append("")
             if highlighted:
                 L.append("★ = named in the comparison against the standard of "
                          "care above, pinned here so the two sections cannot "
                          "disagree.")
                 L.append("")
-            spread = ([e["p_point"] for e in ests] or [0])
-            if max(spread) - min(spread) < 0.05:
-                L.append("**These numbers barely differ, and that is the "
-                         "honest result.** Two of the four links are the same "
-                         "for every candidate: direction defaults to 0.75 "
-                         "without `--predict-direction`, and responsiveness is "
-                         "fixed at 0.40 because nothing in this package can "
-                         "measure it. The chain therefore conveys *magnitude* — "
-                         "how uncertain this route is overall — not a ranking. "
-                         "Use the grades and the axes above to order "
-                         "candidates; use this to decide whether the route is "
-                         "worth pursuing at all.")
-                L.append("")
-            top = shown[0] if shown else res["outcome_estimates"][0]
-            L.append(f"**Most informative next experiment** (for {top['drug']}): "
-                     f"{top['next_experiment']}")
+            ko_lines = outcome_mod.knockout_caveat(ests)
+            if ko_lines:
+                for c in ko_lines:
+                    L.append(c)
+                    L.append("")
+                roles = {t["symbol"]: t.get("role") for t in
+                         (res.get("tfs") or [])}
+                clash = sorted({
+                    f"{e['tf_symbol']}: "
+                    + ko_mod.role_conflict(e.get("knockout"),
+                                           roles.get(e["tf_symbol"]))
+                    for e in ests if ko_mod.role_conflict(
+                        e.get("knockout"), roles.get(e["tf_symbol"]))})
+                if clash:
+                    L.append("Where the knockout data and the annotated role "
+                             "disagree, one of them is wrong for this gene, "
+                             "and it matters whether the factor is to be "
+                             "activated or blocked:")
+                    L.append("")
+                    for c in clash:
+                        L.append(f"- {c}")
+                    L.append("")
+            L.append("Order candidates by tier and score, as the tables above "
+                     "do. These columns say where the evidence behind a "
+                     "route is thin.")
             L.append("")
             if any(e["tissue_dependent"] for e in res["outcome_estimates"]):
                 L.append("*Rows marked tissue-dependent sit in the SERM regime: "
@@ -2739,6 +2766,7 @@ METHOD_OF_SOURCE = {
     "screening": "ligand-based model (trained on this receptor)",
     "docking": "structure-based docking",
     "network": "upstream signalling network",
+    "regulators": "factor recorded as regulating the gene",
     "stabilizers": "protein stability / degradation",
     "catalogue": "chromatin-level agent",
 }
@@ -2752,6 +2780,7 @@ METHOD_WEIGHT = {
     "annotated ligand (ChEMBL/DGIdb/Open Targets)": 0.7,
     "regulon shift in perturbation corpora": 0.6,
     "upstream signalling network": 0.5,
+    "factor recorded as regulating the gene": 0.4,
     "measured change in the factor's own transcript": 0.5,
     "endogenous ligand availability": 0.5,
     "ligand-based model (trained on this receptor)": 0.4,
@@ -2810,6 +2839,10 @@ def _expected_change(routes: list, goal: str, outcomes: dict,
         out["p_low"] = o.get("p_low")
         out["p_high"] = o.get("p_high")
         out["limiting_step"] = o.get("limiting_step")
+        out["knockout"] = o.get("knockout")
+        out["direction_measured"] = not any(
+            "direction from database annotation only" in n
+            for n in (o.get("notes") or []))
         out["chain"] = {
             "engages the target": o.get("p_engages"),
             "right direction": o.get("p_direction"),
@@ -2981,6 +3014,9 @@ def corroboration(result: dict, top_n: int = 20) -> list:
             "effect_size": exp["effect"],
             "effect_basis": exp["effect_basis"],
             "chain": exp.get("chain"),
+            "knockout": exp.get("knockout"),
+            "direction_p": ((exp.get("chain") or {}).get("right direction")
+                          if exp.get("direction_measured") else None),
             "limiting_step": exp.get("limiting_step"),
             "n_routes": len(rs),
             "breadth": _breadth,
@@ -3015,9 +3051,16 @@ def corroboration_table(result: dict, top_n: int = 20) -> list:
              "supports.")
     L.append("")
     L.append(f"| Drug | Methods | Tier | Acts on | What it is | Systems it "
-             f"acts on | Breadth | Reach | BBB? | {gene} change | P(moves) | "
-             f"Measured effect |")
-    L.append("|---|---|---|---|---|---|---|---|---|---|---|---|")
+             f"acts on | Breadth | Reach | BBB? | {gene} change | "
+             f"Engagement / promoter | "
+             + ("Direction | " if any(r.get("direction_p") is not None
+                                      for r in rows) else "")
+             + ("Knockout evidence | " if any(r.get("knockout") is not None
+                                              for r in rows) else "")
+             + "Measured effect |")
+    any_ko = any(r.get("knockout") is not None for r in rows)
+    any_dir = any(r.get("direction_p") is not None for r in rows)
+    L.append("|" + "---|" * (12 + any_ko + any_dir))
     any_p, any_effect = False, False
     for r in rows:
         sys_cell = r["systems"] or "no systemic class flagged"
@@ -3028,14 +3071,14 @@ def corroboration_table(result: dict, top_n: int = 20) -> list:
                else "established" if "established" in r["expected_basis"]
                else "predicted")
 
-        p = r.get("p_move")
-        if p is None:
+        chain = r.get("chain") or {}
+        eng, act = chain.get("engages the target"), chain.get(
+            "acts on the promoter")
+        if eng is None or act is None:
             p_cell = "not estimated"
         else:
             any_p = True
-            lo, hi = r.get("p_low"), r.get("p_high")
-            p_cell = (f"{p:.2f} [{lo:.2f}\u2013{hi:.2f}]"
-                      if lo is not None and hi is not None else f"{p:.2f}")
+            p_cell = f"{eng:.2f} / {act:.2f}"
 
         eff = r.get("effect_size")
         if eff is not None:
@@ -3054,7 +3097,11 @@ def corroboration_table(result: dict, top_n: int = 20) -> list:
                  f"{_route_cell(r)} | "
                  f"{r.get('bbb') or '—'} | "
                  f"{r['expected_change']} ({tag}) | {p_cell} | "
-                 f"{eff_cell} |")
+                 + (f"{r['direction_p']:.2f} | " if any_dir and r.get(
+                     "direction_p") is not None else
+                    "— | " if any_dir else "")
+                 + (f"{ko_mod.cell(r.get('knockout'))} | " if any_ko else "")
+                 + f"{eff_cell} |")
     L.append("")
 
     info = result.get("compound_breadth") or {}
@@ -3082,36 +3129,14 @@ def corroboration_table(result: dict, top_n: int = 20) -> list:
              f"two numbers below are the ones it can actually compute.")
     L.append("")
     if any_p:
-        lo_p = min(r["p_move"] for r in rows if r.get("p_move") is not None)
-        hi_p = max(r["p_move"] for r in rows if r.get("p_move") is not None)
-        L.append(f"**P(moves)** is the probability {gene} moves at all, "
-                 f"with its interval - the product of four steps: the drug "
-                 f"engaging the target, acting in the right direction, "
-                 f"acting through the promoter, and the gene being "
-                 f"responsive in your cells.")
+        L.append("**Engagement / promoter** are the two links that come from "
+                 "evidence: the drug engaging its target at a dose that can "
+                 "be reached, and the factor acting on this promoter. Each "
+                 "is a 0 to 1 heuristic and they differ from row to row. "
+                 "**Direction** and **Knockout evidence** appear only when "
+                 "a model predicted the direction or an experiment "
+                 "perturbed the factor. Order on tier and method count.")
         L.append("")
-        L.append(f"Read it as a magnitude of uncertainty, **not as a "
-                 f"ranking**. Every value here sits between {lo_p:.2f} and "
-                 f"{hi_p:.2f}, and that narrow band is not a coincidence: "
-                 f"two of the four steps are the same constant for every "
-                 f"row. Direction defaults to 0.75 without "
-                 f"`--predict-direction`, and responsiveness is pinned at "
-                 f"0.40 because nothing in this package can measure it. So "
-                 f"the number tells you how uncertain this CLASS of route "
-                 f"is; order on tier and method count instead.")
-        L.append("")
-        limits = {}
-        for r in rows:
-            st = r.get("limiting_step")
-            if st:
-                limits[st] = limits.get(st, 0) + 1
-        if limits:
-            top = max(limits.items(), key=lambda kv: kv[1])
-            L.append(f"For {top[1]} of {len(rows)} rows the limiting step is "
-                     f"the same: **{top[0]}**. That is where the probability "
-                     f"is lost, and the experiment that raises it is the one "
-                     f"worth doing first.")
-            L.append("")
     if any_effect:
         L.append("**Measured effect** is a signed effect size on your gene "
                  "from a perturbation corpus, z-like rather than a "
@@ -3236,8 +3261,15 @@ def summary_report(result: dict, top_n: int = SUMMARY_TOP) -> str:
     said = any("chance" in r or "expected to be" in r
                for r in (verdict.get("reasons") or []))
     if fdp is not None and not said:
-        L.append(f"- Of the motif sites called, about **{fdp:.0%} are "
-                 f"expected to be chance matches**.")
+        n_sites = verdict.get("scan_sites")
+        rng = verdict.get("false_discovery_range")
+        of = f"the {n_sites} motif sites" if n_sites else "the motif sites"
+        span = (f" (range {rng[0]:.0%} to {rng[1]:.0%})"
+                if rng else "")
+        L.append(f"- About **{fdp:.0%} of {of}**{span} would be expected on "
+                 f"shuffled sequence of the same window. A site is a "
+                 f"sequence match, not evidence of binding; ChIP peaks are "
+                 f"what separate the real ones.")
     L.append("")
 
     # ---- the shortlist

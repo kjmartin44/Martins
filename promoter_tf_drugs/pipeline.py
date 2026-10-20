@@ -9,11 +9,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import (annotate, catalogue as cat_mod, cellcycle, congeners as cong_mod,
-               delivery as dlv_mod, fda as fda_mod,
+               delivery as dlv_mod, fda as fda_mod, knockout as knockout_mod,
                liabilities as liab_mod,
                sensitivity as sens_mod,
                promoterdna as dna_mod,
                tfactivity as tfa_mod,
+               regulators as reg_mod,
                depmap as depmap_mod,
                corpora as corpora_mod,
                abundance as abund_mod,
@@ -250,9 +251,10 @@ RUN_SPECS: dict = {
                    "whether an activator is wanted on or off, so a wrong "
                    "value inverts every recommendation."),
     "grade_drugs": _FLAG,
-    "tissue": _V("str", optional=True, choices=("cns",),
-                 why="down-weights drugs unlikely to reach the "
-                     "compartment."),
+    "tissue": _V("str", optional=True, choices=("cns", "skin"),
+                 why="cns down-weights drugs unlikely to reach the "
+                     "compartment; skin keeps drugs approved only for "
+                     "topical use in the reports."),
     "tf_weight": _V("float", minimum=0, maximum=1,
                     why="how much factor-level evidence counts against "
                         "drug-level evidence."),
@@ -293,6 +295,7 @@ RUN_SPECS: dict = {
                                     "0 means no empirical p-value is "
                                     "computed, not that it is 1."),
     "lincs_gmt": _V("tuple", optional=True),
+    "knockout_gmt": _V("tuple", optional=True),
     "expression_file": _V("path", optional=True, must_exist=True),
     "promoter_fasta": _V("path", optional=True),
     "has_ptc": _V("bool", optional=True,
@@ -306,8 +309,25 @@ RUN_SPECS: dict = {
     "upstream_network": _FLAG,
     "upstream_depth": _V("int", minimum=1,
                          why="how many edges upstream to walk."),
+    "null_shuffles": _V("int", minimum=0,
+                        why="shuffled copies of each window used to estimate "
+                            "how many motif sites are chance; 0 uses the "
+                            "formula instead."),
+    "upstream_factors": _V("int", minimum=1,
+                           why="how many ranked factors the upstream search "
+                               "covers."),
+    "upstream_drugs_per_node": _V("int", minimum=1,
+                                  why="how many drugs are listed for each "
+                                      "upstream node."),
+    "regulator_route": _FLAG,
+    "regulator_measured": _FLAG,
+    "regulator_steps": _V("int", minimum=1, maximum=2,
+                          why="1 lists drugs at the gene's own recorded "
+                              "regulators; 2 also lists drugs at the factors "
+                              "that regulate those."),
     "approved_only": _FLAG,
     "fda_only": _FLAG,
+    "include_local_only": _FLAG,
     "use_dgidb": _FLAG,
     "use_opentargets": _FLAG,
     "find_analogs": _FLAG,
@@ -402,7 +422,8 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         promoter_dna: bool = False,
         docking_results: str | None = None,
         activity_tissue: str | None = None,
-        activity_permutations: int = 0, lincs_gmt: tuple | None = None, expression_file: str | None = None,
+        activity_permutations: int = 0, lincs_gmt: tuple | None = None,
+        knockout_gmt: tuple | None = None, expression_file: str | None = None,
         promoter_fasta: str | None = None,
         has_ptc: bool | None = None,
         gtf: str | None = None,
@@ -410,8 +431,14 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         use_genetics: bool = False,
         upstream_network: bool = False,
         upstream_depth: int = 3,
+        null_shuffles: int = motifs_mod.NULL_SHUFFLES,
+        upstream_factors: int = net_mod.UPSTREAM_FACTORS,
+        upstream_drugs_per_node: int = net_mod.UPSTREAM_DRUGS_PER_NODE,
+        regulator_route: bool = False,
+        regulator_steps: int = 1,
+        regulator_measured: bool = False,
         approved_only: bool = True, fda_only: bool = True,
-        use_dgidb: bool = True,
+        include_local_only: bool = False, use_dgidb: bool = True,
         use_opentargets: bool = True,
         find_analogs: bool = False,
         demo: bool = False, offline: bool = False,
@@ -592,14 +619,32 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
 
     outputs = []
     for prom in promoters:
+        scan_info: dict = {}
         hits = motifs_mod.scan_promoter(
             prom.sequence, motif_set, pvalue=pvalue, min_ic=min_ic,
-            offset_fn=prom.offset_to_tss, skip_repeats=mask_repeats and not demo)
+            offset_fn=prom.offset_to_tss, skip_repeats=mask_repeats and not demo,
+            info=scan_info)
         hits = motifs_mod.collapse_overlapping(hits)
         scannable = motifs_mod.scannable_length(
             prom.sequence, skip_repeats=mask_repeats and not demo)
-        quality = motifs_mod.scan_quality(len(hits), len(motif_set),
-                                          scannable, pvalue)
+        # How many sites chance gives is measured on shuffled copies of this
+        # window, since the formula that assumes every motif matches at its
+        # stated p-value undercounted on a masked promoter. 0 shuffles, or a
+        # window with too little scannable sequence, uses the formula.
+        null = None
+        if null_shuffles >= 10 and scannable >= 100:
+            null = motifs_mod.empirical_null(
+                prom.sequence, motif_set, pvalue=pvalue, min_ic=min_ic,
+                skip_repeats=mask_repeats and not demo,
+                n_shuffles=null_shuffles)
+        quality = motifs_mod.scan_quality(
+            len(hits), scan_info.get("n_scanned", len(motif_set)), scannable,
+            pvalue, null=null,
+            observed_scores=[h.pvalue for h in hits
+                             if h.pvalue is not None])
+        quality["motifs_loaded"] = len(motif_set)
+        quality["motifs_scanned"] = scan_info.get("n_scanned")
+        quality["motifs_unreachable"] = scan_info.get("n_unreachable")
         log.info("%s: %d non-redundant sites", prom.transcript_id, len(hits))
         if quality["verdict"] == "no signal":
             log.warning("SCAN FOUND NO SIGNAL: %s", quality["advice"])
@@ -733,13 +778,23 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                     "direction model unavailable" in n
                     or "direction prediction failed" in n
                     for n in (g.notes or [])))
+                # "ok" used to mean only that nothing crashed. A model that
+                # trained for no receptor looked the same as one that worked,
+                # so say how many grades actually got a call.
+                n_called = sum(
+                    1 for g in grades
+                    if getattr(getattr(g, "_prediction", None), "predicted",
+                               "undetermined") != "undetermined")
                 ledger.record(
                     "direction_model", requested=True,
                     ok=broke == 0 and bool(grades),
-                    yielded=len(grades) - broke,
+                    yielded=n_called,
                     detail=(f"{broke} of {len(grades)} grade(s) could not be "
                             f"direction-checked" if broke else
-                            f"{len(grades)} grade(s) direction-checked"))
+                            f"{n_called} of {len(grades)} grade(s) got a "
+                            f"model call" + ("" if n_called else
+                                             "; too few labelled agonists and "
+                                             "antagonists to train")))
 
             # Collapse salt forms. One pharmacology was occupying five rows
             # (Liothyronine / Liothyronine Sodium / Levothyroxine Sodium ...),
@@ -766,7 +821,8 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             for g in grades:
                 est = outcome_mod.estimate(
                     g.drug_name, g.tf_symbol, prom.gene_symbol, goal=goal,
-                    grade=g, tf_result=by_symbol.get(g.tf_symbol))
+                    grade=g, tf_result=by_symbol.get(g.tf_symbol),
+                    prediction=getattr(g, "_prediction", None))
                 d = est.to_dict()
                 d["verdict"] = est.verdict
                 d["next_experiment"] = outcome_mod.narrowing_experiment(est)
@@ -776,6 +832,35 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             # discovery winner could fall outside the printed rows while worse
             # candidates were shown — two rankings disagreeing silently.
             estimates.sort(key=lambda e: -e["p_point"])
+
+        # ---- does the gene change when the factor is lost?
+        # Read from perturbation experiments (see knockout.py). It replaces a
+        # fixed placeholder for "responsiveness"; with no files on disk the
+        # estimates carry no `knockout` entry and the report says so.
+        knockout_results: dict = {}
+        if not demo:
+            _ko_paths = knockout_mod.resolve_paths(knockout_gmt)
+            if _ko_paths:
+                knockout_results = _optional(
+                    "knockout evidence",
+                    lambda: knockout_mod.assess_many(
+                        prom.gene_symbol, [r.symbol for r in ranked],
+                        _ko_paths), {})
+                for d in estimates:
+                    d["knockout"] = knockout_results.get(
+                        d["tf_symbol"].upper())
+                n_meas = sum(1 for v in knockout_results.values()
+                             if v["class"] == knockout_mod.MEASURED)
+                n_test = sum(1 for v in knockout_results.values()
+                             if v["n_experiments"])
+                ledger.record(
+                    "knockout", requested=True, ok=bool(knockout_results),
+                    yielded=n_meas,
+                    detail=(f"{n_test} of {len(knockout_results)} factor(s) "
+                            f"were perturbed in the knockout data; the gene "
+                            f"moved for {n_meas}"
+                            if knockout_results else
+                            "the knockout files could not be read"))
 
         _progress.step(7, "transcriptional call",
                        f"{len(estimates)} route(s) estimated"
@@ -937,6 +1022,30 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                 cmp["hits"] = [h.to_dict() for h in mod_hits]
                 mechanisms[r.symbol] = cmp
 
+        # One batched read of what every approved drug targets, built the
+        # first time a stage needs it. None when no local drug table is on
+        # disk, only approved drugs were not asked for, or the build failed.
+        _index_box: list = []
+
+        def _approved_index():
+            if not _index_box:
+                idx = None
+                if approved_only:
+                    try:
+                        from . import localdrugs as _ld
+                        _lib = _ld.library()
+                        if _lib:
+                            idx = drugs_mod.approved_target_index(
+                                client, _lib)
+                    except Exception as exc:                  # noqa: BLE001
+                        log.warning("could not build the approved-drug index "
+                                    "(%s); asking about upstream nodes one "
+                                    "at a time, capped at %d per factor",
+                                    str(exc)[:100],
+                                    net_mod.UPSTREAM_MAX_CHECKED)
+                _index_box.append(idx)
+            return _index_box[0]
+
         # ------------------- 8c. multi-hop upstream routes to undruggable TFs
         upstream_hits = {}
         upstream_search = {}
@@ -947,7 +1056,10 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             # where they happen to fall in the ranking.
             _priority = [r for r in ranked if r.symbol in
                          set(attrition.get("top25_without_drug") or [])]
-            _rest = [r for r in ranked[:6] if r not in _priority]
+            # Two fewer than the factors searched, which is the six it always
+            # was at the default of eight.
+            _rest = [r for r in ranked[:max(6, upstream_factors - 2)]
+                     if r not in _priority]
             _up = {"factors_searched": 0, "factors_errored": 0,
                    "nodes_reachable": 0, "nodes_checked": 0,
                    "lookups_failed": 0, "factors_truncated": 0,
@@ -957,21 +1069,9 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             # local drug table is on disk, so each upstream node is a lookup
             # and none has to be skipped. Without it, or if it fails, each
             # node is asked about on its own and the walk is capped.
-            _drug_index = None
-            if edges and approved_only:
-                try:
-                    from . import localdrugs as _ld
-                    _lib = _ld.library()
-                    if _lib:
-                        _drug_index = drugs_mod.approved_target_index(
-                            client, _lib)
-                except Exception as exc:                      # noqa: BLE001
-                    log.warning("could not build the approved-drug index "
-                                "(%s); asking about upstream nodes one at a "
-                                "time, capped at %d per factor", str(exc)[:100],
-                                net_mod.UPSTREAM_MAX_CHECKED)
+            _drug_index = _approved_index() if edges else None
             _up["drug_index"] = _drug_index is not None
-            for r in (_priority + _rest)[:8] if edges else []:
+            for r in (_priority + _rest)[:upstream_factors] if edges else []:
                 # The point of this step is TFs with no direct pharmacology.
                 if r.drugs:
                     continue
@@ -981,7 +1081,8 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                         tf_role=r.annotation.get("role", "activator"),
                         max_depth=upstream_depth, edges=edges,
                         approved_only=approved_only, drug_cache=_drug_cache,
-                        drug_index=_drug_index)
+                        drug_index=_drug_index,
+                        drugs_per_node=upstream_drugs_per_node)
                 except Exception as exc:                      # noqa: BLE001
                     log.warning("upstream search failed for %s: %s", r.symbol, exc)
                     _up["factors_errored"] += 1
@@ -1034,6 +1135,81 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                     "upstream", requested=True, ok=True, yielded=0,
                     detail=f"no node checked has an approved drug that moves "
                            f"it the needed way; {_scope}{_more}")
+
+        # --------------- 8c2. drugs at the gene's known regulators
+        # The reverse of the promoter scan: take the factors CollecTRI and
+        # the knockout data record as regulating this gene, skip those that
+        # already have a drug route, and ask what approved drug acts on each.
+        regulator_hits: dict = {}
+        if regulator_route and not demo:
+            _reg_tables = signed_regulons
+            if not _reg_tables:
+                _reg_tables, _ = _optional(
+                    "signed regulon autoload", tfa_mod.autoload_regulons,
+                    ({}, None))
+            _reg_index = _approved_index()
+            if not _reg_tables:
+                ledger.record(
+                    "regulators", requested=True, ok=False, yielded=0,
+                    detail="no signed regulon table (CollecTRI) was found, "
+                           "so the known regulators of the gene could not "
+                           "be listed")
+            elif _reg_index is None:
+                ledger.record(
+                    "regulators", requested=True, ok=False, yielded=0,
+                    detail=("the regulator route reads the approved-drug "
+                            "index, which is not built when investigational "
+                            "drugs are included" if not approved_only else
+                            "the approved-drug index could not be built "
+                            "(it needs the local drug table), so no drug "
+                            "could be matched to a regulator"))
+            else:
+                _regs = _optional(
+                    "known regulators",
+                    lambda: reg_mod.candidates(
+                        prom.gene_symbol, _reg_tables,
+                        knockout_paths=knockout_gmt,
+                        steps=regulator_steps,
+                        skip=[r.symbol for r in ranked if r.drugs]), None)
+                if _regs is None:
+                    ledger.record("regulators", requested=True, ok=False,
+                                  yielded=0,
+                                  detail="the regulator lookup failed")
+                else:
+                    _binders, _binder_failed = None, []
+                    if regulator_measured:
+                        # Asked only for a regulator the mechanism index has
+                        # nothing for, one lookup each, cached by the client.
+                        from . import localdrugs as _ld2
+                        _blib, _bcache = _ld2.library(), {}
+
+                        def _binders(sym):
+                            if sym not in _bcache:
+                                try:
+                                    _bcache[sym] = drugs_mod.measured_binders(
+                                        client, sym, _blib)
+                                except Exception as exc:      # noqa: BLE001
+                                    log.debug("measured binders for %s: %s",
+                                              sym, exc)
+                                    _binder_failed.append(sym)
+                                    _bcache[sym] = []
+                            return _bcache[sym]
+                    regulator_hits = reg_mod.find_drugs(
+                        _regs, goal, _reg_index, binders=_binders)
+                    _n_drugs = sum(len(v["drugs"])
+                                   for v in regulator_hits.values())
+                    ledger.record(
+                        "regulators", requested=True, ok=True,
+                        yielded=len(regulator_hits),
+                        detail=(f"{len(_regs)} recorded regulator(s) of the "
+                                f"gene had no drug route yet; "
+                                f"{len(regulator_hits)} have an approved "
+                                f"drug that moves them the needed way "
+                                f"({_n_drugs} route(s))"
+                                + (f"; {len(_binder_failed)} measured-activity "
+                                   f"lookup(s) failed, which is not a finding "
+                                   f"that none exist" if _binder_failed
+                                   else "")))
 
         # ------------- 8b2. stabilisation routes for pocket-less factors
         stabilisation = {}
@@ -1561,7 +1737,16 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                                           for k, v in _fams.items()}
         attrition["family_saturated"] = bool(grades) and len(_fams) <= 2             and len(_fams) > 0
 
+        # Approved HDAC, DNMT and EZH2 inhibitors beyond the curated list.
+        _chromatin_extra: list = []
+        if not demo:
+            _idx = _optional("approved-drug index for chromatin agents",
+                             _approved_index, None)
+            if _idx:
+                _chromatin_extra = cat_mod.chromatin_agents_from_index(_idx)
+
         block_for_catalogue = {
+            "chromatin_extra": _chromatin_extra,
             "direct_therapies": [t.to_dict() for t in direct_hits],
             "drug_grades": [g.to_dict() for g in grades],
             "mechanisms": mechanisms,
@@ -1569,6 +1754,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             "ligand_axes": ligand_axes,
             "upstream": upstream_hits,
             "upstream_search": upstream_search,
+            "regulators": regulator_hits,
             "lincs": lincs,
             "screens": screens,
             # Both of these were computed above and left out of the dict
@@ -1659,11 +1845,13 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             "cell_cycle_blocked": sorted(blocked),
             "drug_grades": [g.to_dict() for g in grades],
             "outcome_estimates": estimates,
+            "knockout": knockout_results,
             "improvements": improvements,
             "all_routes": all_routes,
             "mechanisms": mechanisms,
             "upstream": upstream_hits,
             "upstream_search": upstream_search,
+            "regulators": regulator_hits,
             "stabilisation": stabilisation,
             "ligand_axes": ligand_axes,
             "cell_type": celltype,
@@ -1751,7 +1939,10 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         "query": query_block(_args, n_motifs=len(motif_set)),
         # Whether the reports show only FDA approved drugs. The full set
         # stays in this file; see fda.py.
-        "fda_filter": fda_mod.status(demo=demo, requested=fda_only),
+        "fda_filter": fda_mod.status(
+            demo=demo, requested=fda_only, tissue=tissue,
+            activity_tissue=activity_tissue,
+            include_local_only=include_local_only),
         # How much the gene has to move, and whether its dose is under
         # selection. Both are about the GENE rather than about any
         # route, so they sit beside the query rather than in a block.

@@ -885,6 +885,9 @@ def test_a_whole_offline_run_performs_the_trans_eqtl_lookup(tmp_path,
 
     rng = random.Random(1)
     seq = "".join(rng.choice("ACGT") for _ in range(6000))
+    # A twelve-base site inside the scanned window. A four-base matrix cannot
+    # reach the scan's p-value, and the scan now leaves such matrices out.
+    seq = seq[:1800] + "ACGTACGTACGT" + seq[1812:]
     fa = tmp_path / "g.fa"
     fa.write_text(">chr1" + NL + NL.join(seq[i:i + 60]
                                          for i in range(0, 6000, 60)) + NL,
@@ -901,8 +904,11 @@ def test_a_whole_offline_run_performs_the_trans_eqtl_lookup(tmp_path,
                   'tag "Ensembl_canonical";'])]) + NL, encoding="utf-8")
     pfm = tmp_path / "m.txt"
     pfm.write_text(NL.join([
-        ">MA0001.1" + TAB + "TEST", "A [ 20 0 0 0 ]", "C [ 0 20 0 0 ]",
-        "G [ 0 0 20 0 ]", "T [ 0 0 0 20 ]"]) + NL, encoding="utf-8")
+        ">MA0001.1" + TAB + "TEST",
+        "A [ 20 0 0 0 20 0 0 0 20 0 0 0 ]",
+        "C [ 0 20 0 0 0 20 0 0 0 20 0 0 ]",
+        "G [ 0 0 20 0 0 0 20 0 0 0 20 0 ]",
+        "T [ 0 0 0 20 0 0 0 20 0 0 0 20 ]"]) + NL, encoding="utf-8")
 
     # A table over the 100 kB the client requires before it trusts a file.
     rows = [_EQTL_HEADER, TAB.join(["rs1", "3", "46000000", "TESTG", "5.2",

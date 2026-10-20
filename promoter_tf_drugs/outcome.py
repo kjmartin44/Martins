@@ -29,8 +29,17 @@ Multiplying honest probabilities gives small numbers. That is the correct
 result, not a bug to be tuned away: a four-link inferential chain with 0.7 at
 each link lands near 0.24. Anyone reporting 0.9 for this has hidden a link.
 
-The output is a probability *band*, not a point estimate, and the widest
-contributing uncertainty is named so you know which experiment would narrow it.
+The chain is still computed and saved in `results.json` (`p_point` and the four
+links), because `discovery` reads it and older results carry it. The reports no
+longer print the product. Two of the four links are one value for every row
+(direction is the database label, responsiveness is a placeholder), so the
+product only rescaled the two links that come from evidence, and the interval
+around it was built on an invented number. Responsiveness is now read from
+knockout experiments (`knockout.py`) and shown as a label, not a number. The
+reports show the two evidence links and leave the ordering to tier and score. A
+link with data, such as a direction a model predicted or a knockout result, is
+shown as its own column; one without is left out. `assumed_links` and
+`shown_links` below decide which.
 """
 
 from __future__ import annotations
@@ -179,3 +188,86 @@ def narrowing_experiment(est: OutcomeEstimate) -> str:
             "target gene. If it does not move, no drug acting through that "
             "factor will help, and everything upstream is moot.",
     }[est.limiting_step]
+
+
+# What each link needs, so the experiment can be named for the weaker one.
+STEP_OF_LINK = {
+    "p_engages": "engagement (potency/exposure)",
+    "p_direction": "functional direction",
+    "p_activates": "activation at this promoter",
+    "p_responsive": "gene responsiveness in your cells",
+}
+LINK_LABEL = {
+    "p_engages": "drug engagement",
+    "p_direction": "direction",
+    "p_activates": "promoter activation",
+    "p_responsive": "responsiveness",
+}
+_ASSUMED_NOTE = {
+    "p_direction": "direction from database annotation only",
+    "p_responsive": "assumed 0.40",
+}
+
+
+def experiment_for(link: str) -> str:
+    """The experiment that would settle one link of the chain."""
+    step = STEP_OF_LINK[link]
+    return narrowing_experiment(OutcomeEstimate(
+        "?", "?", "?", "up", 0, 0, 0, 0, 0, 0, 0, step))
+
+
+def knockout_evidence(estimates) -> bool:
+    """True when some estimate carries a knockout result for its factor."""
+    from . import knockout
+    return any((e.get("knockout") or {}).get("class") in (
+        knockout.MEASURED, knockout.NO_RESPONSE) for e in (estimates or [])
+        if e)
+
+
+def assumed_links(estimates) -> list:
+    """Links no row measured: set to a default for every estimate.
+
+    Direction is the database label unless a model predicted it, and
+    responsiveness is a fixed placeholder because nothing in the package
+    measures it. A link in this list is the same for every row, so it cannot
+    separate candidates and is kept out of the tables.
+    """
+    ests = [e for e in (estimates or []) if e]
+    out = []
+    for key, marker in _ASSUMED_NOTE.items():
+        if key == "p_responsive" and knockout_evidence(ests):
+            continue          # read from knockout experiments instead
+        if ests and all(any(marker in n for n in (e.get("notes") or []))
+                        for e in ests):
+            out.append(key)
+    return out
+
+
+def shown_links(estimates) -> list:
+    """The links worth a column: the two that come from evidence, and any
+    other that some row measured."""
+    assumed = set(assumed_links(estimates))
+    # Responsiveness is never a numeric column: it is the knockout evidence
+    # column when there is data, and a caveat when there is not.
+    return [k for k in ("p_engages", "p_direction", "p_activates")
+            if k not in assumed]
+
+
+def weaker_link(estimate: dict, keys) -> str:
+    """The label of the lowest of the given links for one estimate."""
+    k = min(keys, key=lambda key: estimate[key])
+    return LINK_LABEL[k]
+
+
+def knockout_caveat(estimates) -> list:
+    """One paragraph on what the knockout column does and does not say."""
+    if not knockout_evidence(estimates):
+        return []
+    return [
+        "**Knockout evidence** says whether your gene is among the genes that "
+        "changed when the factor was knocked out, knocked down or "
+        "overexpressed in published experiments. A response shows the factor "
+        "can move the gene somewhere, not that it will in your cells or that "
+        "a drug acting on the factor will. \"Not among top changes\" is weak, "
+        "because each list holds only the few hundred genes that changed "
+        "most."]

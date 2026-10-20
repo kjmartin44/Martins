@@ -60,6 +60,9 @@ class Prediction:
     score: float = 0.0
     p_move: float | None = None
     p_range: tuple | None = None
+    p_engages: float | None = None
+    p_activates: float | None = None
+    knockout: dict | None = None
     limiting_step: str | None = None
     why: list = field(default_factory=list)
     caveats: list = field(default_factory=list)
@@ -80,6 +83,8 @@ class Prediction:
                 "category": self.category, "tier": self.tier,
                 "grade": self.grade, "score": self.score,
                 "p_move": self.p_move, "limiting_step": self.limiting_step,
+                "p_engages": self.p_engages, "p_activates": self.p_activates,
+                "knockout": self.knockout,
                 "why": self.why, "caveats": self.caveats,
                 "falsifier": self.falsifier}
 
@@ -209,6 +214,9 @@ def build(block: dict, *, goal: str = "up", has_chip: bool = False,
         if o:
             p.p_move = o.get("p_point")
             p.p_range = (o.get("p_low"), o.get("p_high"))
+            p.p_engages = o.get("p_engages")
+            p.p_activates = o.get("p_activates")
+            p.knockout = o.get("knockout")
             p.limiting_step = o.get("limiting_step")
             p.falsifier = o.get("next_experiment")
 
@@ -324,19 +332,12 @@ def render(preds: list, gene: str, goal: str, *, verdict: dict | None = None
              "does and does not establish.*")
     L.append("")
 
-    probs = [p.p_move for p in preds if p.p_move is not None]
-    if probs:
-        lo, hi = min(probs), max(probs)
-        L.append(f"**Every candidate here has a predicted P(gene moves) "
-                 f"between {lo:.2f} and {hi:.2f}.** That narrow band is not a "
-                 f"coincidence and not a ranking: two of the chain's four "
-                 f"steps are the same constant for every row — direction "
-                 f"defaults to 0.75 without `--predict-direction`, and "
-                 f"responsiveness is fixed at 0.40 because nothing in this "
-                 f"package can measure it. So the number tells you how "
-                 f"uncertain this *class* of route is (marginal), not which "
-                 f"of these is better. Order on tier and score; use P to "
-                 f"decide whether to pursue a promoter route at all.")
+    if any(p.p_engages is not None for p in preds):
+        L.append("**Engage** and **promoter** below are the two links that "
+                 "come from evidence: the drug engaging its target at a dose "
+                 "that can be reached, and the factor acting on this "
+                 "promoter. They differ between drugs and are 0 to 1 "
+                 "heuristics, not probabilities. Order on tier and score.")
         L.append("")
 
     # Grouped by TARGET, not by drug. Every drug acting through the same
@@ -428,8 +429,12 @@ def render(preds: list, gene: str, goal: str, *, verdict: dict | None = None
             bits = []
             if p.grade:
                 bits.append(f"grade {p.grade}")
-            if p.p_move is not None:
-                bits.append(f"P={p.p_move:.2f}")
+            if p.p_engages is not None and p.p_activates is not None:
+                bits.append(f"engage {p.p_engages:.2f}, "
+                            f"promoter {p.p_activates:.2f}")
+            if p.knockout:
+                from . import knockout as ko_mod
+                bits.append("knockout: " + ko_mod.cell(p.knockout))
             # Only print the mechanism when it distinguishes this drug from
             # its group-mates; "ligand at the transcription factor" on every
             # row of a group is the same noise in a different place.

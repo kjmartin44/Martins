@@ -1,0 +1,11 @@
+symbol	name	role	nuclear_receptor	n_sites	best_rel_score	best_score_bits	best_site_tss_offset	best_site_sequence	matrix_id	chip_peaks	score	n_drugs	drugs
+RARA	retinoic acid receptor alpha	activator	True	3	0.956	21.4	-430	AGGTCAGGCTTAGGTCA	DEMO0003.1	0	75.5	2	Alitretinoin; Tretinoin
+RXRA	retinoid X receptor alpha	activator	True	6	1.0	23.3	-610	AGGTCAAAGGTCA	DEMO0002.1	0	75.3	1	Bexarotene
+PPARG	peroxisome proliferator activated receptor gamma	activator	True	2	1.0	23.3	-610	AGGTCAAAGGTCA	DEMO0002.1	0	71.9	3	Demo-Pam-1; Pioglitazone; Rosiglitazone
+SP1	Sp1 transcription factor	activator	False	2	1.0	14.32	-95	GGGGCGGGGC	DEMO0006.1	0	70.5	0	
+CREB1	cAMP responsive element binding protein 1	activator	False	1	1.0	14.19	-140	TGACGTCA	DEMO0007.1	0	65.9	0	
+VDR	vitamin D receptor	activator	True	1	0.785	11.65	-439	ACTTCTTAAAGGTCA	DEMO0004.1	0	62.4	3	Calcitriol; Demo-Pam-2; Paricalcitol
+REST	RE1 silencing transcription factor	repressor	False	2	1.0	34.0	-720	TTCAGCACCACGGACAGCGCC	DEMO0010.1	0	60.6	1	Valproic Acid
+NR3C1	glucocorticoid receptor	dual	True	1	0.972	22.85	-850	AGAACAGTGTGTTCT	DEMO0001.1	0	60.1	3	Dexamethasone; Hydrocortisone; Prednisolone
+NFKB1	nuclear factor kappa B subunit 1	dual	False	1	1.0	17.17	-310	GGGACTTTCC	DEMO0008.1	0	56.2	0	
+HNF4A	hepatocyte nuclear factor 4 alpha	activator	True	1	0.874	17.06	-611	CAGGTCAAAGGTCA	DEMO0005.1	0	53.9	0	

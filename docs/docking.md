@@ -261,6 +261,11 @@ how you read the order.
 
 ## Exploratory docking on an AlphaFold model
 
+**This is never run by default.** `scripts/run_everything.bat` asks whether to run it
+when the gene's own pocket is refused, and the answer is no unless you type y; if you
+decline, it prints the command below. The result is not validated and a run takes
+hours.
+
 The normal stage refuses a target whose pocket cannot recover its own known
 ligands. For a gene with an AlphaFold model, a crystallised relative, and no
 structure of its own with a ligand, `exploratory.py` asks a weaker question:

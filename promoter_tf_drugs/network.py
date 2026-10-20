@@ -134,6 +134,14 @@ class UpstreamHit:
 # 1,189. Each node costs a few ChEMBL requests, so the walk is bounded.
 UPSTREAM_MAX_CHECKED = 100
 UPSTREAM_WANT = 10
+# Drugs listed for one upstream node, and factors the search covers. Both were
+# fixed numbers. A node such as NR3C1 has dozens of approved drugs and listed
+# five; replaying the search on 36 saved runs found 157 drugs that passed every
+# filter and were cut by limits like these. They are options now, with the old
+# values as the defaults, so saved results and runs without the flags are
+# unchanged.
+UPSTREAM_DRUGS_PER_NODE = 5
+UPSTREAM_FACTORS = 8
 # Consecutive failed lookups after which the walk stops. A service that is
 # down answers every node the same way, and asking on would only repeat it.
 UPSTREAM_MAX_CONSECUTIVE_FAILURES = 5
@@ -358,7 +366,8 @@ def find_upstream_targets(client: Client, tf: str, *, goal: str = "up",
 
 def _attach_one(client: Client, h: UpstreamHit, *, goal_on_node: str,
                 approved_only: bool, drug_cache: dict | None = None,
-                drug_index: dict | None = None) -> bool:
+                drug_index: dict | None = None,
+                drugs_per_node: int = UPSTREAM_DRUGS_PER_NODE) -> bool:
     """Attach the drugs that move one node the needed way.
 
     Returns False when the lookup raised, so the caller can tell "no drug
@@ -403,7 +412,8 @@ def _attach_one(client: Client, h: UpstreamHit, *, goal_on_node: str,
             return False
         if drug_cache is not None:
             drug_cache[key] = found
-    h.drugs = [d.to_dict() for d in found if d.direction in (want, "unclear")][:5]
+    h.drugs = [d.to_dict() for d in found
+               if d.direction in (want, "unclear")][:drugs_per_node]
     return True
 
 
@@ -432,7 +442,9 @@ def find_druggable_upstream(client: Client, tf: str, *, goal: str = "up",
                             want: int = UPSTREAM_WANT,
                             max_checked: int = UPSTREAM_MAX_CHECKED,
                             drug_cache: dict | None = None,
-                            drug_index: dict | None = None) -> UpstreamSearch:
+                            drug_index: dict | None = None,
+                            drugs_per_node: int = UPSTREAM_DRUGS_PER_NODE
+                            ) -> UpstreamSearch:
     """Walk the upstream nodes in score order until enough have a drug.
 
     `find_upstream_targets` ranks by how well a path explains the factor;
@@ -462,7 +474,8 @@ def find_druggable_upstream(client: Client, tf: str, *, goal: str = "up",
         search.n_checked += 1
         if not _attach_one(client, h, goal_on_node=goal,
                            approved_only=approved_only,
-                           drug_cache=drug_cache, drug_index=drug_index):
+                           drug_cache=drug_cache, drug_index=drug_index,
+                           drugs_per_node=drugs_per_node):
             search.n_lookup_failed += 1
             in_a_row += 1
             if in_a_row >= UPSTREAM_MAX_CONSECUTIVE_FAILURES:

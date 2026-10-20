@@ -26,9 +26,10 @@ the wide expression format. Missing landmark status in a signature table is
 treated conservatively as inferred. The current signature loader keeps effects
 in the requested direction with absolute score at least 1.5.
 
-`data/jaspar2024.txt` and `data/trrust.tsv` are reference files in this checkout.
-They are not included in the installed wheel; pass paths to your own files or
-use the network defaults. **`data/hpa.tsv` contains `Tissue` and `Organ` columns.
+`data/jaspar2024.txt` and `data/trrust.tsv` are reference files that git does not
+carry: everything under `data/` is ignored except `data/hpa.tsv`. Run
+`python scripts/setup_data.py` to fetch them. They are not included in the installed
+wheel; pass paths to your own files or use the network defaults. **`data/hpa.tsv` contains `Tissue` and `Organ` columns.
 It is a tissue lookup and cannot be used as an expression matrix.**
 
 Record the source release, download date, assembly, and file hash when obtaining
@@ -41,7 +42,7 @@ manifest or redistribution-license inventory for these files.
 genes moved. That needs a signed regulon, meaning each edge is labelled as
 activation or repression. Two tables work, and they are not equivalent.
 
-TRRUST is in this checkout at `data/trrust.tsv`. It covers 329 factors and
+TRRUST is fetched to `data/trrust.tsv` by `scripts/setup_data.py`. It covers 329 factors and
 labels 47 percent of its human edges; the rest are recorded as `Unknown`.
 An unlabelled edge still supports the two-tailed test that asks whether the
 regulon moved, but it cannot say which way the factor went.
@@ -774,6 +775,14 @@ search covered: `factors_searched`, `nodes_reachable`, `nodes_checked`,
 was used. The evidence ledger's `upstream` row quotes the same counts, so
 "nothing found" says among how many nodes.
 
+The search covers the first eight ranked factors that have no drug of their own and
+lists five drugs per node. `--upstream-factors` and `--upstream-drugs-per-node` change
+those two numbers, and both are recorded in `query`. Replaying the search on 36 saved
+runs found that asking every ranked factor would add at most 41 drugs, and that 157
+drugs passed every filter and were cut by limits of this kind (see
+[checks](checks.md)). The defaults are unchanged, so saved results and runs without
+the options read as before.
+
 **Compatibility:** the upstream search used to ask about drugs for only the 25
 best-scoring nodes of each factor. Those are mostly chromatin and repair
 proteins with no approved drug, so many factors reported no druggable route
@@ -866,6 +875,30 @@ the interval back to the forward genomic coordinate system. For example, on a
 promoter spanning bases 101–120, sequence interval `[2, 7)` maps to BED
 `[102, 107)` on a positive-strand gene or `[113, 118)` on a negative-strand gene.
 
+## Outcome chain
+
+**Compatibility:** `outcome_estimates` in `results.json` is unchanged: each
+estimate still has `p_engages`, `p_direction`, `p_activates`, `p_responsive`,
+`p_point`, `p_low`, `p_high`, `limiting_step`, `verdict` and `next_experiment`.
+What changed is the reports. `report.md` and `summary.md` no longer print
+`p_point`, its interval, the verdict or the limiting step. They print drug
+engagement and promoter activation, plus a Direction column only when a model
+predicted it (the summary table has the same column) and a Knockout evidence
+column only when the knockout files are present. A link with no data is
+omitted without comment. The section heading changed from
+"Predicted transcriptional outcome" to "Strength of evidence for each factor
+route", and the summary column "P(moves)" became "Engagement / promoter".
+Each estimate gains `knockout` when the knockout files are present: `class`
+(measured response, tested with no response, or not tested), `n_experiments`,
+`n_responded`, `activates`, `represses`, `sources`, `species` and the first few
+responding `experiments`. The block carries the same results for every ranked
+factor under `knockout`, and the ledger has a `knockout` source. These come from
+`data/knockout_lincs_crispr_ko.gmt` and `data/knockout_tf_perturbations.gmt`
+(or `--knockout-gmt`), read when they exist and absent from demo runs.
+`p_responsive` is still saved as the 0.40 placeholder and no report uses it.
+`Prediction.to_dict()` gains `p_engages`, `p_activates` and `knockout`. `discovery` still
+reads `p_point`, so its margins are unchanged.
+
 ## FDA filter
 
 `report.md`, `summary.md`, `tf_summary.tsv`, the panel, the combined list and the
@@ -877,9 +910,72 @@ dose check list only FDA approved drugs by default. See
 `results.json`: every route and compound is still there, so a script that reads
 it sees what it saw before. What changes is the rendered reports, which now omit
 non-approved compounds and say how many they left out. `--include-non-fda`
-restores the old reports. Counts inside a report, such as the number of routes,
+restores the old reports. `fda_filter.hide_local_only` records whether drugs
+approved only for local use were also hidden (they are unless the target tissue
+is skin), and `query.include_local_only` and `query.tissue` (now `cns` or `skin`)
+record the options. Counts inside a report, such as the number of routes,
 are counts after the removal. With no Orange Book on disk, or in demo mode, the
 filter is not applied and the report says why.
+
+## Motif scan quality and the CTD key
+
+`scan_quality` in each promoter block records how the scan compares with chance. Its
+older fields are kept: `observed`, `expected_by_chance`, `scannable_bases`,
+`enrichment`, `verdict`, `advice`, `false_discovery_proportion`, `expected_real_sites`
+and `fdp_note`. New fields: `expected_by_formula` (the earlier estimate, kept beside
+the new one), `null` (method, number of shuffles, mean, spread, 10th and 90th
+percentiles; None when no shuffles were run), `false_discovery_range`,
+`top_site_fdp` (the chance share among the best 5, 10 and 20 sites), `motifs_loaded`,
+`motifs_scanned` and `motifs_unreachable`. `expected_by_chance` is the shuffled mean
+when shuffles were run and the formula otherwise. Each site has a `pvalue`. The query
+records `null_shuffles`. The evidence verdict has `scan_sites` and
+`false_discovery_range`.
+
+**Compatibility:** the scan no longer calls sites for matrices that cannot reach the
+requested p-value in the window, and each strand has its own threshold, so a rerun of
+a gene lists fewer sites than before and its factor ranking can change. See
+[checks](checks.md#the-motif-scans-chance-estimate).
+
+`improvements.reported_links` is built from CTD sentences and not from the action
+list, so a new run has fewer chemicals and some different directions. A chemical that
+modulates another's effect is a known link with no direction. See
+[checks](checks.md#what-ctds-expression-record-contains).
+
+## Known regulator route
+
+`--regulator-route` starts from the factors recorded as regulating the gene and
+lists the approved drugs that act on them. The factors come from CollecTRI, which
+signs each edge, and from the knockout files, where a factor that was lost or
+raised and moved the gene in at least two experiments in the same direction
+counts. Only knockout factors that are CollecTRI transcription factors are used.
+A factor that already has a drug route from the promoter scan is skipped.
+
+The drug must move the factor the way the sign and the goal need. A factor that
+raises the gene is switched on to raise the gene and blocked to lower it, and
+the reverse for a factor that lowers it. A drug recorded with an unclear action
+is listed and marked. Drugs come from the approved drug index, so a drug
+recorded at a protein family (aspirin at cyclooxygenase) appears at each member
+and says so.
+
+Each promoter block has a `regulators` key: `{factor: {sign, need, sources,
+n_responses, n_against, disagree, drugs, n_drugs}}`. Routes appear in
+`all_routes` under the category `TF: known regulator`, always at tier 4. The
+evidence ledger's `regulators` row says how many regulators had no route yet and
+how many have a drug. Demo mode never runs it.
+
+**Compatibility:** `query.regulator_route`, `query.regulator_steps` (1 or 2) and
+`query.regulator_measured` are new, and the route is off unless requested, so saved
+results and runs without the flag are unchanged. `Drug` has a new field,
+`target_type`, which is `None` unless the target is a protein family, a complex group,
+a fusion protein or a selectivity group, and then holds that ChEMBL type. Each entry in
+a block's `regulators` has a `via` key, the recorded regulator a two-step factor acts
+through (`None` for a direct one), and its sources can read "CollecTRI, one step
+removed".
+
+The approved-drug index now includes the three extra target types, so a run lists
+more drugs at more genes than an earlier one did. Chromatin-level routes can include
+approved HDAC, DNMT and EZH2 inhibitors found from ChEMBL (the route's notes say so),
+beyond the curated eight.
 
 ## HTTP cache
 

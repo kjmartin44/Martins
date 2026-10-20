@@ -6,6 +6,34 @@ This review was written against the repository as inspected on 2026-09-30.
 Items that have since been done are listed at the bottom with what changed;
 everything under the headings below is still outstanding.
 
+## Open at the time of writing
+
+These are the limits a reader of the results should know about before the
+sections below.
+
+- **No software licence has been chosen.** The repository has none, so nobody
+  else may reuse it. The owner has to decide.
+- **The ranking has not been shown to work.** Against CTD on 36 genes the routes
+  reach about 10 percent of the approved drugs recorded as raising a gene, and rank
+  them no better than chance once a drug's fame is held equal. Starting from known
+  regulators reaches more, at a direction rate that is not separated from chance.
+- **The 36 saved runs predate the motif scan correction**, so the figures above
+  describe the earlier scan. See [checks](checks.md#what-it-cannot-show).
+- **A drug that ChEMBL does not record at a factor cannot be found there**, unless
+  `--regulator-measured` is used. Rifampicin at PXR is the example, and CYP3A4 is the
+  gene it would matter for. That option finds it and reached 22.7% of the wanted drugs
+  against CTD in the 36-gene check, at a direction share of 57% for the drugs it added
+  (48% by chance). It has not been tested on genes held out from that check, and it
+  lists about 80 more drugs per gene.
+- **A factor with no recorded link to the gene is invisible.** Omaveloxolone, approved
+  for Friedreich ataxia, acts through NRF2, and no table the package reads links NRF2
+  to FXN. This is a gap in the literature tables, not in the code.
+- **The known regulators route has not been tested on genes held out from the
+  check that motivated it.**
+- **The exploratory AlphaFold dock is unvalidated** and is run only on request.
+- **The tests have run on Windows with Python 3.12 only.** The CI matrix covers
+  Linux and Python 3.10 and 3.14, and has not been run on this work.
+
 ## Highest priority
 
 1. **Record the source release each lookup answered from.** Most of this item
@@ -213,6 +241,27 @@ now derive the arguments from `run`'s own signature.
 **Static guards for three bug classes**, each checked by reintroducing the
 bug: a local read before assignment, a CLI flag parsed but never read, and a
 documented command using a flag its parser does not accept.
+
+## Done in the latest round
+
+- Only FDA approved drugs are shown, with drugs approved only for local use hidden
+  unless the tissue is skin.
+- Responsiveness is read from knockout experiments in place of a fixed 0.40, and the
+  reports no longer print a chance that the gene moves.
+- A label-derived table of peak blood levels feeds the dose check, which now says why
+  a drug cannot be assessed.
+- The approved-drug index keeps protein-family targets, so aspirin is found at PTGS2.
+- A known regulators route starts from CollecTRI and the knockout data.
+- CTD's sentences are read instead of its action list, which counted another gene's
+  expression and a blocked inducer as raising the gene.
+- The motif scan leaves out matrices that cannot reach the requested p-value, gives
+  each strand its own threshold, and measures how many sites are chance on shuffled
+  copies of the window.
+- `scripts/setup_data.bat` fetches every git-ignored reference file, and the
+  launcher offers it when a key file is missing.
+- The exploratory dock is off unless asked for.
+- Diagnostics for where the literature's drugs are lost: `positive_fate.py`,
+  `upstream_misses.py`, `regulator_gain.py` and `ctd_check.py`.
 
 ## Done in this round
 

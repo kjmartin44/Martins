@@ -138,6 +138,14 @@ def add_analysis_args(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
                         "SigCom, which returns HTTP 500 for days at a time. "
                         "data/lincs_chem_pert_{up,down}.gmt are picked up "
                         "automatically if present (16 MB + 14 MB)")
+    p.add_argument("--knockout-gmt", nargs="+", metavar="GMT",
+                   help="Enrichr libraries of genes that change when a factor "
+                        "is knocked out (LINCS_L1000_CRISPR_KO_Consensus_Sigs, "
+                        "TF_Perturbations_Followed_by_Expression). They show "
+                        "whether your gene responds to each factor, in place of "
+                        "a fixed placeholder. data/knockout_lincs_crispr_ko.gmt "
+                        "and data/knockout_tf_perturbations.gmt are picked up "
+                        "automatically if present (16 MB + 3 MB)")
     p.add_argument("--lincs-geneinfo", metavar="TSV",
                    help="CLUE geneinfo table, which records whether each gene "
                         "was MEASURED on the L1000 array (978 landmarks) or "
@@ -169,6 +177,35 @@ def add_analysis_args(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
                         "find druggable kinases/receptors controlling TFs that have "
                         "no direct pharmacology. Signs propagate, so inhibiting an "
                         "inhibitor counts as activation")
+    p.add_argument("--null-shuffles", type=int, default=30,
+                   help="shuffled copies of each promoter window scanned to "
+                        "estimate how many motif sites are chance (default "
+                        "30, about half a minute per window). 0 uses a "
+                        "formula that undercounts on masked promoters")
+    p.add_argument("--upstream-factors", type=int, default=8,
+                   help="how many ranked factors the upstream search covers "
+                        "(default 8). Only factors with no drug of their own "
+                        "are searched")
+    p.add_argument("--upstream-drugs-per-node", type=int, default=5,
+                   help="drugs listed for each upstream node (default 5). "
+                        "Nodes such as NR3C1 have dozens of approved drugs")
+    p.add_argument("--regulator-measured", action="store_true",
+                   help="with --regulator-route: for a regulator that ChEMBL's "
+                        "mechanism table gives no drug for, also list approved "
+                        "drugs with a measured activity at it (found rifampin "
+                        "at PXR). The records give no direction and include "
+                        "many unrelated drugs, so these are leads to test")
+    p.add_argument("--regulator-steps", type=int, choices=[1, 2], default=1,
+                   help="with --regulator-route: 1 lists drugs at the gene's "
+                        "own recorded regulators (default); 2 also lists "
+                        "drugs at the factors that regulate those, which "
+                        "reached more of the drugs CTD records, at a similar "
+                        "direction rate")
+    p.add_argument("--regulator-route", action="store_true",
+                   help="start from the factors CollecTRI and the knockout "
+                        "data record as regulating the gene, and list the "
+                        "approved drugs that act on them. Reaches factors "
+                        "the motif scan did not rank")
     p.add_argument("--upstream-depth", type=int, default=3,
                    help="max hops upstream. Each hop costs selectivity; 4 is "
                         "usually where paths stop being interpretable")
@@ -187,8 +224,15 @@ def add_analysis_args(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
                    help="virtual-screen ALL approved drugs against the top "
                         "receptors to find untested repurposing pairs. Slow "
                         "(downloads ~4000 structures once) and needs rdkit")
-    p.add_argument("--tissue", choices=["cns"],
-                   help="down-weight drugs unlikely to reach this compartment")
+    p.add_argument("--tissue", choices=["cns", "skin"],
+                   help="cns down-weights drugs unlikely to reach the brain. "
+                        "skin keeps drugs approved only for topical use in "
+                        "the reports, which are hidden for any other target")
+    p.add_argument("--include-local-only", action="store_true",
+                   help="keep drugs approved only for local use (topical, "
+                        "eye, inhaled and the like) in the reports. They "
+                        "are hidden unless --tissue skin or an "
+                        "--activity-tissue naming skin is given")
     p.add_argument("--tf-activity", action="store_true",
                    help="infer which factors are actually ACTIVE from their "
                         "targets' expression (VIPER-style), instead of only "

@@ -35,9 +35,14 @@ In order of trust:
    come back "not assessable". That is the honest answer, not a gap to fill
    with a guess.
 
-Label text from openFDA was tried and not used: the pharmacokinetics sections
-are flattened tables where a Cmax can belong to a drug interaction study or
-another dose, and a wrong number read silently is worse than none.
+`data/fda_label_cmax.tsv`, when it exists, is read as a table of this kind and
+sits below one you name. It is built by `scripts/build_fda_cmax.py` from the
+pharmacokinetics sections of FDA labels (see `fdalabel.py`). The first attempt
+at label text was dropped because a Cmax can belong to an interaction study or
+another dose and a wrong number read silently is worse than none. The reader
+now refuses special populations, interactions, food and metabolites, and sets
+aside any drug whose figures disagree, but it is a text reader: each row carries
+the label, the dose and the sentence so a person can check it.
 
 What it does not do
 -------------------
@@ -79,6 +84,9 @@ from .signatures import breadth_key
 log = logging.getLogger(__name__)
 
 CHEMBL = "https://www.ebi.ac.uk/chembl/api/data"
+
+# Read automatically when present, below any table named with --cmax-table.
+DEFAULT_CMAX_PATHS = ("data/fda_label_cmax.tsv",)
 
 # Ratio of reached to needed. Total drug in plasma is compared with the
 # concentration the evidence was seen at.
@@ -176,6 +184,16 @@ def molecular_weight(smiles: str) -> float | None:
 
 
 # -------------------------------------------------------------- the sources
+def _default_tables() -> dict:
+    """Values from the tables read without being named (`DEFAULT_CMAX_PATHS`)."""
+    table: dict = {}
+    for path in DEFAULT_CMAX_PATHS:
+        if Path(path).exists():
+            table.update(read_cmax_table(path))
+            log.info("human Cmax values from %s", path)
+    return table
+
+
 def read_cmax_table(path) -> dict:
     """Human exposures from a table: `{name key: record}`.
 
@@ -358,7 +376,8 @@ def chembl_ids_from_block(block: dict) -> dict:
     return out
 
 
-def candidate_drugs(block: dict, top: int, fda_only: bool = False) -> list:
+def candidate_drugs(block: dict, top: int, fda_only: bool = False,
+                    hide_local_only: bool = False) -> list:
     """Distinct drugs in the block's routes, best first: `[(key, name)]`.
 
     Approved drugs come before the rest. A compound that is not approved has
@@ -368,7 +387,8 @@ def candidate_drugs(block: dict, top: int, fda_only: bool = False) -> list:
     routes = (block.get("all_routes") or {}).get("routes") or []
     if fda_only:
         from . import fda
-        routes = [r for r in routes if fda.is_approved(r.get("drug") or "")]
+        routes = [r for r in routes
+                  if fda.shown(r.get("drug") or "", hide_local_only)]
     ordered = sorted(routes, key=lambda r: (0 if r.get("approved") else 1,
                                             r.get("tier", 9),
                                             -(r.get("score") or 0)))
@@ -398,7 +418,7 @@ def verdict(reached_nm: float | None, needed_nm: float | None) -> tuple:
 
 def assess(block: dict, *, client=None, table: dict | None = None,
            library: list | None = None, top: int = 60,
-           fda_only: bool = False) -> dict:
+           fda_only: bool = False, hide_local_only: bool = False) -> dict:
     """Exposure against need for the top candidate drugs of one result block.
 
     Returns `{"drugs": {name: record}, "counts": {...}, "errors": [...]}`.
@@ -411,7 +431,7 @@ def assess(block: dict, *, client=None, table: dict | None = None,
     needed = needed_concentrations(block)
     known_ids = chembl_ids_from_block(block)
     drugs, errors = {}, []
-    for key, name in candidate_drugs(block, top, fda_only):
+    for key, name in candidate_drugs(block, top, fda_only, hide_local_only):
         rec: dict = {"drug": name}
         need = needed.get(key)
         if need:
@@ -582,6 +602,9 @@ def main(argv=None) -> int:
     p.add_argument("--no-chembl", action="store_true",
                    help="use only the table; make no network request")
     p.add_argument("--offline", action="store_true")
+    p.add_argument("--include-local-only", action="store_true",
+                   help="also assess drugs approved only for local use. They "
+                        "are left out unless the run's target tissue is skin")
     p.add_argument("--include-non-fda", action="store_true",
                    help="also assess compounds that are not in the FDA "
                         "Orange Book. By default only FDA approved drugs "
@@ -599,7 +622,9 @@ def main(argv=None) -> int:
     data = json.loads(res_path.read_text(encoding="utf-8"))
     gene = (data.get("query") or {}).get("gene", "?")
 
-    table = read_cmax_table(args.cmax_table) if args.cmax_table else {}
+    table = _default_tables()
+    if args.cmax_table:
+        table.update(read_cmax_table(args.cmax_table))   # yours win
     from . import localdrugs as ld
     library = ld.library(args.library)
     client = None
@@ -612,13 +637,17 @@ def main(argv=None) -> int:
     if not args.include_non_fda and not fda_on:
         log.warning("no Orange Book on disk, so the FDA filter was not "
                     "applied: %s", fda.NOTE_NO_TABLE)
+    q = data.get("query") or {}
+    hide_local = (fda_on and not args.include_local_only
+                  and not fda.target_is_skin(q.get("tissue"),
+                                             q.get("activity_tissue")))
     out_dir = Path(args.out) if args.out else res_path.parent
     out_dir.mkdir(parents=True, exist_ok=True)
     blocks = []
     for blk in data.get("results") or []:
         blocks.append(assess(blk, client=client, table=table,
                              library=library, top=args.top,
-                             fda_only=fda_on))
+                             fda_only=fda_on, hide_local_only=hide_local))
     merged = blocks[0] if len(blocks) == 1 else _merge(blocks)
     (out_dir / "exposure.json").write_text(
         json.dumps(merged, indent=2, default=str), encoding="utf-8")

@@ -64,6 +64,12 @@ class Drug:
     properties: dict | None = None        # molecule_properties, for tissue scoring
     interaction_score: float | None = None  # DGIdb confidence, if from DGIdb
     sources: str | None = None            # which databases claim this
+    # "PROTEIN FAMILY" (or another shared type, see SHARED_TARGETS) when ChEMBL
+    # records the drug at a family or group of proteins (aspirin at
+    # cyclooxygenase, haloperidol at the dopamine receptors, hydroxyurea at
+    # ribonucleotide reductase) and this gene is one member. The drug is then
+    # not known to act on this member alone, and a report can say so.
+    target_type: str | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -128,7 +134,32 @@ def filter_drugs_by_goal(drug_map: dict, annotations: dict, goal: str = "up",
 
 
 # ------------------------------------------------------------------- ChEMBL
+# ChEMBL records a drug's mechanism at a single protein, a complex, or a family
+# of proteins. Aspirin and ibuprofen have only the last (cyclooxygenase, which
+# is PTGS1 and PTGS2), as do haloperidol's dopamine receptor effects. Leaving
+# families out meant such a drug could never be found at any of its members,
+# and 156 of the approved drugs CTD records as moving a gene were lost this way
+# in the retrospective check.
+#
+# Three more human types name proteins by gene symbol and were also dropped: a
+# group of complexes (tubulin, ribonucleotide reductase, where hydroxyurea acts),
+# a fusion protein (imatinib at BCR and ABL1) and a selectivity group
+# (cholinesterases). Of the human mechanisms of approved drugs, 120 sat at a
+# complex group, 19 at a fusion and 9 at a selectivity group. Each is listed at
+# every member and marked, like a family.
+FAMILY = "PROTEIN FAMILY"
+SHARED_TARGETS = (FAMILY, "PROTEIN COMPLEX GROUP", "SELECTIVITY GROUP",
+                  "CHIMERIC PROTEIN")
+TARGET_TYPES = ("SINGLE PROTEIN", "PROTEIN COMPLEX") + SHARED_TARGETS
+
+
 def _chembl_targets(client: Client, symbol: str, uniprot: str | None) -> list[str]:
+    return [tid for tid, _ in _chembl_target_records(client, symbol, uniprot)]
+
+
+def _chembl_target_records(client: Client, symbol: str,
+                           uniprot: str | None) -> list[tuple]:
+    """`[(target id, target type)]` for the targets that include this gene."""
     targets: list[dict] = []
     if uniprot:
         try:
@@ -154,7 +185,7 @@ def _chembl_targets(client: Client, symbol: str, uniprot: str | None) -> list[st
     for t in targets:
         if t.get("organism") != "Homo sapiens":
             continue
-        if t.get("target_type") not in ("SINGLE PROTEIN", "PROTEIN COMPLEX"):
+        if t.get("target_type") not in TARGET_TYPES:
             continue
         comps = t.get("target_components") or []
         names = {symbol.upper()}
@@ -165,7 +196,7 @@ def _chembl_targets(client: Client, symbol: str, uniprot: str | None) -> list[st
                     if str(syn.get("component_synonym", "")).upper() in names:
                         matched = True
         if matched:
-            ids.append(t["target_chembl_id"])
+            ids.append((t["target_chembl_id"], t.get("target_type")))
     return ids
 
 
@@ -190,7 +221,8 @@ def _chembl_molecules(client: Client, ids: list[str]) -> dict[str, dict]:
 def chembl_drugs(client: Client, symbol: str, uniprot: str | None = None,
                  approved_only: bool = True) -> list[Drug]:
     drugs: list[Drug] = []
-    for target_id in _chembl_targets(client, symbol, uniprot):
+    for target_id, target_type in _chembl_target_records(client, symbol,
+                                                         uniprot):
         try:
             res = client.get(f"{CHEMBL}/mechanism", {
                 "target_chembl_id": target_id, "format": "json", "limit": 500,
@@ -235,6 +267,8 @@ def chembl_drugs(client: Client, symbol: str, uniprot: str | None = None,
                 source="ChEMBL",
                 target_chembl_id=target_id,
                 properties=props or None,
+                target_type=target_type if target_type in SHARED_TARGETS
+                else None,
             ))
     return drugs
 
@@ -274,14 +308,16 @@ def approved_target_index(client: Client, library: list) -> dict:
         for t in res.get("targets", []):
             if t.get("organism") != "Homo sapiens":
                 continue
-            if t.get("target_type") not in ("SINGLE PROTEIN", "PROTEIN COMPLEX"):
+            if t.get("target_type") not in TARGET_TYPES:
                 continue
+            shared = (t.get("target_type")
+                      if t.get("target_type") in SHARED_TARGETS else None)
             syms = {(syn.get("component_synonym") or "").upper()
                     for comp in t.get("target_components") or []
                     for syn in comp.get("target_component_synonyms") or []
                     if syn.get("syn_type") == "GENE_SYMBOL"}
             if syms:
-                symbols[t["target_chembl_id"]] = syms
+                symbols[t["target_chembl_id"]] = (syms, shared)
 
     index: dict = {}
     seen: set = set()
@@ -292,7 +328,8 @@ def approved_target_index(client: Client, library: list) -> dict:
         action = (m.get("action_type") or "UNKNOWN").upper()
         direction = ("up" if action in ACTIVATING_ACTIONS else
                      "down" if action in INHIBITING_ACTIONS else "unclear")
-        for sym in symbols.get(m.get("target_chembl_id"), ()):
+        syms, shared = symbols.get(m.get("target_chembl_id"), (set(), None))
+        for sym in syms:
             key = (sym, m["molecule_chembl_id"], action)
             if key in seen:
                 continue
@@ -304,12 +341,71 @@ def approved_target_index(client: Client, library: list) -> dict:
                 approved=True, max_phase=4.0, first_approval=None,
                 withdrawn=bool(mol.get("withdrawn")),
                 oral=mol.get("oral") or None, direction=direction,
-                source="ChEMBL (approved-drug index)",
-                target_chembl_id=m.get("target_chembl_id")))
+                source=("ChEMBL (approved-drug index, family target)"
+                        if shared == FAMILY else
+                        "ChEMBL (approved-drug index, group target)"
+                        if shared else "ChEMBL (approved-drug index)"),
+                target_chembl_id=m.get("target_chembl_id"),
+                target_type=shared))
     log.info("approved-drug index: %d drug(s) on %d target gene(s)",
              len({d.chembl_id for ds in index.values() for d in ds}),
              len(index))
     return index
+
+
+MEASURED = "MEASURED ACTIVITY"
+
+
+def measured_binders(client: Client, symbol: str, library: list, *,
+                     min_pchembl: float = 5.0, top: int = 10,
+                     max_pages: int = 6) -> list:
+    """Approved drugs with a measured activity at one human protein.
+
+    The approved-drug index reads ChEMBL's mechanism table, and that table has no
+    entry for a drug whose effect on a receptor was measured but never curated:
+    rifampin activates PXR in cell assays, yet its only mechanism is against the
+    bacterial polymerase. This reads the activity records instead. A drug is kept
+    when it is in `library` and has a pChEMBL value of `min_pchembl` or better,
+    and the `top` best are returned by value.
+
+    The records say how strongly the drug acted, not which way, so every drug has
+    direction "unclear". Screening panels put many unrelated approved drugs on
+    a promiscuous receptor (110 at PXR), so this is a way to find a candidate
+    for testing, not a statement that the drug moves the protein the right way.
+    An empty list means none was found; a failed request raises `HttpError`.
+    """
+    rows = {d["chembl_id"]: d for d in library if d.get("chembl_id")}
+    ids = [tid for tid, ttype in _chembl_target_records(client, symbol, None)
+           if ttype == "SINGLE PROTEIN"]
+    if not ids:
+        return []
+    best: dict = {}
+    for tid in ids[:1]:
+        offset = 0
+        for _ in range(max_pages):
+            res = client.get(f"{CHEMBL}/activity", {
+                "target_chembl_id": tid, "pchembl_value__gte": min_pchembl,
+                "limit": 1000, "offset": offset, "format": "json"})
+            for a in res.get("activities", []):
+                mol, p = a.get("molecule_chembl_id"), a.get("pchembl_value")
+                if mol in rows and p is not None:
+                    best[mol] = max(best.get(mol, 0.0), float(p))
+            if not (res.get("page_meta") or {}).get("next"):
+                break
+            offset += 1000
+        target = tid
+    out = []
+    for mol, p in sorted(best.items(), key=lambda kv: -kv[1])[:top]:
+        row = rows[mol]
+        out.append(Drug(
+            name=(row.get("name") or mol).title(), chembl_id=mol,
+            target_symbol=symbol.upper(), action_type=MEASURED,
+            mechanism=f"measured activity at {symbol.upper()}, pChEMBL {p:g}",
+            approved=True, max_phase=4.0, first_approval=None,
+            withdrawn=bool(row.get("withdrawn")), oral=row.get("oral") or None,
+            direction="unclear", source="ChEMBL (measured activity)",
+            target_chembl_id=target, interaction_score=p))
+    return out
 
 
 # -------------------------------------------------------------------- DGIdb

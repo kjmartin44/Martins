@@ -25,11 +25,16 @@ The demo runs offline on synthetic data. Open `results/demo/report.md`.
 A completed run also writes `results.json`, `tf_summary.tsv`, `sites.bed`,
 and `promoter.fa`.
 
-To analyze a real gene with live services and the repository's motif file:
+To analyze a real gene with live services, first fetch the reference files. Git
+does not carry them, and the full set is about 3 GB (`--small` skips the largest;
+`--list` shows what is missing):
 
 ```sh
+python scripts/setup_data.py
 python -m promoter_tf_drugs --gene CCR5 --direction down --pfm-file data/jaspar2024.txt --out results/CCR5_down
 ```
+
+On Windows, `scripts\run_everything.bat` does both and runs every stage.
 
 To compare several candidate genes and narrow to the one with the least
 collateral effect:
@@ -44,6 +49,8 @@ silently failed is otherwise structurally identical to one where they worked.
 And the ranking is narrowed on four independent axes of collateral — how many
 genes the factor controls, how body-wide it is, how many body systems the
 drug moves, and whether a subtype-selective ligand can exist at all.
+
+Saved example outputs, including a real run, are in [examples](examples/README.md).
 
 See the [documentation](docs/index.md) for installation details, input formats,
 methods, limitations, the Python API, and development instructions —

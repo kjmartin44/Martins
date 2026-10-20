@@ -69,7 +69,7 @@ any one of them works.
 checkout can hold several versions and a run says in its own query block
 which it read.
 
-**Built from other files.** One table is built from the others, and one more is downloaded
+**Built from other files.** Two tables are built from the others, and one more is downloaded
 and then projected down to the columns this package reads. The command
 is given in each entry.
 
@@ -511,6 +511,43 @@ Route of administration, which no structure source has.
 Take the EOBZIP download and keep `products.txt` from inside it.
 
 20,000 products collapse to roughly 1,500 distinct ingredients, so it cannot enlarge a screening library — route is the reason to load it.
+
+### Factor knockout signatures (Enrichr)
+
+Whether your gene changes when a factor is lost, which replaces a fixed placeholder for responsiveness.
+
+| | |
+| --- | --- |
+| Supplied | found by name under data/ — `--knockout-gmt` |
+| Looks for | `data/knockout_lincs_crispr_ko.gmt`, `data/knockout_tf_perturbations.gmt` |
+| Size | 16 MB + 3 MB |
+| Source | <https://maayanlab.cloud/Enrichr/geneSetLibrary?mode=text&libraryName=LINCS_L1000_CRISPR_KO_Consensus_Sigs> |
+| Inventory key | `knockout` |
+
+**Without it:** the report says responsiveness is not measured for every factor.
+
+Two libraries: LINCS_L1000_CRISPR_KO_Consensus_Sigs (data/knockout_lincs_crispr_ko.gmt) and TF_Perturbations_Followed_by_Expression (data/knockout_tf_perturbations.gmt). Each list holds only the few hundred genes that changed most.
+
+### Human peak plasma levels from FDA labels
+
+A human exposure to set against the concentration the evidence was seen at, which ChEMBL has for few drugs.
+
+| | |
+| --- | --- |
+| Supplied | built from other files |
+| Looks for | `data/fda_label_cmax.tsv` |
+| Size | under 100 KB |
+| Inventory key | `fda_label_cmax` |
+
+Built, not downloaded:
+
+```sh
+python scripts/build_fda_cmax.py
+```
+
+**Without it:** the dose check uses ChEMBL's human Cmax records, which exist for few approved drugs, and a table you name.
+
+Built from openFDA label text. Most labels give no usable number, so most drugs get no row; those are listed in fda_label_cmax_review.tsv.
 
 ### hg38 genome FASTA
 

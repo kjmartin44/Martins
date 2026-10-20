@@ -127,6 +127,10 @@ def route_sentence(route: dict, gene: str, goal: str,
     if cat in ("TF: degradation blocker", "TF: stabiliser or glue"):
         return (f"Changes how long {tf} lasts in the cell"
                 f"{f' ({mech})' if mech else ''}, which should {verb} {gene}.")
+    if cat == "TF: known regulator":
+        return (f"Acts on {tf}, which is recorded as regulating {gene}, so "
+                f"changing {tf} activity should {verb} {gene}. The record "
+                f"is from a database or other cells, not from yours.")
     if cat == "upstream signalling":
         return (f"Acts on {tf}, upstream of factors that regulate {gene}; the "
                 f"effect reaches {gene} only by inference through the "

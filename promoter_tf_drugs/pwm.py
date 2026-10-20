@@ -87,12 +87,12 @@ def min_max_score(pssm: np.ndarray) -> tuple[float, float]:
     return float(pssm.min(axis=1).sum()), float(pssm.max(axis=1).sum())
 
 
-def score_threshold(pssm: np.ndarray, bg: np.ndarray, pvalue: float,
-                    scale: int = 100) -> float:
-    """Lowest score whose right-tail probability under `bg` is <= `pvalue`.
+def score_tail(pssm: np.ndarray, bg: np.ndarray, scale: int = 100) -> tuple:
+    """`(base, tail)` where `tail[i]` is P(score >= (base + i) / scale).
 
-    Exact dynamic programming over the discretised score distribution
-    (the same construction MOODS and FIMO use).
+    Exact dynamic programming over the discretised score distribution (the
+    same construction MOODS and FIMO use). `score_threshold` reads a cut-off
+    from it and `tail_pvalue` reads the p-value of one score.
     """
     ints = np.rint(np.asarray(pssm) * scale).astype(np.int64)
     row_min = ints.min(axis=1)
@@ -109,9 +109,39 @@ def score_threshold(pssm: np.ndarray, bg: np.ndarray, pvalue: float,
         dist = new
 
     tail = np.cumsum(dist[::-1])[::-1]         # tail[s] = P(score >= s)
+    return base, tail
+
+
+def threshold_from_tail(base: int, tail: np.ndarray, pvalue: float,
+                        scale: int = 100, *, strict: bool = False):
+    """Lowest score whose right-tail probability is <= `pvalue`.
+
+    No score may reach that probability: the best possible match of a short
+    or weakly specific matrix is itself more common than `pvalue`. Without
+    `strict` the threshold is then the best score, which every consensus match
+    passes, so the matrix reports chance matches at its own rate, often
+    several times the stated p-value. With `strict` the answer is None and
+    the caller leaves the matrix out.
+    """
     hits = np.nonzero(tail <= pvalue)[0]
-    offset = int(hits[0]) if hits.size else len(dist) - 1
+    if not hits.size and strict:
+        return None
+    offset = int(hits[0]) if hits.size else len(tail) - 1
     return (base + offset) / scale
+
+
+def tail_pvalue(score: float, base: int, tail: np.ndarray,
+                scale: int = 100) -> float:
+    """P(a random window scores at least `score`) under the background."""
+    i = int(round(score * scale)) - base
+    return float(tail[min(max(i, 0), len(tail) - 1)])
+
+
+def score_threshold(pssm: np.ndarray, bg: np.ndarray, pvalue: float,
+                    scale: int = 100) -> float:
+    """Lowest score whose right-tail probability under `bg` is <= `pvalue`."""
+    base, tail = score_tail(pssm, bg, scale)
+    return threshold_from_tail(base, tail, pvalue, scale)
 
 
 def scan_strand(enc: np.ndarray, pssm: np.ndarray, threshold: float):
@@ -125,6 +155,25 @@ def scan_strand(enc: np.ndarray, pssm: np.ndarray, threshold: float):
     scores = pssm[np.arange(L)[None, :], idx].sum(axis=1)
     keep = valid & (scores >= threshold)
     return np.nonzero(keep)[0], scores[keep]
+
+
+def scan_strands(enc: np.ndarray, pssm: np.ndarray, thr_plus, thr_minus):
+    """Like `scan_both_strands`, with a threshold of its own for each strand.
+
+    The reverse strand scores the reverse complement of the matrix, whose
+    score distribution under a base composition that is not symmetric (A and
+    T unequal) is not the forward one, so one threshold cannot give both
+    strands the same p-value. A threshold of None leaves that strand out.
+    """
+    L = pssm.shape[0]
+    if thr_plus is not None:
+        starts, scores = scan_strand(enc, pssm, thr_plus)
+        for s, sc in zip(starts.tolist(), scores.tolist()):
+            yield int(s), int(s) + L, "+", float(sc)
+    if thr_minus is not None:
+        starts, scores = scan_strand(enc, pssm[::-1, ::-1], thr_minus)
+        for s, sc in zip(starts.tolist(), scores.tolist()):
+            yield int(s), int(s) + L, "-", float(sc)
 
 
 def scan_both_strands(seq: str, pssm: np.ndarray, threshold: float,

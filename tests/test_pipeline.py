@@ -2703,11 +2703,12 @@ def test_explain_gathers_evidence_from_every_section():
         assert section in b, f"{section} not collected"
 
 
-def test_explain_renders_components_and_limiting_step():
+def test_explain_renders_components_and_the_weaker_link():
     md = ex.render(ex.collect(_demo_result(), "calcitriol"))
     assert "Grade A" in md
     assert "median pChEMBL" in md
-    assert "Limiting step" in md
+    assert "Weaker link" in md
+    assert "P(gene moves)" not in md
     assert "The bar:" in md and "Previously linked to this gene" in md
 
 
@@ -2944,7 +2945,7 @@ def test_discovery_winner_always_appears_in_the_outcome_table():
     if not winners:
         return
     md = pipeline.markdown_report(res, top_n=1)   # aggressive truncation
-    section = _section(md, "Predicted transcriptional outcome")
+    section = _section(md, "Strength of evidence for each factor route")
     for w in winners:
         assert w in section, f"{w} named as winner but missing from outcomes"
         assert "★" in section
@@ -2962,24 +2963,26 @@ def _section(md: str, heading: str) -> str:
 def test_pinned_rows_do_not_exceed_the_row_budget_silently():
     res = pipeline.run("SMN2", demo=True, offline=True)
     md = pipeline.markdown_report(res, top_n=3)
-    section = _section(md, "Predicted transcriptional outcome")
+    section = _section(md, "Strength of evidence for each factor route")
     rows = [l for l in section.splitlines()
-            if l.startswith("| ") and "P(engage)" not in l and "---" not in l]
+            if l.startswith("| ") and "Drug engagement" not in l
+            and "---" not in l]
     assert 0 < len(rows) <= 5, f"row budget blown out by pinning: {len(rows)}"
 
 
-def test_flat_spread_is_explained_not_presented_as_a_ranking():
-    """Two of four links are constants without --predict-direction, so the
-    chain conveys magnitude, not order. Saying so prevents misreading it."""
+def test_links_that_are_not_measured_are_left_out_without_a_lecture():
+    """Direction (the database label) and responsiveness (not measurable
+    without knockout data) are the same for every row, so they are not
+    columns. The report does not explain their absence at length."""
     res = pipeline.run("SMN2", demo=True, offline=True)
-    ests = res["results"][0]["outcome_estimates"]
-    for i, e in enumerate(ests):           # force a flat spread
-        e["p_point"] = 0.15
-        e["p_low"], e["p_high"] = 0.08, 0.22
     md = pipeline.markdown_report(res)
-    assert "These numbers barely differ" in md
-    assert "conveys *magnitude*" in md
-    assert "not a ranking" in md
+    section = _section(md, "Strength of evidence for each factor route")
+    header = [l for l in section.splitlines() if "Drug engagement" in l][0]
+    assert "Promoter activation" in header and "Weaker link" in header
+    assert "Direction" not in header and "Responsiveness" not in header
+    for phrase in ("same for every row", "**Direction**", "**Responsiveness**",
+                   "P(gene moves)", "P(moves)"):
+        assert phrase not in md, phrase
 
 
 def test_binding_model_trains_where_a_direction_model_cannot():
@@ -8384,7 +8387,8 @@ def test_the_table_reaches_summary_md(tmp_path):
     assert "which methods found each" in body
     assert "Systems it acts on" in body
     assert "DEMOGENE change" in body
-    assert "P(moves)" in body
+    assert "Engagement / promoter" in body
+    assert "P(moves)" not in body
 
 
 # ===================================================================== #
@@ -9282,10 +9286,16 @@ def test_the_reach_column_is_rendered_and_its_absence_is_explained():
     src = inspect.getsource(pl.corroboration_table)
     assert "Reach" in src
     assert "_route_cell" in src
-    # The header, the separator and the cells must all be twelve wide, or
-    # markdown drops the trailing columns without complaining.
-    sep = [ln for ln in src.splitlines() if "|---|" in ln][0]
-    assert sep.count("---") == 12
+    # The header, the separator and the cells must all be the same width, or
+    # markdown drops the trailing columns without complaining. Twelve without
+    # knockout evidence; one more when a result carries it.
+    lines = pl.corroboration_table(_two_method_result())
+    header = [ln for ln in lines if ln.startswith("| Drug | Methods")][0]
+    sep = lines[lines.index(header) + 1]
+    body = [ln for ln in lines[lines.index(header) + 2:]
+            if ln.startswith("| **")]
+    assert sep.count("---") == header.count("|") - 1 == 12
+    assert body and all(b.count("|") == header.count("|") for b in body)
 
 
 def test_the_reach_and_pains_footnotes_fire_on_the_right_rows():

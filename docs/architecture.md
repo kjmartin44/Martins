@@ -2,7 +2,7 @@
 
 [Documentation index](index.md)
 
-Sixty-one modules, about thirty thousand lines. This is the map: what the
+Eighty modules, about forty-two thousand lines. This is the map: what the
 run does in order, which module owns each step, and which parts you can
 read on their own.
 
@@ -213,10 +213,12 @@ Generated from each module's own first docstring line.
 | `exploratory.py` | Exploratory docking into a pocket that has no co-crystallised ligand. |
 | `exposure.py` | Can the drug reach the concentration at which the evidence was seen? |
 | `fda.py` | Show only drugs the FDA has approved. |
+| `fdalabel.py` | Human peak plasma concentrations read from FDA drug labels. |
 | `genes.py` | Resolve a gene symbol to a transcription start site and pull the promoter. |
 | `genetics.py` | Human genetic evidence, via eQTLs — and what GWAS/PheWAS can and cannot tell you. |
 | `http.py` | Tiny cached HTTP client. Stdlib only, so the package needs only numpy. |
 | `indications.py` | What each drug actually is, and what it is approved to treat. |
+| `knockout.py` | Does your gene change when a factor is lost? Read from perturbation data. |
 | `liabilities.py` | Structural liabilities: what makes a predicted hit not worth believing. |
 | `ligands.py` | Change the natural ligand, not the receptor. |
 | `localannot.py` | Gene annotation and genetic evidence from files, not web APIs. |
@@ -242,6 +244,7 @@ Generated from each module's own first docstring line.
 | `pwm.py` | Position-weight-matrix mathematics. |
 | `rationale.py` | A plain sentence on how a candidate would act on the condition. |
 | `reactivation.py` | Reactivating a silenced allele, which is a different problem from a low gene. |
+| `regulators.py` | Start from the factors known to regulate your gene, then look for drugs. |
 | `regulon.py` | How many genes does this TF control? The specificity that actually matters. |
 | `report.py` | Turning a finished run into something a person reads. |
 | `retrospective.py` | Does the pipeline recover drugs already known to move a gene? |

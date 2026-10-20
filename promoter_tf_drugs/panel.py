@@ -148,6 +148,7 @@ def parity(panel: Panel) -> dict:
               "use_lincs", "use_genetics", "regulon_file", "tissue",
               "approved_only", "pvalue", "upstream", "downstream",
               "tf_activity", "activity_tissue", "upstream_network",
+              "regulator_route",
               "docking_results", "promoter_dna", "screen_product",
               "sensitivity_scan", "expression_file", "lincs_file",
               "signature_file", "depmap_file", "prism_file",
@@ -217,7 +218,10 @@ def merge_results(panel: Panel) -> dict:
                   "demo": bool(panel.included
                                and panel.included[0].query.get("demo")),
                   "fda_only": any((g.result.get("fda_filter") or {})
-                                  .get("applied") for g in panel.included)},
+                                  .get("applied") for g in panel.included),
+                  "hide_local_only": any((g.result.get("fda_filter") or {})
+                                         .get("hide_local_only")
+                                         for g in panel.included)},
         "fda_hidden": {"entries": hidden["entries"],
                        "drugs": sorted(hidden["drugs"], key=str.lower)},
         "panel": {"per_gene": per_gene,

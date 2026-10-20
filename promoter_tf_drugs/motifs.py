@@ -65,6 +65,10 @@ class Hit:
     pvalue_threshold: float
     tss_offset: int                 # negative = upstream of TSS
     matched_sequence: str
+    # P(a random window of this motif scores at least this well), under the
+    # window's own base composition. Every hit passes the same threshold, so
+    # this is what ranks them against hits of other motifs.
+    pvalue: float | None = None
 
 
 # --------------------------------------------------------------------- load
@@ -143,12 +147,20 @@ def load_motifs(client: Client, pfm_file: str | Path | None = None,
 def scan_promoter(sequence: str, motifs: list[Motif], *, pvalue: float = 1e-4,
                   min_ic: float = 6.0, offset_fn=None,
                   background: np.ndarray | None = None,
-                  skip_repeats: bool = False) -> list[Hit]:
+                  skip_repeats: bool = False,
+                  info: dict | None = None) -> list[Hit]:
     """Scan `sequence` with every motif at a fixed per-position p-value.
 
     `min_ic` drops very low-information matrices (< ~6 bits). Those produce
     hits every few dozen bases in any sequence and only add noise.
+
+    Each strand has its own threshold, and a strand that cannot reach
+    `pvalue` in this window (its best possible match is more common than
+    that) is not scanned. `info`, when given, is filled with how many
+    matrices were scanned, how many were below `min_ic`, and how many could
+    not reach the p-value on either strand.
     """
+    counts = {"n_scanned": 0, "n_low_information": 0, "n_unreachable": 0}
     enc = pwm.encode(sequence, skip_repeats=skip_repeats)
     bg = pwm.background_from_encoding(enc) if background is None else background
     hits: list[Hit] = []
@@ -156,15 +168,22 @@ def scan_promoter(sequence: str, motifs: list[Motif], *, pvalue: float = 1e-4,
     for motif in motifs:
         ic = pwm.information_content(motif.counts, bg)
         if ic < min_ic:
+            counts["n_low_information"] += 1
             continue
         pssm = pwm.pfm_to_pssm(motif.counts, bg)
         lo, hi = pwm.min_max_score(pssm)
         if hi <= lo:
             continue
-        thr = pwm.score_threshold(pssm, bg, pvalue)
+        base, tail = pwm.score_tail(pssm, bg)
+        base_r, tail_r = pwm.score_tail(pssm[::-1, ::-1], bg)
+        thr = pwm.threshold_from_tail(base, tail, pvalue, strict=True)
+        thr_r = pwm.threshold_from_tail(base_r, tail_r, pvalue, strict=True)
+        if thr is None and thr_r is None:
+            counts["n_unreachable"] += 1
+            continue
+        counts["n_scanned"] += 1
 
-        for start, end, strand, score in pwm.scan_both_strands(sequence, pssm, thr,
-                                                               enc=enc):
+        for start, end, strand, score in pwm.scan_strands(enc, pssm, thr, thr_r):
             sub = sequence[start:end]
             hits.append(Hit(
                 matrix_id=motif.matrix_id,
@@ -178,9 +197,13 @@ def scan_promoter(sequence: str, motifs: list[Motif], *, pvalue: float = 1e-4,
                 pvalue_threshold=pvalue,
                 tss_offset=offset_fn(start) if offset_fn else start,
                 matched_sequence=sub if strand == "+" else pwm.reverse_complement(sub),
+                pvalue=(pwm.tail_pvalue(score, base, tail) if strand == "+"
+                        else pwm.tail_pvalue(score, base_r, tail_r)),
             ))
 
     hits.sort(key=lambda h: (-h.score, h.start))
+    if info is not None:
+        info.update(counts)
     return hits
 
 
@@ -238,14 +261,138 @@ def scannable_length(sequence: str, skip_repeats: bool = True) -> int:
     return int((enc < pwm.N_CODE).sum())
 
 
+def dinucleotide_shuffle(seq: str, rng) -> str:
+    """A random sequence with the same dinucleotide counts as `seq`.
+
+    The Altschul and Erikson (1985) construction: every shuffle is an Eulerian
+    path through the graph of observed A-to-C, C-to-G and so on steps, so the
+    first and last bases and every two-base count are kept. A mononucleotide
+    shuffle would also be a null, but it removes CpG depletion and runs of one
+    base, which real promoters have and which change how many motifs match.
+    """
+    if len(seq) < 4:
+        return seq
+    edges: dict = {}
+    for a, b in zip(seq, seq[1:]):
+        edges.setdefault(a, []).append(b)
+    last = seq[-1]
+    nodes = [a for a in edges if a != last]
+    # Pick each node's final exit so that the exits form a tree leading to the
+    # last base; any other choice leaves the walk stranded before the end.
+    for _ in range(1000):
+        final = {a: rng.choice(edges[a]) for a in nodes}
+        good = True
+        for a in nodes:
+            seen, cur = set(), a
+            while cur != last:
+                if cur in seen or cur not in final:
+                    good = False
+                    break
+                seen.add(cur)
+                cur = final[cur]
+            if not good:
+                break
+        if good:
+            break
+    else:
+        return seq
+    pools = {}
+    for a, outs in edges.items():
+        rest = list(outs)
+        if a in final:
+            rest.remove(final[a])
+            rng.shuffle(rest)
+            rest.append(final[a])
+        else:
+            rng.shuffle(rest)
+        pools[a] = rest
+    used = {a: 0 for a in pools}
+    out = [seq[0]]
+    cur = seq[0]
+    for _ in range(len(seq) - 1):
+        nxt = pools[cur][used[cur]]
+        used[cur] += 1
+        out.append(nxt)
+        cur = nxt
+    return "".join(out)
+
+
+def shuffle_scannable(sequence: str, rng, *, skip_repeats: bool = True) -> str:
+    """Shuffle each run of scanned bases, leaving the mask and Ns where they are.
+
+    With repeat masking on, only upper-case runs are scanned, so only those
+    are shuffled and every masked base stays at its position. Shuffling the
+    whole sequence instead moves repeat bases into the scanned region and
+    changes the composition the scan is judged against.
+    """
+    pattern = r"[ACGT]+" if skip_repeats else r"[ACGTacgt]+"
+    out, last = [], 0
+    for m in re.finditer(pattern, sequence):
+        out.append(sequence[last:m.start()])
+        run = m.group(0) if skip_repeats else m.group(0).upper()
+        out.append(dinucleotide_shuffle(run, rng))
+        last = m.end()
+    out.append(sequence[last:])
+    return "".join(out)
+
+
+NULL_SHUFFLES = 30
+
+
+def empirical_null(sequence: str, motifs: list, *, pvalue: float,
+                   min_ic: float = 6.0, skip_repeats: bool = True,
+                   n_shuffles: int = NULL_SHUFFLES, seed: int = 0) -> dict:
+    """Run the same scan and the same collapsing on shuffled copies.
+
+    The count and the scores of the sites each copy gives are the null this
+    scan is judged against. Every setting is the one the real scan used, so
+    nothing but the order of the bases differs.
+    """
+    import random
+    rng = random.Random(seed)
+    counts, scores = [], []
+    for _ in range(max(0, n_shuffles)):
+        shuffled = shuffle_scannable(sequence, rng, skip_repeats=skip_repeats)
+        hits = collapse_overlapping(scan_promoter(
+            shuffled, motifs, pvalue=pvalue, min_ic=min_ic,
+            skip_repeats=skip_repeats))
+        counts.append(len(hits))
+        scores.append(sorted(h.pvalue for h in hits))
+    return {"counts": counts, "scores": scores, "n_shuffles": len(counts),
+            "seed": seed}
+
+
+def _quantile(values: list, q: float) -> float:
+    vs = sorted(values)
+    if not vs:
+        return 0.0
+    pos = q * (len(vs) - 1)
+    lo = int(pos)
+    hi = min(lo + 1, len(vs) - 1)
+    return vs[lo] + (vs[hi] - vs[lo]) * (pos - lo)
+
+
 def scan_quality(n_hits: int, n_motifs: int, seq_length: int,
-                 pvalue: float) -> dict:
+                 pvalue: float, null: dict | None = None,
+                 observed_scores: list | None = None) -> dict:
     """Compare observed hits against the null expectation.
 
     `seq_length` must be the scannable length (see `scannable_length`), not
     the window width.
+
+    Without `null` the expectation is the formula `expected_false_positives`,
+    which assumes every motif matches at exactly its stated p-value at every
+    position. On a real repeat-masked promoter that undercounted: 13 expected
+    against 24 to 27 (plus or minus 10) on shuffled copies, because score
+    thresholds on a discrete distribution give more matches than the nominal
+    p-value, and the formula ignores the mask. With `null` (see
+    `empirical_null`) the expectation is the mean over shuffled copies, with
+    a range from their spread, and the formula is kept beside it.
     """
-    expected = expected_false_positives(n_motifs, seq_length, pvalue)
+    formula = expected_false_positives(n_motifs, seq_length, pvalue)
+    counts = (null or {}).get("counts") or []
+    empirical = len(counts) >= 10
+    expected = (sum(counts) / len(counts)) if empirical else formula
     ratio = n_hits / expected if expected > 0 else float("inf")
 
     if ratio < 0.8:
@@ -283,14 +430,67 @@ def scan_quality(n_hits: int, n_motifs: int, seq_length: int,
     # that unmissable, and it is a real Benjamini-style false discovery
     # PROPORTION — expected false positives over observed — not a fitted score.
     fdp = min(1.0, expected / n_hits) if n_hits > 0 else 0.0
+    real = max(0, round(n_hits - expected))
 
-    return {"observed": n_hits, "expected_by_chance": round(expected, 1),
-            "scannable_bases": seq_length,
-            "enrichment": round(ratio, 2), "verdict": verdict, "advice": advice,
-            "false_discovery_proportion": round(fdp, 3),
-            "expected_real_sites": max(0, round(n_hits - expected)),
-            "fdp_note": (
-                f"about {fdp:.0%} of these {n_hits} sites are expected to be "
-                f"chance matches; roughly {max(0, round(n_hits - expected))} "
-                f"are real, but nothing here says WHICH — only ChIP evidence "
-                f"separates them.")}
+    out = {"observed": n_hits, "expected_by_chance": round(expected, 1),
+           "expected_by_formula": round(formula, 1),
+           "scannable_bases": seq_length,
+           "enrichment": round(ratio, 2), "verdict": verdict, "advice": advice,
+           "false_discovery_proportion": round(fdp, 3),
+           "expected_real_sites": real,
+           "null": None}
+    if not empirical:
+        out["fdp_note"] = (
+            f"about {fdp:.0%} of these {n_hits} sites are expected to be "
+            f"chance matches, from a formula that assumes every motif "
+            f"matches at exactly its stated p-value; roughly {real} are "
+            f"real, but nothing here says which. Only ChIP evidence "
+            f"separates them.")
+        return out
+
+    lo = _quantile(counts, 0.10)
+    hi = _quantile(counts, 0.90)
+    fdp_lo = min(1.0, lo / n_hits) if n_hits > 0 else 0.0
+    fdp_hi = min(1.0, hi / n_hits) if n_hits > 0 else 0.0
+    mean = sum(counts) / len(counts)
+    sd = (sum((c - mean) ** 2 for c in counts) / len(counts)) ** 0.5
+    out["null"] = {
+        "method": ("shuffled copies of this window with the repeat mask and "
+                   "every dinucleotide count kept, scanned and collapsed the "
+                   "same way"),
+        "n_shuffles": len(counts), "mean": round(mean, 1), "sd": round(sd, 1),
+        "p10": round(lo, 1), "p90": round(hi, 1),
+    }
+    out["false_discovery_range"] = [round(fdp_lo, 3), round(fdp_hi, 3)]
+
+    # How the proportion falls as the list is cut to its best sites. Observed
+    # and null sites are ranked the same way, by the p-value of their score,
+    # so the share of chance in the best k is the null's mean count at or
+    # below the k-th p-value, over k.
+    top = []
+    obs = sorted(observed_scores or [])
+    for k in (5, 10, 20):
+        if k > len(obs) or k >= n_hits:
+            continue
+        cut = obs[k - 1]
+        above = [sum(1 for s in sc if s <= cut) for sc in null["scores"]]
+        top.append({"top": k, "fdp": round(min(1.0, sum(above) / len(above)
+                                                / k), 3)})
+    if top:
+        out["top_site_fdp"] = top
+
+    parts = [f"about {fdp:.0%} of these {n_hits} sites "
+             f"(range {fdp_lo:.0%} to {fdp_hi:.0%}) would be expected on "
+             f"shuffled sequence of this window, so roughly {real} are above "
+             f"chance"]
+    if top:
+        parts.append("among the best-scoring sites the share is lower: "
+                     + ", ".join(f"{t['fdp']:.0%} of the top {t['top']}"
+                                 for t in top))
+    out["fdp_note"] = (
+        "; ".join(parts) + f". Estimated from {len(counts)} shuffled copies "
+        f"that keep the repeat mask and every dinucleotide count. The "
+        f"formula that assumes each motif matches at exactly its stated "
+        f"p-value would expect {formula:.0f} and is not used. Nothing here "
+        f"says which sites are real; only ChIP evidence separates them.")
+    return out

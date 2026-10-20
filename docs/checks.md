@@ -111,15 +111,358 @@ Together these moved the BUB1B run from 2 drugs with a verdict to 4. The rest
 are limited by the data, not the code: more values need a source of human
 exposure beyond ChEMBL, which is what `--cmax-table` is for.
 
-Label text from openFDA was tried and not used. The pharmacokinetics sections
-are flattened tables where a Cmax can belong to an interaction study or a
-different dose, and a wrong number read silently is worse than none.
+### The FDA label table
+
+`python scripts/build_fda_cmax.py` builds `data/fda_label_cmax.tsv` from FDA
+labels, and the dose check reads it when it exists, below any table you name.
+With no arguments it looks up the FDA approved drugs in the `results.json` files
+under `results/`; `--from-results`, `--drugs` and `--all-orange-book` choose
+others. The launcher runs it on the finished results before the dose check.
+openFDA allows 1,000 requests a day without a key and 120,000 with one (put it in
+`OPENFDA_API_KEY`).
+
+It reads sentences in the pharmacokinetics section that state a peak:
+"Cmax", "peak plasma concentration", "maximum concentration". It takes each
+number with a concentration unit, with the dose, whether it is single dose or
+steady state, and the sentence. It refuses a sentence or heading about renal or
+hepatic impairment, elderly, children, sex or race, a drug interaction, food, or
+a metabolite. A drug is written to the table when its remaining figures agree
+within thirty fold, and the row holds their median with the range, the label, the
+dose and the sentence in `note` so it can be checked. A protein binding statement
+gives the unbound fraction, from which the dose check reports a free level. A
+range such as "6% to 12% bound" gives none.
+
+Anything else goes to `data/fda_label_cmax_review.tsv` with the reason: figures
+that disagree, a mass unit with no molecular weight, or every sentence refused.
+
+Coverage is partial, and that is the result and not a defect. On 170 FDA
+approved drugs from three saved runs, 38 got a value, 14 were set aside and 118
+had nothing to read. The labels state a number for the peak in prose for about
+one drug in four. The rest give only a time to peak ("C max achieved within 2 to 4
+hours" for imatinib, with no value), put the figures in a table (not read: the
+tables openFDA carries for these sections are mostly interaction ratios, the
+exact trap the rules above avoid), or say nothing. A value that is read is still
+one figure from one population at one dose, so treat a row as a lead to check
+against the label and not as a measured blood level. The text reader can also
+be wrong in ways the tests do not cover.
+
+Label text from openFDA was tried first and dropped, because a wrong number read
+silently is worse than none. The reader above is that attempt with the refusals
+added.
 
 ### Other limits
 
 - LINCS doses are nominal concentrations in a dish, and plasma is not a tissue.
 - A single-dose Cmax understates steady state for a drug that accumulates.
 - Potency at a factor is not the concentration at which the gene responds.
+
+## Where the literature's drugs are lost
+
+```bash
+python scripts/positive_fate.py <results.json files or folders> --out results/retrospective_fate
+```
+
+The retrospective check finds that routes recover few of the approved drugs CTD
+records as moving a gene. This script follows each such drug that has no route
+and says where it stops. For each, it looks up the drug's ChEMBL mechanism
+targets (every library row of the drug, since a mechanism sits on one salt
+form) and places it at the first stage that explains the miss.
+
+On the 36 saved runs, 1,677 approved drugs are recorded by CTD as moving their
+gene the wanted way:
+
+| Stage | Drugs | Share |
+|---|---|---|
+| found by a predicted route | 144 | 8.6% |
+| acts on a factor the run ranked, yet has no route | 2 | 0.1% |
+| a target is a transcription factor the scan did not rank | 206 | 12.3% |
+| non-factor target within three steps upstream of a factor the search covered | 335 | 20.0% |
+| the same, but only of a ranked factor the search did not cover | 59 | 3.5% |
+| target more than three steps upstream | 291 | 17.4% |
+| target not in the signalling network | 265 | 15.8% |
+| no mechanism target in ChEMBL | 375 | 22.4% |
+
+A drug with several targets takes the stage nearest to being found. Reading it:
+
+- **Drug lookup is not the bottleneck.** Once a factor is ranked, its drugs are
+  found: only 2 drugs act on a ranked factor and lack a route. Misses come from
+  which factors are ranked and how far upstream the search goes.
+- **About 38% cannot be reached by a target-based method at all.** Those are
+  drugs with no ChEMBL target (urethane, hydrogen peroxide, zinc salts, DMSO)
+  and drugs whose target is not in the signalling network (RNA polymerase,
+  DHODH, ERG11). CTD records them for toxicology or stress effects. Recall
+  cannot approach 100% by improving the routes.
+- **The upstream groups (335 and 59) are an upper bound.** They count a
+  non-factor target within three steps of a ranked factor without checking that
+  the path has the right sign or that the drug acts in the right direction. The
+  targets are PTGS2, HTR2A, DRD2, PTGS1 and KIT. The upstream search covers only
+  the top eight factors, which is why 59 of these reach a ranked factor outside
+  it.
+- **Transcription factors that were never ranked.** 208 missed drugs have a
+  transcription factor among their targets, mostly NR3C1, ESR1, PGR, AR, PPARA,
+  ESR2 and VDR. For 97 of them (47%) the gene is a known CollecTRI target of
+  that factor, and for 42 (20%) the gene responded when it was knocked out; 110
+  (53%) have one or the other. That is 6.6% of all 1,677 drugs, which would lift
+  recall from 8.6% to about 15% through a route that starts from known
+  regulators and not from motifs at the promoter. CollecTRI and CTD both draw
+  on the published literature, so some of that overlap is not independent, and
+  the 6.6% is an estimate of what such a route could reach, not a measured gain.
+
+### Why the upstream group is missed
+
+`python scripts/upstream_misses.py <results.json files>` replays the filters of
+the upstream search on the 598 drugs whose target is within three steps of a
+ranked factor (the two upstream rows above, plus transcription factors that
+are also upstream nodes). The first column is the search as it runs, with eight
+factors. The second asks every ranked factor, with or without a drug of its own
+and with no cap on how many:
+
+| First filter that removes the drug | Eight factors searched | Every ranked factor |
+|---|---|---|
+| reaches only a factor outside the eight searched | 82 (13.7%) | 0 |
+| no searched factor within three steps | 16 (2.7%) | 16 (2.7%) |
+| no path whose signs give the effect the goal needs | 65 (10.9%) | 32 (5.4%) |
+| no recorded mechanism at that target in the approved-drug index | 26 (4.3%) | 46 (7.7%) |
+| the drug moves the node the wrong way for that path | 252 (42.1%) | 306 (51.2%) |
+| passes every filter, so the search's limits left it out | 157 (26.3%) | 198 (33.1%) |
+
+- **Protein families were missing from the index, and now are included.**
+  ChEMBL records aspirin and ibuprofen at a "PROTEIN FAMILY" target (PTGS1 and
+  PTGS2), and haloperidol at the dopamine receptor family. The index used to
+  keep only single proteins and complexes, which left 156 drugs without an entry
+  (26.1%). It now keeps families too, lists the drug at every member, and marks
+  it with `target_type = "PROTEIN FAMILY"` and a source ending in "family
+  target". The drug is not known to act on one member alone, so read such a
+  route as "acts on this protein family".
+- **Many of the drugs that moved into the wrong way column were hidden before.**
+  With families included, aspirin and ibuprofen are found at PTGS2, and their
+  direction there is down, so the search correctly asks whether lowering PTGS2
+  helps. For most of these drugs it does not, so the count of wrong way drugs
+  rose from 156 to 252.
+- **Widening the search adds at most 41 drugs.** Asking all ranked factors moves
+  the drugs that pass every filter from 157 to 198, which is 6.9% of the 598. It
+  is an upper bound, because the per-factor limits are not replayed. Most of
+  the 198 are at NR3C1, ESR1, AR, ESR2 and VDR, which have dozens of approved
+  drugs each, so the limits would cut most of them. Searching more factors is
+  therefore a small gain compared with the limits, and with starting from known
+  regulators of the gene.
+- **The limits hide drugs at busy nodes.** The search keeps ten druggable nodes
+  per factor and five drugs per node. This is a count of drugs the filters did
+  not remove, not a measurement of which limit did.
+- **Direction and sign filters remove about half.** Those are the search
+  working as designed. They can still be wrong when a factor's role is unknown,
+  because a role that is neither activator nor dual is treated as a repressor.
+
+**Compatibility:** `Drug` has a new field, `target_type`, which is `None` unless
+the target is a protein family. The approved-drug index returns more drugs, at
+more genes, than before, so upstream routes can list drugs such as aspirin that
+an older run did not. Saved results are unchanged and still read correctly.
+
+### What starting from regulators adds
+
+`python scripts/regulator_gain.py <results.json files>` builds the
+`--regulator-route` routes for each of the 36 saved runs, adds them to the run's
+routes, and scores the result against CTD the way the retrospective does. It
+compares each source alone. The check covers the runs that have a CTD record
+(1,666 approved drugs that CTD records as moving a gene the wanted way).
+
+| Source | Runs with new routes | New drugs | CTD wanted | CTD opposite | Wanted drugs with a route |
+|---|---|---|---|---|---|
+| none (routes already in the runs) | 36 | 3,109 | 144 | 91 | 143 of 1,666 (8.6%) |
+| CollecTRI | 32 | 1,119 | 76 | 62 | 190 of 1,666 (11.4%) |
+| knockout data, transcription factors | 14 | 113 | 14 | 7 | 152 of 1,666 (9.1%) |
+| both | 32 | 1,159 | 79 | 64 | 192 of 1,666 (11.5%) |
+
+- **It finds more.** CollecTRI regulators add 47 of the drugs CTD records, a third
+  more than the routes already had. Knockout data adds 9, in 14 of the 36 runs.
+- **Its direction rate is not separated from chance.** Among the new drugs that
+  CTD has an opinion on, 55% (CollecTRI) and 67% (knockout, 21 drugs) had the
+  direction the goal asked for. An approved drug picked at random has 48%, and
+  the routes the runs already had reach 61%. Resampling the 36 genes 5,000 times
+  puts the CollecTRI gain over chance at -1% to +14% (95% interval) and the
+  knockout gain at -16% to +49%. Both intervals include zero. The routes the runs
+  already had do separate from chance (+4% to +20%).
+- **The two-experiment rule for knockout data was chosen before the check, and
+  the check does not favour a different one.** Asking for one experiment finds
+  more (162 of 1,666 against 152) at 64% right direction (-1% to +32% over
+  chance). Asking for three finds fewer (148) at 75% on 12 drugs, with an
+  interval from -29% to +58%. None of the three is separated from chance.
+- **It does not rank better.** The mean AUC for the right-direction test stays
+  at 0.51 with the new routes added. They widen the list and do not sort it.
+- **The CollecTRI gain is not independent.** CollecTRI and CTD draw on the same
+  literature, so a drug recorded in both was probably found through the same
+  papers. The knockout rows use measured experiments and are the fairer test.
+  Counting 9 more drugs is the part of the gain that does not depend on shared
+  curation.
+- **Most new drugs are not in CTD for the gene.** 981 of 1,119 are neither
+  wanted nor opposite there. That says CTD has no record, not that the drug does
+  nothing.
+
+For these reasons the routes are tier 4, and the route is off unless
+`--regulator-route` is given.
+
+The classification describes each drug's targets. It does not prove why a route
+was missed, and an early version of this script counted failed ChEMBL requests
+as "no target" and put 40% there. It now retries and keeps failures out.
+
+## Rare disease genes whose drugs are known
+
+Three genes where an existing drug is known to act through a factor, raised with all
+the options except docking: ABCD2 (X-linked adrenoleukodystrophy, where ABCD2
+compensates for ABCD1), LPL (lipoprotein lipase deficiency) and FXN (Friedreich
+ataxia). Where a drug that should be there was not, `scripts/drug_trace.py GENE up DRUG`
+follows it through the chain and stops at the first missing link: in the library, on the
+Orange Book, a mechanism in ChEMBL, a recorded regulator of the gene, the right
+direction, within reach upstream, and in CTD.
+
+| Gene | Expected drug | Result |
+|---|---|---|
+| ABCD2 up | levothyroxine and liothyronine (THRA) | found, ranks 1 and 3 of 66 approved drugs |
+| ABCD2 up | fenofibrate, gemfibrozil (PPARA) | found, ranks 18 to 20, through known regulators |
+| ABCD2 up | valproic acid | found, rank 11, chromatin-level |
+| LPL up | fenofibrate, gemfibrozil, bexarotene | found, ranks 7, 14 and 5 |
+| FXN up | pioglitazone, rosiglitazone (PPARG) | found, ranks 19 to 20, through known regulators |
+| FXN up | valproic acid and vorinostat | found, ranks 8 and 1 |
+| FXN up | givinostat | **missing at first**, rank 12 after the fix below |
+| FXN up | omaveloxolone | **still missing**, see below |
+
+The scan verdict was "degraded" in all three: no signal for ABCD2 (9 sites against 11.6
+by chance) and FXN weak (9 against 4.7), enriched for LPL (31 against 12.8). Bezafibrate
+and pemafibrate are not FDA approved and are hidden by the filter, as intended.
+
+Where the misses came from, and what was done:
+
+| Cause | Example | Change |
+|---|---|---|
+| The approved-drug index dropped three ChEMBL target types that name human proteins: complex groups, fusion proteins and selectivity groups (120, 19 and 9 human mechanisms of approved drugs) | hydroxyurea at ribonucleotide reductase, imatinib at BCR and ABL1 | Included, listed at every member, and marked on the route |
+| The curated chromatin list was written by hand | givinostat, approved in 2024 for Duchenne | Extended from ChEMBL's mechanisms at the HDACs, DNMTs and EZH2. It adds one drug today |
+| The gene's own regulators are few | a factor two steps away | `--regulator-steps 2`, below |
+| A drug with a measured activity at a receptor and no curated mechanism | rifampin at PXR: its only mechanism is the bacterial polymerase | `--regulator-measured`, below |
+| No recorded link between the factor and the gene | omaveloxolone acts through NRF2, and no table links NRF2 to FXN | Not fixed. None of CollecTRI, TRRUST, the knockout data or the ChIP occupancy table names it, and nothing is within three signed steps. ReMap has one NRF2 peak among the 594 factors with peaks over the FXN window, so occupancy alone is too unspecific to add |
+
+**Two steps.** `--regulator-steps 2` also lists drugs at the factors that regulate the
+gene's recorded regulators, in CollecTRI, with the two signs multiplied. A factor whose
+two routes disagree on the sign is left out. Against CTD on the 36 saved runs:
+
+| | Wanted drugs reached (of 1,666) | Right-direction share | Gain over chance, 95% |
+|---|---|---|---|
+| Routes the runs already had | 143 | 61% | +4% to +20% |
+| Known regulators, one step | 190 | 55% | -1% to +14% |
+| Known regulators, two steps | 216 | 59% | +2% to +18% |
+| Two steps plus measured activities | 378 | 58% | +4% to +13% |
+
+The two-step interval excludes zero where the one-step interval did not, and the drugs
+it adds (41 wanted, 20 opposite) have a 67% right-direction share. This was chosen
+after looking at the same 36 genes, so it is not a held-out result. The launcher uses
+two steps and the command line defaults to one.
+
+**Measured activity.** `--regulator-measured` asks ChEMBL's activity records for a
+regulator that the mechanism table gives no drug for, and lists approved drugs with a
+pChEMBL value of 5 or better, the ten best. It finds rifampin at PXR on its own: PXR has
+110 approved drugs with such a record and rifampin ranks fourth (6.7). The same list
+puts droxidopa first (8.4) and includes ceftazidime, so the records are noise as well as
+signal, and they give no direction, so every drug is listed with direction "unclear".
+Against CTD on the 36 saved runs it reached 378 of the 1,666 wanted drugs (22.7%),
+against 216 (13.0%) with two steps alone and 143 (8.6%) for the routes the runs already
+had. It adds 4,748 - 1,849 = 2,899 new drugs to the 1,849 from two steps, of which 199
+are recorded as raising the gene the wanted way and 148 the other way, a 57% share
+against 48% for a random approved drug. The mean AUC for the reported-or-not test rises
+from 0.553 to 0.591. The drugs have no direction, so this says that drugs with a
+measured activity at a regulator are somewhat more likely than chance to be among those
+CTD records as moving the gene the wanted way, and says nothing about which way a
+particular drug acts.
+
+The cost is one lookup per regulator with no curated drug, roughly 250 per gene on a
+first run (the check took more than an hour for 700 distinct regulators), cached after
+that, and it makes the list much longer: about 80 more drugs per gene on average. It is off
+by default and the launcher does not pass it. Like the two-step option it was tried on
+the same 36 genes it was scored on, so it is not a held-out result.
+
+## The motif scan's chance estimate
+
+The reports say what share of the motif sites called would be expected by chance.
+That number used to come from a formula: matrices times two strands times scannable
+bases times the p-value. Checking it against shuffled copies of a real promoter showed
+it was wrong, and showed two faults in the scan that made it wrong.
+
+The window was BUB1B, 1,200 bases, 739 scannable after repeat masking, 879 JASPAR
+2024 matrices, p of 1e-5.
+
+| | Old scan | Corrected scan |
+|---|---|---|
+| Matrices scanned | 879 | 625 (254 could not reach p = 1e-5) |
+| Sites called | 37 | 17 |
+| Expected by the formula | 13 | 9 |
+| Found in shuffled copies | 27 +/- 10 (40 copies) | 7.7 (30 copies) |
+| Share expected by chance | 35% by formula, about 70% by shuffles | 46%, range 24% to 65% |
+| Best 5 and best 10 sites | not given | 31% and 39% |
+
+- **Some matrices could not reach the p-value.** A short or weakly specific matrix
+  can have a best possible match that is itself more common than 1e-5 in the window.
+  The old scan then used the best score as its threshold, so every consensus match
+  was called, at a rate of 4.5e-5 for NKX2-5 in this window. 254 of 879 matrices were
+  in this state. They are now left out, counted, and named in the report, and every
+  site called has a p-value at or below the one requested (the highest is 9.9e-6).
+- **The strands shared one threshold.** The reverse strand scores the reverse
+  complement of the matrix, whose scores are distributed differently when A and T
+  are not equal. The thresholds differ by more than 0.3 bits for 354 of 570 reachable
+  matrices in this window. Each strand now has its own.
+- **The formula undercounted by half.** With both faults the shuffled copies gave 27
+  sites where the formula gave 13. With them fixed the two agree (7.7 and 9) and the
+  formula is a fair cross-check, slightly high because scores are discrete.
+- **The estimate is now measured.** The run scans shuffled copies that keep the repeat
+  mask and every two-base count, collapses overlapping hits the same way, and uses
+  their mean. The range is the 10th to 90th percentile of the copies. A shuffle that
+  moved repeat bases into the scanned region gave a different answer, so each run of
+  unmasked bases is shuffled on its own. `--null-shuffles 0` returns to the formula.
+- **What it does not say.** A site is a sequence match. Which sites are real is a
+  question for ChIP, and the shuffles give no way to tell them apart. A shuffle that
+  keeps two-base counts is a fair null for the base composition and a poor one for
+  anything longer, such as a repeat family the mask missed.
+
+Compatibility: sites that were called only through the faults are gone, so a run now
+lists fewer sites and fewer factors, and the factor ranking can differ from an earlier
+run of the same gene. `scan_quality` in `results.json` keeps its fields and adds
+`expected_by_formula`, `null`, `false_discovery_range`, `top_site_fdp`,
+`motifs_loaded`, `motifs_scanned` and `motifs_unreachable`. `expected_by_chance` is now
+the shuffled mean when shuffles were run. Each hit has a `pvalue`. The verdict
+thresholds are unchanged, so a window can now be called "weak" or "no signal" where
+the formula called it enriched, and the reverse.
+
+## What CTD's expression record contains
+
+CTD's answer for one gene is a list of sentences, and its `InteractionActions` field
+lists every action in a sentence, not only the ones about this gene. Reading that field
+turned any chemical with an `increases^expression` action into a chemical that raises
+the gene. `python scripts/ctd_check.py <results.json files>` sorts every row that has an
+expression action by what its sentence says, across the 36 saved genes
+(100,979 rows):
+
+| What the sentence says | Share of rows |
+|---|---|
+| The chemical changes this gene's mRNA | 39% |
+| Expression of this gene's protein | 26% |
+| The chemical modulates another's effect ("inhibits the reaction [X results in increased expression of G]") | 24% |
+| Another gene's expression | 8% |
+| The effect comes through another gene | 3% |
+| A shape that is not read | 1% |
+
+A chemical that blocks an inducer was read as raising the gene, and one that raises
+another gene was read as raising this one. The fetch now reads the sentence. It counts a
+chemical that is the subject of an expression clause about this gene's mRNA, or about
+the gene with no form stated. A chemical that modulates another's effect is kept as a
+known link with no direction. Protein expression and indirect effects are left out.
+
+Scored against the saved routes, the cleaner key has fewer approved drugs recorded as
+raising a gene (1,489 against 1,666) and the routes reach slightly more of them (146
+against 143, so 9.8% against 8.6%). The mean AUC for the reported-or-not test moves from
+0.535 to 0.543. Neither change is large, so the cleaner key does not rescue the
+ranking, and the 8.6% figure is not mostly an artefact of the key.
+
+Compatibility: `improvements.reported_links` in a new run has fewer chemicals and
+different directions for some, so counts such as "77 move it the way you want" fall.
+Saved results keep what they recorded. `discovery.ctd_expression_links(client, gene,
+strict=False)` returns the earlier reading.
 
 ## Retrospective check
 
@@ -198,6 +541,13 @@ citations. Read it critically and change it in `POSITIVE_CONTROLS`.
   five negatives is not scored.
 - Routes that remain in the LINCS-graded group may still use scores fitted
   with signature data somewhere upstream. That is not traced.
+- **The 36 saved runs predate two corrections.** They were made before the
+  motif scan stopped calling matrices that cannot reach the requested p-value and
+  before CTD's sentences were read, so a rerun of the same genes would list
+  different sites and factors, and the figures in this section would move. The
+  CTD half is measured above (9.8% of the drugs reached against 8.6% with the
+  cleaner key, on the saved routes). The scan half is not: rerunning all 36 genes
+  with the corrected scan has not been done, and it takes many hours.
 
 ## First results
 

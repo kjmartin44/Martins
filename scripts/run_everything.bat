@@ -9,9 +9,12 @@ REM failing. That is the intended behaviour, not a problem to work around.
 REM
 REM After the five stages, two optional steps read the saved results: a dose
 REM check (what blood level a person reaches against the concentration the
-REM evidence was seen at) and, when the gene's own pocket was refused, an
-REM exploratory dock into a pocket copied onto the AlphaFold model from a
-REM related structure that the script finds by itself.
+REM evidence was seen at), which is on unless declined, and an exploratory dock
+REM into a pocket copied onto the AlphaFold model from a related structure that
+REM the script finds by itself. The exploratory dock is OFF unless you answer y
+REM to its question, because it is unvalidated and takes hours. When the gene's
+REM own pocket is refused and you said no, the command to run it later is
+REM printed instead.
 REM
 REM Usage:  run_everything.bat            (prompts for everything)
 REM         run_everything.bat GENE DIR   (gene and up/down given up front)
@@ -31,6 +34,25 @@ echo.
 echo === Checking dependencies ===
 "%PY%" -c "import numpy" 2>nul || ("%PY%" -m pip install numpy)
 "%PY%" -c "import rdkit, sklearn" 2>nul || ("%PY%" -m pip install rdkit scikit-learn)
+
+REM --- reference files -------------------------------------------------
+REM The files below are git-ignored, so a fresh checkout has none of them.
+REM The offers further down fetch a few; scripts\setup_data.bat fetches all
+REM of them, and leaves any that are already here alone.
+set "NEEDSETUP="
+for %%P in (data\jaspar2024.txt data\remap2022.bed.gz data\chip_regulon.tsv data\collectri.tsv data\gencode.basic.gtf.gz data\rna_tissue_consensus.tsv data\lincs_chem_pert_up.gmt data\lincs_chem_pert_down.gmt data\lincs_geneinfo.txt data\approved_library.tsv) do if not exist %%P set "NEEDSETUP=1"
+if defined NEEDSETUP (
+    echo.
+    echo Some reference files are not in data\. Without them routes are skipped
+    echo or fall back to web services, and the report says which. The setup
+    echo script fetches every missing file and is safe to rerun.
+    set "RUNSETUP="
+    set /p RUNSETUP="Run scripts\setup_data.bat now? y/N: "
+    if /i "!RUNSETUP!"=="y" (
+        set "SETUP_NOPAUSE=1"
+        call scripts\setup_data.bat --yes
+    )
+)
 
 REM --- motif file (required) -------------------------------------------
 if not exist data\jaspar2024.txt (
@@ -198,6 +220,40 @@ if not defined HAVEPR0 (
     )
 )
 
+REM --- Factor knockout signatures, from Enrichr. They show whether your gene
+REM --- changes when a transcription factor is knocked out, which replaces a
+REM --- fixed placeholder for "responsiveness". About 19 MB for both. Each file
+REM --- is downloaded under a .part name and kept only if it reads as a gene
+REM --- set library, so an error page is not mistaken for data.
+set "HAVEKO="
+for %%P in (data\knockout_lincs_crispr_ko.gmt data\knockout_tf_perturbations.gmt) do if exist %%P set "HAVEKO=1"
+if not defined HAVEKO (
+    echo.
+    echo Knockout signatures say whether your gene moves when a factor is lost.
+    echo Without them the report cannot say, for any factor. About 19 MB.
+    set "GETKO="
+    set /p GETKO="Download them? Y/n: "
+    if /i not "!GETKO!"=="n" (
+        echo === Downloading the Enrichr knockout libraries ^(~19 MB^) ===
+        curl.exe -fL -o data\knockout_lincs_crispr_ko.gmt.part "https://maayanlab.cloud/Enrichr/geneSetLibrary?mode=text&libraryName=LINCS_L1000_CRISPR_KO_Consensus_Sigs"
+        if not errorlevel 1 "%PY%" scripts\check_gmt.py data\knockout_lincs_crispr_ko.gmt.part 1000
+        if not errorlevel 1 (
+            move /y data\knockout_lincs_crispr_ko.gmt.part data\knockout_lincs_crispr_ko.gmt >nul
+        ) else (
+            echo   The CRISPR knockout library could not be fetched or read. Skipped.
+            del data\knockout_lincs_crispr_ko.gmt.part >nul 2>&1
+        )
+        curl.exe -fL -o data\knockout_tf_perturbations.gmt.part "https://maayanlab.cloud/Enrichr/geneSetLibrary?mode=text&libraryName=TF_Perturbations_Followed_by_Expression"
+        if not errorlevel 1 "%PY%" scripts\check_gmt.py data\knockout_tf_perturbations.gmt.part 500
+        if not errorlevel 1 (
+            move /y data\knockout_tf_perturbations.gmt.part data\knockout_tf_perturbations.gmt >nul
+        ) else (
+            echo   The TF perturbation library could not be fetched or read. Skipped.
+            del data\knockout_tf_perturbations.gmt.part >nul 2>&1
+        )
+    )
+)
+
 set "REGULON="
 if exist data\trrust.tsv set "REGULON=--regulon-file data\trrust.tsv"
 REM A ChIP-derived table covers far more factors. It is occupancy rather
@@ -244,14 +300,23 @@ set /p PROLIF="Tissue state - cycling / post-mitotic / mixed / unknown [unknown]
 if "!PROLIF!"=="" set "PROLIF=unknown"
 
 set "TISS="
-set /p CNS="Is the target tissue in the CNS? y/N: "
+set /p CNS="Is the target tissue in the CNS (c), in skin (s), or neither? c/s/N: "
+if /i "!CNS!"=="c" set "TISS=--tissue cns"
 if /i "!CNS!"=="y" set "TISS=--tissue cns"
+if /i "!CNS!"=="s" set "TISS=--tissue skin"
 
 REM The dose check is cheap and reads only the finished results, so it is
 REM on unless declined.
 set "DOSECHK=1"
 set /p DOSECHK_ANS="Run the dose check on the candidates at the end? Y/n: "
 if /i "!DOSECHK_ANS!"=="n" set "DOSECHK="
+
+REM The exploratory dock is the opposite: off unless asked for. It docks the
+REM library into a pocket copied onto an AlphaFold model, the result is not
+REM validated, and it can take hours, so it is not something to start by
+REM default. It only applies when the gene's own pocket is refused.
+set "XDOCK_ANS="
+set /p XDOCK_ANS="If the gene's own pocket is refused, also run the exploratory AlphaFold dock? Unvalidated, hours. y/N: "
 
 REM --- which tissue to infer factor activity in ------------------------
 REM Spelled as the expression table spells it: "liver", "lymph node",
@@ -532,10 +597,11 @@ if errorlevel 1 (
     echo.
 )
 
-REM Whether the pocket was refused decides whether the exploratory dock runs.
-REM It runs at the end, with no input from you: it searches the PDB with the
-REM AlphaFold model's sequence, takes the closest structure whose ligand
-REM transplants onto the model, and labels the result unvalidated.
+REM Whether the pocket was refused decides whether the exploratory dock is
+REM available, and the answer to the question near the top decides whether it
+REM runs. When it runs it is at the end, with no further input: it searches the
+REM PDB with the AlphaFold model's sequence, takes the closest structure whose
+REM ligand transplants onto the model, and labels the result unvalidated.
 set "EXPLORE="
 set "XUNI=-"
 set "PSTATE=refused"
@@ -545,10 +611,16 @@ for /f "tokens=1,2" %%A in ('%PY% scripts\product_status.py !DOCKJSON!') do (
 )
 if /i "!PSTATE!"=="refused" if not "!XUNI!"=="-" (
     echo.
-    echo The pocket of the !GENE! protein was refused. An exploratory dock will run
-    echo at the end instead. It finds a related structure that holds a ligand by
-    echo itself and labels the result unvalidated.
-    set "EXPLORE=1"
+    echo The pocket of the !GENE! protein was refused.
+    if /i "!XDOCK_ANS!"=="y" (
+        echo An exploratory dock will run at the end instead. It finds a related
+        echo structure that holds a ligand by itself and labels the result unvalidated.
+        set "EXPLORE=1"
+    ) else (
+        echo An exploratory dock on an AlphaFold model is available and is not run
+        echo by default. To run it later, from the same folder:
+        echo   python -m promoter_tf_drugs.exploratory --gene !GENE! --uniprot !XUNI! --reference --out "!OUT!_exploratory"
+    )
 )
 
 REM ---------------------------------------------------------------------
@@ -670,6 +742,7 @@ echo.
     !CHIP! !WINDOW! --all-tss ^
     !TFW! --proliferation !PROLIF! --cell-type-check !TISS! !EXPR! !GTF! ^
     --predict-direction --upstream-network --upstream-depth 3 ^
+    --regulator-route --regulator-steps 2 ^
     !LINCS! --genetics --screen --design-screen --design-modality ^
     --promoter-dna --screen-product --find-analogs ^
     !ACTIVITY! !SENS! !DOCKING! !DOSAGE! ^
@@ -719,7 +792,7 @@ REM control rather than a second analysis.
     --pfm-file data\jaspar2024.txt !REGULON! ^
     !CHIP! !WINDOW! --all-tss !TFW! ^
     --proliferation !PROLIF! !TISS! !EXPR! !GTF! --cell-type-check ^
-    !LINCS! --genetics --upstream-network ^
+    !LINCS! --genetics --upstream-network --regulator-route --regulator-steps 2 ^
     --promoter-dna --screen-product !ACTIVITY! !SENS! !DOCKING! ^
     --max-regulon 600 --max-burden moderate ^
     --out "!OUT!_panel" -v
@@ -760,7 +833,13 @@ if defined DOSECHK (
     echo === Dose check ===
     set "CMAXARG="
     if exist data\cmax_table.tsv set "CMAXARG=--cmax-table data\cmax_table.tsv"
-    if not defined CMAXARG echo   ^(no data\cmax_table.tsv - using blood levels ChEMBL holds, which is fewer^)
+    if not defined CMAXARG echo   ^(no data\cmax_table.tsv - using blood levels from FDA labels and ChEMBL^)
+    REM Reads the FDA label of each approved candidate for a human peak level and
+    REM adds what it can stand behind to data\fda_label_cmax.tsv, which the dose
+    REM check reads. Most labels give no usable number, and those are listed in
+    REM data\fda_label_cmax_review.tsv. A failure here only means fewer values.
+    "%PY%" scripts\build_fda_cmax.py --from-results "!OUT!\results.json"
+    if errorlevel 1 echo   The FDA label table could not be built. Continuing without it.
     "%PY%" -m promoter_tf_drugs.exposure "!OUT!\results.json" !CMAXARG! !LIBRARY! ^
         --out "!OUT!_exposure"
     if errorlevel 1 echo   The dose check failed. The analysis above is unaffected.

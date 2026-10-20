@@ -74,6 +74,7 @@ CATEGORIES = [
     "TF: stabiliser or glue",
     "TF: endogenous ligand",
     "TF: degradation blocker",
+    "TF: known regulator",
     "upstream signalling",
     "off-pathway pocket binder",
     "measured phenocopy",
@@ -348,6 +349,22 @@ CATEGORY_GUIDE = {
                 "factor stabilises it everywhere.",
         "differs": "Raises protein *abundance*, visible on a western blot — "
                    "unlike a conformational stabiliser, which does not.",
+    },
+    "TF: known regulator": {
+        "changes": "abundance",
+        "assay": "RT-qPCR for your gene after treatment; check the factor's "
+                 "own activity (a reporter or a known target) moved first",
+        "what": "Drugs that act on a factor CollecTRI or perturbation data "
+                "records as raising or lowering your gene, whether or not "
+                "the motif scan ranked that factor.",
+        "why": "Reaches factors the motif scan misses, such as those that "
+               "bind through a partner or a distant enhancer.",
+        "cost": "The link comes from a database or a knockout in other "
+                "cells, so it may not hold in yours. The drug's effect on "
+                "the factor is taken from its recorded action.",
+        "differs": "Starts from the literature on your gene, not from its "
+                   "promoter sequence. CollecTRI and CTD share sources, so "
+                   "agreement between them is not independent.",
     },
     "upstream signalling": {
         "changes": "abundance",
@@ -703,6 +720,66 @@ def from_upstream(upstream: dict) -> list[Route]:
                               round(bp["specificity"], 3), 0.6, "predicted"),
                     approved=bool(d.get("approved")), source="network",
                     notes=[bp["description"]]))
+    return out
+
+
+def from_regulators(regulators: dict) -> list[Route]:
+    """Drugs at factors recorded as regulating the gene (see regulators.py).
+
+    Every route is tier 4. Both links are recorded, the factor to the gene
+    and the drug to the factor, but the effect of the drug on the gene is
+    still inferred by multiplying their signs. Checked against CTD on 36
+    saved runs, the drugs found this way had the right direction 55% of the
+    time (CollecTRI) and 67% (knockout data, 21 drugs), against 48% for an
+    approved drug picked at random. Resampling the genes gives intervals for
+    the gain over chance that include zero, so the route earns the tier of a
+    model's prediction and not a curator's, and no more than that. The numbers
+    on the axes are fixed by source and are not calibrated.
+    """
+    out = []
+    for sym, rec in (regulators or {}).items():
+        curated = "CollecTRI" in rec.get("sources", [])
+        knocked = "knockout data" in rec.get("sources", [])
+        strength = 0.5 if curated else 0.35
+        if curated and knocked and not rec.get("disagree"):
+            strength = 0.6
+        verb = "activate" if rec.get("need") == "up" else "inhibit"
+        effect = "raises" if rec.get("sign") == 1 else "lowers"
+        basis = " and ".join(rec.get("sources", []))
+        via = rec.get("via")
+        if via:
+            strength = 0.4
+            notes = [f"{sym} {effect} the gene by way of {via}, according to "
+                     f"{basis}; the sign is the product of two edges"]
+        else:
+            notes = [f"{sym} {effect} the gene according to {basis}"]
+        if knocked:
+            notes.append(f"{rec.get('n_responses', 0)} knockout experiment(s) "
+                         f"agree and {rec.get('n_against', 0)} disagree")
+        if rec.get("disagree"):
+            notes.append("the knockout data gives the opposite sign to "
+                         "CollecTRI, so the direction here is uncertain")
+        for d in rec.get("drugs", []):
+            nt = list(notes)
+            if d.get("action_type") == "MEASURED ACTIVITY":
+                nt.append(f"only a measured activity at {sym} is recorded "
+                          f"({d.get('mechanism')}), not which way the drug "
+                          f"moves it")
+            elif d.get("direction") == "unclear":
+                nt.append("the drug's action at the factor is not recorded "
+                          "as raising or lowering it")
+            if d.get("target_type"):
+                nt.append("recorded at a protein family or group that includes "
+                          f"{sym}, not at {sym} alone")
+            out.append(Route(
+                drug=d["name"], category="TF: known regulator",
+                mechanism=(f"{verb} {sym}, which regulates {via}, a recorded "
+                           f"regulator of the gene" if via else
+                           f"{verb} {sym}, a recorded regulator of the gene"),
+                acts_on=sym, tier=4, directness=2 if via else 1,
+                axes=Axes(strength, 0.5, 0.6, "predicted"),
+                approved=bool(d.get("approved", True)), source="regulators",
+                notes=nt))
     return out
 
 
@@ -1343,13 +1420,49 @@ def _established_ligand_route(h: dict, sym: str, tf_info: dict, goal: str,
         approved=True, source="screening", notes=notes)
 
 
-def chromatin_routes(goal: str = "up") -> list[Route]:
+# The proteins each class of chromatin drug inhibits. The curated list above was
+# written by hand and missed givinostat, approved in 2024 for Duchenne muscular
+# dystrophy, so the list is extended from ChEMBL's mechanisms for these targets.
+CHROMATIN_TARGETS = {
+    "HDAC inhibitor": tuple(f"HDAC{i}" for i in range(1, 12)),
+    "DNMT inhibitor": ("DNMT1", "DNMT3A", "DNMT3B"),
+    "EZH2 inhibitor": ("EZH2",),
+}
+
+
+def chromatin_agents_from_index(index: dict) -> list:
+    """`[(name, class, "up", year)]` for approved drugs that inhibit an HDAC, a
+    DNA methyltransferase or EZH2 and are not already in `CHROMATIN_DRUGS`.
+
+    `index` is `drugs.approved_target_index`. Only drugs ChEMBL records as
+    inhibiting the target count, and a drug is listed once under the first class
+    it matches.
+    """
+    from .congeners import salt_free_name
+    known = {salt_free_name(n.lower()) for n, *_ in CHROMATIN_DRUGS}
+    out, seen = [], set()
+    for cls, genes in CHROMATIN_TARGETS.items():
+        for g in genes:
+            for d in (index or {}).get(g, []):
+                if d.direction != "down":
+                    continue
+                key = salt_free_name(d.name.lower())
+                if key in known or key in seen:
+                    continue
+                seen.add(key)
+                out.append((d.name, cls, "up", d.first_approval or 0))
+    return sorted(out)
+
+
+def chromatin_routes(goal: str = "up", extra: list | None = None
+                     ) -> list[Route]:
     """Approved chromatin drugs. They move almost any promoter — which is the
-    point, and the problem."""
+    point, and the problem. `extra` adds the drugs found from ChEMBL."""
     if goal != "up":
         return []
     out = []
-    for name, mech, direction, year in CHROMATIN_DRUGS:
+    curated = {n for n, *_ in CHROMATIN_DRUGS}
+    for name, mech, direction, year in list(CHROMATIN_DRUGS) + list(extra or []):
         r = Route(
             drug=name, category="chromatin-level", mechanism=mech,
             # Not "directness 0": acting genome-wide is not acting on your gene.
@@ -1362,6 +1475,9 @@ def chromatin_routes(goal: str = "up") -> list[Route]:
             "yours. Useful as a positive control that your reporter CAN be "
             "induced; almost never an acceptable therapeutic route on "
             "specificity grounds")
+        if name not in curated:
+            r.notes.append("added from ChEMBL's mechanism table (it inhibits "
+                           "a chromatin enzyme), not from the curated list")
         out.append(r)
     return out
 
@@ -1389,6 +1505,7 @@ def build(result_block: dict, *, goal: str = "up",
     routes += from_stabilisers(result_block.get("stabilisation") or {})
     routes += from_ligands(result_block.get("ligand_axes") or {})
     routes += from_upstream(result_block.get("upstream") or {})
+    routes += from_regulators(result_block.get("regulators") or {})
     routes += from_lincs(result_block.get("lincs") or {})
     routes += from_screen(
         result_block.get("screens") or {},
@@ -1408,7 +1525,7 @@ def build(result_block: dict, *, goal: str = "up",
                                goal=goal,
                                tf_roles=result_block.get("tf_roles"))
     if include_chromatin:
-        routes += chromatin_routes(goal)
+        routes += chromatin_routes(goal, result_block.get("chromatin_extra"))
 
     if breadth:
         from .signatures import breadth_key

@@ -19,24 +19,29 @@ usage: promoter-tf-drugs [-h] --gene GENE [--out OUT] [--top TOP]
                          [--gtf GTF] [--has-ptc] [--genome GENOME]
                          [--promoter-fasta PROMOTER_FASTA]
                          [--expression-file EXPRESSION_FILE]
-                         [--lincs-gmt UP_GMT DOWN_GMT] [--lincs-geneinfo TSV]
+                         [--lincs-gmt UP_GMT DOWN_GMT]
+                         [--knockout-gmt GMT [GMT ...]] [--lincs-geneinfo TSV]
                          [--lincs-file LINCS_FILE]
                          [--signature-file SIGNATURE_FILE] [--genetics]
                          [--proliferation {cycling,post-mitotic,mixed,unknown}]
-                         [--upstream-network]
-                         [--upstream-depth UPSTREAM_DEPTH]
+                         [--upstream-network] [--null-shuffles NULL_SHUFFLES]
+                         [--upstream-factors UPSTREAM_FACTORS]
+                         [--upstream-drugs-per-node UPSTREAM_DRUGS_PER_NODE]
+                         [--regulator-measured] [--regulator-steps {1,2}]
+                         [--regulator-route] [--upstream-depth UPSTREAM_DEPTH]
                          [--include-unknown-direction] [--no-mechanisms]
                          [--no-improvements] [--no-outcome] [--screen]
-                         [--tissue {cns}] [--tf-activity]
-                         [--activity-tissue TISSUE] [--docking-results JSON]
-                         [--promoter-dna] [--screen-product]
-                         [--sensitivity-scan] [--prism-file CSV]
-                         [--depmap-file CSV] [--activity-permutations N]
-                         [--tf-weight TF_WEIGHT] [--chip-bed CHIP_BED]
-                         [--chip-api] [--include-investigational]
-                         [--include-non-fda] [--no-dgidb] [--find-analogs]
-                         [--no-opentargets] [--demo] [--offline]
-                         [--cache-dir CACHE_DIR] [--max-requests N]
+                         [--tissue {cns,skin}] [--include-local-only]
+                         [--tf-activity] [--activity-tissue TISSUE]
+                         [--docking-results JSON] [--promoter-dna]
+                         [--screen-product] [--sensitivity-scan]
+                         [--prism-file CSV] [--depmap-file CSV]
+                         [--activity-permutations N] [--tf-weight TF_WEIGHT]
+                         [--chip-bed CHIP_BED] [--chip-api]
+                         [--include-investigational] [--include-non-fda]
+                         [--no-dgidb] [--find-analogs] [--no-opentargets]
+                         [--demo] [--offline] [--cache-dir CACHE_DIR]
+                         [--max-requests N]
                          [--scenario {haploinsufficiency,hypomorph,toxic_gain,null,silenced_allele,modifier}]
                          [--broken-allele-makes {null,truncated,unknown}]
                          [--target-fraction TARGET_FRACTION]
@@ -144,6 +149,15 @@ options:
                         data/lincs_chem_pert_{up,down}.gmt are picked up
                         automatically if present (16 MB + 14 MB) (default:
                         None)
+  --knockout-gmt GMT [GMT ...]
+                        Enrichr libraries of genes that change when a factor
+                        is knocked out (LINCS_L1000_CRISPR_KO_Consensus_Sigs,
+                        TF_Perturbations_Followed_by_Expression). They show
+                        whether your gene responds to each factor, in place of
+                        a fixed placeholder. data/knockout_lincs_crispr_ko.gmt
+                        and data/knockout_tf_perturbations.gmt are picked up
+                        automatically if present (16 MB + 3 MB) (default:
+                        None)
   --lincs-geneinfo TSV  CLUE geneinfo table, which records whether each gene
                         was MEASURED on the L1000 array (978 landmarks) or
                         imputed from those that were. Without it every LINCS
@@ -174,6 +188,35 @@ options:
                         that have no direct pharmacology. Signs propagate, so
                         inhibiting an inhibitor counts as activation (default:
                         False)
+  --null-shuffles NULL_SHUFFLES
+                        shuffled copies of each promoter window scanned to
+                        estimate how many motif sites are chance (default 30,
+                        about half a minute per window). 0 uses a formula that
+                        undercounts on masked promoters (default: 30)
+  --upstream-factors UPSTREAM_FACTORS
+                        how many ranked factors the upstream search covers
+                        (default 8). Only factors with no drug of their own
+                        are searched (default: 8)
+  --upstream-drugs-per-node UPSTREAM_DRUGS_PER_NODE
+                        drugs listed for each upstream node (default 5). Nodes
+                        such as NR3C1 have dozens of approved drugs (default:
+                        5)
+  --regulator-measured  with --regulator-route: for a regulator that ChEMBL's
+                        mechanism table gives no drug for, also list approved
+                        drugs with a measured activity at it (found rifampin
+                        at PXR). The records give no direction and include
+                        many unrelated drugs, so these are leads to test
+                        (default: False)
+  --regulator-steps {1,2}
+                        with --regulator-route: 1 lists drugs at the gene's
+                        own recorded regulators (default); 2 also lists drugs
+                        at the factors that regulate those, which reached more
+                        of the drugs CTD records, at a similar direction rate
+                        (default: 1)
+  --regulator-route     start from the factors CollecTRI and the knockout data
+                        record as regulating the gene, and list the approved
+                        drugs that act on them. Reaches factors the motif scan
+                        did not rank (default: False)
   --upstream-depth UPSTREAM_DEPTH
                         max hops upstream. Each hop costs selectivity; 4 is
                         usually where paths stop being interpretable (default:
@@ -193,8 +236,14 @@ options:
                         receptors to find untested repurposing pairs. Slow
                         (downloads ~4000 structures once) and needs rdkit
                         (default: False)
-  --tissue {cns}        down-weight drugs unlikely to reach this compartment
+  --tissue {cns,skin}   cns down-weights drugs unlikely to reach the brain.
+                        skin keeps drugs approved only for topical use in the
+                        reports, which are hidden for any other target
                         (default: None)
+  --include-local-only  keep drugs approved only for local use (topical, eye,
+                        inhaled and the like) in the reports. They are hidden
+                        unless --tissue skin or an --activity-tissue naming
+                        skin is given (default: False)
   --tf-activity         infer which factors are actually ACTIVE from their
                         targets' expression (VIPER-style), instead of only
                         guessing from motifs. Uses --regulon-file, or
@@ -350,16 +399,22 @@ usage: promoter-tf-drugs.panel [-h] [--genes GENES] [--gene-file GENE_FILE]
                                [--promoter-fasta PROMOTER_FASTA]
                                [--expression-file EXPRESSION_FILE]
                                [--lincs-gmt UP_GMT DOWN_GMT]
+                               [--knockout-gmt GMT [GMT ...]]
                                [--lincs-geneinfo TSV]
                                [--lincs-file LINCS_FILE]
                                [--signature-file SIGNATURE_FILE] [--genetics]
                                [--proliferation {cycling,post-mitotic,mixed,unknown}]
                                [--upstream-network]
+                               [--null-shuffles NULL_SHUFFLES]
+                               [--upstream-factors UPSTREAM_FACTORS]
+                               [--upstream-drugs-per-node UPSTREAM_DRUGS_PER_NODE]
+                               [--regulator-measured]
+                               [--regulator-steps {1,2}] [--regulator-route]
                                [--upstream-depth UPSTREAM_DEPTH]
                                [--include-unknown-direction] [--no-mechanisms]
                                [--no-improvements] [--no-outcome] [--screen]
-                               [--tissue {cns}] [--tf-activity]
-                               [--activity-tissue TISSUE]
+                               [--tissue {cns,skin}] [--include-local-only]
+                               [--tf-activity] [--activity-tissue TISSUE]
                                [--docking-results JSON] [--promoter-dna]
                                [--screen-product] [--sensitivity-scan]
                                [--prism-file CSV] [--depmap-file CSV]
@@ -508,6 +563,14 @@ options:
                         SigCom, which returns HTTP 500 for days at a time.
                         data/lincs_chem_pert_{up,down}.gmt are picked up
                         automatically if present (16 MB + 14 MB)
+  --knockout-gmt GMT [GMT ...]
+                        Enrichr libraries of genes that change when a factor
+                        is knocked out (LINCS_L1000_CRISPR_KO_Consensus_Sigs,
+                        TF_Perturbations_Followed_by_Expression). They show
+                        whether your gene responds to each factor, in place of
+                        a fixed placeholder. data/knockout_lincs_crispr_ko.gmt
+                        and data/knockout_tf_perturbations.gmt are picked up
+                        automatically if present (16 MB + 3 MB)
   --lincs-geneinfo TSV  CLUE geneinfo table, which records whether each gene
                         was MEASURED on the L1000 array (978 landmarks) or
                         imputed from those that were. Without it every LINCS
@@ -535,6 +598,32 @@ options:
                         to find druggable kinases/receptors controlling TFs
                         that have no direct pharmacology. Signs propagate, so
                         inhibiting an inhibitor counts as activation
+  --null-shuffles NULL_SHUFFLES
+                        shuffled copies of each promoter window scanned to
+                        estimate how many motif sites are chance (default 30,
+                        about half a minute per window). 0 uses a formula that
+                        undercounts on masked promoters
+  --upstream-factors UPSTREAM_FACTORS
+                        how many ranked factors the upstream search covers
+                        (default 8). Only factors with no drug of their own
+                        are searched
+  --upstream-drugs-per-node UPSTREAM_DRUGS_PER_NODE
+                        drugs listed for each upstream node (default 5). Nodes
+                        such as NR3C1 have dozens of approved drugs
+  --regulator-measured  with --regulator-route: for a regulator that ChEMBL's
+                        mechanism table gives no drug for, also list approved
+                        drugs with a measured activity at it (found rifampin
+                        at PXR). The records give no direction and include
+                        many unrelated drugs, so these are leads to test
+  --regulator-steps {1,2}
+                        with --regulator-route: 1 lists drugs at the gene's
+                        own recorded regulators (default); 2 also lists drugs
+                        at the factors that regulate those, which reached more
+                        of the drugs CTD records, at a similar direction rate
+  --regulator-route     start from the factors CollecTRI and the knockout data
+                        record as regulating the gene, and list the approved
+                        drugs that act on them. Reaches factors the motif scan
+                        did not rank
   --upstream-depth UPSTREAM_DEPTH
                         max hops upstream. Each hop costs selectivity; 4 is
                         usually where paths stop being interpretable
@@ -551,7 +640,13 @@ options:
   --screen              virtual-screen ALL approved drugs against the top
                         receptors to find untested repurposing pairs. Slow
                         (downloads ~4000 structures once) and needs rdkit
-  --tissue {cns}        down-weight drugs unlikely to reach this compartment
+  --tissue {cns,skin}   cns down-weights drugs unlikely to reach the brain.
+                        skin keeps drugs approved only for topical use in the
+                        reports, which are hidden for any other target
+  --include-local-only  keep drugs approved only for local use (topical, eye,
+                        inhaled and the like) in the reports. They are hidden
+                        unless --tissue skin or an --activity-tissue naming
+                        skin is given
   --tf-activity         infer which factors are actually ACTIVE from their
                         targets' expression (VIPER-style), instead of only
                         guessing from motifs. Uses --regulon-file, or

@@ -199,8 +199,11 @@ def test_the_index_maps_gene_symbols_to_approved_drugs():
                _lf_target("TFAM", "XYZ", kind="PROTEIN FAMILY")]
     client = _LfChembl(mechs, targets)
     idx = drugs_mod.approved_target_index(client, _lf_library(4))
-    assert sorted(idx) == ["ABC1", "ESR1"], (
-        "human single proteins only, by GENE_SYMBOL, upper-cased")
+    assert sorted(idx) == ["ABC1", "ESR1", "XYZ"], (
+        "human targets only, by GENE_SYMBOL, upper-cased; a family counts")
+    assert idx["XYZ"][0].target_type == "PROTEIN FAMILY"
+    assert idx["XYZ"][0].source.endswith("family target)")
+    assert idx["ESR1"][0].target_type is None
     assert len(idx["ESR1"]) == 2, "the repeated mechanism is listed once"
     esr1 = {d.name: d for d in idx["ESR1"]}
     assert sorted(esr1) == ["Drug 0", "Drug 1"]
@@ -297,6 +300,9 @@ def _lf_offline_run(tmp_path, monkeypatch, *, edges, library, index=None,
 
     rng = random.Random(1)
     seq = "".join(rng.choice("ACGT") for _ in range(6000))
+    # A twelve-base site inside the scanned window. A four-base matrix cannot
+    # reach the scan's p-value, and the scan now leaves such matrices out.
+    seq = seq[:1800] + "ACGTACGTACGT" + seq[1812:]
     fa = tmp_path / "g.fa"
     fa.write_text(">chr1" + NL + NL.join(seq[i:i + 60]
                                          for i in range(0, 6000, 60)) + NL,
@@ -313,8 +319,11 @@ def _lf_offline_run(tmp_path, monkeypatch, *, edges, library, index=None,
                   'tag "Ensembl_canonical";'])]) + NL, encoding="utf-8")
     pfm = tmp_path / "m.txt"
     pfm.write_text(NL.join([
-        ">MA0001.1" + TAB + "TEST", "A [ 20 0 0 0 ]", "C [ 0 20 0 0 ]",
-        "G [ 0 0 20 0 ]", "T [ 0 0 0 20 ]"]) + NL, encoding="utf-8")
+        ">MA0001.1" + TAB + "TEST",
+        "A [ 20 0 0 0 20 0 0 0 20 0 0 0 ]",
+        "C [ 0 20 0 0 0 20 0 0 0 20 0 0 ]",
+        "G [ 0 0 20 0 0 0 20 0 0 0 20 0 ]",
+        "T [ 0 0 0 20 0 0 0 20 0 0 0 20 ]"]) + NL, encoding="utf-8")
     res = pipeline.run("TESTG", gtf=str(gtf), genome=str(fa),
                        pfm_file=str(pfm), offline=True, goal="down",
                        upstream_network=True, include_direct=False,
@@ -444,3 +453,167 @@ def test_a_finished_promoter_dna_scan_with_no_candidate_is_not_a_failure(
         ledger_row="promoter_dna", promoter_dna=True)
     assert row["ok"] is True and row["yielded"] == 0
     assert "no sequence feature beat the shuffled null" in row["detail"]
+
+
+def test_a_family_target_lists_its_drug_at_every_member_and_says_so():
+    """Aspirin is recorded at cyclooxygenase, which is PTGS1 and PTGS2. With
+    families left out it could never be found at either."""
+    mechs = [{"molecule_chembl_id": "CHEMBL1", "target_chembl_id": "TCOX",
+              "action_type": "INHIBITOR"},
+             {"molecule_chembl_id": "CHEMBL2", "target_chembl_id": "TDRD",
+              "action_type": "ANTAGONIST"}]
+    cox = _lf_target("TCOX", "PTGS1", kind="PROTEIN FAMILY")
+    cox["target_components"].append({"target_component_synonyms": [
+        {"syn_type": "GENE_SYMBOL", "component_synonym": "PTGS2"}]})
+    idx = drugs_mod.approved_target_index(
+        _LfChembl(mechs, [cox, _lf_target("TDRD", "DRD2")]), _lf_library(4))
+    assert sorted(idx) == ["DRD2", "PTGS1", "PTGS2"]
+    for sym in ("PTGS1", "PTGS2"):
+        d = idx[sym][0]
+        assert d.name == "Drug 1" and d.direction == "down"
+        assert d.target_type == "PROTEIN FAMILY"
+        assert "family target" in d.source
+    assert idx["DRD2"][0].target_type is None
+
+
+class _PerGene:
+    """Serves one family target and one mechanism to `chembl_drugs`."""
+
+    def get(self, url, params=None, **kw):
+        if url.endswith("/target/search") or url.endswith("/target"):
+            return {"targets": [{
+                "target_chembl_id": "TCOX", "organism": "Homo sapiens",
+                "target_type": "PROTEIN FAMILY",
+                "target_components": [{"accession": "P35354",
+                                       "target_component_synonyms": [
+                                           {"syn_type": "GENE_SYMBOL",
+                                            "component_synonym": "PTGS2"}]}]},
+                {"target_chembl_id": "TOTHER", "organism": "Homo sapiens",
+                 "target_type": "PROTEIN-PROTEIN INTERACTION",
+                 "target_components": [{"accession": "P35354",
+                                        "target_component_synonyms": [
+                                            {"syn_type": "GENE_SYMBOL",
+                                             "component_synonym": "PTGS2"}]}]}]}
+        if url.endswith("/mechanism"):
+            return {"mechanisms": [{"molecule_chembl_id": "CHEMBL25",
+                                    "action_type": "INHIBITOR",
+                                    "mechanism_of_action": "COX inhibitor"}]}
+        if url.endswith("/molecule"):
+            return {"molecules": [{"molecule_chembl_id": "CHEMBL25",
+                                   "pref_name": "ASPIRIN", "max_phase": 4}]}
+        raise AssertionError(url)
+
+
+def test_the_per_gene_lookup_also_finds_a_drug_at_a_family_and_marks_it():
+    got = drugs_mod.chembl_drugs(_PerGene(), "PTGS2", "P35354")
+    assert [d.name for d in got] == ["Aspirin"]
+    assert got[0].target_type == "PROTEIN FAMILY" and got[0].direction == "down"
+    assert got[0].target_chembl_id == "TCOX"
+
+
+# ------------------------------------- the route that starts at regulators
+def _regulator_run(tmp_path, monkeypatch, *, tables, index, flag=True,
+                   **kw):
+    from promoter_tf_drugs import tfactivity
+    monkeypatch.setattr(tfactivity, "autoload_regulons",
+                        lambda *a, **k: (tables, "collectri.tsv"))
+    return _lf_offline_run(
+        tmp_path, monkeypatch, edges=[],
+        library=[{"chembl_id": "C1", "name": "x"}], index=index,
+        ledger_row="regulators", regulator_route=flag,
+        knockout_gmt=("no_such_file.gmt",), **kw)
+
+
+def test_a_run_lists_the_drugs_at_a_recorded_regulator_of_the_gene(
+        tmp_path, monkeypatch):
+    # TESTG is lowered (goal "down"), and REGX raises it, so REGX is blocked.
+    index = {"REGX": [_lf_drug("Agonist", "REGX", "up"),
+                      _lf_drug("Blocker", "REGX", "down")]}
+    block, row = _regulator_run(
+        tmp_path, monkeypatch, tables={"REGX": {"TESTG": 1}}, index=index)
+    assert row["ok"] is True and row["yielded"] == 1
+    assert "1 recorded regulator(s)" in row["detail"]
+    assert [d["name"] for d in block["regulators"]["REGX"]["drugs"]] == [
+        "Blocker"]
+    routes = [r for r in block["all_routes"]["routes"]
+              if r["category"] == "TF: known regulator"]
+    assert [(r["drug"], r["acts_on"], r["tier"]) for r in routes] == [
+        ("Blocker", "REGX", 4)]
+
+
+def test_without_the_flag_no_regulator_route_is_built_or_recorded(
+        tmp_path, monkeypatch):
+    res, rows = _regulator_run(
+        tmp_path, monkeypatch, tables={"REGX": {"TESTG": 1}},
+        index={"REGX": [_lf_drug("Blocker", "REGX", "down")]},
+        flag=False, full=True)
+    assert "regulators" not in rows
+    assert res["results"][0]["regulators"] == {}
+
+
+def test_a_missing_regulon_table_is_reported_not_read_as_none_found(
+        tmp_path, monkeypatch):
+    _, row = _regulator_run(tmp_path, monkeypatch, tables={}, index={})
+    assert row["ok"] is False
+    assert "no signed regulon table" in row["detail"]
+
+
+def test_a_failed_drug_index_is_reported_for_the_regulator_route_too(
+        tmp_path, monkeypatch):
+    _, row = _regulator_run(
+        tmp_path, monkeypatch, tables={"REGX": {"TESTG": 1}}, index=None,
+        index_error="ChEMBL 500", chembl=lambda *a, **k: [])
+    assert row["ok"] is False
+    assert "index could not be built" in row["detail"]
+
+
+def test_the_regulator_route_says_why_it_cannot_run_with_investigational_drugs(
+        tmp_path, monkeypatch):
+    _, row = _regulator_run(
+        tmp_path, monkeypatch, tables={"REGX": {"TESTG": 1}}, index={},
+        approved_only=False, fda_only=False, include_local_only=True)
+    assert row["ok"] is False
+    assert "investigational" in row["detail"]
+
+
+# ------------------------------------------- the limits are options now
+def test_the_drugs_listed_per_node_follow_the_option_and_default_to_five():
+    edges = [net.Edge("NODE", "TFX", 1, 2, "test")]
+    index = {"NODE": [_lf_drug(f"Drug{i}", "NODE", "up") for i in range(9)]}
+    default = net.find_druggable_upstream(None, "TFX", goal="up",
+                                          tf_role="activator", edges=edges,
+                                          drug_index=index)
+    assert len(default.hits[0].drugs) == net.UPSTREAM_DRUGS_PER_NODE == 5
+    wide = net.find_druggable_upstream(None, "TFX", goal="up",
+                                       tf_role="activator", edges=edges,
+                                       drug_index=index, drugs_per_node=9)
+    assert len(wide.hits[0].drugs) == 9
+    narrow = net.find_druggable_upstream(None, "TFX", goal="up",
+                                         tf_role="activator", edges=edges,
+                                         drug_index=index, drugs_per_node=1)
+    assert [d["name"] for d in narrow.hits[0].drugs] == ["Drug0"]
+
+
+def test_the_run_and_the_command_line_agree_on_the_limits():
+    import inspect
+    from promoter_tf_drugs import cli, pipeline
+    sig = inspect.signature(pipeline.run).parameters
+    assert sig["upstream_factors"].default == net.UPSTREAM_FACTORS == 8
+    assert sig["upstream_drugs_per_node"].default == 5
+    args = cli.build_parser().parse_args(
+        ["--gene", "X", "--upstream-factors", "20",
+         "--upstream-drugs-per-node", "12"])
+    kw = cli.run_kwargs_from_args(args)
+    assert kw["upstream_factors"] == 20 and kw["upstream_drugs_per_node"] == 12
+    default = cli.run_kwargs_from_args(
+        cli.build_parser().parse_args(["--gene", "X"]))
+    assert default["upstream_factors"] == 8
+    assert default["upstream_drugs_per_node"] == 5
+
+
+def test_a_limit_below_one_is_refused_before_the_run_starts():
+    import pytest
+    from promoter_tf_drugs import pipeline
+    for bad in ({"upstream_factors": 0}, {"upstream_drugs_per_node": 0}):
+        with pytest.raises(Exception):
+            pipeline.run("DEMOGENE", demo=True, **bad)
