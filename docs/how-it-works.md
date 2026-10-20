@@ -48,7 +48,11 @@ is not scanned, because every hit it gave would be a chance match at a higher
 rate than stated. Overlapping calls are collapsed. The run reports how many
 calls to expect by chance for that window by scanning 30 shuffled copies of it,
 which keep the repeat mask and every two-base count. At these thresholds many
-calls are noise, and the report says what share.
+calls are noise, and the report says what share. When the requested window shows no
+signal above chance, the same transcript is rescanned at 5,000 bases before the start
+and 1,000 after, and the wider window is kept only if it shows some; the report says
+what was tried either way, and `--no-widen` keeps the requested window. Sites far from
+the start say less about the gene, so a widened scan is more of a lead than a core one.
 
 **3. Say what each factor does.** Gene Ontology annotations decide whether a
 factor is an activator, a repressor, both, or unknown, and a curated list marks

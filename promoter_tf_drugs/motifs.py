@@ -393,7 +393,10 @@ def scan_quality(n_hits: int, n_motifs: int, seq_length: int,
     counts = (null or {}).get("counts") or []
     empirical = len(counts) >= 10
     expected = (sum(counts) / len(counts)) if empirical else formula
-    ratio = n_hits / expected if expected > 0 else float("inf")
+    # No sites is no signal, even when chance gives none either; dividing 0 by
+    # 0 would otherwise read as infinite enrichment.
+    ratio = (n_hits / expected if expected > 0
+             else float("inf") if n_hits > 0 else 0.0)
 
     if ratio < 0.8:
         verdict = "no signal"

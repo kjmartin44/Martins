@@ -207,3 +207,105 @@ def test_a_window_with_unscanned_motifs_says_so_in_the_report():
     res["results"][0]["scan_quality"]["motifs_unreachable"] = 254
     text = report.markdown_report(res)
     assert "254 of those motifs were not scanned" in text
+
+
+# ---------------------------------------- widening a window with no signal
+def _run_with_windows(tmp_path, monkeypatch, *, planted_narrow: bool,
+                      planted_wide: bool, **run_kw):
+    """An offline run whose narrow window does or does not hold the site and
+    whose wide window does or does not."""
+    import dataclasses
+
+    from test_upstream_search import _lf_offline_run
+    from promoter_tf_drugs import genes, pipeline
+    real = genes.get_promoters
+    site = "ACGTACGTACGT"
+    asked = []
+
+    def fake(client, gene, **kw):
+        asked.append((kw["upstream"], kw["downstream"]))
+        wide = kw["upstream"] >= pipeline.WIDE_UPSTREAM
+        base = real(client, gene, **{**kw, "upstream": 500, "downstream": 100})
+        planted = planted_wide if wide else planted_narrow
+        out = []
+        for p in base:
+            # A sequence with no C or G cannot hold the site by chance.
+            seq = ("AT" * len(p.sequence))[:len(p.sequence)]
+            if planted:
+                seq = seq[:60] + site + seq[60 + len(site):]
+            out.append(dataclasses.replace(
+                p, upstream=kw["upstream"], downstream=kw["downstream"],
+                sequence=seq))
+        return out
+    monkeypatch.setattr(pipeline.genes, "get_promoters", fake)
+    block, _ = _lf_offline_run(
+        tmp_path, monkeypatch, edges=[],
+        library=[{"chembl_id": "C1", "name": "x"}], index={},
+        ledger_row="upstream", **run_kw)
+    return block, asked
+
+
+def test_a_window_with_no_signal_is_rescanned_wider_and_kept_if_it_helps(
+        tmp_path, monkeypatch):
+    block, asked = _run_with_windows(tmp_path, monkeypatch,
+                                     planted_narrow=False, planted_wide=True)
+    ww = block["scan_quality"]["window_widened"]
+    assert ww and ww["kept"] is True
+    assert ww["from"] == [500, 100] and ww["to"] == [5000, 1000]
+    assert ww["sites_before"] == 0 and ww["sites_after"] >= 1
+    assert block["scan_quality"]["verdict"] != "no signal"
+    assert [a for a in asked if a[0] >= 5000], "the wide window was asked for"
+
+
+def test_a_wider_window_that_does_not_help_is_not_kept(tmp_path, monkeypatch):
+    block, _ = _run_with_windows(tmp_path, monkeypatch, planted_narrow=False,
+                                 planted_wide=False)
+    ww = block["scan_quality"]["window_widened"]
+    assert ww and ww["kept"] is False
+    assert block["scan_quality"]["verdict"] == "no signal"
+    assert block["promoter"]["upstream"] == 500, "the requested window stays"
+
+
+def test_a_window_with_signal_is_left_alone_and_no_widen_turns_it_off(
+        tmp_path, monkeypatch):
+    block, asked = _run_with_windows(tmp_path, monkeypatch,
+                                     planted_narrow=True, planted_wide=True)
+    assert block["scan_quality"]["window_widened"] is None
+    assert not [a for a in asked if a[0] >= 5000]
+
+
+def test_no_widen_keeps_the_requested_window(tmp_path, monkeypatch):
+    block, asked = _run_with_windows(
+        tmp_path, monkeypatch, planted_narrow=False, planted_wide=True,
+        widen_no_signal=False)
+    assert block["scan_quality"]["window_widened"] is None
+    assert block["scan_quality"]["verdict"] == "no signal"
+    assert not [a for a in asked if a[0] >= 5000]
+
+
+def test_the_option_reaches_the_run_and_the_report_says_what_happened():
+    import inspect
+    from promoter_tf_drugs import cli, pipeline, report
+    assert inspect.signature(pipeline.run).parameters[
+        "widen_no_signal"].default is True
+    kw = cli.run_kwargs_from_args(cli.build_parser().parse_args(
+        ["--gene", "X", "--no-widen"]))
+    assert kw["widen_no_signal"] is False
+    res = pipeline.run("DEMOGENE", demo=True, null_shuffles=0)
+    q = res["results"][0]["scan_quality"]
+    q["window_widened"] = {"from": [1000, 200], "to": [5000, 1000],
+                           "sites_before": 3, "sites_after": 40,
+                           "chance_after": 20.5, "verdict_after": "weak",
+                           "kept": True}
+    text = report.markdown_report(res)
+    assert "The window was widened" in text and "-5000/+1000" in text
+    q["window_widened"]["kept"] = False
+    assert "did not help either" in report.markdown_report(res)
+
+
+def test_a_scan_with_no_sites_is_never_called_enriched():
+    null = {"counts": [0] * 12, "scores": [[] for _ in range(12)],
+            "n_shuffles": 12}
+    assert m.scan_quality(0, 500, 800, 1e-5, null=null)["verdict"] == "no signal"
+    assert m.scan_quality(0, 0, 800, 1e-5)["verdict"] == "no signal"
+    assert m.scan_quality(3, 500, 800, 1e-5, null=null)["verdict"] == "enriched"

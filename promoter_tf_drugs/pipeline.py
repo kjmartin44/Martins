@@ -211,6 +211,10 @@ def score_tf(res: TFResult, has_chip: bool, goal: str = "up") -> float:
     return s
 
 
+# The window a no-signal scan is retried at (bases before and after the start).
+WIDE_UPSTREAM = 5000
+WIDE_DOWNSTREAM = 1000
+
 # ===================================================================== #
 # What run() accepts.                                                   #
 # ===================================================================== #
@@ -309,6 +313,7 @@ RUN_SPECS: dict = {
     "upstream_network": _FLAG,
     "upstream_depth": _V("int", minimum=1,
                          why="how many edges upstream to walk."),
+    "widen_no_signal": _FLAG,
     "null_shuffles": _V("int", minimum=0,
                         why="shuffled copies of each window used to estimate "
                             "how many motif sites are chance; 0 uses the "
@@ -432,6 +437,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         upstream_network: bool = False,
         upstream_depth: int = 3,
         null_shuffles: int = motifs_mod.NULL_SHUFFLES,
+        widen_no_signal: bool = True,
         upstream_factors: int = net_mod.UPSTREAM_FACTORS,
         upstream_drugs_per_node: int = net_mod.UPSTREAM_DRUGS_PER_NODE,
         regulator_route: bool = False,
@@ -617,8 +623,8 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
     _progress.step(2, "motifs loaded",
                    f"{len(motif_set)} at p <= {pvalue:g}; scanning")
 
-    outputs = []
-    for prom in promoters:
+    def _scan_window(prom):
+        """`(hits, quality, scan_info)` for one promoter window."""
         scan_info: dict = {}
         hits = motifs_mod.scan_promoter(
             prom.sequence, motif_set, pvalue=pvalue, min_ic=min_ic,
@@ -645,6 +651,48 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         quality["motifs_loaded"] = len(motif_set)
         quality["motifs_scanned"] = scan_info.get("n_scanned")
         quality["motifs_unreachable"] = scan_info.get("n_unreachable")
+        return hits, quality, scan_info
+
+    outputs = []
+    for prom in promoters:
+        hits, quality, scan_info = _scan_window(prom)
+        # A window with no signal says nothing about the gene, and real sites
+        # are often further out. Scanning 5 genes at four window sizes found
+        # 20 to 48 sites above chance at -5000/+1000 where the core window gave
+        # none (ABCD2, CYP24A1), though the chance share did not fall. So when
+        # the requested window shows no signal, the same transcript is
+        # rescanned wider, and the wider window is kept only if it does show
+        # some. What was tried is recorded either way.
+        quality["window_widened"] = None
+        if (widen_no_signal and not demo
+                and quality["verdict"] == "no signal"
+                and (prom.upstream < WIDE_UPSTREAM
+                     or prom.downstream < WIDE_DOWNSTREAM)):
+            _wide = _optional(
+                "wider promoter window",
+                lambda: genes.get_promoters(
+                    client, gene, species=species,
+                    upstream=max(prom.upstream, WIDE_UPSTREAM),
+                    downstream=max(prom.downstream, WIDE_DOWNSTREAM),
+                    all_tss=all_tss, mask="soft" if mask_repeats else None),
+                None)
+            _match = next((w for w in _wide or []
+                           if w.transcript_id == prom.transcript_id), None)
+            if _match is not None:
+                _h2, _q2, _i2 = _scan_window(_match)
+                _try = {"from": [prom.upstream, prom.downstream],
+                        "to": [_match.upstream, _match.downstream],
+                        "sites_before": quality["observed"],
+                        "sites_after": _q2["observed"],
+                        "chance_after": _q2["expected_by_chance"],
+                        "verdict_after": _q2["verdict"]}
+                if _q2["verdict"] != "no signal":
+                    _try["kept"] = True
+                    prom, hits, quality, scan_info = _match, _h2, _q2, _i2
+                    quality["window_widened"] = _try
+                else:
+                    _try["kept"] = False
+                    quality["window_widened"] = _try
         log.info("%s: %d non-redundant sites", prom.transcript_id, len(hits))
         if quality["verdict"] == "no signal":
             log.warning("SCAN FOUND NO SIGNAL: %s", quality["advice"])

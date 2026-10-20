@@ -448,6 +448,8 @@ def test_the_launcher_passes_every_analysis_switch_the_cli_offers():
         "--upstream-factors", "--upstream-drugs-per-node", "--null-shuffles",
         # off on purpose: leads with no direction, see docs/checks.md
         "--regulator-measured",
+        # the opposite of a default the launcher wants
+        "--no-widen",
         "--depmap-file", "--cache-dir", "--max-requests",
         # opposite of a default, or narrows the output
         "--no-mask-repeats", "--include-unknown-direction",

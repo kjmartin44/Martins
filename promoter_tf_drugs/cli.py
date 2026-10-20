@@ -66,6 +66,11 @@ def add_analysis_args(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
                    help="scan repeat-masked (lowercase) sequence too; off by default "
                         "because Alu/simple repeats generate large numbers of "
                         "spurious hits")
+    p.add_argument("--no-widen", action="store_true",
+                   help="do not retry a no-signal promoter scan at -5000/+1000. "
+                        "By default a window with no signal above chance is "
+                        "rescanned wider and the wider one is kept if it shows "
+                        "some")
     p.add_argument("--no-grade", action="store_true",
                    help="skip drug grading (faster; grading costs ~3 ChEMBL calls "
                         "per drug on the first run)")
@@ -472,6 +477,7 @@ _NEGATED_ARGS = {
     "include_non_fda": "fda_only",
     "no_dgidb": "use_dgidb",
     "no_opentargets": "use_opentargets",
+    "no_widen": "widen_no_signal",
 }
 
 

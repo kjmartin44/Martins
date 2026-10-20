@@ -12,7 +12,7 @@ usage: promoter-tf-drugs [-h] --gene GENE [--out OUT] [--top TOP]
                          [--upstream UPSTREAM] [--downstream DOWNSTREAM]
                          [--all-tss] [--pvalue PVALUE] [--min-ic MIN_IC]
                          [--pfm-file PFM_FILE] [--matrix-id MATRIX_IDS]
-                         [--no-mask-repeats] [--no-grade]
+                         [--no-mask-repeats] [--no-widen] [--no-grade]
                          [--predict-direction] [--regulon-file REGULON_FILE]
                          [--no-direct] [--design-modality] [--design-screen]
                          [--no-stabilizers] [--cell-type-check] [--lincs]
@@ -79,6 +79,10 @@ options:
   --no-mask-repeats     scan repeat-masked (lowercase) sequence too; off by
                         default because Alu/simple repeats generate large
                         numbers of spurious hits (default: False)
+  --no-widen            do not retry a no-signal promoter scan at -5000/+1000.
+                        By default a window with no signal above chance is
+                        rescanned wider and the wider one is kept if it shows
+                        some (default: False)
   --no-grade            skip drug grading (faster; grading costs ~3 ChEMBL
                         calls per drug on the first run) (default: False)
   --predict-direction   independently predict agonist vs antagonist from
@@ -389,7 +393,7 @@ usage: promoter-tf-drugs.panel [-h] [--genes GENES] [--gene-file GENE_FILE]
                                [--downstream DOWNSTREAM] [--all-tss]
                                [--pvalue PVALUE] [--min-ic MIN_IC]
                                [--pfm-file PFM_FILE] [--matrix-id MATRIX_IDS]
-                               [--no-mask-repeats] [--no-grade]
+                               [--no-mask-repeats] [--no-widen] [--no-grade]
                                [--predict-direction]
                                [--regulon-file REGULON_FILE] [--no-direct]
                                [--design-modality] [--design-screen]
@@ -501,6 +505,10 @@ options:
   --no-mask-repeats     scan repeat-masked (lowercase) sequence too; off by
                         default because Alu/simple repeats generate large
                         numbers of spurious hits
+  --no-widen            do not retry a no-signal promoter scan at -5000/+1000.
+                        By default a window with no signal above chance is
+                        rescanned wider and the wider one is kept if it shows
+                        some
   --no-grade            skip drug grading (faster; grading costs ~3 ChEMBL
                         calls per drug on the first run)
   --predict-direction   independently predict agonist vs antagonist from

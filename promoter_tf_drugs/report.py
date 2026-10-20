@@ -941,6 +941,25 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                  f"(-{p['upstream']} / +{p['downstream']}, {p['sequence_length']} bp)")
         L.append(f"- Motifs scanned: {q['n_motifs']} at p ≤ {q['pvalue']:g} per position")
         qs = res.get("scan_quality") or {}
+        ww = qs.get("window_widened")
+        if ww:
+            if ww.get("kept"):
+                L.append(
+                    f"- **The window was widened.** The requested window "
+                    f"(-{ww['from'][0]}/+{ww['from'][1]}) showed no signal above "
+                    f"chance ({ww['sites_before']} sites), so it was rescanned at "
+                    f"-{ww['to'][0]}/+{ww['to'][1]}, which gave {ww['sites_after']} "
+                    f"sites against about {ww['chance_after']} expected by chance. "
+                    f"Sites further out say less about this gene than core "
+                    f"promoter sites do. `--no-widen` keeps the requested window.")
+            else:
+                L.append(
+                    f"- The requested window (-{ww['from'][0]}/+{ww['from'][1]}) "
+                    f"showed no signal, and rescanning at "
+                    f"-{ww['to'][0]}/+{ww['to'][1]} did not help either "
+                    f"({ww['sites_after']} sites against about "
+                    f"{ww['chance_after']} by chance), so the requested window "
+                    f"was kept.")
         if qs.get("motifs_unreachable"):
             L.append(
                 f"- {qs['motifs_unreachable']} of those motifs were not "

@@ -936,6 +936,14 @@ requested p-value in the window, and each strand has its own threshold, so a rer
 a gene lists fewer sites than before and its factor ranking can change. See
 [checks](checks.md#the-motif-scans-chance-estimate).
 
+`scan_quality.window_widened` is `None` unless the requested window showed no signal.
+Then it holds `from` and `to` (bases before and after the start), `sites_before`,
+`sites_after`, `chance_after`, `verdict_after` and `kept`. When `kept` is true the block's
+`promoter` and every site describe the wider window, not the one in `query`. `query` records
+`widen_no_signal`. **Compatibility:** this is on by default, so a gene whose default scan
+showed no signal now reports a wider window and different sites and factors than an earlier
+run did.
+
 `improvements.reported_links` is built from CTD sentences and not from the action
 list, so a new run has fewer chemicals and some different directions. A chemical that
 modulates another's effect is a known link with no direction. See
