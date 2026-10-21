@@ -458,8 +458,11 @@ def test_the_launcher_passes_every_analysis_switch_the_cli_offers():
         "--no-mask-repeats", "--include-unknown-direction",
         "--include-local-only", "--include-investigational",
         "--include-non-fda", "--no-dgidb", "--no-opentargets", "--quiet",
-        # about the run's mode, or about a particular gene
+        # about the run's mode, or about a particular gene or patient
         "--demo", "--offline", "--has-ptc", "--help",
+        # a declaration about the patient, like --has-ptc: the launcher
+        # cannot know it, and defaulting it either way would be a claim
+        "--avoid-genotoxic",
     }
     missing = []
     for a in cli.build_parser()._actions:

@@ -1,13 +1,17 @@
 # Documentation
 
-promoter-tf-drugs builds candidate routes from a gene's promoter to transcription
-factors and drugs. Start with the synthetic demo, then run a gene with explicit
-inputs and inspect the evidence behind each route.
+promoter-tf-drugs collects candidate ways to move one gene's expression and
+ranks them by the strength of the evidence behind each. The routes are
+independent: the gene's own product, its recorded regulators, compounds
+measured to move it, its promoter's predicted binding sites, and others.
+Start with the synthetic demo, then run a gene with explicit inputs and
+inspect the evidence behind each route.
 
 - [How the pipeline works](how-it-works.md): one run from the question to the
   output files, and every database it reads and why.
-- [Pipeline overview](pipeline.mmd): the six steps of a run, as a short Mermaid
-  flowchart. [The detailed flowchart](pipeline_detail.mmd) shows the branches.
+- [Pipeline overview](pipeline.mmd): the seven steps of a run, as a short
+  Mermaid flowchart. [The detailed flowchart](pipeline_detail.mmd) shows the
+  branches, the shuffled-sequence null and the four collateral axes.
 - [A full workup](workflow.md): the five steps, end to end, with the
   commands and what would make you stop at each one.
 - [Installation](installation.md): environments, extras, and Windows launchers.

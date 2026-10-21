@@ -14,9 +14,11 @@ test one? The output is a ranked list of hypotheses with the evidence behind
 each. A drug in the list is not shown to work, and a run that finishes does not
 validate anything.
 
-You also say what is wrong with the gene, if you know. The launcher offers six
-dosage scenarios: haploinsufficiency (one copy lost), hypomorph (both copies
-weak), toxic gain, null, silenced allele, and modifier (no mutation). The
+You also say what is wrong with the gene, if you know. There are seven
+dosage scenarios: haploinsufficiency (one copy lost, the other intact),
+biallelic hypomorph (one copy weak, the other dead - the recessive
+arrangement), hypomorph (both copies weak), toxic gain, null, silenced
+allele, and modifier (no mutation). The
 scenario fixes how far and which way the gene has to move, so the ranking can be
 read against a requirement. The package reads no variant, so this is declared by
 you and never inferred.
@@ -97,7 +99,7 @@ to the factor route, among them the upstream network, the known regulators and t
 CTD literature record. Most produce routes that go into the same ranked list;
 three (genetics, CTD and the dosage constraint) produce evidence that is
 attached to the list instead, and the designed modalities produce a separate
-section. [The next section](#the-other-routes-in-detail) takes each in turn.
+section. [The next section](#the-routes-in-detail) takes each in turn.
 
 **9. Put every route on one scale.** The catalogue gives each route a tier, which
 says what kind of claim it is: 1 clinical, 2 measured, 3 curated, 4 predicted, 5
@@ -140,7 +142,7 @@ keeps every route, and each report says how many entries were left out. With no
 Orange Book on disk the filter is not applied and the report says so. Run with
 `--include-non-fda` to show everything.
 
-## The other routes in detail
+## The routes in detail
 
 Each search below asks a different question, reads different data, and enters
 the ranked list in a different way. The list puts every route on one scale
@@ -148,9 +150,21 @@ the ranked list in a different way. The list puts every route on one scale
 efficiency), and a distance from the gene. This table says where each search
 lands.
 
+The promoter motif route is in the table with the rest, and not above it.
+The package is named after that route because it was written first, which is
+a fact about the history and not a ranking. It is the only route whose
+factor-to-gene step is a sequence resemblance rather than a record of
+anything, so it is the one most weakened by a noisy scan, and above a false
+discovery proportion of 25% its tiers are capped (see
+[methods](methods.md#gates-that-demote-a-route)). The routes that rest on a
+measurement of the gene itself - the CTD record, the LINCS signature, the
+PRISM phenocopy - are stronger evidence about the gene, though weaker about
+mechanism.
+
 | Search | Category in the list | Tier | Strength is | Distance |
 |---|---|---|---|---|
 | Drugs on the gene's own protein or transcript | direct: gene product, or gene or transcript | 1 if approved, else 3 | 0.85 if it raises the protein, 0.55 if only activity | 0 |
+| Promoter motif scan, then drugs at the factors it finds | TF: orthosteric ligand, and the other TF categories | 2 with measured binding at the factor, else 3; capped at 3 when the scan is noisy | potency, action and factor confidence | 1 |
 | Upstream network | upstream signalling | 4 | confidence of the best path | 1 plus the hops |
 | CTD literature record | literature: reported effect | 4 | 0.5 for two or more papers, 0.35 for one | 2 |
 | Known regulators (`--regulator-route`) | TF: known regulator | 4, or 3 for a direct regulator that CollecTRI and the knockout data both name with the same sign | 0.5 for a CollecTRI edge, 0.6 with knockout support, 0.35 from knockout data alone | 1 |

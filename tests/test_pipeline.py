@@ -3637,7 +3637,7 @@ def test_collapse_keeps_the_winner_and_names_the_alternates():
     assert "Liothyronine Sodium" not in names      # collapsed away
     assert "Liothyronine" in names                  # winner survives
     assert "Calcitriol" in names                    # untouched
-    assert info["Liothyronine"] == ["Liothyronine Sodium"]
+    assert info[("Liothyronine", "THRB")] == ["Liothyronine Sodium"]
 
 
 def test_same_drug_at_two_tfs_stays_two_routes():
@@ -9841,7 +9841,6 @@ def test_no_public_function_accepts_a_parameter_it_never_reads():
     allowed = {("report.py", "_drug_glossary", "res"),
                ("screens.py", "crispra_plan", "promoter"),
                ("discovery.py", "axes_from_grade", "tf_result"),
-               ("congeners.py", "collapse_grades", "set_name"),
                ("depmap.py", "_verdict", "mean"),
                ("evidence.py", "annotate_hits_with_chip", "hits")}
     bad = []
@@ -13015,6 +13014,37 @@ def test_the_library_call_still_degrades_rather_than_raising():
     assert "activity-tissue" in sources["tf_activity"]["detail"]
     # The rest of the run still happened.
     assert res["results"], "the run should still produce blocks"
+
+
+def test_tf_activity_that_works_does_not_change_the_factor_count(
+        monkeypatch):
+    """Every other --tf-activity test checks a REFUSAL. Nothing ran it to
+    success, which is how `n_tfs` came to report the size of the regulon
+    table - hundreds of factors - instead of the factors with a site in
+    this promoter window.
+    """
+    from promoter_tf_drugs import pipeline as pl
+    from promoter_tf_drugs import tfactivity as tfa
+
+    # More testable factors than the window can possibly contain, which is
+    # the realistic case: a regulon table covers the genome.
+    acts = [tfa.TFActivity(tf=f"FAKETF{i}", nes=1.0, p_value=0.001,
+                           q_value=0.01, direction="activated")
+            for i in range(400)]
+    monkeypatch.setattr(tfa, "tissue_activity",
+                        lambda *a, **k: acts)
+    monkeypatch.setattr(tfa, "autoload_regulons",
+                        lambda: ({f"FAKETF{i}": {"G": 1} for i in range(400)},
+                                 "fake.tsv"))
+
+    res = pl.run("DEMOGENE", demo=True, tf_activity=True,
+                 activity_tissue="liver")
+    block = res["results"][0]
+    assert block["tf_activity"]["n_testable"] == 400, "the step did run"
+    assert block["n_tfs"] == len(block["tfs"]), (
+        "n_tfs must count the factors with a site in this window, not the "
+        "factors testable in the tissue")
+    assert block["n_tfs"] < 400
 
 
 def test_a_flag_that_would_do_nothing_is_refused_too():

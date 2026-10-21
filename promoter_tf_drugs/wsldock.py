@@ -57,6 +57,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shlex
 import shutil
 import subprocess
 from pathlib import Path, PureWindowsPath
@@ -279,11 +280,18 @@ def dock_script(binary: str, args: list) -> str:
 
     Built here so no caller has to know about LD_LIBRARY_PATH, and so a
     machine with a real CUDA toolkit simply gets no prefix.
+
+    Every word is quoted for the shell. Joining them raw split any path
+    holding a space - `/mnt/c/Users/Ada Lovelace/rec.pdb` arrived as two
+    arguments - and the binary then exited non-zero, which the caller
+    records as a compound that did not score. A whole screen came back
+    empty rather than broken, for a username.
     """
     libdir = library_path()
-    prefix = (f'export LD_LIBRARY_PATH="{libdir}:$LD_LIBRARY_PATH"\n'
-              if libdir else "")
-    return prefix + " ".join([binary] + [str(a) for a in args]) + "\n"
+    prefix = (f'export LD_LIBRARY_PATH={shlex.quote(f"{libdir}:")}'
+              f'"$LD_LIBRARY_PATH"\n' if libdir else "")
+    return prefix + " ".join(
+        shlex.quote(str(a)) for a in [binary] + list(args)) + "\n"
 
 
 def reset_cache() -> None:

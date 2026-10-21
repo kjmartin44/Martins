@@ -1,4 +1,4 @@
-"""Orchestration: gene -> promoter -> motifs -> activators -> approved drugs."""
+"""Orchestration: run every route for one gene and rank what they return."""
 
 from __future__ import annotations
 
@@ -40,6 +40,7 @@ from . import constraint as con_mod
 from .http import Client
 
 from . import poisonexon
+from . import proliferation as prolif_mod
 from . import standard_of_care as soc_mod
 
 log = logging.getLogger(__name__)
@@ -346,6 +347,7 @@ RUN_SPECS: dict = {
                  why="information content floor for a motif."),
     "scenario": _V("str", optional=True,
                    choices=("haploinsufficiency", "hypomorph",
+                            "biallelic_hypomorph",
                             "toxic_gain", "null", "silenced_allele",
                             "modifier"),
                    why="the shape of the dosage problem. It fixes what "
@@ -367,6 +369,11 @@ RUN_SPECS: dict = {
     "condition": _V("str", optional=True,
                     why="the condition being treated, for a gene with no "
                         "mutation in it."),
+    "avoid_genotoxic": _V("bool", optional=True,
+                          why="the patient already has chromosomal "
+                              "instability or is cancer-predisposed, so a "
+                              "compound that works by damaging DNA or the "
+                              "spindle causes the defect being treated."),
 }
 
 
@@ -456,7 +463,8 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         scenario: str | None = None,
         broken_allele_makes: str = "unknown",
         target_fraction: float = 0.5,
-        condition: str | None = None) -> dict:
+        condition: str | None = None,
+        avoid_genotoxic: bool = False) -> dict:
     """Run the full pipeline and return a JSON-serialisable result dict."""
     # locals() here is exactly the arguments, before anything else is
     # bound. Every one is checked against RUN_SPECS, so an annotation
@@ -657,7 +665,14 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         return hits, quality, scan_info
 
     outputs = []
-    for prom in promoters:
+
+    def _analyse_promoter(prom) -> dict:
+        """Everything this run has to say about one promoter window.
+
+        A function rather than a loop body so its names are its own.
+        It reads the run-level values above it - the client, the
+        ledger, the shared screen cache - and rebinds none of them.
+        """
         hits, quality, scan_info = _scan_window(prom)
         # A window with no signal says nothing about the gene, and real sites
         # are often further out. Scanning 5 genes at four window sizes found
@@ -855,7 +870,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             # chain, discovery — inherits one row per active moiety.
             grades, collapsed = cong_mod.collapse_grades(grades)
             for g in grades:
-                alts = collapsed.get(g.drug_name)
+                alts = collapsed.get((g.drug_name, g.tf_symbol))
                 if alts:
                     g.notes.append(
                         "same active moiety as " + ", ".join(alts[:4])
@@ -864,6 +879,54 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         _progress.step(6, "drug/factor pairs graded",
                        f"{len(grades)} pair(s)" if grade_drugs
                        else "skipped, --no-grade")
+
+        # ---- 6b. does the drug reach the cells expressing the gene?
+        # Runs HERE, straight after grading, because it is the last
+        # thing that changes a factor's score. Further down - where it
+        # used to be - the stabilisation, ligand-axis, mechanism and
+        # upstream sections had already taken their `ranked[:N]` from
+        # the unpenalised order, so one report showed two different
+        # top lists and a factor absent from the gene's tissue stayed
+        # in half of them.
+        celltype = {}
+        if cell_type_check and not demo:
+            gene_tissues = _optional(
+                "tissue expression lookup",
+                lambda: dlv_mod.tissue_expression(client, prom.gene_symbol),
+                set())
+            expr_status = dlv_mod.expression_source_status()
+            # A gene with no tissues AND a working source is a real result;
+            # with a broken source it is nothing at all.
+            ledger.record("expression", requested=expr_status["requested"],
+                          ok=expr_status["ok"] and bool(gene_tissues),
+                          yielded=len(gene_tissues),
+                          detail=(expr_status["detail"] if not expr_status["ok"] else
+                                  f"{len(gene_tissues)} tissue(s) for "
+                                  f"{prom.gene_symbol}" if gene_tissues else
+                                  f"source available but returned no tissue "
+                                  f"for {prom.gene_symbol} — co-expression "
+                                  f"cannot be checked for any factor"))
+            celltype["gene_tissues"] = sorted(gene_tissues)[:20]
+            # The denominator a tissue count needs to mean anything. None
+            # when no local table was loaded — see tissue_universe_size.
+            celltype["n_tissues_total"] = dlv_mod.tissue_universe_size()
+            celltype["tfs"] = {}
+            for r in ranked[:10]:
+                tf_t = dlv_mod.tissue_expression(client, r.symbol)
+                ov = dlv_mod.expression_overlap(gene_tissues, tf_t)
+                celltype["tfs"][r.symbol] = ov
+                if ov.get("compatible") is False:
+                    r.score = round(r.score * 0.2, 1)
+            ranked.sort(key=lambda r: -r.score)
+
+            celltype["delivery"] = []
+            for g in grades[:20]:
+                a = dlv_mod.assess_delivery(
+                    g.drug_name, compartment=(tissue or "unknown"),
+                    properties=(g.evidence or {}).get("properties"))
+                if a.multiplier != 1.0 or a.notes:
+                    celltype["delivery"].append(a.to_dict())
+
 
         # ------------------------------ 7. propagate to a transcriptional call
         estimates = []
@@ -1192,6 +1255,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         # the knockout data record as regulating this gene, skip those that
         # already have a drug route, and ask what approved drug acts on each.
         regulator_hits: dict = {}
+        regulators_undrugged: list = []
         if regulator_route and not demo:
             _reg_tables = signed_regulons
             if not _reg_tables:
@@ -1247,6 +1311,13 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                             return _bcache[sym]
                     regulator_hits = reg_mod.find_drugs(
                         _regs, goal, _reg_index, binders=_binders)
+                    # The other half of the same walk. These produce no
+                    # route - there is no molecule to give - but they are
+                    # what is actually recorded as running the gene, and
+                    # dropping them left the section listing whatever
+                    # happened to be druggable.
+                    regulators_undrugged = reg_mod.without_drugs(
+                        _regs, goal, _reg_index, binders=_binders)
                     _n_drugs = sum(len(v["drugs"])
                                    for v in regulator_hits.values())
                     ledger.record(
@@ -1256,7 +1327,9 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                                 f"gene had no drug route yet; "
                                 f"{len(regulator_hits)} have an approved "
                                 f"drug that moves them the needed way "
-                                f"({_n_drugs} route(s))"
+                                f"({_n_drugs} route(s)); "
+                                f"{len(regulators_undrugged)} have none, and "
+                                f"are listed rather than dropped"
                                 + (f"; {len(_binder_failed)} measured-activity "
                                    f"lookup(s) failed, which is not a finding "
                                    f"that none exist" if _binder_failed
@@ -1289,46 +1362,6 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                 a = lig_mod.assess(r.symbol, goal=goal)
                 if a["routes"]:
                     ligand_axes[r.symbol] = a
-
-        # ------------- 8c2. does the drug reach the cells expressing the gene?
-        celltype = {}
-        if cell_type_check and not demo:
-            gene_tissues = _optional(
-                "tissue expression lookup",
-                lambda: dlv_mod.tissue_expression(client, prom.gene_symbol),
-                set())
-            expr_status = dlv_mod.expression_source_status()
-            # A gene with no tissues AND a working source is a real result;
-            # with a broken source it is nothing at all.
-            ledger.record("expression", requested=expr_status["requested"],
-                          ok=expr_status["ok"] and bool(gene_tissues),
-                          yielded=len(gene_tissues),
-                          detail=(expr_status["detail"] if not expr_status["ok"] else
-                                  f"{len(gene_tissues)} tissue(s) for "
-                                  f"{prom.gene_symbol}" if gene_tissues else
-                                  f"source available but returned no tissue "
-                                  f"for {prom.gene_symbol} — co-expression "
-                                  f"cannot be checked for any factor"))
-            celltype["gene_tissues"] = sorted(gene_tissues)[:20]
-            # The denominator a tissue count needs to mean anything. None
-            # when no local table was loaded — see tissue_universe_size.
-            celltype["n_tissues_total"] = dlv_mod.tissue_universe_size()
-            celltype["tfs"] = {}
-            for r in ranked[:10]:
-                tf_t = dlv_mod.tissue_expression(client, r.symbol)
-                ov = dlv_mod.expression_overlap(gene_tissues, tf_t)
-                celltype["tfs"][r.symbol] = ov
-                if ov.get("compatible") is False:
-                    r.score = round(r.score * 0.2, 1)
-            ranked.sort(key=lambda r: -r.score)
-
-            celltype["delivery"] = []
-            for g in grades[:20]:
-                a = dlv_mod.assess_delivery(
-                    g.drug_name, compartment=(tissue or "unknown"),
-                    properties=(g.evidence or {}).get("properties"))
-                if a.multiplier != 1.0 or a.notes:
-                    celltype["delivery"].append(a.to_dict())
 
         # ---- how many other genes does each factor control?
         # The collateral question, and the reason a high-scoring route can
@@ -1440,7 +1473,11 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                     permutations=activity_permutations), [])
             scanned = [r.symbol for r in ranked]
             scanned_up = {s.upper() for s in scanned}
-            by_tf = {a.tf.upper(): a for a in acts}
+            # NOT `by_tf`: that name already holds this window's
+            # factors, and reusing it here made the reported `n_tfs`
+            # the size of the regulon table rather than the number of
+            # factors with a site in this promoter.
+            activity_by_tf = {a.tf.upper(): a for a in acts}
 
             activity = {
                 "tissue": activity_tissue,
@@ -1460,7 +1497,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             # moving the score: the activity call is a reference-tissue
             # average and should inform a reader, not overrule a scan.
             for r in ranked:
-                a = by_tf.get(r.symbol.upper())
+                a = activity_by_tf.get(r.symbol.upper())
                 if a is None:
                     r.annotation.setdefault(
                         "activity", "not testable - too few curated targets "
@@ -1854,23 +1891,54 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         }
         _mitotic_gene = (cellcycle.is_mitotic_gene(gene)
                          or cellcycle.is_mitotic_gene(prom.gene_symbol))
+        _fdp = quality.get("false_discovery_proportion")
         all_routes = cat_mod.build(block_for_catalogue, goal=goal,
-                                   mitotic_gene=_mitotic_gene)
+                                   mitotic_gene=_mitotic_gene,
+                                   scan_fdp=_fdp,
+                                   avoid_genotoxic=avoid_genotoxic)
         # Compounds that move a large share of the transcriptome lose score
         # within their tier. The routes are built once to learn which
         # compounds are candidates, and again only if one of them is that
         # broad, so a run with no LINCS files or no broad candidate pays
         # nothing and scores as it always did.
+        # Did the compound move the gene, or move the cell cycle? Asked
+        # only for a gene whose transcript tracks the cycle, because for
+        # any other gene it is not a confound. Measured on the compound's
+        # own signatures; see proliferation.py.
+        _prolif: dict = {}
+        if _mitotic_gene and not demo:
+            _cands = [r.get("drug") for r in
+                      (all_routes.get("routes") or []) if r.get("drug")]
+            _prolif = _optional(
+                "proliferation confound check",
+                lambda: prolif_mod.assess(prom.gene_symbol, _cands,
+                                          direction=goal), {}) or {}
+            _n_tracks = sum(1 for v in _prolif.values()
+                            if v.get("tracks_proliferation"))
+            ledger.record(
+                "proliferation", requested=True, ok=bool(_prolif),
+                yielded=_n_tracks,
+                detail=(f"{len(_prolif)} candidate(s) checked against the "
+                        f"mitotic programme; {_n_tracks} move it along with "
+                        f"the gene" if _prolif else
+                        "no LINCS .gmt on disk, so no candidate could be "
+                        "checked for moving the cell cycle rather than this "
+                        "gene"))
+
         if not demo:
             _b = _optional("LINCS compound breadth",
                            lambda: _compound_breadth([{"all_routes": all_routes}]),
                            {})
             _very = {k: v for k, v in (_b.get("compounds") or {}).items()
                      if v.get("very_broad")}
-            if _very:
+            if _very or any(v.get("tracks_proliferation")
+                            for v in _prolif.values()):
                 all_routes = cat_mod.build(block_for_catalogue, goal=goal,
-                                           breadth=_b["compounds"],
-                                           mitotic_gene=_mitotic_gene)
+                                           breadth=_b.get("compounds"),
+                                           mitotic_gene=_mitotic_gene,
+                                           scan_fdp=_fdp,
+                                           proliferation=_prolif,
+                                           avoid_genotoxic=avoid_genotoxic)
 
         # Where a factor has both a dock and a ligand screen, intersect
         # them. The two share no input - one reads pocket shape, the other
@@ -1895,7 +1963,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             ledger.record("screen", requested=True, ok=_ok,
                           yielded=len(screens), detail=_detail)
 
-        outputs.append({
+        return {
             "promoter": prom.to_dict(),
             "sequence": prom.sequence,
             "n_sites": len(hits),
@@ -1924,6 +1992,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             "upstream": upstream_hits,
             "upstream_search": upstream_search,
             "regulators": regulator_hits,
+            "regulators_without_drugs": regulators_undrugged,
             "stabilisation": stabilisation,
             "ligand_axes": ligand_axes,
             "cell_type": celltype,
@@ -1939,13 +2008,17 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             "sensitivity": sensitivity,
             "product_screen": product_screen,
             "promoter_dna": promoter_dna_scan,
+            "proliferation": _prolif,
             "modality_design": modality,
             "screen_plan": screen_plan,
             "lincs": lincs,
             "genetics": genetic,
             "screens": screens,
             "hits": [vars(h) for h in hits],
-        })
+        }
+
+    for prom in promoters:
+        outputs.append(_analyse_promoter(prom))
 
     # How much the --all-tss windows duplicate each other. CCR5's two
     # overlapped by 4275 of 6000 bp, so they were largely one analysis
@@ -1983,6 +2056,18 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                     broken_allele_makes=broken_allele_makes)}
 
     _dosage = _optional("dosage constraint", _assess_dosage, None)
+
+    # The declared scenario against the measured constraint. Both are now
+    # in hand, which is the earliest this can be asked: `goal_conflict`
+    # runs before the analysis because it needs only two arguments, and
+    # this needs a table that is read during it.
+    if _requirement is not None and _dosage:
+        _clash = mag_mod.constraint_conflict(
+            scenario, _dosage.get("pli"), _dosage.get("loeuf"))
+        if _clash:
+            _requirement["constraint_conflict"] = _clash
+            log.warning("declared scenario %r sits badly with pLI %s",
+                        scenario, _dosage.get("pli"))
 
     _compound_breadth_info = ({} if demo else _optional(
         "LINCS compound breadth", lambda: _compound_breadth(outputs), {}))

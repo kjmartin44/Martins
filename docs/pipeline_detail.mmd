@@ -1,17 +1,20 @@
 %% The same run in more detail. The short version is pipeline.mmd. Source of truth: docs/how-it-works.md.
 flowchart TD
-    START["Choose a gene<br/>and a direction"] --> PROM["Find its promoter"]
+    START["Choose a gene, a direction,<br/>and the shape of the dosage problem"] --> PROM["Find its promoter"]
     PROM --> SCAN["Scan for spots where<br/>regulating proteins could bind"]
-    SCAN --> Q{"Anything<br/>stands out?"}
+    SCAN --> NULL["Shuffle the same window<br/>to see how many spots<br/>chance alone would give"]
+    NULL --> Q{"Anything<br/>stands out?"}
     Q -- no --> WIDE["Search a wider stretch"] --> CHECK
-    Q -- yes --> CHECK["Say what each protein does<br/>and whether it is really there"]
+    Q -- yes --> CHECK["Say what each protein does,<br/>whether it is really there,<br/>and whether it is active"]
     CHECK --> DRUGS["Find approved drugs that<br/>push those proteins the right way"]
 
     START --> OTHER["Try other routes<br/>drugs on the gene itself<br/>on proteins further upstream<br/>on known regulators<br/>reported in the literature<br/>measured to move the gene"]
 
-    DRUGS --> RANK["Rank every route by<br/>how strong its evidence is"]
-    OTHER --> RANK
+    DRUGS --> NARROW["Weigh the collateral<br/>how many genes the factor runs<br/>how body-wide the factor is<br/>how many systems the drug moves<br/>whether a selective ligand can exist"]
+    OTHER --> NARROW
+    NARROW --> RANK["Rank every route by<br/>how strong its evidence is"]
     CONTEXT["Context only<br/>genetic support, safe dose range"] -.-> RANK
+    LEDGER["Which lookups actually answered"] -.-> RANK
 
     RANK --> REPORT["Write up<br/>show approved drugs<br/>say what ran and what failed<br/>save everything"]
     REPORT --> TEST["Test it<br/>compare with what is already known"]

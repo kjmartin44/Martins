@@ -1,7 +1,7 @@
 [project]
 name = "promoter-tf-drugs"
 version = "0.1.0"
-description = "Gene promoter -> activating TF -> approved drug repurposing pipeline"
+description = "Ranks approved drugs that might raise or lower one gene, from several independent kinds of evidence"
 readme = "README.md"
 license = {text = "CC-BY-4.0"}
 requires-python = ">=3.10"

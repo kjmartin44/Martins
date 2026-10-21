@@ -68,6 +68,74 @@ The signature module includes connectivity helpers, but the main pipeline does
 not currently call them for `--signature-file`. The genetics module also includes
 manual lookup guidance; do not read that as a completed trans-eQTL analysis.
 
+## Gates that demote a route
+
+Four checks can lower a route after it is built. None deletes anything, and
+each says on the row what it did and why. They were added after a review of a
+BUB1B run that produced confident tier-2 candidates on evidence that did not
+support them.
+
+**A noisy scan caps a motif-derived tier.** `motifs.scan_quality` reports the
+false discovery proportion: the share of the site list expected on shuffled
+copies of the same window. Above 25%, routes whose factor came from that scan
+are capped at tier 3. Tier 2 means the route's evidence is observed, and for
+these routes only the drug-to-factor half is observed; the factor-to-gene half
+is a sequence resemblance. A scan that is half noise cannot support it. Routes
+that do not rest on the scan — CTD, LINCS, the gene's own product, the
+sensitivity correlation — are untouched.
+
+**A compound that moves the cell cycle is halved.** For a gene whose
+transcript tracks the cell cycle (`cellcycle.MITOTIC_GENES`),
+`proliferation.assess` asks whether each candidate also moves the rest of the
+mitotic programme the same way across its LINCS signatures. The bar is the
+95th percentile of all compounds, not a flat share, because the background is
+not zero: about 1.9% of signatures raise three or more mitotic markers on
+their own, and about 10.9% lower them. A compound above the bar is most simply
+read as changing how many cells are dividing. This is a measurement and it
+takes precedence over the hand-written `systemic.MITOTIC_DISRUPTORS` list. A
+compound the files do not cover gets no verdict, which is not a pass.
+
+**An agent that causes the defect being treated sinks.** With
+`--avoid-genotoxic`, a compound that works by damaging DNA or the spindle —
+alkylators, platinums, topoisomerase poisons, azacitidine, decitabine, the
+taxanes — drops to tier 5 with its score cut tenfold. It is for a patient who
+already has chromosomal instability or is cancer-predisposed, where such an
+agent causes the problem it is being offered for. The rows stay in the report
+so the search remains visible.
+
+**A declared scenario is checked against the population data.**
+`--scenario haploinsufficiency` asserts one allele is lost and the other is
+intact. When the gene's pLI says losing one copy is not selected against, that
+assertion disagrees with the frequency data: healthy people carry a broken
+copy, so the condition is probably recessive and the second allele is probably
+not wild type either. The report says so and points at
+`--scenario biallelic_hypomorph`, which does not assume a wild-type allele.
+The check is reported rather than refused, because the constraint tables are
+read during the analysis and a gene can be haploinsufficient in one tissue and
+tolerated in the population.
+
+## What the literature says moves the gene
+
+CTD records which chemicals have been published as changing a gene's
+expression. The run already read that list to decide which candidates were
+novel. It now also says what KIND of chemical is on it: carcinogens, tumour
+promoters, mitogens, inflammogens, industrial chemicals, nutrients, or
+approved drugs. When most of what raises a gene is not a medicine, the gene is
+more likely responding to injury than being regulated in a way a drug could
+copy, and that is worth knowing before reading a ranking. The classes come
+from a keyword vocabulary over the chemical names, not from a toxicology
+database: an unmatched chemical is unclassified, which is not the same as
+safe, and a chemical can be both a medicine and a hazard.
+
+## Regulators with no drug
+
+The regulator route lists approved drugs at factors recorded as regulating the
+gene. It used to drop a recorded regulator that no approved drug reaches,
+which left the section listing whatever happened to be druggable rather than
+what is recorded as running the gene. Those factors are now listed separately.
+They generate no route — there is no molecule to offer — and they are the list
+of what a chemistry effort would aim at.
+
 ## Interpreting results
 
 Approval filtering depends on source fields and curated entries. For example,

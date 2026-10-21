@@ -27,10 +27,14 @@ gene symbol to a ranked table, which module owns each step,
 and a table of every module with its purpose.
 
 The short version. `pipeline.py` owns orchestration, report formatting and
-export, though the formatting now lives in `report.py`. The file is about 2,000
-lines, most of it one long `run` function that still does the fetching, the scoring
-and the assembly; splitting that is the first item under maintainability in the
-[improvement review](improvements.md). The main CLI translates user options
+export, though the formatting now lives in `report.py`. `run` validates its
+arguments, sets up the client and assembles the run-level result; the
+per-window analysis is `_analyse_promoter` inside it, which is where a name
+bound at the top used to still be live a thousand lines down. Keep it that
+way: anything per-window belongs in the inner function, anything per-run
+outside it. `report.py`'s `markdown_report` is still one long function and is
+the remaining item under maintainability in the [improvement
+review](improvements.md). The main CLI translates user options
 into its `run` function, and both CLIs derive those options from `run`'s own
 signature through `cli.run_kwargs_from_args`, so a new flag reaches both
 without anyone maintaining a list. `http.py` centralises external requests.

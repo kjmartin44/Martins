@@ -291,6 +291,49 @@ def is_mitotic_disruptor(drug_name: str) -> bool:
     return _compact(salt_free_name(drug_name)) in _MITOTIC_COMPACT
 
 
+# Compounds whose therapeutic mechanism IS damage to DNA or to the
+# machinery that segregates it. Separate from MITOTIC_DISRUPTORS, which is
+# about a confound in the readout: this is about the patient.
+#
+# Not a hazard grading and not exhaustive. It is the approved classes
+# whose labels carry a mutagenicity or secondary-malignancy warning, which
+# is the bar that matters for someone whose cells already miss-segregate
+# chromosomes. A compound absent from it is unexamined, not cleared.
+GENOTOXIC = frozenset({
+    # topoisomerase poisons
+    "doxorubicin", "daunorubicin", "epirubicin", "idarubicin",
+    "mitoxantrone", "etoposide", "teniposide", "topotecan", "irinotecan",
+    # alkylators and platinum
+    "cyclophosphamide", "ifosfamide", "chlorambucil", "melphalan",
+    "busulfan", "lomustine", "carmustine", "temozolomide", "dacarbazine",
+    "procarbazine", "bendamustine", "thiotepa", "mechlorethamine",
+    "cisplatin", "carboplatin", "oxaliplatin",
+    # antimetabolites incorporated into DNA
+    "azacitidine", "decitabine", "cytarabine", "gemcitabine",
+    "fluorouracil", "capecitabine", "mercaptopurine", "thioguanine",
+    "azathioprine", "methotrexate", "hydroxyurea", "cladribine",
+    "fludarabine", "clofarabine", "nelarabine",
+    # radiomimetic and other direct DNA damage
+    "bleomycin", "mitomycin", "dactinomycin", "plicamycin",
+    "trabectedin", "lurbinectedin",
+})
+
+_GENOTOXIC_COMPACT = frozenset(_compact(m) for m in GENOTOXIC)
+
+
+def is_genotoxic(drug_name: str) -> bool:
+    """Does this compound work by damaging DNA or chromosome segregation?
+
+    True also for the tubulin and spindle compounds in
+    `MITOTIC_DISRUPTORS`: an aneugen gives a cell the wrong number of
+    chromosomes, which is the very defect in a chromosomal-instability
+    syndrome.
+    """
+    if not drug_name:
+        return False
+    key = _compact(salt_free_name(drug_name))
+    return key in _GENOTOXIC_COMPACT or key in _MITOTIC_COMPACT
+
 def classify(drug_name: str) -> SystemicClass | None:
     """Which systemic class this drug belongs to, or None if unlisted.
 

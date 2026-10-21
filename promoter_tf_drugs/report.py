@@ -66,6 +66,43 @@ def _dep_label(tf: dict) -> str:
     }.get(v, v)
 
 
+def _undrugged_regulators(res: dict) -> list:
+    """Factors RECORDED as regulating the gene that no approved drug reaches.
+
+    A different claim from the motif list above it. A motif hit says a
+    sequence resembles a binding site; these factors are in a curated table
+    or moved the gene in a knockout experiment. They produce no route,
+    because there is no molecule to give - which is exactly why they used
+    to be dropped, and exactly why they have to be named. They are the list
+    of what a chemistry effort would aim at.
+    """
+    rows = res.get("regulators_without_drugs") or []
+    if not rows:
+        return []
+    L = ["#### Recorded regulators with no approved drug", ""]
+    L.append("These are not motif matches. Each is named by a curated table "
+             "or by a knockout experiment as regulating this gene, and none "
+             "has an approved drug that moves it the way this run needs. "
+             "They generate no route and are listed so the regulator "
+             "section is not read as the full set of regulators.")
+    L.append("")
+    L.append("| Factor | Effect on the gene | Would need to be | Recorded by |")
+    L.append("|---|---|---|---|")
+    for r in rows[:15]:
+        effect = "raises it" if r.get("sign") == 1 else "lowers it"
+        src = ", ".join(r.get("sources") or []) or "?"
+        via = r.get("via")
+        if via:
+            effect += f" (by way of {via})"
+        L.append(f"| {r.get('symbol')} | {effect} | "
+                 f"{'activated' if r.get('need') == 'up' else 'inhibited'} | "
+                 f"{src} |")
+    if len(rows) > 15:
+        L.append(f"| … | {len(rows) - 15} more | | |")
+    L.append("")
+    return L
+
+
 def _corpus_note(res: dict) -> list:
     """Which corpora ran, which did not, and what agreed across them."""
     from . import corpora as cp
@@ -726,6 +763,156 @@ def _brake_exon_section(result: dict) -> list:
     return L
 
 
+def _mover_profile_section(result: dict) -> list:
+    """What KIND of chemical the literature records as moving this gene.
+
+    First, because it frames everything under it. When the published way
+    to move a gene is to damage the tissue, the ranking below is a list of
+    ways to attempt something the literature has only ever achieved by
+    insult - and that is worth knowing before reading a drug name.
+    """
+    for blk in result.get("results") or []:
+        prof = (blk.get("crosscheck") or {}).get("wanted_profile") or {}
+        if not prof.get("verdict"):
+            continue
+        L = ["## What the literature says moves this gene", "",
+             prof["verdict"], "",
+             "| Kind of chemical | How many |", "|---|---|"]
+        for k, n in sorted(prof.get("counts", {}).items(),
+                           key=lambda kv: (-kv[1], kv[0])):
+            L.append(f"| {k} | {n} |")
+        L.append("")
+        L.append("*The classes come from a keyword vocabulary over the CTD "
+                 "chemical names, not from a toxicology database. An "
+                 "unclassified chemical was not examined and is not thereby "
+                 "safe, and a chemical can be both a medicine and a hazard "
+                 "- phenobarbital is an approved barbiturate and a classic "
+                 "rodent tumour promoter.*")
+        L.append("")
+        return L
+    return []
+
+
+def _proliferation_section(result: dict) -> list:
+    """Did the candidates move the gene, or move the cell cycle?"""
+    from . import proliferation as pr_mod
+    for blk in result.get("results") or []:
+        assessed = blk.get("proliferation") or {}
+        if not assessed:
+            continue
+        gene = (blk.get("promoter") or {}).get("gene_symbol") or "the gene"
+        text = pr_mod.summarise(assessed, gene)
+        if not text:
+            continue
+        L = ["### Moving the gene, or moving the cell cycle", "", text, ""]
+        tracked = [(k, v) for k, v in sorted(assessed.items())
+                   if v.get("tracks_proliferation")]
+        if tracked:
+            L.append("| Compound | Signatures moving the programme | "
+                     "Background |")
+            L.append("|---|---|---|")
+            for k, v in tracked[:12]:
+                L.append(f"| {k} | {v['n_with_programme']} of "
+                         f"{v['n_signatures']} ({v['share']:.0%}) | "
+                         f"{v['background_share']:.1%} |")
+            L.append("")
+        return L
+    return []
+
+
+def _protein_level_section(result: dict) -> list:
+    """Routes that change the protein rather than how much of it there is.
+
+    Fires on what the caller DECLARED about the alleles, never on a guess:
+    a hypomorphic or biallelic scenario, a premature stop, or a broken
+    allele recorded as making a truncated product. Each of those means the
+    quality of the product is part of the problem, and transcription
+    cannot reach quality.
+    """
+    q = result.get("query") or {}
+    scenario = q.get("scenario")
+    has_ptc = q.get("has_ptc")
+    truncated = q.get("broken_allele_makes") == "truncated"
+    gene = q.get("gene") or "this gene"
+    if not (scenario in ("hypomorph", "biallelic_hypomorph")
+            or has_ptc or truncated):
+        return []
+
+    why = []
+    if scenario == "biallelic_hypomorph":
+        why.append("the only working copy is itself impaired")
+    elif scenario == "hypomorph":
+        why.append("both copies are impaired")
+    if has_ptc:
+        why.append("the transcript carries a premature stop")
+    if truncated:
+        why.append("the broken copy is recorded as making a truncated "
+                   "product")
+
+    L = ["## The problem may be the protein, not the amount", ""]
+    L.append(f"**You declared that {', and '.join(why)}.** Everything in "
+             f"the promoter sections below changes how MUCH {gene} is "
+             f"made. None of it changes what is made. Where the pathogenic "
+             f"allele yields an impaired product, more transcription "
+             f"yields more of the same impairment — and because "
+             f"transcription raises both copies, it raises the broken one "
+             f"too.")
+    L.append("")
+    L.append("The routes that address the product itself are computed in "
+             "this run and sit lower down:")
+    L.append("")
+
+    blk = next(iter(result.get("results") or []), {}) or {}
+    beyond = blk.get("beyond_transcription") or {}
+    pointers = []
+    if blk.get("stabilisation"):
+        pointers.append(
+            f"**Stabilisation** — {len(blk['stabilisation'])} factor(s) "
+            f"assessed for a molecule that holds the protein in its "
+            f"working shape instead of making more of it.")
+    if (beyond.get("product_stability") or {}):
+        pointers.append(
+            "**Product stabilisation** — whether the gene's own protein "
+            "can be kept from being degraded.")
+    if (beyond.get("post_transcriptional") or {}).get("routes"):
+        n = len(beyond["post_transcriptional"]["routes"])
+        extra = (" Readthrough and NMD inhibition are the ones that "
+                 "address a premature stop, and for a stop codon they "
+                 "address the problem where extra transcription does not."
+                 if has_ptc else "")
+        pointers.append(
+            f"**After transcription** — {n} route(s) acting on the "
+            f"transcript or the protein rather than the promoter.{extra}")
+    if result.get("brake_exons", {}).get("candidates"):
+        pointers.append(
+            f"**Brake exons** — "
+            f"{len(result['brake_exons']['candidates'])} exon(s) used only "
+            f"by decay-prone isoforms, candidates for an oligonucleotide "
+            f"that raises useful output rather than total output.")
+    if blk.get("product_screen", {}).get("hits"):
+        pointers.append(
+            f"**Binders of the product** — "
+            f"{len(blk['product_screen']['hits'])} compound(s) predicted "
+            f"to bind the protein itself.")
+    if blk.get("modality_design"):
+        pointers.append(
+            "**Designed modality** — a direct construct for this gene.")
+
+    if pointers:
+        L.extend(f"- {p}" for p in pointers)
+    else:
+        L.append("- None ran. `--design-modality`, `--screen-product` and "
+                 "the stabilisation section (on by default) are the ones "
+                 "that would, and `--has-ptc` moves readthrough and NMD "
+                 "inhibition to the front.")
+    L.append("")
+    L.append("*This is a pointer, not a ranking. Nothing here establishes "
+             "that a protein-level route works either; it establishes that "
+             "it is aimed at the right thing.*")
+    L.append("")
+    return L
+
+
 def _crosscheck_section(result: dict) -> list:
     """Where CTD and LINCS disagree, and ranked drugs CTD records the other way."""
     from . import crosscheck as xc_mod
@@ -787,6 +974,12 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                          "candidates.")
                 L.append("")
             L.append(req["summary"])
+            L.append("")
+        if req.get("constraint_conflict"):
+            # The scenario is declared and the constraint is measured, so
+            # only this says when the two disagree. It is above the dosage
+            # line because it changes how that line should be read.
+            L.append(f"> ⚠ {req['constraint_conflict']}")
             L.append("")
         if dose.get("summary") and dose.get("assessed"):
             L.append(dose["summary"])
@@ -922,6 +1115,9 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
 
     L.extend(_standard_of_care_section(result))
     L.extend(_mitotic_gene_section(result))
+    L.extend(_protein_level_section(result))
+    L.extend(_mover_profile_section(result))
+    L.extend(_proliferation_section(result))
     L.extend(_crosscheck_section(result))
     L.extend(_brake_exon_section(result))
 
@@ -1092,6 +1288,8 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                          "upstream-network, stabilisation and "
                          "protein-level sections, not the ligand tables.")
                 L.append("")
+
+        L.extend(_undrugged_regulators(res))
 
         L.append("### Top-ranked transcription factors")
         L.append("")

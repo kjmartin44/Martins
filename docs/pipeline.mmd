@@ -1,10 +1,13 @@
+%% The seven steps of a run. The branches are in pipeline_detail.mmd.
+%% Source of truth: docs/how-it-works.md.
 flowchart TB
-    A["1 Choose<br/>a gene and a direction<br/>(raise or lower it)"]
-    B["2 Scan<br/>find the promoter and<br/>its binding spots, and<br/>widen the search if<br/>none stand out"]
-    C["3 Check<br/>what each protein does<br/>and whether it is<br/>really bound there"]
+    A["1 Choose<br/>a gene, a direction,<br/>and the shape of<br/>the dosage problem"]
+    B["2 Scan<br/>find the promoter and its<br/>binding spots, widen if<br/>none stand out, and measure<br/>how many are chance"]
+    C["3 Check<br/>what each protein does,<br/>whether it is really<br/>bound there, and whether<br/>it is active"]
     D["4 Match<br/>drugs that push those<br/>proteins the right way,<br/>plus other routes"]
-    E["5 Report<br/>rank by evidence, show<br/>approved drugs, say what<br/>ran and what failed"]
-    F["6 Test<br/>compare with what<br/>is already known"]
-    A --> B --> C --> D --> E --> F
+    E["5 Narrow<br/>weigh each route's<br/>collateral against the<br/>gain, on four axes"]
+    F["6 Report<br/>rank by evidence tier,<br/>show approved drugs, say<br/>what ran and what failed"]
+    G["7 Test<br/>compare with what<br/>is already known"]
+    A --> B --> C --> D --> E --> F --> G
     classDef step fill:#f6f8fa,stroke:#57606a,color:#1f2328
-    class A,B,C,D,E,F step
+    class A,B,C,D,E,F,G step

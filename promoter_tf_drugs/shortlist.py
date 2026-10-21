@@ -47,6 +47,8 @@ import json
 import sys
 from pathlib import Path
 
+from .provenance import check_schema
+
 PRESETS = {
     "strict": {
         "max_tier": 3, "min_grade": "B", "require_chip": True,
@@ -515,32 +517,6 @@ def _why_class(name: str) -> str:
         logging.getLogger(__name__).debug(
             "no explanation for class %s: %s", name, type(exc).__name__)
     return f"**{name}**"
-
-
-def check_schema(data: dict, tool: str) -> str | None:
-    """Warn when a saved result was written by a newer package.
-
-    Returns the warning text, and prints it to stderr. None when the
-    file is one this version understands - including a file with no
-    schema at all, which predates the field and is read quietly rather
-    than warned about every time.
-    """
-    import sys
-
-    from .provenance import RESULT_SCHEMA
-
-    found = (data.get("provenance") or {}).get("schema")
-    if found is None or found <= RESULT_SCHEMA:
-        return None
-    version = (data.get("provenance") or {}).get("package_version")
-    msg = (f"{tool}: this result uses schema {found} and this package "
-           f"understands {RESULT_SCHEMA}"
-           + (f" (written by version {version})" if version else "")
-           + ". Reading it anyway; fields added since are ignored, and "
-             f"any whose meaning changed are read with the older one. "
-             f"Upgrade the package to read it as it was written.")
-    print(msg, file=sys.stderr)
-    return msg
 
 
 def main(argv=None) -> int:

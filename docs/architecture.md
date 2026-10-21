@@ -9,30 +9,39 @@ read on their own.
 If you are looking for one thing in particular, the table at the bottom
 lists every module with its own one-line description.
 
-## The chain, in order
+## The routes, and what they share
 
 The package answers one question — which approved drugs plausibly move
-this gene — by walking a chain. Every stage narrows or annotates what the
-stage before produced.
+this gene — by asking it several independent ways and putting the answers
+on one scale. The routes do not feed each other. They read different data,
+fail for unrelated reasons, and meet only in the catalogue.
 
 ```
 gene symbol
-  │  genes.py          resolve to a transcript and a TSS, pull the promoter
-  ▼
-promoter sequence
-  │  motifs.py, pwm.py scan it with position-weight matrices
-  ▼
-motif hits                      ← most of these are chance; see below
-  │  evidence.py       is the site real? ChIP peaks over the same window
-  │  annotate.py       is the factor an activator or a repressor?
-  │  neighbours.py     what else is transcribed in this window?
-  ▼
-candidate factors
-  │  drugs.py          approved drugs annotated at each factor
-  │  network.py        and drugs further upstream: TF ← kinase ← receptor
-  │  direct.py         and drugs acting on the gene's own product
-  ▼
-routes
+  │
+  ├─ the promoter motif route ──────────────────────────────────┐
+  │    genes.py          resolve to a transcript and a TSS      │
+  │    motifs.py, pwm.py scan the promoter with matrices        │
+  │      → motif hits    most of these are chance; see below    │
+  │    evidence.py       is the site real? ChIP over the window │
+  │    annotate.py       is the factor an activator?            │
+  │    neighbours.py     what else is transcribed here?         │
+  │    drugs.py          approved drugs annotated at the factor │
+  │                                                             │
+  ├─ direct.py        drugs on the gene's own product ──────────┤
+  ├─ regulators.py    drugs at its recorded regulators ─────────┤
+  ├─ signatures.py    compounds measured to move the gene ──────┤
+  ├─ network.py       further upstream: TF ← kinase ← receptor ─┤
+  ├─ sensitivity.py   compounds that phenocopy losing a factor ─┤
+  ├─ screening.py     ligand screens at the factor ─────────────┤
+  ├─ docking.py       poses, once the pocket passes a control ──┤
+  ├─ abundance.py     how much of the factor itself exists ─────┤
+  ├─ stabilizers.py   hold the factor in its working shape ─────┤
+  ├─ ligands.py       move its endogenous ligand instead ───────┤
+  ├─ promoterdna.py   agents that bind the promoter itself ─────┤
+  └─ discovery.py     what the literature already records ──────┤
+                                                                ▼
+                                                             routes
   │  catalogue.py      every route on one scale, with an evidence tier
   │  drug_scoring.py   grade each route on factor and drug confidence
   ▼
@@ -46,9 +55,15 @@ a table you can act on
 The honest part of that diagram is the note next to the motif hits. A
 promoter scan at p ≤ 1e-4 over a kilobase returns far more sites than
 exist, and the report says so with a number: for CCR5, 241 hits against
-187 expected by chance. Everything downstream inherits that, which is why
-so much of the package is evidence that a site is real rather than
-predicted.
+187 expected by chance. Everything on that branch inherits it, which is
+why so much of the package is evidence that a site is real rather than
+predicted, and why a noisy scan now caps that branch's tiers.
+
+That weakness belongs to the motif route and not to the others. The
+package is named after it because it was written first. The routes that
+rest on a measurement of the gene — the literature record, the LINCS
+signature, the sensitivity phenocopy — carry better evidence that the gene
+moves, and worse evidence about why.
 
 ## The groups
 
@@ -235,11 +250,12 @@ Generated from each module's own first docstring line.
 | `outcome.py` | From "the drug binds the receptor" to "my gene goes up": the chain, explicitly. |
 | `panel.py` | Compare several candidate genes and narrow to the cleanest route. |
 | `paralogs.py` | How many close relatives share the pocket you are trying to hit? |
-| `pipeline.py` | Orchestration: gene -> promoter -> motifs -> activators -> approved drugs. |
+| `pipeline.py` | Orchestration: run every route for one gene and rank what they return. |
 | `poisonexon.py` | Exons that only decay-prone isoforms use: candidate brakes on output. |
 | `posttranscriptional.py` | Raising a gene's output after transcription has already happened. |
 | `predictions.py` | The headline answer: which medications the model predicts, and why. |
 | `progress.py` | Telling the user what the run is doing while it does it. |
+| `proliferation.py` | Did the compound move the gene, or just move the cell cycle? |
 | `promoterdna.py` | Small molecules aimed at the promoter DNA rather than at a protein. |
 | `provenance.py` | Did each evidence source actually produce evidence? |
 | `pwm.py` | Position-weight-matrix mathematics. |

@@ -112,29 +112,27 @@ def is_salt_form(name: str) -> bool:
     return salt_free_name(name) != " ".join(_tokens(name))
 
 
-def _display(names: list[str]) -> str:
-    """Prefer the shortest name: the parent, not the marketed salt."""
-    return min(names, key=lambda n: (len(n), n))
+def _target_of(g):
+    return getattr(g, "tf_symbol", None)
 
 
-def collapse_grades(grades: list, *, key=None, name_of=None,
-                    set_name=None) -> tuple[list, dict]:
+def collapse_grades(grades: list) -> tuple[list, dict]:
     """Collapse salt forms of the same drug at the same target.
 
     Grouped on (salt-free name, target), so the same compound acting at two
     different TFs stays as two rows — those are genuinely different routes.
     The highest-scoring member survives and carries the alternates.
 
-    Returns (kept, info) where info maps the surviving row's name to the list
-    of collapsed alternates.
+    Returns (kept, info) where info maps the surviving row's
+    `(name, target)` to the list of collapsed alternates. Keyed on the
+    PAIR, because the same drug can survive at two targets: keyed on the
+    name alone, the row where nothing was collapsed was told it shared an
+    active moiety with a salt that is not on it.
     """
-    name_of = name_of or (lambda g: g.drug_name)
-    key = key or (lambda g: (salt_free_name(name_of(g)),
-                             getattr(g, "tf_symbol", None)))
-
     groups: dict = {}
     for g in grades:
-        groups.setdefault(key(g), []).append(g)
+        groups.setdefault(
+            (salt_free_name(g.drug_name), _target_of(g)), []).append(g)
 
     kept, info = [], {}
     for _, members in groups.items():
@@ -145,9 +143,9 @@ def collapse_grades(grades: list, *, key=None, name_of=None,
         # than re-deriving a score here, so this cannot disagree with the
         # ranking that produced it.
         winner = members[0]
-        others = [name_of(m) for m in members[1:]]
         kept.append(winner)
-        info[name_of(winner)] = others
+        info[(winner.drug_name, _target_of(winner))] = [
+            m.drug_name for m in members[1:]]
     return kept, info
 
 

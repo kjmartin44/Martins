@@ -892,6 +892,36 @@ def markdown_report(panel: Panel, merged: dict, rows: list, stages: list,
                      f"margin as modest rather than clean.")
         L.append("")
 
+        # Which drugs reach the control as well. A count says whether the
+        # funnel discriminates; this says which specific rows it does not
+        # discriminate on, and those are the ones to stop reading.
+        ctrl_drugs = {d for d, _ in (surviving.get(ctrl) or ())}
+        shared: dict = {}
+        for gene, prs in surviving.items():
+            if gene == ctrl:
+                continue
+            for drug, target in prs:
+                if drug in ctrl_drugs:
+                    shared.setdefault(drug, set()).add(gene)
+        if shared:
+            L.append(f"**{len(shared)} compound(s) survive for {ctrl} too.** "
+                     f"A compound that reaches a control gene as readily as "
+                     f"your candidate is not telling you about your "
+                     f"candidate. Treat these as generic until something "
+                     f"gene-specific supports them.")
+            L.append("")
+            L.append("| Compound | Also survives for |")
+            L.append("|---|---|")
+            for drug in sorted(shared)[:15]:
+                L.append(f"| {drug} | {', '.join(sorted(shared[drug]))} |")
+            if len(shared) > 15:
+                L.append(f"| … | {len(shared) - 15} more |")
+            L.append("")
+        elif ctrl_drugs:
+            L.append(f"*No compound surviving for a candidate also survives "
+                     f"for {ctrl}, so nothing above is obviously generic.*")
+            L.append("")
+
     # ------------------------------------ 6b. relatives among the targets
     pairs = par_mod.cross_reactive_pairs(
         [r.get("acts_on") for r in rows if r.get("acts_on")])

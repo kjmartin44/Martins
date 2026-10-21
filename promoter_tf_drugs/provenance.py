@@ -310,6 +310,30 @@ def verdict(ledger: Ledger, scan_quality: dict | None = None) -> dict:
 # key is not such a change.
 RESULT_SCHEMA = 1
 
+
+def check_schema(data: dict, tool: str) -> str | None:
+    """Warn when a saved result was written by a newer package.
+
+    Returns the warning text, and prints it to stderr. None when the
+    file is one this version understands - including a file with no
+    schema at all, which predates the field and is read quietly rather
+    than warned about every time.
+    """
+    import sys
+
+    found = (data.get("provenance") or {}).get("schema")
+    if found is None or found <= RESULT_SCHEMA:
+        return None
+    version = (data.get("provenance") or {}).get("package_version")
+    msg = (f"{tool}: this result uses schema {found} and this package "
+           f"understands {RESULT_SCHEMA}"
+           + (f" (written by version {version})" if version else "")
+           + ". Reading it anyway; fields added since are ignored, and "
+             f"any whose meaning changed are read with the older one. "
+             f"Upgrade the package to read it as it was written.")
+    print(msg, file=sys.stderr)
+    return msg
+
 # Above this, a file's contents are not hashed. The ReMap BED is 1.4 GB
 # and the full BindingDB release is 8.6 GB, and hashing either on every
 # run costs real time for a number that is almost never compared.

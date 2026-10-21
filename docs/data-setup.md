@@ -48,7 +48,7 @@ python -m promoter_tf_drugs --demo --gene DEMOGENE --out results/demo
 
 | Group | Contents | Disk | What you get |
 | --- | --- | --- | --- |
-| A. Core | motifs, ChIP peaks, gene models, regulons, expression, drug library | about 1.7 GB | the main promoter to factor to drug route |
+| A. Core | motifs, ChIP peaks, gene models, regulons, expression, drug library | about 1.7 GB | the promoter motif route, and the tables most routes read |
 | B. Evidence | LINCS, dosage, genes and GO, Orange Book, CollecTRI | about 0.3 GB | measured drug effects, dosage limits, route of administration, signed regulons |
 | C. Large optional | BindingDB, DepMap, PRISM, GWAS Catalog, ChEMBL database | 12 GB or more | measured potency, dependency, drug sensitivity, human genetics |
 

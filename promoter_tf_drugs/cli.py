@@ -356,12 +356,18 @@ def add_analysis_args(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
                         "was the reason")
     p.add_argument("--scenario",
                    choices=["haploinsufficiency", "hypomorph",
+                            "biallelic_hypomorph",
                             "toxic_gain", "null", "silenced_allele",
                             "modifier"],
                    help="the shape of the dosage problem, which fixes "
                         "what counts as enough. haploinsufficiency: one "
-                        "allele dead, raise the other. hypomorph: both "
-                        "weak. toxic_gain: lower a harmful product. "
+                        "allele dead, raise the other (assumes the other "
+                        "is WILD TYPE). hypomorph: both weak. "
+                        "biallelic_hypomorph: one weak copy and one dead "
+                        "- the recessive arrangement, where the surviving "
+                        "copy is itself impaired and doubling it doubles "
+                        "a reduced product. toxic_gain: lower a harmful "
+                        "product. "
                         "null: no working product - says plainly that "
                         "transcription cannot help. silenced_allele: an "
                         "intact copy switched off. modifier: no "
@@ -379,6 +385,15 @@ def add_analysis_args(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
                    help="for a lowering plan, the share of the current "
                         "level you want left. 0.5 is a halving "
                         "(default: 0.5)")
+    p.add_argument("--avoid-genotoxic", action="store_true",
+                   help="the patient already has chromosomal instability "
+                        "or is cancer-predisposed (MVA, Fanconi, "
+                        "Li-Fraumeni). Compounds that work by damaging DNA "
+                        "or the spindle - alkylators, platinums, "
+                        "topoisomerase poisons, azacitidine, decitabine, "
+                        "taxanes - drop to the bottom tier and say why. "
+                        "They are not deleted, so you can still see what "
+                        "the search found")
     p.add_argument("--condition",
                    help="the condition being treated, for a gene with no "
                         "mutation in it")

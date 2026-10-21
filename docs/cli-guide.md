@@ -66,7 +66,7 @@ under their usual names are found without a flag (marked auto).
 | Known regulators | CollecTRI at `data/collectri.tsv` (auto) | `--regulator-route` records that no signed table was found. |
 | Cell dependency, drug sensitivity | `--depmap-file`, `--prism-file` | Found in `data/` (auto). `--sensitivity-scan` needs both. |
 | Docking results | `--docking-results FILE` | No docking enters the run. |
-| What is wrong with the gene | `--scenario`, with `--broken-allele-makes`, `--target-fraction`, `--condition` | The ranking states no requirement. |
+| What is wrong with the gene | `--scenario`, with `--broken-allele-makes`, `--target-fraction`, `--condition` | The ranking states no requirement. `haploinsufficiency` assumes the surviving copy is wild type; for a recessive condition where it is not, use `biallelic_hypomorph`. |
 
 ## Defaults you can change
 
@@ -131,6 +131,7 @@ under their usual names are found without a flag (marked auto).
 | `--include-unknown-direction` | Keep drug-gene links that record no direction. |
 | `--include-local-only` | Keep drugs approved only for local use (topical, eye, inhaled). |
 | `--has-ptc` | Say the gene carries a premature stop codon in the alleles you care about. |
+| `--avoid-genotoxic` | Say the patient already has chromosomal instability or is cancer-predisposed. Compounds that work by damaging DNA or the spindle drop to the bottom tier and say why. They are not deleted. |
 | `--offline` | Never use the network; cached answers only. |
 | `--demo` | Synthetic data, never the network. |
 | `--quiet`, `-v` | Fewer or more progress and log messages. |

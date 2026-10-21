@@ -170,6 +170,24 @@ def candidates(gene: str, signed_regulons: dict | None, *,
     return out
 
 
+def _wanted_drugs(r, goal: str, drug_index: dict, binders=None) -> tuple:
+    """`(direction the factor must move, the drugs that move it that way)`."""
+    need_up = (r.sign == 1) == (goal == "up")
+    want = "up" if need_up else "down"
+    drugs = [d for d in drug_index.get(r.symbol, [])
+             if d.direction in (want, "unclear")]
+    if not drugs and binders is not None:
+        drugs = list(binders(r.symbol) or [])
+    return want, drugs
+
+
+def _record(r, want: str) -> dict:
+    """The part of a regulator's row that does not depend on any drug."""
+    return {"sign": r.sign, "need": want, "sources": list(r.sources),
+            "n_responses": r.n_responses, "n_against": r.n_against,
+            "disagree": r.disagree, "via": r.via}
+
+
 def find_drugs(regs: list, goal: str, drug_index: dict, binders=None) -> dict:
     """`{factor: record}` for each regulator that has an approved drug.
 
@@ -180,22 +198,46 @@ def find_drugs(regs: list, goal: str, drug_index: dict, binders=None) -> dict:
     `binders` is an optional function `symbol -> [Drug]` (see
     `drugs.measured_binders`). It is asked only for a regulator the mechanism
     index gives nothing for, and what it returns has direction "unclear".
+
+    The regulators this returns NOTHING for are not uninteresting; see
+    `without_drugs`, which is the other half of the same walk.
     """
     out = {}
     for r in regs:
-        need_up = (r.sign == 1) == (goal == "up")
-        want = "up" if need_up else "down"
-        drugs = [d for d in drug_index.get(r.symbol, [])
-                 if d.direction in (want, "unclear")]
-        if not drugs and binders is not None:
-            drugs = list(binders(r.symbol) or [])
+        want, drugs = _wanted_drugs(r, goal, drug_index, binders)
         if not drugs:
             continue
         out[r.symbol] = {
-            "sign": r.sign, "need": want, "sources": list(r.sources),
-            "n_responses": r.n_responses, "n_against": r.n_against,
-            "disagree": r.disagree, "via": r.via,
+            **_record(r, want),
             "drugs": [d.to_dict() for d in drugs[:MAX_DRUGS_PER_FACTOR]],
             "n_drugs": len(drugs),
         }
     return out
+
+
+def without_drugs(regs: list, goal: str, drug_index: dict,
+                  binders=None) -> list:
+    """The recorded regulators that no approved drug reaches.
+
+    `find_drugs` drops these, and dropping them silently is the same
+    mistake the evidence ledger exists to prevent: it leaves a report whose
+    regulator section lists whatever happened to be druggable and never
+    says which factors are actually recorded as running the gene.
+
+    For BUB1B that was the whole finding. CollecTRI names FOXM1, MYC, TP53
+    and ZNF143; none has an approved drug, so the section showed AHR, ESR2
+    and three HDACs instead - factors that reach the gene far less
+    directly and are there because somebody made a ligand for them.
+
+    Returns rows in the same shape as `find_drugs`, with no `drugs` key, so
+    a reader and a caller can treat the two together. No route is built
+    from these: there is nothing to give anyone. They are the list of what
+    to go and find a molecule for.
+    """
+    out = []
+    for r in regs:
+        want, drugs = _wanted_drugs(r, goal, drug_index, binders)
+        if drugs:
+            continue
+        out.append({**_record(r, want), "symbol": r.symbol})
+    return sorted(out, key=lambda d: d["symbol"])

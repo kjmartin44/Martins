@@ -87,6 +87,9 @@ def build(gene: str, goal: str, improvements: dict | None, *,
     out = {"gene": gene, "goal": goal,
            "ctd_opposite": sorted(opposite.values()),
            "ctd_wanted": sorted(wanted.values()),
+           # What KIND of thing moves the gene your way. The list was
+           # already here and only ever used for a novelty check.
+           "wanted_profile": mover_profile(sorted(wanted.values()), goal),
            "lincs": {"checked": False, "reason": None,
                      "n_wanted": 0, "n_opposite": 0},
            "n_compared": 0, "n_agree": 0, "conflicts": []}
@@ -226,3 +229,127 @@ def markdown(xc: dict | None, ranked: list | None = None,
         L.append(f"LINCS was not compared with CTD: {lincs['reason']}.")
         L.append("")
     return L if len(L) > 2 else []
+# ===================================================================== #
+# What KIND of chemical moves this gene the way you want?               #
+# ===================================================================== #
+# A keyword vocabulary, not a toxicology database. It is here to answer
+# one coarse question - are the things that move this gene the way you
+# want them to mostly medicines, or mostly poisons - and it answers that
+# well enough to change a decision. It cannot grade a hazard, it does not
+# know a dose, and a chemical it does not match is UNCLASSIFIED, which is
+# not a clean bill.
+#
+# Matching is on lowercased substrings of the CTD chemical name.
+MOVER_CLASSES = (
+    ("carcinogen or genotoxin", (
+        "dimethylhydrazine", "methylcholanthrene", "benzo(a)pyrene",
+        "benzo[a]pyrene", "aflatoxin", "aristolochic", "acrylamide",
+        "glycidol", "n-nitroso", "nitrosamine", "ochratoxin",
+        "safrole", "urethane", "vinyl chloride", "diethylnitrosamine",
+        "4-aminobiphenyl", "2-acetylaminofluorene", "thioacetamide",
+        "carbon tetrachloride", "imidazo(4,5-b)pyridine", "dibenzo",
+        "chromium", "cadmium", "arsen", "nickel",
+    )),
+    ("tumour promoter", (
+        "tetradecanoylphorbol", "phorbol", "croton oil", "phenobarbital",
+        "okadaic acid", "cuprizone", "clofibrate", "pirinixic",
+        "wy-14643", "peroxisome prolifer",
+    )),
+    ("hormone or mitogen", (
+        "estradiol", "estrogen", "dihydrotestosterone", "testosterone",
+        "progesterone", "genistein", "coumestrol", "diethylstilbestrol",
+        "bisphenol", "growth factor", "insulin",
+    )),
+    ("inflammogen or irritant", (
+        "lipopolysaccharid", "oxazolone", "isocyanate", "trimellitic",
+        "latex", "carrageenan", "turpentine",
+    )),
+    ("particulate or metal salt", (
+        "nanotube", "titanium dioxide", "silicon dioxide", "silica",
+        "silver nitrate", "copper sulfate", "asbestos", "carbon black",
+        "particulate",
+    )),
+    ("pesticide or industrial chemical", (
+        "chlorpyrifos", "imidacloprid", "acetamiprid", "decamethrin",
+        "deltamethrin", "epoxiconazole", "picoxystrobin", "pcb ",
+        "polychlorinated", "dioxin", "tetrafluoro", "perfluoro",
+        "toluene", "dichloroacetic", "rotenone", "paraquat",
+        "tributyltin", "bis(tri-n-butyltin)",
+    )),
+    ("nutrient or dietary", (
+        "glucose", "fructose", "sucrose", "choline", "methionine",
+        "dietary", "ethanol", "vitamin",
+    )),
+)
+
+
+def classify_mover(name: str) -> str | None:
+    """The coarse class of one CTD chemical, or None when unmatched."""
+    low = (name or "").lower()
+    for label, keys in MOVER_CLASSES:
+        if any(k in low for k in keys):
+            return label
+    return None
+
+
+def mover_profile(names: list, goal: str = "up") -> dict:
+    """What kind of thing the literature says moves this gene your way.
+
+    Returns the counts by class, how many are approved drugs, and a
+    verdict sentence. `approved` is answered by the same Orange Book the
+    report filter uses, so a chemical that is also a medicine - phenobarbital
+    is both an approved barbiturate and a classic rodent tumour promoter -
+    is counted in both columns rather than forced into one.
+    """
+    from .catalogue import verify_approval
+
+    names = [n for n in (names or []) if n]
+    if not names:
+        return {}
+    by_class: dict = {}
+    for n in names:
+        by_class.setdefault(classify_mover(n) or "unclassified",
+                            []).append(n)
+    approved = [n for n in names if verify_approval(n) is True]
+    hazard = sum(len(v) for k, v in by_class.items()
+                 if k not in ("unclassified", "nutrient or dietary"))
+    share = hazard / len(names)
+    word = "raise" if goal == "up" else "lower"
+
+    if approved:
+        drugs = (f"{len(approved)} of them are FDA approved drugs "
+                 f"({', '.join(sorted(approved)[:6])}"
+                 + (" …" if len(approved) > 6 else "") + ")")
+    else:
+        drugs = "none of them is an FDA approved drug"
+
+    if share >= 0.5:
+        verdict = (
+            f"**Most of what is recorded as {word[:-1]}ing this gene is not "
+            f"a medicine.** Of {len(names)} chemicals CTD records as "
+            f"{word[:-1]}ing it, {hazard} fall into a carcinogen, tumour "
+            f"promoter, mitogen, inflammogen or industrial class, and "
+            f"{drugs}. That pattern is worth pausing on: when the published "
+            f"way to {word} a gene is to damage or inflame the tissue, the "
+            f"gene is most likely responding to that insult rather than "
+            f"being regulated in a way a drug could copy. Check whether the "
+            f"transcriptional objective is the right objective before "
+            f"reading the ranking below.")
+    else:
+        verdict = (
+            f"Of {len(names)} chemicals CTD records as {word[:-1]}ing this "
+            f"gene, {hazard} fall into a hazard class and {drugs}. The "
+            f"classes are a keyword vocabulary, so an unclassified chemical "
+            f"is unexamined rather than safe.")
+
+    return {
+        "n": len(names),
+        "goal": goal,
+        "by_class": {k: sorted(v) for k, v in sorted(by_class.items())},
+        "counts": {k: len(v) for k, v in sorted(by_class.items())},
+        "n_hazard": hazard,
+        "hazard_share": round(share, 3),
+        "approved": sorted(approved),
+        "n_approved": len(approved),
+        "verdict": verdict,
+    }

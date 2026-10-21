@@ -248,6 +248,7 @@ def summarise(ask: Ask, effects: dict | None = None) -> str:
 SCENARIOS = (
     "haploinsufficiency",   # one allele dead, raise the other
     "hypomorph",            # both alleles weak, raise both
+    "biallelic_hypomorph",  # one weak allele, one dead - raise the weak one
     "toxic_gain",           # a harmful product to lower
     "null",                 # no functional transcript from either allele
     "silenced_allele",      # a working copy switched off
@@ -265,6 +266,8 @@ SCENARIO_GOAL = {
                                  "raise the working one"),
     "hypomorph": ("up", "both alleles are weak, so the plan is to raise "
                         "expression"),
+    "biallelic_hypomorph": ("up", "the only working copy is a weak one, so "
+                                  "the plan is to raise it"),
     "silenced_allele": ("up", "an intact copy is switched off, so the plan "
                               "is to switch it on"),
     "toxic_gain": ("down", "the product is harmful, so the plan is to "
@@ -298,6 +301,59 @@ def ask_for(scenario: str, gene: str, **kw) -> Ask:
             f"unknown scenario {scenario!r}. One of: "
             + ", ".join(SCENARIOS))
     return _SCENARIO_BUILDERS[scenario](gene, **kw)
+
+
+def _biallelic_hypomorph(gene: str, *, target_fold: float = 2.0,
+                         residual_function: float | None = None,
+                         broken_allele_makes: str = "unknown", **_) -> Ask:
+    """One allele hypomorphic, the other dead. The recessive arrangement.
+
+    Distinct from `haploinsufficiency`, which assumes the surviving copy is
+    WILD TYPE and only needs doubling. Here the surviving copy is itself
+    impaired, so transcription is working against a lower ceiling: doubling
+    it doubles a reduced-function product, and whether that clears the
+    threshold depends on how much function the allele retains - which is a
+    property of the variant and is not in any database this package reads.
+
+    It is the usual arrangement in recessive disease, and declaring
+    haploinsufficiency instead quietly promises a rescue the arithmetic
+    does not support.
+    """
+    a = Ask(gene=gene, goal="up", mechanism="one weak allele, one dead",
+            requirement=f"about {target_fold:g}x from the weak allele",
+            target_fold=target_fold)
+    a.notes.append(
+        "Only one copy makes anything, and it is impaired. Raising "
+        "transcription raises the amount of that impaired product; it does "
+        "not improve it. Whether more of it is enough depends on how much "
+        "function the allele keeps, which no database here holds - so the "
+        "fold above is what transcription could deliver, not a dose that is "
+        "known to be sufficient.")
+    if residual_function is not None:
+        reached = target_fold * residual_function
+        a.notes.append(
+            f"At {residual_function:.0%} residual function per transcript, "
+            f"{target_fold:g}x of it reaches about {reached:.0%} of normal "
+            f"activity."
+            + ("" if reached >= 0.5 else
+               " That is below the half a healthy carrier demonstrates is "
+               "tolerated, so transcription alone would not close the gap."))
+    if broken_allele_makes == "truncated":
+        a.notes.append(
+            "The dead allele is recorded as making a truncated product. "
+            "Raising transcription raises BOTH copies, so that product "
+            "rises alongside the one you want. Where it competes with the "
+            "working protein, more transcription can make matters worse.")
+    elif broken_allele_makes == "unknown":
+        a.notes.append(
+            "What the dead allele produces is not declared "
+            "(--broken-allele-makes). If it makes a truncated protein "
+            "rather than nothing, raising transcription amplifies it too.")
+    a.notes.append(
+        "If the problem is the quality of the protein rather than its "
+        "amount, the routes that address it are stabilisation, readthrough "
+        "and the protein-level sections, not the promoter.")
+    return a
 
 
 def _hypomorph(gene: str, *, target_fold: float = 2.0, **_) -> Ask:
@@ -380,6 +436,11 @@ _SCENARIO_BUILDERS = {
     "haploinsufficiency": lambda g, **kw: restore_one_allele(
         g, broken_allele_makes=kw.get("broken_allele_makes", "unknown")),
     "hypomorph": _hypomorph,
+    "biallelic_hypomorph": lambda g, **kw: _biallelic_hypomorph(
+        g,
+        target_fold=kw.get("target_fold", 2.0),
+        residual_function=kw.get("residual_function"),
+        broken_allele_makes=kw.get("broken_allele_makes", "unknown")),
     "toxic_gain": lambda g, **kw: lower_toxic_product(
         g,
         target_fraction=kw.get("target_fraction", 0.5),
@@ -389,3 +450,40 @@ _SCENARIO_BUILDERS = {
     "silenced_allele": _silenced,
     "modifier": _modifier,
 }
+# Below this, losing one copy is not selected against in the population, so
+# a dominant one-allele-lost model has to argue against the frequency data.
+PLI_TOLERANT = 0.1
+
+
+def constraint_conflict(scenario: str | None, pli: float | None,
+                        loeuf: float | None = None) -> str | None:
+    """Does the population data argue against the declared scenario?
+
+    The scenario is declared and the constraint is measured, so only a
+    check can notice when they disagree - the same reasoning as
+    `goal_conflict`, against a different pair. This one cannot be run
+    before the analysis, because the constraint tables are read during it,
+    so it is reported rather than refused: the declaration is the
+    clinician's and a gene can be haploinsufficient in one tissue and
+    tolerated in the population.
+
+    BUB1B is the case it was written for: pLI about 0, because MVA is
+    recessive and heterozygous carriers are healthy, declared as
+    haploinsufficiency - which promises that doubling a wild-type allele
+    fixes it, when the second allele is usually a hypomorph.
+    """
+    if scenario != "haploinsufficiency" or pli is None or pli >= PLI_TOLERANT:
+        return None
+    extra = (f" (LOEUF {loeuf:.2f})" if isinstance(loeuf, (int, float))
+             else "")
+    return (
+        f"**The declared scenario and the population data disagree.** "
+        f"`--scenario haploinsufficiency` says one allele is lost and the "
+        f"other is intact. But this gene's pLI is {pli:.3g}{extra}: losing "
+        f"one copy is not selected against, so healthy people carry a "
+        f"broken copy and a single loss is unlikely to cause disease on its "
+        f"own. That usually means the condition is recessive and the second "
+        f"allele is not wild type either - in which case the requirement "
+        f"above understates the ask, because it assumes the surviving copy "
+        f"works normally. Consider `--scenario biallelic_hypomorph`, and "
+        f"declare `--broken-allele-makes`.")

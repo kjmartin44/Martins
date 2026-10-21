@@ -57,6 +57,40 @@ sections below.
    need a documented evidence trail and independent benchmarks. Successful
    software tests cannot establish scientific validity.
 
+## Limits of the gates added after the BUB1B review
+
+The four gates in [methods](methods.md#gates-that-demote-a-route) each rest on
+something that has not been calibrated, and each is written to fail toward
+saying less rather than more.
+
+- **The 25% false-discovery cap is a judgement, not a calibration.** It is the
+  point past which the modal site in a list is about as likely to be noise as
+  not. Nothing has been measured about whether routes above and below it
+  differ in how often their direction is right. Re-deriving it from the
+  retrospective runs, the way the regulator route's tiers were, would make it
+  evidence rather than a choice.
+- **The proliferation check needs the LINCS .gmt files.** Without them no
+  candidate is checked, and the ledger says so. It also reads set membership,
+  so it can say a gene travelled with its programme and cannot say what share
+  of the change the programme accounts for. A compound that genuinely acts at
+  a cell-cycle gene's promoter AND arrests the cycle is flagged; the two are
+  not separable in this data, and only a phase-resolved experiment separates
+  them.
+- **The hazard vocabulary is a keyword list.** It answers "are the published
+  movers of this gene medicines or poisons" well enough to change a decision,
+  and it is not a toxicology database. An unmatched chemical is unclassified.
+  The obvious upgrade is a real source — the CTD chemical-disease
+  associations, or an IARC listing — rather than more keywords.
+- **`--avoid-genotoxic` is a list of approved classes, not a hazard grading.**
+  It covers alkylators, platinums, topoisomerase poisons, DNA-incorporated
+  antimetabolites and the spindle agents. It does not know a dose, a route or
+  a duration, and it says nothing about compounds outside those classes.
+- **The constraint check only fires one way.** It catches
+  `haploinsufficiency` declared for a gene whose pLI says otherwise. It does
+  not check the reverse, and pLI is a statement about the population rather
+  than about a tissue, so a gene can be constrained where it matters and
+  tolerant overall.
+
 ## Maintainability and release work
 
 - Run the full test suite on Linux before pushing. The two CI failures above
@@ -67,10 +101,15 @@ sections below.
   test that needs NumPy. The development machine is Windows and its WSL has no
   pip, so those tests have so far only run in CI. A virtual environment in WSL
   with the dev and chemistry extras would close the gap.
-- Finish splitting `pipeline.py`. The report formatting moved to `report.py`
-  and the file went from 4,649 lines to 1,493, but `run` is still 1,185 of
-  those and does the fetching, the scoring and the assembly in one function.
-  The test module is still one file covering every domain.
+- Finish splitting the two long functions. The report formatting moved to
+  `report.py`, and the per-window analysis moved out of `run` into
+  `_analyse_promoter`, so `run` is about 350 lines of orchestration rather
+  than 1,633 lines of everything. That split was not cosmetic: a name bound
+  near the top of `run` was still live seven hundred lines down, and one of
+  them was reused for a second purpose, which made the reported factor count
+  the size of the regulon table. `report.markdown_report` is still one
+  function of about 2,000 lines and has no comparable seam yet. The test
+  module is still one file covering every domain.
 - Add a versioned result schema and transcript identifiers to multi-promoter TSV
   rows. Treat schema changes as compatibility changes for shortlist and explain.
 - Add input validation to the remaining helper CLIs. The exported tables and

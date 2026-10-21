@@ -88,6 +88,11 @@ PATHS = (
     ("cell_type.delivery", "drug"),
     ("promoter_dna.candidates", "drug"),
     ("stabilisation.*.stabilisers", "drug"),
+    # Rendered as its own table (report.py, "Changing the natural
+    # ligand"). Left out, it was the one table in a filtered report
+    # still showing drugs outside the Orange Book - carbenoxolone,
+    # approved in the UK and never by the FDA, among them.
+    ("ligand_axes.*.routes", "drug"),
 )
 
 _CACHE: dict = {}

@@ -470,6 +470,15 @@ class Route:
     # The multiplier applied because the compound disturbs mitosis and the
     # gene being treated is a mitotic one (see systemic.MITOTIC_DISRUPTORS).
     mitotic_penalty: float | None = None
+    # The tier this route would have had if the motif scan under it were
+    # clean. None when the scan was clean or the route does not rest on it.
+    tier_before_scan_penalty: int | None = None
+    # True when the mitotic penalty came from measuring this compound's own
+    # signatures rather than from the hand-written disruptor list.
+    proliferation_measured: bool = False
+    # True when the compound works by damaging DNA or the spindle and the
+    # run was told that is the defect being treated.
+    genotoxic: bool = False
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -488,6 +497,29 @@ BROAD_SCORE_FACTOR = 0.5
 # way and for the same kind of reason. Applied once: a compound that is both
 # very broad and a mitotic disruptor is halved, not quartered.
 MITOTIC_SCORE_FACTOR = 0.5
+
+# Routes whose FACTOR came from the motif scan. Everything they claim about
+# the factor-to-gene step rests on that scan, so when most of the site list
+# is chance, so is most of this.
+MOTIF_DERIVED = frozenset({
+    "drug_scoring", "stabilizers", "ligands", "screening", "docking",
+    "network", "abundance", "tfactivity",
+})
+# Above this share of the site list expected to be chance, a motif-derived
+# route is capped at `NOISY_SCAN_TIER`. A quarter is the point past which
+# the modal site in the list is as likely to be noise as not.
+NOISY_SCAN_FDP = 0.25
+# "curated", not "measured". Tier 2 says the route's evidence is observed.
+# For these routes the drug-to-factor half IS observed and the
+# factor-to-gene half is a sequence resemblance, so the route as a whole is
+# not a measurement and must not sort above one.
+NOISY_SCAN_TIER = 3
+
+# Where a genotoxic route lands when the patient cannot afford one. The
+# bottom tier, not removal: the caller asked, and a silent deletion would
+# leave them wondering why a drug they expected is missing.
+GENOTOXIC_TIER = 5
+GENOTOXIC_SCORE_FACTOR = 0.1
 
 
 def _score(r: Route) -> float:
@@ -1596,7 +1628,9 @@ def chromatin_routes(goal: str = "up", extra: list | None = None
 # ------------------------------------------------------------------ driver
 def build(result_block: dict, *, goal: str = "up",
           include_chromatin: bool = True, breadth: dict | None = None,
-          mitotic_gene: bool = False) -> dict:
+          mitotic_gene: bool = False, scan_fdp: float | None = None,
+          proliferation: dict | None = None,
+          avoid_genotoxic: bool = False) -> dict:
     """Assemble every route from one promoter's result block.
 
     `breadth` is `signatures.breadth_for`'s output, keyed by
@@ -1608,6 +1642,29 @@ def build(result_block: dict, *, goal: str = "up",
     `mitotic_gene` says the gene being treated is one whose job is mitosis. A
     route through a compound that disturbs mitosis then has its score
     multiplied by `MITOTIC_SCORE_FACTOR` and says so. It never changes a tier.
+
+    `scan_fdp` is the share of this window's site list expected to be chance
+    (`motifs.scan_quality`). Above `NOISY_SCAN_FDP`, routes whose factor came
+    from that scan are capped at `NOISY_SCAN_TIER`. This one DOES change a
+    tier, and deliberately: the others are cautions about a route whose
+    evidence stands, while this says the evidence does not stand. A scan that
+    is half noise cannot support a claim that a factor acts on this promoter,
+    whatever is known about the drug that binds it.
+
+    `proliferation` is `proliferation.assess`'s output, keyed the same way
+    as `breadth`. A compound it says moves the mitotic programme along with
+    the gene is halved exactly as a listed mitotic disruptor is, and for a
+    better reason: the list is a judgement about the compound, this is a
+    measurement against the gene in hand. It takes precedence, so a
+    compound the data covers is judged on the data.
+
+    `avoid_genotoxic` is for a patient whose cells already miss-segregate
+    chromosomes or who is cancer-predisposed. Routes through a compound
+    that works BY damaging DNA or the spindle drop to the bottom tier and
+    say why. They are not removed: the caller asked a question and
+    deleting the answer is not an answer. But an agent that causes the
+    defect being treated should never sit near the top of a list, and
+    marking it only "broad" did not say that.
     """
     routes: list[Route] = []
     routes += from_direct(result_block.get("direct_therapies") or [])
@@ -1639,15 +1696,32 @@ def build(result_block: dict, *, goal: str = "up",
     if include_chromatin:
         routes += chromatin_routes(goal, result_block.get("chromatin_extra"))
 
-    if breadth:
+    if breadth or proliferation:
         from .signatures import breadth_key
     if mitotic_gene:
         from .systemic import is_mitotic_disruptor
+    if avoid_genotoxic:
+        from .systemic import is_genotoxic
     xc = result_block.get("crosscheck")
     for r in routes:
         r.score = _score(r)
         scaled = False
-        if mitotic_gene and is_mitotic_disruptor(r.drug):
+        # Measured first. The hand-written disruptor list is a judgement
+        # about a compound; this is a measurement of what that compound
+        # does to THIS gene's programme, so where both speak, it wins.
+        prolif = ((proliferation or {}).get(breadth_key(r.drug))
+                  if proliferation else None)
+        if prolif and prolif.get("tracks_proliferation"):
+            from .proliferation import note_for
+            r.score = round(r.score * MITOTIC_SCORE_FACTOR, 1)
+            r.mitotic_penalty = MITOTIC_SCORE_FACTOR
+            r.proliferation_measured = True
+            scaled = True
+            r.notes.append(
+                f"score multiplied by {MITOTIC_SCORE_FACTOR}: "
+                + note_for(prolif,
+                           result_block.get("gene_symbol") or "this gene"))
+        elif mitotic_gene and is_mitotic_disruptor(r.drug):
             r.score = round(r.score * MITOTIC_SCORE_FACTOR, 1)
             r.mitotic_penalty = MITOTIC_SCORE_FACTOR
             scaled = True
@@ -1675,6 +1749,28 @@ def build(result_block: dict, *, goal: str = "up",
                     f"could push the gene either way, and CTD records the "
                     f"drug moving the gene the opposite way")
                 r.tier = DEMOTED_TIER
+        if (scan_fdp is not None and scan_fdp > NOISY_SCAN_FDP
+                and r.source in MOTIF_DERIVED and r.tier < NOISY_SCAN_TIER):
+            r.tier_before_scan_penalty = r.tier
+            r.tier = NOISY_SCAN_TIER
+            r.notes.append(
+                f"tier lowered from {r.tier_before_scan_penalty} to "
+                f"{NOISY_SCAN_TIER}: about {scan_fdp:.0%} of the motif sites "
+                f"in this window are expected on shuffled sequence, so that "
+                f"this factor acts on this promoter is a sequence "
+                f"resemblance rather than an observation. What is known "
+                f"about the drug at its target is unchanged")
+        if avoid_genotoxic and is_genotoxic(r.drug):
+            r.genotoxic = True
+            r.tier = max(r.tier, GENOTOXIC_TIER)
+            r.score = round(r.score * GENOTOXIC_SCORE_FACTOR, 1)
+            r.notes.append(
+                "**acts by damaging DNA or the spindle.** This run was "
+                "told the patient already has chromosomal instability or "
+                "is cancer-predisposed, and this compound's mechanism is "
+                "the defect being treated. Moved to the bottom tier and "
+                "kept only so the search is visible; it is not a "
+                "candidate")
         rec = breadth.get(breadth_key(r.drug)) if breadth else None
         if rec and rec.get("very_broad"):
             if not scaled:

@@ -525,10 +525,27 @@ def test_dock_script_exports_the_cuda_libraries_only_when_there_are_some(
         monkeypatch):
     monkeypatch.setattr(wsldock, "library_path", lambda: "/home/u/cuda-libs")
     script = wsldock.dock_script("/home/u/bin/gnina", ["-r", "a b", 3])
-    assert script.startswith('export LD_LIBRARY_PATH="/home/u/cuda-libs:')
-    assert script.rstrip().endswith("/home/u/bin/gnina -r a b 3")
+    assert "/home/u/cuda-libs:" in script
+    assert '"$LD_LIBRARY_PATH"' in script, "the variable must still expand"
     monkeypatch.setattr(wsldock, "library_path", lambda: None)
     assert wsldock.dock_script("/x/vina", ["-r"]) == "/x/vina -r" + NL
+
+
+def test_dock_script_keeps_a_path_with_a_space_as_one_argument(monkeypatch):
+    """A Windows username with a space split one argument into two.
+
+    gnina then exited non-zero, `_run_dock` recorded the compound as
+    unscored, and a whole screen came back empty rather than broken - for
+    a username. The script must parse back into exactly what was asked.
+    """
+    import shlex
+
+    monkeypatch.setattr(wsldock, "library_path", lambda: None)
+    args = ["-r", "/mnt/c/Users/Ada Lovelace/rec.pdb", "-l", "lig.sdf",
+            "--seed", 0]
+    script = wsldock.dock_script("/home/u/bin/gnina", args)
+    assert shlex.split(script) == ["/home/u/bin/gnina"] + [
+        str(a) for a in args]
 
 
 # ------------------------------------------------ the library limit says so
