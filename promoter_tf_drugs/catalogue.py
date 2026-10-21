@@ -1664,10 +1664,17 @@ def build(result_block: dict, *, goal: str = "up",
                     "such genes are at their highest, and not a switch at "
                     "the promoter")
         if xc:
-            from .crosscheck import cautions_for
-            r.notes.extend(cautions_for({"drug": r.drug,
-                                         "category": r.category,
-                                         "notes": r.notes}, xc))
+            from .crosscheck import DEMOTED_TIER, cautions_for, demotes
+            probe = {"drug": r.drug, "category": r.category, "notes": r.notes}
+            cautions = cautions_for(probe, xc)
+            r.notes.extend(cautions)
+            if cautions and demotes(probe, xc) and r.tier < DEMOTED_TIER:
+                r.notes.append(
+                    f"tier lowered from {r.tier} to {DEMOTED_TIER}: which way "
+                    f"the drug moves its factor is not recorded, so the route "
+                    f"could push the gene either way, and CTD records the "
+                    f"drug moving the gene the opposite way")
+                r.tier = DEMOTED_TIER
         rec = breadth.get(breadth_key(r.drug)) if breadth else None
         if rec and rec.get("very_broad"):
             if not scaled:

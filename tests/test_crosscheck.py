@@ -108,7 +108,7 @@ def test_a_route_for_a_drug_ctd_records_the_other_way_carries_a_caution(lincs):
     assert xc_mod.cautions_for(known, None) == []
 
 
-def test_the_catalogue_notes_the_caution_and_changes_no_tier_or_score(lincs):
+def test_a_recorded_direction_that_ctd_contradicts_is_flagged_not_demoted(lincs):
     lincs()
     xc = xc_mod.build("G1", "up", _links([], ["Tretinoin"]))
     block = {"lincs": {"hits": [{"drug": "Tretinoin", "direction": "up",
@@ -164,7 +164,7 @@ def test_the_full_report_section_lists_flagged_drugs_and_conflicts(lincs):
     assert ("| Aspirin | 2 | RXRA | CTD records the opposite direction and "
             "this route's own direction is unknown |") in text
     assert "| Tretinoin | up | down |" in text
-    assert "Nothing is demoted" in text
+    assert "is lowered to tier 4" in text and "only flagged" in text
 
 
 def test_no_disagreement_and_nothing_to_flag_writes_no_section(lincs):
@@ -203,3 +203,69 @@ def test_the_mitotic_caution_is_only_for_mitotic_genes_and_disruptors():
                            mitotic_gene=True,
                            include_chromatin=False)["routes"][0]
     assert not any("held in mitosis" in n for n in other_drug["notes"])
+
+
+# ------------------------------------------------- the one case that is demoted
+def _unknown_route(drug="Tretinoin", tier=2):
+    return cat.Route(
+        drug=drug, category="TF: orthosteric ligand", mechanism="m",
+        acts_on="RXRA", tier=tier, directness=1,
+        axes=cat.Axes(0.7, 0.5, 0.65, "measured binding"), approved=True,
+        source="screening",
+        notes=["which way " + drug + " moves RXRA is not recorded, so it may "
+               "push the gene the wrong way; scored with an unknown action"])
+
+
+def _build_with(monkeypatch, routes, xc):
+    monkeypatch.setattr(cat, "from_lincs", lambda lincs: routes)
+    return cat.build({"lincs": {"hits": []}, "crosscheck": xc}, goal="up",
+                     include_chromatin=False)["routes"]
+
+
+def test_unknown_direction_and_a_ctd_report_the_other_way_lowers_the_tier(
+        lincs, monkeypatch):
+    lincs()
+    xc = xc_mod.build("G1", "up", _links([], ["Tretinoin"]))
+    plain = _build_with(monkeypatch, [_unknown_route()], None)[0]
+    got = _build_with(monkeypatch, [_unknown_route()], xc)[0]
+    assert plain["tier"] == 2 and got["tier"] == 4
+    assert got["score"] == plain["score"], "only the tier moves"
+    assert any("tier lowered from 2 to 4" in n for n in got["notes"])
+    assert any("CTD records the opposite direction" in n for n in got["notes"])
+
+
+def test_a_demoted_route_sorts_below_an_untouched_tier_three_route(
+        lincs, monkeypatch):
+    lincs()
+    xc = xc_mod.build("G1", "up", _links([], ["Tretinoin"]))
+    routes = [_unknown_route("Tretinoin", 2), _unknown_route("Aspirin", 3)]
+    got = _build_with(monkeypatch, routes, xc)
+    assert [r["drug"] for r in got] == ["Aspirin", "Tretinoin"]
+
+
+def test_a_route_already_at_tier_four_or_lower_is_left_alone(lincs, monkeypatch):
+    lincs()
+    xc = xc_mod.build("G1", "up", _links([], ["Tretinoin"]))
+    got = _build_with(monkeypatch, [_unknown_route("Tretinoin", 5)], xc)[0]
+    assert got["tier"] == 5
+    assert not any("tier lowered" in n for n in got["notes"])
+
+
+def test_a_drug_ctd_does_not_contradict_keeps_its_tier(lincs, monkeypatch):
+    lincs()
+    xc = xc_mod.build("G1", "up", _links(["Tretinoin"], ["Caffeine"]))
+    got = _build_with(monkeypatch, [_unknown_route("Tretinoin", 2)], xc)[0]
+    assert got["tier"] == 2
+
+
+def test_demotion_needs_both_conditions_and_never_touches_ctd_routes(lincs):
+    lincs()
+    xc = xc_mod.build("G1", "up", _links([], ["Tretinoin"]))
+    base = {"drug": "Tretinoin", "category": "TF: orthosteric ligand",
+            "notes": ["which way A moves B is not recorded"]}
+    assert xc_mod.demotes(base, xc)
+    assert not xc_mod.demotes(dict(base, notes=[]), xc), "direction is known"
+    assert not xc_mod.demotes(dict(base, drug="Aspirin"), xc)
+    assert not xc_mod.demotes(dict(base, category="literature: reported "
+                                   "effect"), xc)
+    assert not xc_mod.demotes(base, None)

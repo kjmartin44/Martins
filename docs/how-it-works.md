@@ -455,8 +455,9 @@ the protein is a row that says so, and it is not read as a sign that the promote
 involved, since protein level can change through stability or translation. See
 [checks](checks.md#using-ctd-directly). The run then compares CTD with LINCS and with the
 routes: a ranked drug that CTD records moving the gene the other way is marked, and drugs on
-which the two sources give opposite directions are listed. Nothing is demoted for it. See
-[checks](checks.md#when-ctd-records-the-opposite-direction).
+which the two sources give opposite directions are listed. A route with no recorded
+direction at its factor for such a drug is lowered to tier 4, and any other is only flagged.
+See [checks](checks.md#when-ctd-records-the-opposite-direction).
 
 CTD does not change another route's score. It does set the label of receptor-screen
 hits: an established ligand that CTD already links to the gene is labelled as

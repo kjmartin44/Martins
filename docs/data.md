@@ -955,8 +955,10 @@ ignores them.
 Each result block also carries `crosscheck`, or `null` when CTD was not read: `ctd_opposite`
 and `ctd_wanted` (drug names), `lincs` (`checked`, `reason`, and the counts of drugs LINCS
 calls each way), `n_compared`, `n_agree` and `conflicts` (`drug`, `ctd`, `lincs`, each "up"
-or "down"). A route for a drug in `ctd_opposite` has a note saying so. No tier or score
-depends on it. The routes of compounds in the mitotic list gain a note when CTD reported
+or "down"). A route for a drug in `ctd_opposite` has a note saying so. Its tier changes
+only when its drug's direction at the factor is not recorded, in which case it is lowered
+to tier 4 and a note says "tier lowered from N to 4". **Compatibility:** such a route sits
+at a lower tier than in an earlier run, and no score changes. The routes of compounds in the mitotic list gain a note when CTD reported
 them for a mitotic gene.
 
 `improvements.reported_protein_links` has the same shape as `reported_links` for

@@ -432,6 +432,23 @@ def test_the_exploratory_mode_runs_only_for_a_refused_product_pocket():
     assert "scripts" + chr(92) + "product_status.py" in src
 
 
+def test_the_upstream_factor_count_is_an_option_that_defaults_to_nothing():
+    """Blank passes no flag, so the CLI default of 8 stands; a number reaches
+    both the analysis and the panel funnel, which must scan the same way."""
+    src = _launcher()
+    line = next(ln for ln in src.splitlines() if "set /p UPF_ANS=" in ln)
+    assert "blank for the default 8" in line
+    assert src.index("set /p UPF_ANS=") < src.index("=== 1 of 5")
+    assert src.count('set "UPFACT=--upstream-factors !UPF_ANS!"') == 1
+    # only a whole number above zero is accepted
+    assert 'findstr /r /c:"^' + chr(92) + '"[1-9][0-9]*' + chr(92) + '"$"' in src
+    # the flag is passed to the analysis and to the funnel, and nowhere else
+    assert src.count("!UPFACT!") == 2
+    analysis = src.index("-m promoter_tf_drugs --gene")
+    panel = src.index("-m promoter_tf_drugs.panel")
+    assert analysis < src.index("!UPFACT!") < panel < src.rindex("!UPFACT!")
+
+
 def test_the_exploratory_dock_is_off_unless_the_user_says_yes():
     """It is unvalidated and takes hours, so it must never start by default."""
     src = _launcher()

@@ -3455,9 +3455,10 @@ def summary_report(result: dict, top_n: int = SUMMARY_TOP) -> str:
         if _ctd_opposite:
             L.append(f"⚠CTD opposite: CTD records "
                      f"{', '.join(dict.fromkeys(_ctd_opposite))} moving "
-                     f"{q['gene']} the other way. Nothing is demoted for "
-                     f"it; CTD mixes cell types and doses, so check it before "
-                     f"testing the drug. `report.md` lists them all.")
+                     f"{q['gene']} the other way. A route with no recorded "
+                     f"direction at its factor is lowered to tier 4; the "
+                     f"others are only flagged, since CTD mixes cell types "
+                     f"and doses. `report.md` lists them all.")
             L.append("")
         if _xc and _xc.get("conflicts"):
             _cn = [c["drug"] for c in _xc["conflicts"]]

@@ -311,6 +311,22 @@ set "DOSECHK=1"
 set /p DOSECHK_ANS="Run the dose check on the candidates at the end? Y/n: "
 if /i "!DOSECHK_ANS!"=="n" set "DOSECHK="
 
+REM The upstream search looks for drugs at the proteins that act on the gene's
+REM factors, and by default it covers the 8 best-ranked factors. A larger number
+REM adds drugs that reach the gene only through the network, all of them tier 4,
+REM and a few more minutes. Left blank, nothing is passed and the default stands.
+set "UPFACT="
+set "UPF_ANS="
+set /p UPF_ANS="Factors to search for upstream drugs, a number, blank for the default 8: "
+if not "!UPF_ANS!"=="" (
+    echo "!UPF_ANS!"| findstr /r /c:"^\"[1-9][0-9]*\"$" >nul
+    if errorlevel 1 (
+        echo   "!UPF_ANS!" is not a whole number above 0 - the default 8 is used.
+    ) else (
+        set "UPFACT=--upstream-factors !UPF_ANS!"
+    )
+)
+
 REM The exploratory dock is the opposite: off unless asked for. It docks the
 REM library into a pocket copied onto an AlphaFold model, the result is not
 REM validated, and it can take hours, so it is not something to start by
@@ -741,7 +757,7 @@ echo.
     --pfm-file data\jaspar2024.txt !REGULON! ^
     !CHIP! !WINDOW! --all-tss ^
     !TFW! --proliferation !PROLIF! --cell-type-check !TISS! !EXPR! !GTF! ^
-    --predict-direction --upstream-network --upstream-depth 3 ^
+    --predict-direction --upstream-network --upstream-depth 3 !UPFACT! ^
     --regulator-route --regulator-steps 2 ^
     !LINCS! --genetics --screen --design-screen --design-modality ^
     --promoter-dna --screen-product --find-analogs ^
@@ -792,7 +808,7 @@ REM control rather than a second analysis.
     --pfm-file data\jaspar2024.txt !REGULON! ^
     !CHIP! !WINDOW! --all-tss !TFW! ^
     --proliferation !PROLIF! !TISS! !EXPR! !GTF! --cell-type-check ^
-    !LINCS! --genetics --upstream-network --regulator-route --regulator-steps 2 ^
+    !LINCS! --genetics --upstream-network !UPFACT! --regulator-route --regulator-steps 2 ^
     --promoter-dna --screen-product !ACTIVITY! !SENS! !DOCKING! ^
     --max-regulon 600 --max-burden moderate ^
     --out "!OUT!_panel" -v

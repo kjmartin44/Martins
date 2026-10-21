@@ -20,7 +20,11 @@ the local LINCS consensus signatures, and reports
 
 What it does not do
 -------------------
-**It changes no tier and no score.** A caution is a reason to check, not a
+**It changes a tier in one case only.** A route whose drug has no recorded
+direction at its factor, for a drug CTD records moving the gene the other way, is
+lowered to tier 4 (`demotes`). Its tier rested on measured binding alone, so the
+route was a coin flip on direction, and CTD's record tips it toward the wrong
+way. Every other caution changes nothing. A caution is a reason to check, not a
 verdict. CTD aggregates cell types, doses and assays, so a chemical can raise a
 gene in one and lower it in another. Against LINCS, CTD's direction held for 24
 of 37 pairs where both gave one (65%), and most CTD drugs have no LINCS call at
@@ -41,6 +45,11 @@ log = logging.getLogger(__name__)
 # What a route's own notes say when no direction is recorded for the drug at
 # the factor. The catalogue writes these; they are read here, not redefined.
 UNKNOWN_DIRECTION_MARKERS = ("is not recorded", "unknown action")
+
+# The tier a route falls to when its direction is unknown and CTD records the
+# opposite. Tier 4 is "predicted": the other routes there have no measured step
+# at the factor either.
+DEMOTED_TIER = 4
 
 
 def _names(entries) -> dict:
@@ -119,6 +128,17 @@ def unknown_direction(route: dict) -> bool:
     return any(m in notes for m in UNKNOWN_DIRECTION_MARKERS)
 
 
+def demotes(route: dict, xc: dict | None) -> bool:
+    """Should this route fall to `DEMOTED_TIER`?
+
+    True for a route that is not itself a CTD route, whose drug has no recorded
+    direction at its factor, and which CTD records moving the gene the other way.
+    A route with a recorded direction that CTD contradicts is a disagreement
+    between two measurements and is flagged, not demoted.
+    """
+    return bool(cautions_for(route, xc)) and unknown_direction(route)
+
+
 def opposite_keys(xc: dict | None) -> set:
     """Salt-free keys of the drugs CTD records moving the gene the other way."""
     return {breadth_key(n) for n in (xc or {}).get("ctd_opposite") or []} - {""}
@@ -168,9 +188,10 @@ def markdown(xc: dict | None, ranked: list | None = None,
         L.append(f"**{len(flagged)} ranked drugs are recorded by CTD as moving "
                  f"{gene} the other way** (the goal is to move it {goal}). A "
                  f"route predicts the drug should help; CTD says someone "
-                 f"measured the opposite. Nothing is demoted for this, since "
-                 f"CTD mixes cell types and doses, but it is the first thing "
-                 f"to check before testing the drug.")
+                 f"measured the opposite. A route whose own direction at its "
+                 f"factor is not recorded is lowered to tier {DEMOTED_TIER}; "
+                 f"any other is only flagged, since CTD mixes cell types and "
+                 f"doses. Check it before testing the drug.")
         L.append("")
         L.append("| Drug | Tier | Acts on | Caution |")
         L.append("|---|---|---|---|")

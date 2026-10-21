@@ -402,6 +402,7 @@ SUBS = {
     "!ACTIVITY!": '--tf-activity --activity-tissue "liver" '
                   "--activity-permutations 2000",
     "!SENS!": "--sensitivity-scan", "!DOCKING!": "--docking-results d.json",
+    "!UPFACT!": "--upstream-factors 17",
     "!DOSAGE!": "--scenario haploinsufficiency --broken-allele-makes "
                 "truncated", "!LIBRARY!": "",
 }
@@ -432,6 +433,7 @@ def test_the_launcher_analysis_and_funnel_commands_parse_with_the_real_parsers()
         assert kw["regulator_route"] is True
         assert kw["upstream_network"] is True
         assert kw["use_genetics"] is True
+        assert kw["upstream_factors"] == 17, "the analysis and the funnel agree"
 
 
 def test_the_launcher_passes_every_analysis_switch_the_cli_offers():
@@ -445,7 +447,7 @@ def test_the_launcher_passes_every_analysis_switch_the_cli_offers():
         "--species", "--min-ic", "--matrix-id", "--genome", "--promoter-fasta",
         "--knockout-gmt", "--lincs-file", "--signature-file", "--prism-file",
         # limits whose defaults are what the launcher wants
-        "--upstream-factors", "--upstream-drugs-per-node", "--null-shuffles",
+        "--upstream-drugs-per-node", "--null-shuffles",
         # off on purpose: leads with no direction, see docs/checks.md
         "--regulator-measured",
         # the opposite of a default the launcher wants

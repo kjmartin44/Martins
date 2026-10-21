@@ -148,7 +148,11 @@ of range (for example `--null-shuffles -1` or `--upstream-factors 0`).
 dosage scenario, then runs the long command above with a window of -1000/+200, a p-value
 of 1e-5, `--all-tss`, `--tf-weight 0.7` when ChIP data is present, and `--regulator-steps 2`.
 It adds docking before the analysis, a funnel against a control gene after it, and a dose
-check. It uses a local file for each option only if that file exists in `data/`.
+check. It uses a local file for each option only if that file exists in `data/`. It also
+asks how many factors to search for upstream drugs. Blank keeps the default of 8, and a
+number is passed as `--upstream-factors` to the analysis and to the funnel. A larger number
+adds drugs that reach the gene only through the network, all of them tier 4, and takes a few
+more minutes.
 
 ## Reading the result
 

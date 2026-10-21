@@ -570,17 +570,21 @@ gene the run was trying to raise. The run now compares them and shows the result
 - **CTD against LINCS.** The same section lists drugs for which both give a direction and the
   directions differ, with the number they agree on. LINCS covers few CTD drugs, so the count
   is often small. For BUB1B it was 1.
-- **Nothing is demoted.** No tier or score changes. CTD pools cell types, doses and assays,
-  and a drug can raise a gene in one and lower it in another.
+- **One case is demoted.** A route whose drug has no recorded direction at its factor, for a
+  drug CTD records moving the gene the other way, is lowered to tier 4 and says so in its
+  notes. Nothing else changes a tier or score. CTD pools cell types, doses and assays, and a
+  drug can raise a gene in one and lower it in another, so every other disagreement is
+  only flagged.
 
-**Should an unknown direction plus a CTD report of the opposite demote the route?** The
-evidence says it should lose its tier, and the change is left for you to decide. A route
-with no recorded direction at its factor is a coin flip on direction. CTD's direction held
+**Why that case is demoted.** A route with no recorded direction at its factor is a coin
+flip on direction, and its tier rested only on measured binding. CTD's direction held
 against LINCS for 24 of the 37 drugs it recorded moving a gene the wanted way and that LINCS
-also called (65%, a small count). A CTD record of the opposite way is therefore somewhat
-better than chance at saying the route points the wrong way, and the tier of such a route
-rests only on binding. A route with a recorded direction that CTD contradicts is a
-disagreement between two measurements and stays flagged only.
+also called (65%, a small count). So a CTD record of the opposite way makes the route more
+likely to point the wrong way than the right way, below the 69% of other predicted routes
+that had the right direction. The rule was chosen after reading one BUB1B result, where it
+moved tretinoin and fulvestrant from tier 2 to tier 4, and the 65% is itself a small count,
+so it has not been tested on held-out genes. A route with a recorded direction that CTD
+contradicts is a disagreement between two measurements and stays flagged only.
 
 **Spindle poisons on a mitotic gene.** A mitotic gene's mRNA and protein are highest in
 cells held in mitosis, so a compound that arrests cells there (paclitaxel, benomyl,

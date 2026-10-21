@@ -15,28 +15,16 @@ clinical story of one child. Nothing here has been shown to help with MVA.
 One run, from a gene and a direction to ranked drug hypotheses. The [flowchart](docs/pipeline_detail.mmd) shows the same steps as a diagram, and [how it works](docs/how-it-works.md) covers the data each step reads.
 
 ```mermaid
----
-config:
-  theme: base
-  themeVariables:
-    fontSize: 20px
-    primaryColor: "#f6f8fa"
-    primaryTextColor: "#1f2328"
-    primaryBorderColor: "#57606a"
-    lineColor: "#57606a"
-  flowchart:
-    wrappingWidth: 460
-    rankSpacing: 28
-    padding: 14
----
 flowchart TB
-    A["<b>1 Choose</b><br/>a gene, and whether to raise or lower it"]
-    B["<b>2 Scan</b><br/>find the promoter and its binding spots,<br/>searching wider if none stand out"]
-    C["<b>3 Check</b><br/>what each protein does, and whether<br/>it is really bound there"]
-    D["<b>4 Match</b><br/>drugs that push those proteins the right way,<br/>plus other routes to the same effect"]
-    E["<b>5 Report</b><br/>rank by evidence, show approved drugs,<br/>and say what ran and what failed"]
-    F["<b>6 Test</b><br/>compare with what is already known"]
+    A["1 Choose<br/>a gene and a direction<br/>(raise or lower it)"]
+    B["2 Scan<br/>find the promoter and<br/>its binding spots, and<br/>widen the search if<br/>none stand out"]
+    C["3 Check<br/>what each protein does<br/>and whether it is<br/>really bound there"]
+    D["4 Match<br/>drugs that push those<br/>proteins the right way,<br/>plus other routes"]
+    E["5 Report<br/>rank by evidence, show<br/>approved drugs, say what<br/>ran and what failed"]
+    F["6 Test<br/>compare with what<br/>is already known"]
     A --> B --> C --> D --> E --> F
+    classDef step fill:#f6f8fa,stroke:#57606a,color:#1f2328
+    class A,B,C,D,E,F step
 ```
 
 ## Quick start
