@@ -1,27 +1,62 @@
-%% The same run in more detail. The short version is pipeline.mmd. Source of truth: docs/how-it-works.md.
+%% The same run in more detail, naming all fourteen routes.
+%% The short version is pipeline.mmd. Source of truth: docs/how-it-works.md.
 flowchart TD
     START["Choose a gene, a direction,<br/>and what is wrong with the alleles"]
 
-    START --> PROM["Find its promoter"]
-    PROM --> SCAN["Scan for spots where<br/>regulating proteins could bind"]
-    SCAN --> NULL["Shuffle the same window<br/>to see how many spots<br/>chance alone would give"]
-    NULL --> Q{"Anything<br/>stands out?"}
-    Q -- no --> WIDE["Search a wider stretch"] --> CHECK
-    Q -- yes --> CHECK["Say what each protein does,<br/>whether it is really there,<br/>and whether it is active"]
-    CHECK --> DRUGS["Find approved drugs that<br/>push those proteins the right way"]
+    subgraph ON_GENE["On the gene itself"]
+        R1["1 drugs already acting on<br/>its protein or transcript"]
+        R13["13 compounds predicted to<br/>bind its protein"]
+        R14["14 compounds measured to<br/>move its protein"]
+    end
 
-    START --> OTHER["Other routes to the same gene<br/>drugs on the gene itself<br/>on proteins further upstream<br/>on its recorded regulators<br/>reported in the literature<br/>measured to move the transcript"]
+    subgraph MEASURED["Measured on the gene"]
+        R4["4 chemicals the literature<br/>records as moving it (CTD)"]
+        R6["6 compounds whose LINCS<br/>signature contains it"]
+        R12["12 compounds that phenocopy<br/>losing a factor (PRISM)"]
+    end
 
-    START --> AFTER["After transcription<br/>decay exons an oligo could skip<br/>upstream ORFs in the 5'UTR<br/>decay elements in the 3'UTR<br/>the ligase that destroys the protein<br/>and the enzyme that reverses it<br/>drugs measured on the protein itself"]
+    subgraph VIA_TF["Through a factor at the promoter"]
+        PROM["Find the promoter"] --> SCAN["Scan for binding spots"]
+        SCAN --> NULL["Shuffle the same window:<br/>how many spots does<br/>chance alone give?"]
+        NULL --> Q{"Anything<br/>stands out?"}
+        Q -- no --> WIDE["Search a wider stretch"] --> CHECK
+        Q -- yes --> CHECK["What each factor does,<br/>whether it is really bound,<br/>and whether it is active"]
+        CHECK --> R2["2 approved drugs at<br/>those factors"]
+        CHECK --> R9["9 ligand screen:<br/>an established ligand"]
+        CHECK --> R10["10 ligand screen:<br/>a new hypothesis"]
+        CHECK --> R11["11 docking, once the<br/>pocket passes a control"]
+        CHECK --> R7["7 compounds that change<br/>a factor's own transcript"]
+        CHECK --> R8["8 compounds that move<br/>a factor's inferred activity"]
+    end
 
-    DRUGS --> NARROW["Weigh the collateral<br/>how many genes the factor runs<br/>how body-wide the factor is<br/>how many systems the drug moves<br/>whether a selective ligand can exist"]
-    OTHER --> NARROW
-    AFTER --> NARROW
+    subgraph AROUND["Around the factor"]
+        R3["3 drugs further upstream:<br/>TF to kinase to receptor"]
+        R5["5 drugs at its recorded<br/>regulators (CollecTRI)"]
+    end
+
+    subgraph AFTER["After transcription, annotated not searched for drugs"]
+        A1["decay exons an oligo could skip"]
+        A2["upstream ORFs in the 5'UTR"]
+        A3["decay elements in the 3'UTR"]
+        A4["the ligase that destroys the protein,<br/>and the enzyme that reverses it"]
+    end
+
+    START --> ON_GENE
+    START --> MEASURED
+    START --> PROM
+    START --> AROUND
+    START --> AFTER
+
+    ON_GENE --> NARROW["Weigh the collateral<br/>how many genes the factor runs<br/>how body-wide the factor is<br/>how many systems the drug moves<br/>whether a selective ligand can exist"]
+    MEASURED --> NARROW
+    VIA_TF --> NARROW
+    AROUND --> NARROW
 
     NARROW --> GATES["Demote what the evidence cannot carry<br/>a scan that is mostly noise<br/>a compound that just moves the cell cycle<br/>one the literature records for every gene<br/>one that damages DNA, or raises an oncogene,<br/>when the patient cannot afford either"]
     GATES --> RANK["Rank every route by<br/>how strong its evidence is"]
     CONTEXT["Context only<br/>genetic support, safe dose range"] -.-> RANK
     LEDGER["Which lookups actually answered"] -.-> RANK
+    AFTER -.-> REPORT
 
     RANK --> REPORT["Write up<br/>show approved drugs<br/>say what ran and what failed<br/>and which of the six steps<br/>were never asked at all"]
     REPORT --> TEST["Test it<br/>the screen this analysis prioritises,<br/>and a check against what is already known"]

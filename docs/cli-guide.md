@@ -66,6 +66,8 @@ under their usual names are found without a flag (marked auto).
 | Known regulators | CollecTRI at `data/collectri.tsv` (auto) | `--regulator-route` records that no signed table was found. |
 | Cell dependency, drug sensitivity | `--depmap-file`, `--prism-file` | Found in `data/` (auto). `--sensitivity-scan` needs both. |
 | Docking results | `--docking-results FILE` | No docking enters the run. |
+| How much of the order is drug fame | `data/ctd_fame.tsv` (auto), built by `python scripts/build_fame_table.py` from your own saved runs | No candidate is checked for being a compound the literature records for every gene. That is the control the retrospective found mattered most. |
+| Drugs measured on the PROTEIN | `data/drug_protein_abundance.tsv` (auto) | Every abundance claim in the run is about mRNA, so a stabiliser or a degradation blocker is invisible. decryptE and ProTargetMiner fit; LINCS P100 and CPTAC do not. |
 | What is wrong with the gene | `--scenario`, with `--broken-allele-makes`, `--target-fraction`, `--condition` | The ranking states no requirement. `haploinsufficiency` assumes the surviving copy is wild type; for a recessive condition where it is not, use `biallelic_hypomorph`. |
 
 ## Defaults you can change
@@ -122,7 +124,8 @@ under their usual names are found without a flag (marked auto).
 | `--genetics` | Human genetic support for moving the gene. |
 | `--tf-activity` | Infers which factors are active. Needs `--activity-tissue`. |
 | `--screen` | Virtual screens against the receptors. Many requests. |
-| `--design-screen`, `--design-modality` | Experimental screen design and designed modalities. |
+| `--design-screen` | The experiment this analysis prioritises. A promoter reporter by default; a screen of the approved drug library against the gene's PROTEIN in patient cells when `--scenario` says the protein is the problem, or with `--has-ptc` or `--broken-allele-makes truncated`. |
+| `--design-modality` | siRNA, ASO and CRISPRa candidates designed from the transcript. |
 | `--promoter-dna` | DNA-directed agents that prefer sequence features of this promoter. |
 | `--screen-product` | Screens the gene's own protein for binders. |
 | `--find-analogs` | Close analogues of the candidates. |
@@ -155,8 +158,30 @@ number is passed as `--upstream-factors` to the analysis and to the funnel. A la
 adds drugs that reach the gene only through the network, all of them tier 4, and takes a few
 more minutes.
 
+## What runs without being asked
+
+Some checks have no switch. They cost nothing, they only ever lower a
+route or add a caution, and the report says when a missing file stopped
+one from running.
+
+| Check | What it does |
+|---|---|
+| Coverage audit | Marks each of the six steps between a gene and a protein as searched, listed only, or not covered. A full table of transcriptional routes is not evidence that the other five were considered. |
+| Scan quality | Above a 25% false discovery proportion, routes that rest on the motif scan are capped at tier 3. |
+| Proliferation | For a gene whose transcript tracks the cell cycle, a compound that moves the rest of the mitotic programme with it is halved. Needs the LINCS `.gmt` files. |
+| Drug fame | A compound the literature records for most genes loses 15% of its score. Needs `data/ctd_fame.tsv`. |
+| UTR scan | Upstream ORFs in the 5'UTR and AU-rich elements in the 3'UTR, each against a shuffle of the same sequence. |
+| Degradation | Names the ligase that destroys the protein and the enzyme that reverses it, and asks whether any approved drug acts on either. |
+
 ## Reading the result
 
 Open `report.md`, and read its **Evidence available in this run** table first. A source
-that failed is recorded as failed and never as zero. `summary.md` is the one-page version,
-`results.json` keeps everything, and `tf_summary.tsv` is the factor table.
+that failed is recorded as failed and never as zero. Then read **How much of the problem
+this run examined**, which says which of the six steps were searched and which were only
+named — a full ranking is not evidence that the rest were considered. `summary.md` is the
+one-page version, `results.json` keeps everything, and `tf_summary.tsv` is the factor table.
+
+The order within a tier carries less than it looks. Tested against CTD, the ranking orders
+drugs no better than chance once drug fame is held equal, so read the list as a stratified
+pool rather than a priority order, and use the tiers, the method count and the exclusions
+rather than the score. [Checks](checks.md) has the measurement.

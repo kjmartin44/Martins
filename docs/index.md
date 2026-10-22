@@ -11,8 +11,9 @@ inspect the evidence behind each route.
   output files, and every database it reads and why.
 - [Pipeline overview](pipeline.mmd): one run as a short Mermaid
   flowchart, with the routes in parallel rather than one chain.
-  [The detailed flowchart](pipeline_detail.mmd) shows the branches, the
-  shuffled-sequence null and the four collateral axes.
+  [The detailed flowchart](pipeline_detail.mmd) names all fourteen routes,
+  numbered as in the routes table, and shows the shuffled-sequence null,
+  the four collateral axes and the gates.
 - [A full workup](workflow.md): the five steps, end to end, with the
   commands and what would make you stop at each one.
 - [Installation](installation.md): environments, extras, and Windows launchers.

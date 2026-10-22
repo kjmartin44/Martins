@@ -160,6 +160,9 @@ measurement of the gene itself - the CTD record, the LINCS signature, the
 PRISM phenocopy - are stronger evidence about the gene, though weaker about
 mechanism.
 
+The numbers in [the detailed flowchart](pipeline_detail.mmd) are the rows
+of this table, in this order.
+
 | Search | Category in the list | Tier | Strength is | Distance |
 |---|---|---|---|---|
 | Drugs on the gene's own protein or transcript | direct: gene product, or gene or transcript | 1 if approved, else 3 | 0.85 if it raises the protein, 0.55 if only activity | 0 |
