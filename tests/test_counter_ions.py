@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from promoter_tf_drugs import docking as dk
+from generoutes import docking as dk
 
 NL = chr(10)
 TAB = chr(9)

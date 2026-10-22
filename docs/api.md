@@ -5,7 +5,7 @@
 The package exposes three functions:
 
 ```python
-from promoter_tf_drugs import run, markdown_report, write_outputs
+from generoutes import run, markdown_report, write_outputs
 
 result = run("DEMOGENE", demo=True, cache_dir="results/cache", goal="down")
 text = markdown_report(result, top_n=10)
@@ -36,8 +36,8 @@ the five `pathlib.Path` objects written there. Existing output files are replace
 | `cache_dir` | `None` | Override the default cache directory. |
 
 For the complete signature, use `help(run)` or inspect
-[`pipeline.py`](../promoter_tf_drugs/pipeline.py). Boolean CLI switches are
-translated explicitly in [`cli.py`](../promoter_tf_drugs/cli.py); for example,
+[`pipeline.py`](../generoutes/pipeline.py). Boolean CLI switches are
+translated explicitly in [`cli.py`](../generoutes/cli.py); for example,
 `--no-grade` means `grade_drugs=False`.
 
 ## Errors and partial results
@@ -48,7 +48,7 @@ scenario that contradicts the direction, such as `scenario="haploinsufficiency"`
 with `goal="down"`: the requirement and the ranking would point opposite ways.
 The scenarios `null` and `modifier` accept either direction. Missing
 explicit input files raise `FileNotFoundError`. Failed required requests can
-raise `promoter_tf_drugs.http.HttpError`. Optional stages often log warnings and
+raise `generoutes.http.HttpError`. Optional stages often log warnings and
 return defaults instead of aborting. Retain logs with saved results when using
 the API for batch analyses.
 

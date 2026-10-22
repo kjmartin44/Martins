@@ -766,7 +766,7 @@ def run_all(paths: list, library_keys: set, *, permutations: int = 2000,
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(
-        prog="python -m promoter_tf_drugs.retrospective",
+        prog="python -m generoutes.retrospective",
         description=("Check saved results against known effects: do the "
                      "predicted routes point at drugs known to move the "
                      "gene?"))

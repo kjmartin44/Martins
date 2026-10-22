@@ -68,7 +68,7 @@ def one_run(gene: str, goal: str, arm: str, out: Path) -> str:
         return f"{gene} {arm}: already done"
     dest.mkdir(parents=True, exist_ok=True)
     up, down = ARMS[arm]
-    cmd = [sys.executable, "-m", "promoter_tf_drugs", "--gene", gene,
+    cmd = [sys.executable, "-m", "generoutes", "--gene", gene,
            "--direction", goal, "--upstream", str(up), "--downstream", str(down),
            *OPTIONS, "--out", str(dest), "--quiet"]
     with open(dest / "run.log", "w", encoding="utf-8") as log:
@@ -87,9 +87,9 @@ def run_all(paths, out: Path, workers: int) -> None:
 
 def score(out: Path, permutations: int = 500) -> str:
     import numpy as np  # noqa: F401
-    from promoter_tf_drugs import localdrugs
-    from promoter_tf_drugs import retrospective as rt
-    from promoter_tf_drugs.signatures import breadth_key
+    from generoutes import localdrugs
+    from generoutes import retrospective as rt
+    from generoutes.signatures import breadth_key
 
     library = {breadth_key(r["name"]) for r in localdrugs.library()} - {""}
 

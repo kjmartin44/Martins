@@ -14,10 +14,10 @@ import random
 
 import pytest
 
-from promoter_tf_drugs import drugs as drugs_mod
-from promoter_tf_drugs import network as net
-from promoter_tf_drugs.drugs import Drug
-from promoter_tf_drugs.http import HttpError
+from generoutes import drugs as drugs_mod
+from generoutes import network as net
+from generoutes.drugs import Drug
+from generoutes.http import HttpError
 
 NL = chr(10)
 TAB = chr(9)
@@ -278,8 +278,8 @@ def test_lowering_the_gene_through_an_activator_is_reached_by_an_inhibitory_edge
 def _lf_offline_run(tmp_path, monkeypatch, *, edges, library, index=None,
                     index_error=None, chembl=None, ledger_row="upstream",
                     full=False, **run_kw):
-    from promoter_tf_drugs import eqtl, genes, neighbours
-    from promoter_tf_drugs import localdrugs, pipeline
+    from generoutes import eqtl, genes, neighbours
+    from generoutes import localdrugs, pipeline
 
     monkeypatch.setattr(genes, "_TX_BY_GENE", {})
     monkeypatch.setattr(genes, "_TX_SOURCE", {"path": None})
@@ -413,21 +413,21 @@ def test_a_run_whose_lookups_all_fail_is_not_reported_as_a_clean_negative(
 def test_a_screen_with_nothing_to_screen_is_not_a_failure():
     """HTT's promoter has 49 factors and no approved drug on any of them, so
     there is no receptor to build a screen from. That is a complete answer."""
-    from promoter_tf_drugs import pipeline
+    from generoutes import pipeline
     ok, detail = pipeline._screen_outcome({}, set())
     assert ok is True
     assert "no receptor to screen" in detail
 
 
 def test_a_screen_that_had_receptors_and_screened_none_is_a_failure():
-    from promoter_tf_drugs import pipeline
+    from generoutes import pipeline
     ok, detail = pipeline._screen_outcome({}, {"CHEMBL1", "CHEMBL2"})
     assert ok is False
     assert "2 receptor(s) had drugs" in detail and "none could be screened" in detail
 
 
 def test_a_screen_that_ran_says_how_many():
-    from promoter_tf_drugs import pipeline
+    from generoutes import pipeline
     ok, detail = pipeline._screen_outcome({"ESR1": {}}, {"CHEMBL1"})
     assert ok is True and detail == "1 receptor(s) screened"
 
@@ -445,7 +445,7 @@ def test_a_whole_run_with_no_eligible_receptor_records_the_screen_as_ok(
 # --------------------------------------- the promoter DNA scan's ledger row
 def test_a_finished_promoter_dna_scan_with_no_candidate_is_not_a_failure(
         tmp_path, monkeypatch):
-    from promoter_tf_drugs import promoterdna
+    from generoutes import promoterdna
     monkeypatch.setattr(promoterdna, "candidates", lambda scan: [])
     block, row = _lf_offline_run(
         tmp_path, monkeypatch, edges=_lf_tf_edges(),
@@ -514,7 +514,7 @@ def test_the_per_gene_lookup_also_finds_a_drug_at_a_family_and_marks_it():
 # ------------------------------------- the route that starts at regulators
 def _regulator_run(tmp_path, monkeypatch, *, tables, index, flag=True,
                    **kw):
-    from promoter_tf_drugs import tfactivity
+    from generoutes import tfactivity
     monkeypatch.setattr(tfactivity, "autoload_regulons",
                         lambda *a, **k: (tables, "collectri.tsv"))
     return _lf_offline_run(
@@ -596,7 +596,7 @@ def test_the_drugs_listed_per_node_follow_the_option_and_default_to_five():
 
 def test_the_run_and_the_command_line_agree_on_the_limits():
     import inspect
-    from promoter_tf_drugs import cli, pipeline
+    from generoutes import cli, pipeline
     sig = inspect.signature(pipeline.run).parameters
     assert sig["upstream_factors"].default == net.UPSTREAM_FACTORS == 8
     assert sig["upstream_drugs_per_node"].default == 5
@@ -613,7 +613,7 @@ def test_the_run_and_the_command_line_agree_on_the_limits():
 
 def test_a_limit_below_one_is_refused_before_the_run_starts():
     import pytest
-    from promoter_tf_drugs import pipeline
+    from generoutes import pipeline
     for bad in ({"upstream_factors": 0}, {"upstream_drugs_per_node": 0}):
         with pytest.raises(Exception):
             pipeline.run("DEMOGENE", demo=True, **bad)

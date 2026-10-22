@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-PKG = ROOT / "promoter_tf_drugs"
+PKG = ROOT / "generoutes"
 DOC = ROOT / "docs" / "architecture.md"
 
 START = "| Module | Purpose |"

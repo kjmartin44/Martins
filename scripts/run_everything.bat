@@ -124,7 +124,7 @@ if not defined HAVEOB (
     set /p GETOB="Download it? Y/n: "
     if /i not "!GETOB!"=="n" (
         echo === Downloading the FDA Orange Book ^(~1 MB^) ===
-        curl.exe -fL -A "Mozilla/5.0 promoter-tf-drugs" -o data\EOBZIP.zip "https://www.fda.gov/media/76860/download?attachment"
+        curl.exe -fL -A "Mozilla/5.0 generoutes" -o data\EOBZIP.zip "https://www.fda.gov/media/76860/download?attachment"
         "%PY%" -c "import sys,zipfile; sys.exit(0 if any(n.lower().endswith('products.txt') for n in zipfile.ZipFile(sys.argv[1]).namelist()) else 1)" data\EOBZIP.zip >nul 2>&1
         if errorlevel 1 (
             echo   That is not the Orange Book - deleting it.
@@ -601,7 +601,7 @@ if not exist "!DOCKDIR!" mkdir "!DOCKDIR!"
 set "DOCKJSON=!DOCKDIR!\product.json"
 if exist "!DOCKJSON!" del "!DOCKJSON!"
 
-"%PY%" -m promoter_tf_drugs.docking --product --gene !GENE! ^
+"%PY%" -m generoutes.docking --product --gene !GENE! ^
     --direction !DIR! --state any !LIBRARY! ^
     --jobs !JOBS! --cpu !CORES! --top 40 ^
     --library-limit !LIBLIMIT! --exhaustiveness !EXH! ^
@@ -635,7 +635,7 @@ if /i "!PSTATE!"=="refused" if not "!XUNI!"=="-" (
     ) else (
         echo An exploratory dock on an AlphaFold model is available and is not run
         echo by default. To run it later, from the same folder:
-        echo   python -m promoter_tf_drugs.exploratory --gene !GENE! --uniprot !XUNI! --reference --out "!OUT!_exploratory"
+        echo   python -m generoutes.exploratory --gene !GENE! --uniprot !XUNI! --reference --out "!OUT!_exploratory"
     )
 )
 
@@ -683,7 +683,7 @@ if not "!NTF!"=="0" (
     echo.
     echo === 2 of 5: finding the factors worth docking ===
     echo   A fast scan, expensive stages off. Two to three minutes.
-    "%PY%" -m promoter_tf_drugs --gene !GENE! --direction !DIR! ^
+    "%PY%" -m generoutes --gene !GENE! --direction !DIR! ^
         --pfm-file data\jaspar2024.txt !REGULON! ^
         !CHIP! --upstream 1000 --downstream 200 --pvalue 1e-5 !GTF! ^
         --no-grade --no-outcome --no-improvements --no-mechanisms ^
@@ -712,7 +712,7 @@ if exist "!TFLIST!" (
         echo   --- docking %%T ^(%%U^) ---
         set "TFROLE="
         if not "%%U"=="unknown" set "TFROLE=--role %%U"
-        "%PY%" -m promoter_tf_drugs.docking --gene %%T !TFROLE! ^
+        "%PY%" -m generoutes.docking --gene %%T !TFROLE! ^
             --direction !DIR! !LIBRARY! ^
             --jobs !JOBS! --cpu !CORES! --top 40 ^
             --library-limit !LIBLIMIT! --exhaustiveness !EXH! ^
@@ -753,7 +753,7 @@ echo === 3 of 5: analysing !GENE! ===
 echo   Thirty minutes to a couple of hours on a first run. Checkpoints print as it goes.
 echo.
 
-"%PY%" -m promoter_tf_drugs --gene !GENE! --direction !DIR! ^
+"%PY%" -m generoutes --gene !GENE! --direction !DIR! ^
     --pfm-file data\jaspar2024.txt !REGULON! ^
     !CHIP! !WINDOW! --all-tss ^
     !TFW! --proliferation !PROLIF! --cell-type-check !TISS! !EXPR! !GTF! ^
@@ -803,7 +803,7 @@ REM
 REM --proliferation and --tissue describe the target tissue rather than
 REM either gene, so the control gets them too; that is what makes it a
 REM control rather than a second analysis.
-"%PY%" -m promoter_tf_drugs.panel --genes !GENE! --control-gene ACTB ^
+"%PY%" -m generoutes.panel --genes !GENE! --control-gene ACTB ^
     --direction !DIR! ^
     --pfm-file data\jaspar2024.txt !REGULON! ^
     !CHIP! !WINDOW! --all-tss !TFW! ^
@@ -832,7 +832,7 @@ set "DOCKARGS="
 for %%F in ("!DOCKDIR!\*.json") do set "DOCKARGS=!DOCKARGS! --docking "%%F""
 set "COMBPANEL="
 if exist "!OUT!_panel\panel.json" set "COMBPANEL=--panel "!OUT!_panel\panel.json""
-"%PY%" -m promoter_tf_drugs.combined --results "!OUT!\results.json" ^
+"%PY%" -m generoutes.combined --results "!OUT!\results.json" ^
     !COMBPANEL! !DOCKARGS! --gene !GENE! --top 40 ^
     --out "!OUT!_combined"
 if errorlevel 1 (
@@ -856,7 +856,7 @@ if defined DOSECHK (
     REM data\fda_label_cmax_review.tsv. A failure here only means fewer values.
     "%PY%" scripts\build_fda_cmax.py --from-results "!OUT!\results.json"
     if errorlevel 1 echo   The FDA label table could not be built. Continuing without it.
-    "%PY%" -m promoter_tf_drugs.exposure "!OUT!\results.json" !CMAXARG! !LIBRARY! ^
+    "%PY%" -m generoutes.exposure "!OUT!\results.json" !CMAXARG! !LIBRARY! ^
         --out "!OUT!_exposure"
     if errorlevel 1 echo   The dose check failed. The analysis above is unaffected.
 )
@@ -868,7 +868,7 @@ if defined EXPLORE (
     echo   the first. Add --max-sites 1 to the command below to dock only the best.
     echo   For a kinase the reference dock doubles the time and is what the class
     echo   check is calibrated on.
-    "%PY%" -m promoter_tf_drugs.exploratory --gene !GENE! --uniprot !XUNI! ^
+    "%PY%" -m generoutes.exploratory --gene !GENE! --uniprot !XUNI! ^
         !LIBRARY! --library-limit !LIBLIMIT! --exhaustiveness !EXH! ^
         --jobs !JOBS! --cpu !CORES! --reference ^
         --out "!OUT!_exploratory"

@@ -1,4 +1,4 @@
-# promoter-tf-drugs
+# generoutes
 
 A Python research tool that collects ways an approved drug might raise or
 lower one gene, from several independent kinds of evidence, and ranks them by
@@ -7,10 +7,10 @@ recorded as regulating it, the compounds measured to move it, the promoter's
 predicted binding sites, and nine other routes. Results are hypotheses for
 further study, not validated treatment advice.
 
-The package is named `promoter-tf-drugs` after the promoter motif route,
-which was written first. That route is not the strongest one here and the
-documentation no longer presents it as the method; see
-[the routes](docs/how-it-works.md#the-routes-in-detail).
+It was called `promoter-tf-drugs` until October 2026, after the promoter
+motif route, which was written first. That route is one of thirteen and is
+not the strongest, so neither the name nor the documentation presents it as
+the method any more; see [the routes](docs/how-it-works.md#the-routes-in-detail).
 
 It was made for the Rare Disease, Real Kid: The MVA Hackathon 2026. The hackathon
 asks the research community to help understand Mosaic Variegated Aneuploidy (MVA),
@@ -48,7 +48,7 @@ Activate the environment (`.venv\Scripts\Activate.ps1` in PowerShell, or
 
 ```sh
 python -m pip install -e .
-python -m promoter_tf_drugs --demo --gene DEMOGENE --out results/demo
+python -m generoutes --demo --gene DEMOGENE --out results/demo
 ```
 
 The demo runs offline on synthetic data. Open `results/demo/report.md`.
@@ -61,7 +61,7 @@ does not carry them, and the full set is about 3 GB (`--small` skips the largest
 
 ```sh
 python scripts/setup_data.py
-python -m promoter_tf_drugs --gene CCR5 --direction down --pfm-file data/jaspar2024.txt --out results/CCR5_down
+python -m generoutes --gene CCR5 --direction down --pfm-file data/jaspar2024.txt --out results/CCR5_down
 ```
 
 On Windows, `scripts\run_everything.bat` does both and runs every stage.
@@ -70,7 +70,7 @@ To compare several candidate genes and narrow to the one with the least
 collateral effect:
 
 ```sh
-python -m promoter_tf_drugs.panel --genes GENE1,GENE2,GENE3 --control-gene ACTB --demo --out results/panel
+python -m generoutes.panel --genes GENE1,GENE2,GENE3 --control-gene ACTB --demo --out results/panel
 ```
 
 Two things worth reading before acting on any output. Every report opens with

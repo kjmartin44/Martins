@@ -10,7 +10,7 @@ from the checkout directory containing `pyproject.toml`.
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e .
-.\.venv\Scripts\python.exe -m promoter_tf_drugs --demo --gene DEMOGENE --out results/demo
+.\.venv\Scripts\python.exe -m generoutes --demo --gene DEMOGENE --out results/demo
 ```
 
 Calling the environment's executable directly avoids activation policy issues
@@ -22,11 +22,11 @@ can refer to different installations; use the former.
 ```sh
 python3 -m venv .venv
 .venv/bin/python -m pip install -e .
-.venv/bin/python -m promoter_tf_drugs --demo --gene DEMOGENE --out results/demo
+.venv/bin/python -m generoutes --demo --gene DEMOGENE --out results/demo
 ```
 
-Once the environment is activated, `promoter-tf-drugs` is equivalent to
-`python -m promoter_tf_drugs`.
+Once the environment is activated, `generoutes` is equivalent to
+`python -m generoutes`.
 
 ## Optional dependencies
 
@@ -69,7 +69,7 @@ for reproducible runs and when diagnosing failures.
 
 ## Troubleshooting
 
-- **No module named promoter_tf_drugs:** install the checkout with the same
+- **No module named generoutes:** install the checkout with the same
   Python used to run the command. An installed package can run outside the repo.
 - **No module named pip:** select a standard Python installation with pip, then
   create the virtual environment from that interpreter.

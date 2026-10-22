@@ -79,27 +79,44 @@ def _undrugged_regulators(res: dict) -> list:
     rows = res.get("regulators_without_drugs") or []
     if not rows:
         return []
+    # Direct first, and all of them. With --regulator-steps 2 the two-step
+    # factors outnumber the direct ones twenty to one, so a list sorted by
+    # symbol showed ABL1 to CREB1 and hid FOXM1, MYC, TP53 and ZNF143 -
+    # the factors this section exists to name.
+    direct = [r for r in rows if not r.get("via")]
+    indirect = [r for r in rows if r.get("via")]
+
     L = ["#### Recorded regulators with no approved drug", ""]
     L.append("These are not motif matches. Each is named by a curated table "
              "or by a knockout experiment as regulating this gene, and none "
              "has an approved drug that moves it the way this run needs. "
              "They generate no route and are listed so the regulator "
-             "section is not read as the full set of regulators.")
+             "section is not read as the full set of regulators. This is "
+             "the list a chemistry effort would aim at.")
     L.append("")
-    L.append("| Factor | Effect on the gene | Would need to be | Recorded by |")
-    L.append("|---|---|---|---|")
-    for r in rows[:15]:
-        effect = "raises it" if r.get("sign") == 1 else "lowers it"
-        src = ", ".join(r.get("sources") or []) or "?"
-        via = r.get("via")
-        if via:
-            effect += f" (by way of {via})"
-        L.append(f"| {r.get('symbol')} | {effect} | "
-                 f"{'activated' if r.get('need') == 'up' else 'inhibited'} | "
-                 f"{src} |")
-    if len(rows) > 15:
-        L.append(f"| … | {len(rows) - 15} more | | |")
-    L.append("")
+    if direct:
+        L.append("| Factor | Effect on the gene | Would need to be | "
+                 "Recorded by |")
+        L.append("|---|---|---|---|")
+        for r in sorted(direct, key=lambda r: r.get("symbol") or ""):
+            L.append(
+                f"| {r.get('symbol')} | "
+                f"{'raises it' if r.get('sign') == 1 else 'lowers it'} | "
+                f"{'activated' if r.get('need') == 'up' else 'inhibited'} | "
+                f"{', '.join(r.get('sources') or []) or '?'} |")
+        L.append("")
+    else:
+        L.append("No factor is recorded as regulating this gene directly "
+                 "without already having a drug.")
+        L.append("")
+    if indirect:
+        L.append(f"A further **{len(indirect)}** factor(s) reach the gene "
+                 f"only through one of the regulators above, so each is a "
+                 f"longer way round with a sign that is the product of two "
+                 f"edges. They are in `results.json` rather than here, "
+                 f"because at this distance the list is a property of the "
+                 f"network and not of this gene.")
+        L.append("")
     return L
 
 
@@ -138,7 +155,7 @@ def _corpus_note(res: dict) -> list:
         L.append(f"Not on disk, and therefore skipped rather than searched: "
                  f"{', '.join(sorted(absent))}. Absent is not the same as "
                  f"finding nothing. Run "
-                 f"`python -m promoter_tf_drugs.corpora` for the downloads.")
+                 f"`python -m generoutes.corpora` for the downloads.")
     L.append("")
 
     flat = [a for per_tf in agree.values() for a in per_tf]
@@ -913,6 +930,37 @@ def _protein_level_section(result: dict) -> list:
     return L
 
 
+def _fame_section(result: dict) -> list:
+    """How many other genes the literature records each candidate for.
+
+    Placed with the other specificity cautions rather than beside the
+    ranking, because it is a statement about what the ranking can tell
+    you rather than about any one drug.
+    """
+    from . import fame as fame_mod
+
+    for blk in result.get("results") or []:
+        assessed = blk.get("fame")
+        if assessed is None:
+            continue
+        table = {"n_genes": next(iter(assessed.values()))["of"]} \
+            if assessed else None
+        L = ["### How much of this order is fame?", "",
+             fame_mod.summarise(assessed, table), ""]
+        loud = sorted((k, v) for k, v in assessed.items()
+                      if v.get("promiscuous"))
+        if loud:
+            L.append("| Compound | Genes it is recorded for |")
+            L.append("|---|---|")
+            for k, v in sorted(loud, key=lambda kv: -kv[1]["n_genes"])[:12]:
+                L.append(f"| {v.get('name') or k} | "
+                         f"{v['n_genes']} of {v['of']} "
+                         f"({v['share']:.0%}) |")
+            L.append("")
+        return L
+    return []
+
+
 def _crosscheck_section(result: dict) -> list:
     """Where CTD and LINCS disagree, and ranked drugs CTD records the other way."""
     from . import crosscheck as xc_mod
@@ -1118,6 +1166,7 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
     L.extend(_protein_level_section(result))
     L.extend(_mover_profile_section(result))
     L.extend(_proliferation_section(result))
+    L.extend(_fame_section(result))
     L.extend(_crosscheck_section(result))
     L.extend(_brake_exon_section(result))
 

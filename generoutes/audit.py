@@ -23,8 +23,8 @@ the salt-collapsing logic agree about what a drug is called.
 the ones that no longer resolve, plus any that ChEMBL now flags withdrawn.
 One cached request per name.
 
-    python -m promoter_tf_drugs.audit             # offline only
-    python -m promoter_tf_drugs.audit --online    # also resolve in ChEMBL
+    python -m generoutes.audit             # offline only
+    python -m generoutes.audit --online    # also resolve in ChEMBL
 
 Neither level can tell you what is **missing** from a curated table — only a
 human reading the current literature can. What this catches is drift in what
@@ -36,6 +36,7 @@ from __future__ import annotations
 import logging
 
 from .congeners import salt_free_name
+from . import provenance as _prov
 
 log = logging.getLogger(__name__)
 
@@ -253,7 +254,7 @@ def main(argv=None) -> int:
     import sys
 
     ap = argparse.ArgumentParser(
-        prog="promoter-tf-drugs.audit",
+        prog="generoutes.audit",
         description="Check the hand-curated tables for internal consistency, "
                     "and optionally resolve every curated drug name against "
                     "ChEMBL to detect drift.")
@@ -264,11 +265,7 @@ def main(argv=None) -> int:
                     help="only check this many names online, for a quick look")
     args = ap.parse_args(argv)
 
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(encoding="utf-8", errors="replace")
-        except (AttributeError, ValueError):
-            pass
+    _prov.use_utf8_console()
     logging.basicConfig(level=logging.WARNING,
                         format="%(levelname)s %(name)s: %(message)s")
 

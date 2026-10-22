@@ -27,7 +27,7 @@ Counting is deliberately cheap
 ------------------------------
 `survey()` reports presence and size for everything, and record counts
 only when asked, because counting means parsing — and some of these
-files are gigabytes. `python -m promoter_tf_drugs.datasets` lists what
+files are gigabytes. `python -m generoutes.datasets` lists what
 is on disk; `--count` opens them.
 
 What this does not do
@@ -212,6 +212,13 @@ def _count_library(path):
     return len(localdrugs.read_table(path, approved_only=False))
 
 
+def _count_fame(path):
+    """Chemicals in the fame table, header and metadata line excluded."""
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+        return sum(1 for ln in fh
+                   if ln.strip() and not ln.startswith(("#", "chemical	")))
+
+
 def _count_regulon(path):
     rows = 0
     with open(path, "r", encoding="utf-8", errors="replace") as fh:
@@ -312,12 +319,32 @@ def registry() -> tuple:
                    "as many factors; --tf-activity wants it.",),
         ),
         Dataset(
+            key="ctd_fame",
+            title="Drug fame, from your own saved runs",
+            buys="how many other genes the literature records each "
+                 "candidate as moving",
+            supply=BUILT,
+            paths=_paths("fame", "DEFAULT_PATHS"),
+            build="python scripts/build_fame_table.py",
+            size="30 KB built",
+            flag="on by default once the file exists",
+            without="no candidate is checked for being a compound the "
+                    "literature records for every gene, which is the "
+                    "control the retrospective found mattered most",
+            counter=_count_fame, unit="chemical",
+            notes=("Built from results/, so its resolution is however "
+                   "many genes you have run; five is the minimum before "
+                   "a count means anything.",
+                   "A compound recorded for most genes is telling you "
+                   "about the literature, not about yours.",),
+        ),
+        Dataset(
             key="regulon_chip",
             title="ChIP-derived regulon",
             buys="a target count for the factors curation never reached",
             supply=BUILT,
             paths=("data/chip_regulon.tsv",),
-            build="python -m promoter_tf_drugs.chipregulon "
+            build="python -m generoutes.chipregulon "
                   "--bed data/remap2022.bed.gz "
                   "--gtf data/gencode.basic.gtf.gz "
                   "--out data/chip_regulon.tsv",
@@ -353,14 +380,14 @@ def registry() -> tuple:
             url="https://www.bindingdb.org/bind/chemsearch/marvin/"
                 "Download.jsp",
             size="9 GB unpacked, 268 MB distilled",
-            build="python -m promoter_tf_drugs.localpotency "
+            build="python -m generoutes.localpotency "
                   "--distil data/BindingDB_All.tsv",
             without="the potency axis in drug scoring has nothing to read "
                     "and the established-ligand ranking loses its order",
             notes=("The full release is 640 columns and seven are read, so "
                    "distil it once: 268 MB afterwards, and read in six "
                    "seconds rather than three minutes. Check it landed "
-                   "with `python -m promoter_tf_drugs.localpotency "
+                   "with `python -m generoutes.localpotency "
                    "--uniprot P51681`.",
                    "Leave `--min-pchembl` alone unless you know why. A "
                    "row-level threshold drops weak Ki measurements and "
@@ -663,7 +690,7 @@ def _human(n) -> str:
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(
-        prog="python -m promoter_tf_drugs.datasets",
+        prog="python -m generoutes.datasets",
         description="What every analysis table is, where to get it, and "
                     "whether this checkout has it.")
     p.add_argument("--count", action="store_true",

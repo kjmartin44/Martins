@@ -8,8 +8,8 @@ They use one line so they work in PowerShell and POSIX shells.
 ## Start with the demo
 
 ```sh
-python -m promoter_tf_drugs --demo --gene DEMOGENE --out results/demo
-python -m promoter_tf_drugs --demo --gene DEMOGENE --direction down --out results/demo_down
+python -m generoutes --demo --gene DEMOGENE --out results/demo
+python -m generoutes --demo --gene DEMOGENE --direction down --out results/demo_down
 ```
 
 Demo mode uses synthetic sequence, motifs, annotations, and pharmacology. The
@@ -20,9 +20,9 @@ forces the HTTP client offline, including when an optional stage requests data.
 ## Analyze a gene
 
 ```sh
-python -m promoter_tf_drugs --gene ABCA4 --direction down --pfm-file data/jaspar2024.txt --regulon-file data/trrust.tsv --out results/ABCA4_down -v
-python -m promoter_tf_drugs --gene CCR5 --direction down --pfm-file data/jaspar2024.txt --out results/CCR5_down -v
-python -m promoter_tf_drugs --gene SMN1 --direction up --pfm-file data/jaspar2024.txt --out results/SMN1_up -v
+python -m generoutes --gene ABCA4 --direction down --pfm-file data/jaspar2024.txt --regulon-file data/trrust.tsv --out results/ABCA4_down -v
+python -m generoutes --gene CCR5 --direction down --pfm-file data/jaspar2024.txt --out results/CCR5_down -v
+python -m generoutes --gene SMN1 --direction up --pfm-file data/jaspar2024.txt --out results/SMN1_up -v
 ```
 
 These specify a desired expression change. They do not assert that the genes
@@ -70,25 +70,25 @@ See [methods and limitations](methods.md) before interpreting optional sections.
 ## Reuse cached data
 
 ```sh
-python -m promoter_tf_drugs --gene SMN1 --pfm-file data/jaspar2024.txt --cache-dir results/cache --out results/SMN1
-python -m promoter_tf_drugs --gene SMN1 --pfm-file data/jaspar2024.txt --cache-dir results/cache --offline --out results/SMN1_cached
+python -m generoutes --gene SMN1 --pfm-file data/jaspar2024.txt --cache-dir results/cache --out results/SMN1
+python -m generoutes --gene SMN1 --pfm-file data/jaspar2024.txt --cache-dir results/cache --offline --out results/SMN1_cached
 ```
 
 The second command forbids network requests. It can fail if a required response
 is absent. Optional stages may log a warning and return partial or empty results.
 A successful offline run therefore does not prove that every source was available.
-Use `--cache-dir` or set `PTD_CACHE` before starting Python to choose the cache.
+Use `--cache-dir` or set `GENEROUTES_CACHE` before starting Python to choose the cache. The old `PTD_CACHE` is still read, and a cache written before the rename is picked up automatically.
 
 ## Read and narrow results
 
 ```sh
-python -m promoter_tf_drugs.shortlist results/SMN1/results.json --preset strict --out results/SMN1/shortlist.md
-python -m promoter_tf_drugs.shortlist results/SMN1/results.json --max-steps 0
-python -m promoter_tf_drugs.explain results/SMN1/results.json "compound name"
+python -m generoutes.shortlist results/SMN1/results.json --preset strict --out results/SMN1/shortlist.md
+python -m generoutes.shortlist results/SMN1/results.json --max-steps 0
+python -m generoutes.explain results/SMN1/results.json "compound name"
 ```
 
-The installed aliases are `promoter-tf-drugs-shortlist` and
-`promoter-tf-drugs-explain`. Both read saved JSON without network calls.
+The installed aliases are `generoutes-shortlist` and
+`generoutes-explain`. Both read saved JSON without network calls.
 Shortlist presets are `strict`, `mechanism`, `empirical`, `specific`, and `novel`.
 Individual supplied filters override preset values. A zero step limit selects
 direct routes. An empty shortlist is a valid result.

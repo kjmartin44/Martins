@@ -13,7 +13,7 @@ belief. Neither changes a rank or a score, and neither runs the pipeline.
 ## Exposure against need
 
 ```bash
-python -m promoter_tf_drugs.exposure results/MYGENE_up/results.json \
+python -m generoutes.exposure results/MYGENE_up/results.json \
     --cmax-table data/human_cmax.tsv --top 60
 ```
 
@@ -598,7 +598,7 @@ is in `systemic.py`, is entered by hand, and is short.
 ## Retrospective check
 
 ```bash
-python -m promoter_tf_drugs.retrospective results/GENE1_up results/GENE2_down \
+python -m generoutes.retrospective results/GENE1_up results/GENE2_down \
     --out results/retrospective
 ```
 

@@ -1,6 +1,6 @@
 # Documentation
 
-promoter-tf-drugs collects candidate ways to move one gene's expression and
+generoutes collects candidate ways to move one gene's expression and
 ranks them by the strength of the evidence behind each. The routes are
 independent: the gene's own product, its recorded regulators, compounds
 measured to move it, its promoter's predicted binding sites, and others.

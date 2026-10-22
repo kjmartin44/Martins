@@ -8,8 +8,8 @@ import json
 
 import pytest
 
-from promoter_tf_drugs import pipeline, report
-from promoter_tf_drugs import standard_of_care as soc
+from generoutes import pipeline, report
+from generoutes import standard_of_care as soc
 
 
 def test_huntington_disease_lists_the_three_approved_chorea_drugs():

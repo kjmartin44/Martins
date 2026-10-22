@@ -45,7 +45,7 @@ if not defined OK (
     exit /b 1
 )
 
-"%PY%" -m promoter_tf_drugs.shortlist "!RESULTS!" --preset !PRESET! ^
+"%PY%" -m generoutes.shortlist "!RESULTS!" --preset !PRESET! ^
     --out "shortlist_!PRESET!.md"
 if errorlevel 1 (
     echo.

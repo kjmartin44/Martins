@@ -12,7 +12,7 @@ done. The three that do are marked and their commands are given.
 ## Two different ways to be offline
 
 **A warm cache** replays what a previous run fetched. `http.Client`
-stores every response under `~/.cache/promoter_tf_drugs` (or `$PTD_CACHE`),
+stores every response under `~/.cache/generoutes` (or `$GENEROUTES_CACHE`),
 so a gene that has been run once will run again with `--offline`. It is
 the easiest route and the most fragile: it covers exactly the genes and
 factors you happened to ask for.
@@ -55,7 +55,7 @@ from the loaders themselves, so it cannot drift from what the code
 searches for. To find out what this checkout is missing right now:
 
 ```sh
-python -m promoter_tf_drugs.datasets --missing
+python -m generoutes.datasets --missing
 ```
 
 ### Transcription factor binding
@@ -95,7 +95,7 @@ For the factors curation never reached. Built from the ReMap BED and a
 GTF:
 
 ```sh
-python -m promoter_tf_drugs.chipregulon \
+python -m generoutes.chipregulon \
     --bed data/remap2022.bed.gz --gtf data/gencode.basic.gtf.gz \
     --out data/chip_regulon.tsv
 ```
@@ -148,14 +148,14 @@ full `BindingDB_All.tsv` release, about 9 GB unpacked across 640 columns.
 Seven of them are read, so project it down once:
 
 ```sh
-python -m promoter_tf_drugs.localpotency --distil data/BindingDB_All.tsv
+python -m generoutes.localpotency --distil data/BindingDB_All.tsv
 ```
 
 268 MB afterwards, and read in six seconds rather than three minutes.
 Check it landed:
 
 ```sh
-python -m promoter_tf_drugs.localpotency --uniprot P51681
+python -m generoutes.localpotency --uniprot P51681
 ```
 
 Leave `--min-pchembl` alone unless you know why you are changing it. A
@@ -268,7 +268,7 @@ installation; the short version is gnina on Linux or through WSL, smina
 everywhere:
 
 ```sh
-python -m promoter_tf_drugs.docking --check
+python -m generoutes.docking --check
 ```
 
 Structures are fetched from RCSB and cached, so the first run for a
@@ -282,7 +282,7 @@ Every loader reports what it found. The fastest check is a real run with
 evidence table at the top of the report:
 
 ```sh
-python -m promoter_tf_drugs --gene CCR5 --direction down --offline \
+python -m generoutes --gene CCR5 --direction down --offline \
     --pfm-file data/jaspar2024.txt \
     --chip-bed data/remap2022.bed.gz \
     --regulon-file data/chip_regulon.tsv \
@@ -301,10 +301,10 @@ answer was nothing. That is a measurement, and it is not a find.
 Individual checks, when you want one:
 
 ```sh
-python -m promoter_tf_drugs.localpotency              # potency tables
-python -m promoter_tf_drugs.docking --check           # binary and rdkit
-python -m promoter_tf_drugs.wsldock                   # docking through WSL
-python -m promoter_tf_drugs.audit                     # curated tables
+python -m generoutes.localpotency              # potency tables
+python -m generoutes.docking --check           # binary and rdkit
+python -m generoutes.wsldock                   # docking through WSL
+python -m generoutes.audit                     # curated tables
 ```
 
 ## What offline cannot give you
@@ -314,7 +314,7 @@ nothing local substitutes for it.
 
 **Up-to-date approvals.** A drug table is a snapshot. A drug withdrawn
 after the file was published is still marked available in it, and that is
-the dangerous direction of the error. `python -m promoter_tf_drugs.audit
+the dangerous direction of the error. `python -m generoutes.audit
 --online` cross-checks the curated tables against ChEMBL and is worth
 running when you next have a network.
 

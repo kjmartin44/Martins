@@ -11,7 +11,7 @@ import json
 
 import pytest
 
-from promoter_tf_drugs import combined as cb
+from generoutes import combined as cb
 
 
 def _route(drug, tier=2, score=50.0, category="TF: orthosteric ligand",
@@ -206,7 +206,7 @@ def test_the_command_rejects_nothing_to_read_and_bad_options(tmp_path, capsys):
 
 
 def test_only_a_class_that_really_acts_across_the_body_is_flagged(monkeypatch):
-    from promoter_tf_drugs import systemic
+    from generoutes import systemic
 
     def fake(burden):
         return lambda name: systemic.SystemicClass(

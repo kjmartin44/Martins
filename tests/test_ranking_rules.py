@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import pytest
 
-from promoter_tf_drugs import catalogue as cat
-from promoter_tf_drugs import chemblid, drug_scoring as ds
+from generoutes import catalogue as cat
+from generoutes import chemblid, drug_scoring as ds
 
 
 # ----------------------------------------------------------- the helpers
@@ -201,7 +201,7 @@ class _Drug:
 
 @pytest.fixture(autouse=True)
 def _offline_helpers(monkeypatch):
-    from promoter_tf_drugs import localannot
+    from generoutes import localannot
     monkeypatch.setattr(localannot, "uniprot_for", lambda s: None)
     chemblid.reset()
     yield
@@ -268,7 +268,7 @@ def test_the_found_id_is_reported_in_the_grade():
 
 # -------------------------------------------------------- the pipeline wire
 def test_the_pipeline_gives_the_catalogue_each_factors_confidence(monkeypatch):
-    from promoter_tf_drugs import pipeline
+    from generoutes import pipeline
     seen = {}
     real = cat.build
 

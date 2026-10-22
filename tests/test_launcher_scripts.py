@@ -205,7 +205,7 @@ _RECORDS = [
 @pytest.mark.parametrize("module,name", _RECORDS)
 def test_every_result_record_serialises_to_json_with_all_its_fields(module,
                                                                     name):
-    cls = getattr(importlib.import_module(f"promoter_tf_drugs.{module}"), name)
+    cls = getattr(importlib.import_module(f"generoutes.{module}"), name)
     record = _lf_build(cls)
     d = record.to_dict()
     assert isinstance(d, dict)
@@ -216,7 +216,7 @@ def test_every_result_record_serialises_to_json_with_all_its_fields(module,
 
 
 def test_panel_gene_to_dict_carries_the_verdict_and_the_reason_for_exclusion():
-    from promoter_tf_drugs.panel import PanelGene
+    from generoutes.panel import PanelGene
     g = PanelGene("CCR5", result={"evidence_verdict": {
         "level": "degraded", "reasons": ["no ChIP"]}},
         excluded="not interpretable")
@@ -232,7 +232,7 @@ def test_prediction_to_dict_writes_the_fields_the_report_reads():
     """It is a summary: `mechanism` and `p_range` are on the record and are
     not written (the outcome block carries p_low and p_high). That is a
     choice about saved output, so it is pinned here, not changed silently."""
-    from promoter_tf_drugs.predictions import Prediction
+    from generoutes.predictions import Prediction
     p = Prediction("Dexamethasone", target="NR3C1", category="agonist",
                    mechanism="m", tier=2, grade="A", score=61.2,
                    p_move=0.4, p_range=(0.2, 0.6), limiting_step="delivery")
@@ -247,7 +247,7 @@ def test_prediction_to_dict_writes_the_fields_the_report_reads():
 
 
 def test_to_dict_returns_a_copy_that_does_not_alias_the_record():
-    from promoter_tf_drugs.docking import DockingResult
+    from generoutes.docking import DockingResult
     r = DockingResult("Drug", "ESR1", notes=["a"])
     d = r.to_dict()
     d["notes"].append("b")
@@ -281,7 +281,7 @@ def test_the_orange_book_zip_the_launcher_downloads_is_one_the_package_reads(
     """Same layout as the FDA file: three tables in one zip."""
     import zipfile
 
-    from promoter_tf_drugs import orangebook
+    from generoutes import orangebook
     # The module caches what it loaded; start empty and put it back after.
     monkeypatch.setattr(orangebook, "_PRODUCTS", {})
     monkeypatch.setattr(orangebook, "_LOADED", None)
@@ -329,15 +329,15 @@ def test_the_launcher_ends_with_a_combined_list_that_uses_only_real_flags():
     bs = chr(92)
     src = (Path(__file__).resolve().parents[1] / "scripts"
            / "run_everything.bat").read_text(encoding="utf-8")
-    start = src.index("-m promoter_tf_drugs.combined")
+    start = src.index("-m generoutes.combined")
     optional = src.index("REM Optional: the dose check")
     block = src[start:src.rindex("REM ---", 0, optional)]
-    assert src.index("promoter_tf_drugs.panel") < start
+    assert src.index("generoutes.panel") < start
     assert f'for %%F in ("!DOCKDIR!{bs}*.json")' in src
     assert "docking_all.json" not in block
     assert f'--results "!OUT!{bs}results.json"' in block
     help_text = subprocess.run(
-        [sys.executable, "-m", "promoter_tf_drugs.combined", "--help"],
+        [sys.executable, "-m", "generoutes.combined", "--help"],
         capture_output=True, text=True, cwd=str(
             Path(__file__).resolve().parents[1])).stdout
     flags = {t for t in block.replace("^", " ").split() if t.startswith("--")}
@@ -358,7 +358,7 @@ def _command_flags(src, module, marker):
     """Flags the launcher passes to `module`, read from the lines that follow
     its `-m` call until the next blank or non-continued line."""
     import re
-    start = src.index(f"-m promoter_tf_drugs.{module}")
+    start = src.index(f"-m generoutes.{module}")
     lines = src[start:].splitlines()
     block = []
     for ln in lines:
@@ -385,7 +385,7 @@ def test_the_launcher_says_which_data_gated_routes_it_will_skip():
                    "no GWAS Catalog table", "no tissue given for factor activity"):
         assert needle in src, needle
     # every file name the launcher tests for is one the package also reads
-    from promoter_tf_drugs import depmap, localannot, sensitivity
+    from generoutes import depmap, localannot, sensitivity
     for name in ("Repurposing_Public_24Q2_LFC_COLLAPSED.csv", "prism_lfc.csv"):
         assert f"data/{name}" in sensitivity.DEFAULT_PRISM_PATHS
         assert name in src
@@ -400,22 +400,22 @@ def test_the_optional_steps_run_after_the_combined_list_with_real_flags():
     import sys
     root = Path(__file__).resolve().parents[1]
     src = _launcher()
-    assert (src.index("-m promoter_tf_drugs.combined")
-            < src.index("-m promoter_tf_drugs.exposure")
+    assert (src.index("-m generoutes.combined")
+            < src.index("-m generoutes.exposure")
             < src.index("echo === Done ===")
-            < src.rindex("-m promoter_tf_drugs.exploratory")
-            or src.index("-m promoter_tf_drugs.exploratory")
+            < src.rindex("-m generoutes.exploratory")
+            or src.index("-m generoutes.exploratory")
             < src.index("echo === Done ==="))
     for module in ("exposure", "exploratory"):
         help_text = subprocess.run(
-            [sys.executable, "-m", f"promoter_tf_drugs.{module}", "--help"],
+            [sys.executable, "-m", f"generoutes.{module}", "--help"],
             capture_output=True, text=True, cwd=str(root)).stdout
         flags = _command_flags(src, module, module)
         assert flags, module
         for f in flags:
             assert f in help_text, f"{f} is not a flag of {module}"
     # nothing is asked for: the exploratory dock finds its own template
-    block = src[src.index("-m promoter_tf_drugs.exploratory"):]
+    block = src[src.index("-m generoutes.exploratory"):]
     block = block[:block.index("echo === Done ===")]
     for flag in ("--template-pdb", "--template-chain", "--template-ligand"):
         assert flag not in block
@@ -444,8 +444,8 @@ def test_the_upstream_factor_count_is_an_option_that_defaults_to_nothing():
     assert 'findstr /r /c:"^' + chr(92) + '"[1-9][0-9]*' + chr(92) + '"$"' in src
     # the flag is passed to the analysis and to the funnel, and nowhere else
     assert src.count("!UPFACT!") == 2
-    analysis = src.index("-m promoter_tf_drugs --gene")
-    panel = src.index("-m promoter_tf_drugs.panel")
+    analysis = src.index("-m generoutes --gene")
+    panel = src.index("-m generoutes.panel")
     assert analysis < src.index("!UPFACT!") < panel < src.rindex("!UPFACT!")
 
 
@@ -462,9 +462,9 @@ def test_the_exploratory_dock_is_off_unless_the_user_says_yes():
     assert yes < src.index('set "EXPLORE=1"') < src.index(") else (", yes)
     # a refused pocket with no yes prints how to run it later
     assert "is available and is not run" in src
-    assert "python -m promoter_tf_drugs.exploratory --gene !GENE!" in src
+    assert "python -m generoutes.exploratory --gene !GENE!" in src
     # nothing else starts it: one command, and it is gated by EXPLORE
-    assert src.count("-m promoter_tf_drugs.exploratory") == 2
+    assert src.count("-m generoutes.exploratory") == 2
     assert "if defined EXPLORE (" in src
 
 
@@ -552,7 +552,7 @@ def test_unpack_gwas_writes_the_table_the_loader_reads(tmp_path):
     dest = tmp_path / "out.tsv"
     assert mod.unpack(zpath, dest) == "assoc.tsv"
     assert dest.read_text(encoding="utf-8").splitlines()[1] == row
-    from promoter_tf_drugs import localannot
+    from generoutes import localannot
     assert mod.usable_header(header)
     saved = (dict(localannot._GWAS), dict(localannot._LOADED))
     try:
@@ -687,7 +687,7 @@ def test_the_launcher_offers_the_knockout_libraries_and_keeps_only_good_files():
         assert f"move /y {part} data{bs}{name}" in src
         assert f"del {part}" in src
     # the file names the launcher saves are the ones the package looks for
-    from promoter_tf_drugs import knockout
+    from generoutes import knockout
     for name in ("knockout_lincs_crispr_ko.gmt", "knockout_tf_perturbations.gmt"):
         assert f"data/{name}" in knockout.DEFAULT_KNOCKOUT_PATHS
 

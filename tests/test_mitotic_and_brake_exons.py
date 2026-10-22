@@ -11,10 +11,10 @@ from __future__ import annotations
 
 import pytest
 
-from promoter_tf_drugs import catalogue as cat
-from promoter_tf_drugs import cellcycle, pipeline, poisonexon, report
-from promoter_tf_drugs import signatures as sg
-from promoter_tf_drugs import systemic
+from generoutes import catalogue as cat
+from generoutes import cellcycle, pipeline, poisonexon, report
+from generoutes import signatures as sg
+from generoutes import systemic
 
 
 # ----------------------------------------------------- the compound tag
@@ -197,7 +197,7 @@ def test_a_record_without_exons_is_an_error_not_an_empty_answer():
 # --------------------------------- the pipeline step and the report section
 def test_brake_exons_are_only_sought_when_the_goal_is_to_raise_the_gene(
         monkeypatch):
-    from promoter_tf_drugs import genes
+    from generoutes import genes
     monkeypatch.setattr(genes, "_lookup_symbol",
                         lambda client, symbol, species: _gene())
     up = pipeline._brake_exons(None, "G1", "homo_sapiens", "up")
@@ -207,8 +207,8 @@ def test_brake_exons_are_only_sought_when_the_goal_is_to_raise_the_gene(
 
 def test_a_failed_isoform_lookup_is_reported_not_read_as_no_brake_exon(
         monkeypatch):
-    from promoter_tf_drugs import genes
-    from promoter_tf_drugs.http import HttpError
+    from generoutes import genes
+    from generoutes.http import HttpError
 
     def down(client, symbol, species):
         raise HttpError("Ensembl 500")
@@ -220,7 +220,7 @@ def test_a_failed_isoform_lookup_is_reported_not_read_as_no_brake_exon(
 def test_a_loaded_gtf_does_not_replace_the_ensembl_isoform_list(monkeypatch):
     """The GTF records have no exons, so reading them reported an error for
     every gene in a launcher run, which loads one."""
-    from promoter_tf_drugs import genes
+    from generoutes import genes
     monkeypatch.setitem(genes._TX_BY_GENE, "G1", [
         {"id": "T1", "biotype": "protein_coding", "start": 1, "end": 9,
          "strand": 1, "chrom": "1"}])

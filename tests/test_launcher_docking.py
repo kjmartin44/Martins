@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 
-from promoter_tf_drugs import docking as dk
-from promoter_tf_drugs import wsldock
+from generoutes import docking as dk
+from generoutes import wsldock
 
 NL = chr(10)
 

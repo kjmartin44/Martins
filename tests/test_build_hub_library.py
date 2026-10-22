@@ -1,7 +1,7 @@
 import importlib.util
 from pathlib import Path
 
-from promoter_tf_drugs import localdrugs
+from generoutes import localdrugs
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "build_hub_library.py"
 spec = importlib.util.spec_from_file_location("build_hub_library", SCRIPT)

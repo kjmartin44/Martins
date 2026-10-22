@@ -169,7 +169,7 @@ Scores are identical either way — same receptor, same box, same seed, and
 the only change is how many run at once. `--jobs` defaults to 1.
 
 ```sh
-python -m promoter_tf_drugs.docking --gene VDR --state active \
+python -m generoutes.docking --gene VDR --state active \
     --jobs 8 --cpu 4 --library data/approved_library.tsv \
     --out results/vdr/dock.json
 ```
@@ -179,7 +179,7 @@ conformation then follows `--direction` directly, because no factor sits
 between the product and the gene.
 
 ```sh
-python -m promoter_tf_drugs.docking --product --gene CCR5 \
+python -m generoutes.docking --product --gene CCR5 \
     --direction down --state any --jobs 8 --cpu 4 \
     --library data/approved_library.tsv --out results/ccr5/dock.json
 ```
@@ -195,7 +195,7 @@ leaves a folder, `--bundle` docks it with no network at all, and
 `--docking-results` brings the JSON back into an analysis.
 
 ```sh
-python -m promoter_tf_drugs --gene CCR5 --direction down \
+python -m generoutes --gene CCR5 --direction down \
     --docking-results results/ccr5/dock.json --out results/ccr5
 ```
 
@@ -272,7 +272,7 @@ structure of its own with a ligand, `exploratory.py` asks a weaker question:
 does anything in the library fit a model of the pocket.
 
 ```bash
-python -m promoter_tf_drugs.exploratory --gene BUB1B --uniprot O60566 --jobs 8 --cpu 4 --reference
+python -m generoutes.exploratory --gene BUB1B --uniprot O60566 --jobs 8 --cpu 4 --reference
 ```
 
 With no template named, it chooses one. It searches the PDB with the model's

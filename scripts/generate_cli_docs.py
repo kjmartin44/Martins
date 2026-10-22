@@ -23,10 +23,10 @@ def main():
     # that is committed and diffed.
     env = {**os.environ, "COLUMNS": HELP_WIDTH, "NO_COLOR": "1"}
     env.pop("FORCE_COLOR", None)
-    for module in ("promoter_tf_drugs", "promoter_tf_drugs.panel",
-                   "promoter_tf_drugs.shortlist",
-                   "promoter_tf_drugs.explain",
-                   "promoter_tf_drugs.audit"):
+    for module in ("generoutes", "generoutes.panel",
+                   "generoutes.shortlist",
+                   "generoutes.explain",
+                   "generoutes.audit"):
         help_text = subprocess.check_output(
             [sys.executable, "-X", "utf8", "-m", module, "--help"],
             cwd=root, text=True, encoding="utf-8", env=env)

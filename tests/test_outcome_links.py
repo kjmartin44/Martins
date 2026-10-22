@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import copy
 
-from promoter_tf_drugs import outcome, pipeline, report
+from generoutes import outcome, pipeline, report
 
 
 def est(drug="D", tf="T", engage=0.8, direction=0.75, activate=0.6,

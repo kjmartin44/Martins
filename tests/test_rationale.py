@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-from promoter_tf_drugs import combined as cb
-from promoter_tf_drugs import rationale as rat
+from generoutes import combined as cb
+from generoutes import rationale as rat
 
 
 def _route(cat, tf="NR1I2", mech="a mechanism", evidence="predicted", **kw):
@@ -136,7 +136,7 @@ def test_there_is_a_sentence_for_every_scenario_the_launcher_offers():
 
 # --------------------------------------------- folding in the summary report
 def _demo_with_a_family():
-    from promoter_tf_drugs import pipeline
+    from generoutes import pipeline
     res = pipeline.run("SMN2", demo=True, offline=True)
     blk = res["results"][0]
     routes = blk["all_routes"]["routes"]
@@ -149,7 +149,7 @@ def _demo_with_a_family():
 
 
 def test_the_summary_folds_a_family_and_names_the_folded_drug():
-    from promoter_tf_drugs import report
+    from generoutes import report
     res, top, twin = _demo_with_a_family()
     text = report.summary_report(res)
     assert "| How it would work |" in text
@@ -162,7 +162,7 @@ def test_the_summary_folds_a_family_and_names_the_folded_drug():
 
 
 def test_the_summary_states_the_aim_and_a_sentence_per_row():
-    from promoter_tf_drugs import report
+    from generoutes import report
     res, *_ = _demo_with_a_family()
     text = report.summary_report(res)
     assert "SMN2" in text.split("## Top")[1].split("| # |")[0]
@@ -171,7 +171,7 @@ def test_the_summary_states_the_aim_and_a_sentence_per_row():
 
 
 def test_a_drug_reached_through_two_factors_is_one_row_with_both_targets():
-    from promoter_tf_drugs import report
+    from generoutes import report
     res, top, _ = _demo_with_a_family()
     other = dict(top, acts_on="OTHERTF", score=top["score"] - 5)
     res["results"][0]["all_routes"]["routes"].append(other)
@@ -192,7 +192,7 @@ def _crow(drug, tier=2, score=50.0, source="screening"):
 
 @pytest.fixture
 def structures():
-    from promoter_tf_drugs import clusters
+    from generoutes import clusters
     clusters.smiles_index([
         {"name": "PENTYL", "smiles": "CCCCCOC(=O)c1ccccc1"},
         {"name": "HEXYL", "smiles": "CCCCCCOC(=O)c1ccccc1"},
@@ -249,7 +249,7 @@ def test_the_command_line_checks_the_similarity_option(capsys):
 
 
 def test_close_analogues_acting_through_different_targets_stay_two_rows():
-    from promoter_tf_drugs import report
+    from generoutes import report
     res, top, twin = _demo_with_a_family()
     twin["acts_on"] = "SOMEOTHERTF"
     text = report.summary_report(res)
@@ -262,7 +262,7 @@ def test_close_analogues_acting_through_different_targets_stay_two_rows():
 
 
 def test_the_summary_uses_the_declared_scenario_when_no_requirement_was_made():
-    from promoter_tf_drugs import report
+    from generoutes import report
     res, *_ = _demo_with_a_family()
     res["requirement"] = None
     res["query"]["scenario"] = "toxic_gain"
@@ -294,7 +294,7 @@ def _shortlist_rows(text):
 
 
 def test_unrelated_drugs_through_one_factor_take_one_row(structures):
-    from promoter_tf_drugs import report
+    from generoutes import report
     text = report.summary_report(_results(
         _fam_route("PENTYL", 3, 60), _fam_route("ASPIRIN", 3, 50),
         _fam_route("OTHER", 3, 40, acts_on="RXRA")))
@@ -306,7 +306,7 @@ def test_unrelated_drugs_through_one_factor_take_one_row(structures):
 
 def test_the_same_factor_by_a_different_kind_of_route_is_another_row(
         structures):
-    from promoter_tf_drugs import report
+    from generoutes import report
     text = report.summary_report(_results(
         _fam_route("PENTYL", 3, 60),
         _fam_route("ASPIRIN", 3, 50, category="TF: known regulator")))
@@ -314,7 +314,7 @@ def test_the_same_factor_by_a_different_kind_of_route_is_another_row(
 
 
 def test_drugs_with_no_stated_factor_are_never_folded_as_a_family(structures):
-    from promoter_tf_drugs import report
+    from generoutes import report
     lit = "literature: reported effect"
     text = report.summary_report(_results(
         _fam_route("PENTYL", 4, 60, acts_on="not stated", category=lit),
@@ -324,7 +324,7 @@ def test_drugs_with_no_stated_factor_are_never_folded_as_a_family(structures):
 
 def test_folding_never_drops_a_drug_from_the_summary(structures):
     """Every drug that reaches the pool is a row or is named under the table."""
-    from promoter_tf_drugs import report
+    from generoutes import report
     drugs = ["PENTYL", "ASPIRIN", "HEXYL", "OTHER"]
     text = report.summary_report(_results(
         _fam_route("PENTYL", 3, 60), _fam_route("ASPIRIN", 3, 50),
@@ -337,7 +337,7 @@ def test_folding_never_drops_a_drug_from_the_summary(structures):
 
 
 def test_a_folded_drug_stays_in_the_full_results(structures):
-    from promoter_tf_drugs import report
+    from generoutes import report
     res = _results(_fam_route("PENTYL", 3, 60), _fam_route("ASPIRIN", 3, 50))
     report.summary_report(res)
     kept = [r["drug"] for r in res["results"][0]["all_routes"]["routes"]]

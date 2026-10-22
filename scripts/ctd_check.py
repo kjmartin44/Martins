@@ -32,11 +32,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from promoter_tf_drugs import discovery as disc  # noqa: E402
-from promoter_tf_drugs import localdrugs  # noqa: E402
-from promoter_tf_drugs import retrospective as rt  # noqa: E402
-from promoter_tf_drugs.http import Client  # noqa: E402
-from promoter_tf_drugs.signatures import breadth_key  # noqa: E402
+from generoutes import discovery as disc  # noqa: E402
+from generoutes import localdrugs  # noqa: E402
+from generoutes import retrospective as rt  # noqa: E402
+from generoutes.http import Client  # noqa: E402
+from generoutes.signatures import breadth_key  # noqa: E402
 
 LABELS = ["mRNA of this gene", "protein of this gene", "modulated",
           "indirect", "another gene", "unparsed"]

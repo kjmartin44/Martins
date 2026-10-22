@@ -7,7 +7,7 @@ question is whether the pipeline finds them and how it ranks them.
 Command (the launcher's options without docking, on 21 October 2026):
 
 ```sh
-python -m promoter_tf_drugs --gene CYP24A1 --direction up \
+python -m generoutes --gene CYP24A1 --direction up \
   --pfm-file data/jaspar2024.txt --regulon-file data/chip_regulon.tsv \
   --chip-bed data/remap2022.bed.gz --upstream 1000 --downstream 200 --pvalue 1e-5 \
   --all-tss --tf-weight 0.7 --cell-type-check --predict-direction \

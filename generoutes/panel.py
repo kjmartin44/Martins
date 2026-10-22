@@ -46,6 +46,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import progress as _progress
+from . import provenance as _prov
 from . import (congeners as cong_mod, delivery as dlv_mod,
                paralogs as par_mod, pipeline,
                provenance as prov_mod, regulon as regulon_mod,
@@ -1076,7 +1077,7 @@ def build_parser():
     from .cli import add_analysis_args
 
     p = argparse.ArgumentParser(
-        prog="promoter-tf-drugs.panel",
+        prog="generoutes.panel",
         description="Compare several CANDIDATE genes and narrow to the "
                     "route with the least collateral effect. The genes are "
                     "treated as alternatives, so a drug recurring across "
@@ -1186,11 +1187,7 @@ def main(argv=None) -> int:
     # piped run is unaffected.
     if not getattr(args, "quiet", False):
         _progress.enable()
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(encoding="utf-8", errors="replace")
-        except (AttributeError, ValueError):
-            pass
+    _prov.use_utf8_console()
     logging.basicConfig(
         level=[logging.WARNING, logging.INFO,
                logging.DEBUG][min(getattr(args, "verbose", 0), 2)],

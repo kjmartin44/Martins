@@ -10,7 +10,7 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
-from promoter_tf_drugs.network import Edge, build_graph
+from generoutes.network import Edge, build_graph
 
 
 def _script():

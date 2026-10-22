@@ -1,5 +1,5 @@
 [project]
-name = "promoter-tf-drugs"
+name = "generoutes"
 version = "0.1.0"
 description = "Ranks approved drugs that might raise or lower one gene, from several independent kinds of evidence"
 readme = "README.md"
@@ -16,13 +16,13 @@ Repository = "https://github.com/kjmartin44/Martins"
 Documentation = "https://github.com/kjmartin44/Martins/tree/main/docs"
 
 [project.scripts]
-promoter-tf-drugs = "promoter_tf_drugs.cli:main"
-promoter-tf-drugs-shortlist = "promoter_tf_drugs.shortlist:main"
-promoter-tf-drugs-explain = "promoter_tf_drugs.explain:main"
-promoter-tf-drugs-dock = "promoter_tf_drugs.docking:main"
+generoutes = "generoutes.cli:main"
+generoutes-shortlist = "generoutes.shortlist:main"
+generoutes-explain = "generoutes.explain:main"
+generoutes-dock = "generoutes.docking:main"
 
 [tool.setuptools.packages.find]
-include = ["promoter_tf_drugs*"]
+include = ["generoutes*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -8,8 +8,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from promoter_tf_drugs import cli, pipeline, shortlist, motifs
-from promoter_tf_drugs.http import Client, HttpError, _retry_delay
+from generoutes import cli, pipeline, shortlist, motifs
+from generoutes.http import Client, HttpError, _retry_delay
 
 
 @pytest.mark.parametrize("kwargs", [
@@ -204,3 +204,72 @@ def test_failed_cache_write_keeps_successful_response(tmp_path, monkeypatch, cap
     assert len(calls) == 1
     assert "could not cache response" in caplog.text
     assert not list(tmp_path.rglob("*.tmp"))
+# ===================================================================== #
+# Printing a report on a console that cannot spell it.                  #
+# ===================================================================== #
+def _cp1252_stream():
+    """A stdout like a default Windows console: cp1252, reconfigurable."""
+    return io.TextIOWrapper(io.BytesIO(), encoding="cp1252",
+                            errors="strict", line_buffering=False)
+
+
+def test_explain_prints_a_report_holding_an_arrow_on_a_cp1252_console(
+        tmp_path, monkeypatch, capsysbinary):
+    """`generoutes-explain` died with a UnicodeEncodeError on any result
+    whose notes held an arrow, which the route chains build routinely. It
+    read as a bug in the analysis rather than in how it was printed."""
+    from generoutes import explain, provenance
+
+    result = {"query": {"gene": "G", "goal": "up"},
+              "results": [{"all_routes": {"routes": [{
+                  "drug": "Bexarotene", "category": "TF: orthosteric ligand",
+                  "mechanism": "agonist", "acts_on": "RXRA", "tier": 2,
+                  "directness": 1, "score": 50.0, "approved": True,
+                  "tier_label": "measured",
+                  "source": "drug_scoring",
+                  "axes": {"strength": 0.5, "specificity": 0.5,
+                           "efficiency": 0.5},
+                  "notes": ["Bexarotene \u2192 RXRA \u2192 G"]}]}}]}
+    path = tmp_path / "results.json"
+    path.write_text(json.dumps(result), encoding="utf-8")
+
+    monkeypatch.setattr("sys.stdout", _cp1252_stream())
+    monkeypatch.setattr("sys.stderr", _cp1252_stream())
+    assert explain.main([str(path), "bexarotene"]) == 0
+
+
+def test_shortlist_does_the_same(tmp_path, monkeypatch):
+    from generoutes import shortlist as sl
+
+    result = {"query": {"gene": "G", "goal": "up"},
+              "results": [{"all_routes": {"routes": [{
+                  "drug": "Bexarotene", "category": "TF: orthosteric ligand",
+                  "mechanism": "agonist", "acts_on": "RXRA", "tier": 2,
+                  "directness": 1, "score": 50.0, "approved": True,
+                  "tier_label": "measured",
+                  "source": "drug_scoring",
+                  "axes": {"strength": 0.5, "specificity": 0.5,
+                           "efficiency": 0.5},
+                  "notes": ["A \u2192 B"]}]}}]}
+    path = tmp_path / "results.json"
+    path.write_text(json.dumps(result), encoding="utf-8")
+
+    monkeypatch.setattr("sys.stdout", _cp1252_stream())
+    monkeypatch.setattr("sys.stderr", _cp1252_stream())
+    assert sl.main([str(path)]) == 0
+
+
+def test_the_console_guard_leaves_a_stream_it_cannot_change_alone():
+    """A pipe opened in binary has no reconfigure; that is not an error."""
+    from generoutes.provenance import use_utf8_console
+
+    class Fixed:
+        encoding = "ascii"
+
+    import sys
+    before = (sys.stdout, sys.stderr)
+    try:
+        sys.stdout = sys.stderr = Fixed()
+        use_utf8_console()          # must not raise
+    finally:
+        sys.stdout, sys.stderr = before

@@ -74,7 +74,7 @@ echo DGIdb, so a first run takes a minute or two. Later runs are cached.
 echo Checkpoints print as it goes.
 echo.
 
-"%PY%" -m promoter_tf_drugs --gene !GENE! --pfm-file data\jaspar2024.txt ^
+"%PY%" -m generoutes --gene !GENE! --pfm-file data\jaspar2024.txt ^
     --direction !DIR! --out "results\!GENE!_!DIR!" -v
 
 if errorlevel 1 (

@@ -479,6 +479,14 @@ class Route:
     # True when the compound works by damaging DNA or the spindle and the
     # run was told that is the defect being treated.
     genotoxic: bool = False
+    # The multiplier applied because the literature records this
+    # compound as moving most genes. None when it does not, or was
+    # not checked.
+    fame_penalty: float | None = None
+    # Why moving this route's target is a cancer risk in itself,
+    # when the run was told the patient cannot afford one. None
+    # otherwise, including when the direction is not recorded.
+    cancer_risk: str | None = None
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -520,6 +528,13 @@ NOISY_SCAN_TIER = 3
 # leave them wondering why a drug they expected is missing.
 GENOTOXIC_TIER = 5
 GENOTOXIC_SCORE_FACTOR = 0.1
+
+# A compound the literature records for most genes loses a little score
+# within its tier. Slight, and deliberately so: see fame.py. Unlike the
+# breadth and mitotic penalties this one DOES combine with them, because
+# it measures a different confound - promiscuity in the literature
+# rather than in an assay - and at 0.85 combining it cannot dominate.
+FAME_SCORE_FACTOR = 0.85
 
 
 def _score(r: Route) -> float:
@@ -1630,7 +1645,8 @@ def build(result_block: dict, *, goal: str = "up",
           include_chromatin: bool = True, breadth: dict | None = None,
           mitotic_gene: bool = False, scan_fdp: float | None = None,
           proliferation: dict | None = None,
-          avoid_genotoxic: bool = False) -> dict:
+          avoid_genotoxic: bool = False,
+          fame: dict | None = None) -> dict:
     """Assemble every route from one promoter's result block.
 
     `breadth` is `signatures.breadth_for`'s output, keyed by
@@ -1659,12 +1675,22 @@ def build(result_block: dict, *, goal: str = "up",
     compound the data covers is judged on the data.
 
     `avoid_genotoxic` is for a patient whose cells already miss-segregate
-    chromosomes or who is cancer-predisposed. Routes through a compound
-    that works BY damaging DNA or the spindle drop to the bottom tier and
-    say why. They are not removed: the caller asked a question and
+    chromosomes or who is cancer-predisposed. Two kinds of route drop to
+    the bottom tier and say why: one through a compound that works BY
+    damaging DNA or the spindle, and one that moves its TARGET in the
+    direction that causes cancer - raising a proto-oncogene, or lowering
+    a tumour suppressor. The second needs the factor's recorded role, so
+    a route whose direction is unrecorded is left alone rather than
+    guessed at. They are not removed: the caller asked a question and
     deleting the answer is not an answer. But an agent that causes the
     defect being treated should never sit near the top of a list, and
     marking it only "broad" did not say that.
+
+    `fame` is `fame.assess`'s output, keyed like `breadth`. A compound
+    the literature records for most genes loses `FAME_SCORE_FACTOR` of
+    its score and keeps its tier. It is the control the retrospective
+    found mattered most: a baseline of drug popularity predicted CTD
+    better than every route in this package combined.
     """
     routes: list[Route] = []
     routes += from_direct(result_block.get("direct_therapies") or [])
@@ -1696,12 +1722,13 @@ def build(result_block: dict, *, goal: str = "up",
     if include_chromatin:
         routes += chromatin_routes(goal, result_block.get("chromatin_extra"))
 
-    if breadth or proliferation:
+    if breadth or proliferation or fame:
         from .signatures import breadth_key
     if mitotic_gene:
         from .systemic import is_mitotic_disruptor
     if avoid_genotoxic:
-        from .systemic import is_genotoxic
+        from .abundance import wanted_direction
+        from .systemic import cancer_risk_direction, is_genotoxic
     xc = result_block.get("crosscheck")
     for r in routes:
         r.score = _score(r)
@@ -1760,6 +1787,36 @@ def build(result_block: dict, *, goal: str = "up",
                 f"this factor acts on this promoter is a sequence "
                 f"resemblance rather than an observation. What is known "
                 f"about the drug at its target is unchanged")
+        # Applied on its own account, not under `scaled`: a famous
+        # compound can also be broad, and the two say different things.
+        fam = (fame or {}).get(breadth_key(r.drug)) if fame else None
+        if fam and fam.get("promiscuous"):
+            from .fame import note_for as _fame_note
+            r.score = round(r.score * FAME_SCORE_FACTOR, 1)
+            r.fame_penalty = FAME_SCORE_FACTOR
+            r.notes.append(
+                f"score multiplied by {FAME_SCORE_FACTOR}: "
+                + _fame_note(fam))
+        # The same patient fact as the genotoxic gate, reaching the
+        # other way: not a drug that damages DNA, but a TARGET whose
+        # dose this route moves in the direction that causes cancer.
+        # The abundance scan offered to raise MYC, FOXM1 and ETS2.
+        if avoid_genotoxic:
+            _why = cancer_risk_direction(
+                r.acts_on,
+                wanted_direction(goal, (result_block.get("tf_roles") or {})
+                                 .get(r.acts_on)))
+            if _why:
+                r.cancer_risk = _why
+                r.tier = max(r.tier, GENOTOXIC_TIER)
+                r.score = round(r.score * GENOTOXIC_SCORE_FACTOR, 1)
+                r.notes.append(
+                    f"**{_why}.** This run was told the patient is already "
+                    f"cancer-predisposed or chromosomally unstable, and "
+                    f"moving this gene that way is a cancer risk whatever "
+                    f"it does for the target. Moved to the bottom tier and "
+                    f"kept so the search stays visible; it is not a "
+                    f"candidate")
         if avoid_genotoxic and is_genotoxic(r.drug):
             r.genotoxic = True
             r.tier = max(r.tier, GENOTOXIC_TIER)

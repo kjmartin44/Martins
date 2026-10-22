@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from promoter_tf_drugs import fdalabel as fl
+from generoutes import fdalabel as fl
 
 PLUS = "±"
 BAD = "�"                 # what a lost plus-minus sign arrives as

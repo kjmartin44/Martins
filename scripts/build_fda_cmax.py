@@ -6,13 +6,13 @@
     python scripts/build_fda_cmax.py --all-orange-book     # every FDA ingredient, slow
 
 It asks openFDA for each drug's label, reads the peak concentration sentences in
-the pharmacokinetics section (see `promoter_tf_drugs/fdalabel.py` for what it
+the pharmacokinetics section (see `generoutes/fdalabel.py` for what it
 accepts and refuses), and writes two files:
 
     data/fda_label_cmax.tsv          drugs with a value it is willing to stand behind
     data/fda_label_cmax_review.tsv   drugs it set aside, with why and the sentence
 
-The first is read by `python -m promoter_tf_drugs.exposure` when it is present.
+The first is read by `python -m generoutes.exposure` when it is present.
 Rows already in it are kept unless the drug is looked up again, so the table
 grows run by run. Most labels give no usable number: a table of figures, a
 sentence about time to peak with no value, or only an interaction study. Those
@@ -35,9 +35,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from promoter_tf_drugs import exposure, fda, fdalabel, localdrugs  # noqa: E402
-from promoter_tf_drugs.http import Client  # noqa: E402
-from promoter_tf_drugs.signatures import breadth_key  # noqa: E402
+from generoutes import exposure, fda, fdalabel, localdrugs  # noqa: E402
+from generoutes.http import Client  # noqa: E402
+from generoutes.signatures import breadth_key  # noqa: E402
 
 TABLE = ROOT / "data" / "fda_label_cmax.tsv"
 REVIEW = ROOT / "data" / "fda_label_cmax_review.tsv"
@@ -113,7 +113,7 @@ def main(argv=None) -> int:
     if args.drugs:
         names = list(args.drugs)
     elif args.all_orange_book:
-        from promoter_tf_drugs import orangebook
+        from generoutes import orangebook
         names = [i.title() for i in orangebook.ingredients()]
     else:
         names = names_from_results(args.from_results or [ROOT / "results"])

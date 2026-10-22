@@ -13,7 +13,7 @@ import logging
 
 import pytest
 
-from promoter_tf_drugs import exposure as ex
+from generoutes import exposure as ex
 
 _REAL_WEIGHT = ex.molecular_weight      # the autouse fixture below replaces it
 

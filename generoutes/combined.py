@@ -410,7 +410,7 @@ def build(*, results: dict | None = None, panel: dict | None = None,
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(
-        prog="python -m promoter_tf_drugs.combined",
+        prog="python -m generoutes.combined",
         description=("One ranked list from docking and the rest of the "
                      "analysis, fused by reciprocal rank."))
     p.add_argument("--results", default=None, help="a saved results.json")

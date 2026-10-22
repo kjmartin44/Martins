@@ -1732,7 +1732,7 @@ Docking on Windows, no WSL needed.
      pip install meeko              (ligands, and receptors on newer meeko)
      pip install openbabel-wheel    (receptor fallback)
 
-Check it with:  python -m promoter_tf_drugs.docking --check
+Check it with:  python -m generoutes.docking --check
 
 smina is still the better engine where you can run it - it takes PDB and
 SDF directly and needs no conversion step - but it has no Windows build.
@@ -1958,7 +1958,7 @@ To run docking you need two things.
      which unpacks them from NVIDIA's PyPI wheels into ~/cuda-libs.
      Check what was found with:
 
-       python -m promoter_tf_drugs.wsldock
+       python -m generoutes.wsldock
 
      On Windows there is no gnina build, so it runs through WSL and this
      package handles the path translation. A GPU changes the speed, not
@@ -2007,7 +2007,7 @@ To run docking you need two things.
 
      pip install rdkit
 
-Check it with:  python -m promoter_tf_drugs.wsldock
+Check it with:  python -m generoutes.wsldock
            or:  smina --version
 """
 
@@ -2169,7 +2169,7 @@ def annotate_directions(run, symbol: str, labelled: list, *,
     except ImportError:
         out.update(attempted=False, reason=(
             "scikit-learn is not installed, so direction cannot be "
-            "predicted. pip install 'promoter-tf-drugs[chemistry]'"))
+            "predicted. pip install 'generoutes[chemistry]'"))
         return out
     except Exception as exc:                                # noqa: BLE001
         out.update(attempted=False,
@@ -2574,7 +2574,7 @@ def dock_from_bundle(bundle_dir, *, top_n: int = 25,
 
 
 # ===================================================================== #
-# Entry point.  python -m promoter_tf_drugs.docking --check             #
+# Entry point.  python -m generoutes.docking --check             #
 # ===================================================================== #
 def check_setup() -> dict:
     """What is installed, what is missing, and what to do about it."""
@@ -2799,7 +2799,7 @@ def main(argv=None) -> int:
     import json as _json
 
     p = argparse.ArgumentParser(
-        prog="python -m promoter_tf_drugs.docking",
+        prog="python -m generoutes.docking",
         description=(
             "Dock approved drugs into a receptor pocket and report the ones "
             "that fit, after checking that docking into that pocket can "
@@ -3003,7 +3003,7 @@ def main(argv=None) -> int:
             print(f"\n  WARNING: {man['warning']}")
         print(f"\nBundle written. It needs no network from here. Dock it "
               f"with:\n"
-              f"  python -m promoter_tf_drugs.docking --bundle "
+              f"  python -m generoutes.docking --bundle "
               f"{args.prepare}")
         return 0
 

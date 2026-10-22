@@ -12,8 +12,8 @@ import json
 
 import pytest
 
-from promoter_tf_drugs import cli, combined, exposure, fda, orangebook, pipeline
-from promoter_tf_drugs import report
+from generoutes import cli, combined, exposure, fda, orangebook, pipeline
+from generoutes import report
 
 APPROVED = {"calcitriol", "tretinoin", "bexarotene"}
 _RECORD = {"ingredient": "x", "reach": "systemic", "routes": ["ORAL"],

@@ -31,13 +31,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from promoter_tf_drugs import discovery as disc  # noqa: E402
-from promoter_tf_drugs import drugs as drugs_mod  # noqa: E402
-from promoter_tf_drugs import fda, knockout, localdrugs, network  # noqa: E402
-from promoter_tf_drugs import regulon as regulon_mod  # noqa: E402
-from promoter_tf_drugs import tfactivity  # noqa: E402
-from promoter_tf_drugs.http import Client  # noqa: E402
-from promoter_tf_drugs.signatures import breadth_key  # noqa: E402
+from generoutes import discovery as disc  # noqa: E402
+from generoutes import drugs as drugs_mod  # noqa: E402
+from generoutes import fda, knockout, localdrugs, network  # noqa: E402
+from generoutes import regulon as regulon_mod  # noqa: E402
+from generoutes import tfactivity  # noqa: E402
+from generoutes.http import Client  # noqa: E402
+from generoutes.signatures import breadth_key  # noqa: E402
 
 MAX_HOPS = 3
 

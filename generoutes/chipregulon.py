@@ -371,11 +371,11 @@ def summarise(acc: dict) -> str:
 
 
 def main(argv=None) -> int:
-    """`python -m promoter_tf_drugs.chipregulon --bed ... --gtf ...`"""
+    """`python -m generoutes.chipregulon --bed ... --gtf ...`"""
     import argparse
 
     p = argparse.ArgumentParser(
-        prog="python -m promoter_tf_drugs.chipregulon",
+        prog="python -m generoutes.chipregulon",
         description="Build a regulon table from ChIP peaks, for the "
                     "factors curated tables never reached.")
     p.add_argument("--bed", required=True,

@@ -8,10 +8,10 @@ factors are skipped, and that each source is labelled for what it is.
 
 from __future__ import annotations
 
-from promoter_tf_drugs import catalogue as cat
-from promoter_tf_drugs import knockout as ko
-from promoter_tf_drugs import regulators as reg
-from promoter_tf_drugs.drugs import Drug
+from generoutes import catalogue as cat
+from generoutes import knockout as ko
+from generoutes import regulators as reg
+from generoutes.drugs import Drug
 
 
 def gmt(tmp_path, lines, name="ko.gmt"):
@@ -207,7 +207,7 @@ def test_a_run_without_the_flag_has_no_regulator_routes():
 
 
 def test_the_flag_reaches_run_from_both_command_lines():
-    from promoter_tf_drugs import cli, panel
+    from generoutes import cli, panel
     for mod, base in ((cli, ["--gene", "CCR5"]), (panel, ["--genes", "CCR5"])):
         parser = mod.build_parser()
         assert cli.run_kwargs_from_args(

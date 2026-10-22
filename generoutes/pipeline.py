@@ -39,6 +39,7 @@ from . import magnitude as mag_mod
 from . import constraint as con_mod
 from .http import Client
 
+from . import fame as fame_mod
 from . import poisonexon
 from . import proliferation as prolif_mod
 from . import standard_of_care as soc_mod
@@ -1549,21 +1550,43 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         if not demo and sig_mod.autoload_gmt_available("up") \
                 and sig_mod.autoload_gmt_available("down"):
             rows = [r.to_dict() for r in ranked[:ACTIVITY_DRUG_FACTORS]]
+            # The recorded regulators that no drug reaches are exactly what
+            # this step exists for, and most of them never appear in the
+            # motif ranking, so they were never asked. Direct ones only: a
+            # two-step regulator's sign is a product of two edges, and the
+            # list runs to hundreds. The sign gives the role - a factor
+            # that RAISES the gene has to go up to raise it.
+            _asked = {(r.get("symbol") or "").upper() for r in rows}
+            _from_regulators = 0
+            for _reg in regulators_undrugged:
+                _sym = (_reg.get("symbol") or "").strip()
+                if _reg.get("via") or not _sym or _sym.upper() in _asked:
+                    continue
+                _asked.add(_sym.upper())
+                _from_regulators += 1
+                rows.append({
+                    "symbol": _sym,
+                    "role": ("activator" if _reg.get("sign") == 1
+                             else "repressor")})
             found = _optional(
                 "factor abundance scan",
                 lambda: abund_mod.find(rows, goal=goal), [])
             factor_abundance = [h.to_dict() for h in (found or [])]
             undirected_factors = abund_mod.undirected_factors(rows, goal=goal)
+            _scope = (f"{len(rows)} factor(s) asked, {_from_regulators} of "
+                      f"them recorded regulators the motif scan did not "
+                      f"rank")
             ledger.record(
                 "factor_abundance", requested=True, ok=True,
                 yielded=len(factor_abundance),
                 detail=(f"{len(factor_abundance)} compound(s) move a "
-                        f"factor's own transcript the needed way; "
+                        f"factor's own transcript the needed way; {_scope}; "
                         f"{len(undirected_factors)} factor(s) skipped for "
                         f"an unrecorded role"
                         if factor_abundance else
-                        "no compound moved a factor's own transcript the "
-                        "needed way in enough contexts to report"))
+                        f"no compound moved a factor's own transcript the "
+                        f"needed way in enough contexts to report "
+                        f"({_scope})"))
 
         # ---- 8c-ter. which approved drugs move those factors?
         # The drug lookup can only return compounds somebody assayed at the
@@ -1762,8 +1785,14 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             react["summary"] = react_mod.summarise(react)
             beyond["reactivation"] = react
 
+            # The approved-drug index turns "E3 ligase inhibition" from a
+            # generic mechanism into a question with an answer: is there a
+            # drug at the ligase that destroys THIS protein?
             beyond["product_stability"] = stab_mod.product_stabilisation(
-                prom.gene_symbol, goal=goal)
+                prom.gene_symbol, goal=goal,
+                drug_index=None if demo else _optional(
+                    'approved-drug index for the degradation route',
+                    _approved_index, None))
 
         # ---------------- 8e2. design a direct modality for this gene
         modality = {}
@@ -1877,8 +1906,16 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             # from a dock against something else, and to say whether the
             # conformation docked is the one you want stabilised.
             # `annotation` is a dict subclass, so this is a key read.
-            "tf_roles": {r.symbol: (r.annotation or {}).get("role")
-                         for r in ranked},
+            # The recorded regulators go in too, with their sign as the
+            # role: most never appear in `ranked`, so without them a
+            # route through MYC or FOXM1 has no recorded direction and
+            # the cancer-risk check can make no claim about it.
+            "tf_roles": {
+                **{r["symbol"]: ("activator" if r.get("sign") == 1
+                                 else "repressor")
+                   for r in regulators_undrugged if not r.get("via")},
+                **{r.symbol: (r.annotation or {}).get("role")
+                   for r in ranked}},
             "sensitivity": sensitivity,
             "product_screen": product_screen,
             "promoter_dna": promoter_dna_scan,
@@ -1925,20 +1962,43 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                         "checked for moving the cell cycle rather than this "
                         "gene"))
 
+        # How many OTHER genes the literature records each candidate as
+        # moving. The retrospective found this is the control that matters
+        # most for reading the order: a baseline of drug popularity beat
+        # every route here. See fame.py.
+        _fame: dict = {}
+        if not demo:
+            _ftable = _optional("fame table", fame_mod.load, None)
+            _names = [r.get("drug") for r in
+                      (all_routes.get("routes") or []) if r.get("drug")]
+            _fame = fame_mod.assess(_names, _ftable)
+            _n_fame = sum(1 for v in _fame.values() if v.get("promiscuous"))
+            ledger.record(
+                "fame", requested=True, ok=bool(_fame), yielded=_n_fame,
+                detail=(f"{len(_fame)} candidate(s) found in the fame "
+                        f"table over {_ftable['n_genes']} gene(s); "
+                        f"{_n_fame} are recorded for most of them"
+                        if _fame and _ftable else
+                        "no drug-fame table, so no candidate could be "
+                        "checked for being a compound the literature "
+                        "records for every gene. " + fame_mod.SOURCE))
+
         if not demo:
             _b = _optional("LINCS compound breadth",
                            lambda: _compound_breadth([{"all_routes": all_routes}]),
                            {})
             _very = {k: v for k, v in (_b.get("compounds") or {}).items()
                      if v.get("very_broad")}
-            if _very or any(v.get("tracks_proliferation")
-                            for v in _prolif.values()):
+            if (_very or any(v.get("tracks_proliferation")
+                             for v in _prolif.values())
+                    or any(v.get("promiscuous") for v in _fame.values())):
                 all_routes = cat_mod.build(block_for_catalogue, goal=goal,
                                            breadth=_b.get("compounds"),
                                            mitotic_gene=_mitotic_gene,
                                            scan_fdp=_fdp,
                                            proliferation=_prolif,
-                                           avoid_genotoxic=avoid_genotoxic)
+                                           avoid_genotoxic=avoid_genotoxic,
+                                           fame=_fame)
 
         # Where a factor has both a dock and a ligand screen, intersect
         # them. The two share no input - one reads pocket shape, the other
@@ -2009,6 +2069,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             "product_screen": product_screen,
             "promoter_dna": promoter_dna_scan,
             "proliferation": _prolif,
+            "fame": _fame,
             "modality_design": modality,
             "screen_plan": screen_plan,
             "lincs": lincs,

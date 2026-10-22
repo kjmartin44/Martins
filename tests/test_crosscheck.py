@@ -11,10 +11,10 @@ from __future__ import annotations
 
 import pytest
 
-from promoter_tf_drugs import catalogue as cat
-from promoter_tf_drugs import crosscheck as xc_mod
-from promoter_tf_drugs import report, systemic
-from promoter_tf_drugs import retrospective as rt
+from generoutes import catalogue as cat
+from generoutes import crosscheck as xc_mod
+from generoutes import report, systemic
+from generoutes import retrospective as rt
 
 
 def _links(wanted=(), opposite=()):

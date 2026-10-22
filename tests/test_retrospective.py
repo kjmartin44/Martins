@@ -15,7 +15,7 @@ import os
 import numpy as np
 import pytest
 
-from promoter_tf_drugs import retrospective as rt
+from generoutes import retrospective as rt
 
 
 # --------------------------------------------------------------- metrics

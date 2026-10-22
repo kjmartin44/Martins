@@ -16,7 +16,7 @@ uses synthetic data and mocked services. Live checks should be separate commands
 with outputs and logs under `results/`; do not add network calls to unit tests.
 
 After packaging changes, install the wheel into another environment and run
-`python -m promoter_tf_drugs --demo --gene DEMOGENE --out demo` outside the
+`python -m generoutes --demo --gene DEMOGENE --out demo` outside the
 checkout. This checks installed imports and confirms that repository files are
 not accidentally required. Also exercise each installed command's `--help`.
 
@@ -105,7 +105,7 @@ test that quietly reads one of them passes on your machine and fails there.
 ```bash
 git clone . /tmp/ci-check
 cd /tmp/ci-check
-PTD_CACHE="$(mktemp -d)" python -m pytest -q
+GENEROUTES_CACHE="$(mktemp -d)" python -m pytest -q
 ```
 
 To make any test that reaches for the network fail loudly instead of being
@@ -113,7 +113,7 @@ answered from your warm cache, point the proxy variables at a closed port:
 
 ```bash
 HTTP_PROXY=http://127.0.0.1:9 HTTPS_PROXY=http://127.0.0.1:9 \
-PTD_CACHE="$(mktemp -d)" python -m pytest -q
+GENEROUTES_CACHE="$(mktemp -d)" python -m pytest -q
 ```
 
 On Windows keep the clone and the temporary directory under a short path such
@@ -126,7 +126,7 @@ To check a different Python, compile the source with that interpreter. It
 needs no dependencies and finds syntax the running interpreter accepts:
 
 ```bash
-python3.10 -m compileall -q promoter_tf_drugs scripts tests
+python3.10 -m compileall -q generoutes scripts tests
 ```
 
 `python scripts/generate_cli_docs.py` pins the terminal width and writes LF line
@@ -143,8 +143,8 @@ worse than one known to be incomplete — the report presents both with the
 same confidence.
 
 ```bash
-python -m promoter_tf_drugs.audit            # consistency, no network
-python -m promoter_tf_drugs.audit --online   # also resolve names in ChEMBL
+python -m generoutes.audit            # consistency, no network
+python -m generoutes.audit --online   # also resolve names in ChEMBL
 ```
 
 The offline pass runs as a test. It catches changes that would silently alter

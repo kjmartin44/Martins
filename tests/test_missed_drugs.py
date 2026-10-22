@@ -16,11 +16,11 @@ from pathlib import Path
 
 import pytest
 
-from promoter_tf_drugs import catalogue as cat
-from promoter_tf_drugs import drugs as drugs_mod
-from promoter_tf_drugs import regulators as reg
-from promoter_tf_drugs.http import HttpError
-from promoter_tf_drugs.network import Edge, build_graph
+from generoutes import catalogue as cat
+from generoutes import drugs as drugs_mod
+from generoutes import regulators as reg
+from generoutes.http import HttpError
+from generoutes.network import Edge, build_graph
 
 from test_upstream_search import _LfChembl, _lf_drug, _lf_library, _lf_target
 
@@ -251,7 +251,7 @@ def test_binders_are_asked_only_when_the_mechanism_index_has_nothing():
 # ---------------------------------------------------- the run and the CLI
 def test_the_run_and_the_command_line_take_the_new_options():
     import inspect
-    from promoter_tf_drugs import cli, pipeline
+    from generoutes import cli, pipeline
     sig = inspect.signature(pipeline.run).parameters
     assert sig["regulator_steps"].default == 1
     assert sig["regulator_measured"].default is False
@@ -287,7 +287,7 @@ def _steps(lines):
 
 
 def test_the_trace_stops_at_the_first_missing_link(monkeypatch):
-    from promoter_tf_drugs import fda
+    from generoutes import fda
     monkeypatch.setattr(fda, "is_approved", lambda name: True)
     assert _steps(_trace("nothere", library=[{"name": "A", "chembl_id": "x"}])
                   ) == {1: False}
@@ -295,7 +295,7 @@ def test_the_trace_stops_at_the_first_missing_link(monkeypatch):
 
 
 def test_the_trace_names_the_regulator_and_checks_the_direction(monkeypatch):
-    from promoter_tf_drugs import fda
+    from generoutes import fda
     monkeypatch.setattr(fda, "is_approved", lambda name: True)
     index = {"TFA": [_lf_drug("Drugx", "TFA", "down")]}
     regs = {"TFA": {"sources": {"CollecTRI": "raises"}, "sign": 1}}
@@ -311,7 +311,7 @@ def test_the_trace_names_the_regulator_and_checks_the_direction(monkeypatch):
 
 
 def test_the_trace_says_when_a_drug_is_within_reach_of_a_regulator(monkeypatch):
-    from promoter_tf_drugs import fda
+    from generoutes import fda
     monkeypatch.setattr(fda, "is_approved", lambda name: True)
     index = {"UPSTREAM": [_lf_drug("Drugx", "UPSTREAM", "up")]}
     regs = {"TFA": {"sources": {"CollecTRI": "raises"}, "sign": 1}}

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from promoter_tf_drugs import discovery as d
+from generoutes import discovery as d
 
 
 def eff(chem, text, gene="CYP3A4"):
@@ -136,7 +136,7 @@ def test_a_failed_lookup_is_still_none_not_empty():
 
 
 # ------------------------------------------------- the literature route
-from promoter_tf_drugs import catalogue as cat  # noqa: E402
+from generoutes import catalogue as cat  # noqa: E402
 
 
 def _literature(entries, papers=None, gene="CYP3A4"):
@@ -206,7 +206,7 @@ def test_the_catalogue_builds_them_from_the_result_block():
 
 
 def test_the_retrospective_never_scores_the_answer_key_against_itself():
-    from promoter_tf_drugs import retrospective as rt
+    from generoutes import retrospective as rt
     routes = [{"drug": "Rifampin", "category": "literature: reported effect",
                "tier": 4, "score": 50},
               {"drug": "Other", "category": "TF: known regulator", "tier": 4,
@@ -218,7 +218,7 @@ def test_the_retrospective_never_scores_the_answer_key_against_itself():
 
 def test_the_run_and_the_command_line_can_turn_the_route_off():
     import inspect
-    from promoter_tf_drugs import cli, pipeline
+    from generoutes import cli, pipeline
     assert inspect.signature(pipeline.run).parameters["ctd_route"].default is True
     kw = cli.run_kwargs_from_args(cli.build_parser().parse_args(
         ["--gene", "X", "--no-ctd-route"]))

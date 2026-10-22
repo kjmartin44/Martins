@@ -12,8 +12,8 @@ import logging
 
 import pytest
 
-from promoter_tf_drugs import chemblid as cid
-from promoter_tf_drugs.http import HttpError
+from generoutes import chemblid as cid
+from generoutes.http import HttpError
 
 ROWS = [{"name": "RIFAMPIN", "chembl_id": "CHEMBL374478"},
         {"name": "IMATINIB MESYLATE", "chembl_id": "CHEMBL1642"},
@@ -115,7 +115,7 @@ def test_an_empty_name_is_unresolved_without_a_request():
 
 
 def test_with_no_approved_table_only_the_search_can_resolve(monkeypatch):
-    from promoter_tf_drugs import localdrugs
+    from generoutes import localdrugs
     cid.reset()
     monkeypatch.setattr(localdrugs, "library", lambda path=None: [])
     c = _Client(search=[{"pref_name": "RIFAMPIN",

@@ -12,7 +12,7 @@ import json
 import numpy as np
 import pytest
 
-from promoter_tf_drugs import docking, exploratory as ex
+from generoutes import docking, exploratory as ex
 
 AA = "ACDEFGHIKLMNPQRSTVWY"
 _ONE_TO_THREE = {v: k for k, v in ex._THREE.items()}

@@ -24,7 +24,7 @@ what it produces and what would make you stop.
 
 ```sh
 python -m pip install -e ".[dev,chemistry]"
-python -m promoter_tf_drugs --demo --gene DEMOGENE --out results/demo
+python -m generoutes --demo --gene DEMOGENE --out results/demo
 ```
 
 The demo runs offline on synthetic data and never touches the network.
@@ -46,8 +46,8 @@ the answer most, in order:
 binary as well:
 
 ```sh
-python -m promoter_tf_drugs.docking --check
-python -m promoter_tf_drugs.wsldock
+python -m generoutes.docking --check
+python -m generoutes.wsldock
 ```
 
 **Stop if:** the demo does not produce a report. Everything below assumes
@@ -60,7 +60,7 @@ plausible, which have measured occupancy, and which approved drugs act on
 them.
 
 ```sh
-python -m promoter_tf_drugs --gene CCR5 --direction down \
+python -m generoutes --gene CCR5 --direction down \
     --pfm-file data/jaspar2024.txt \
     --chip-bed data/remap2022.bed.gz \
     --regulon-file data/chip_regulon.tsv \
@@ -104,7 +104,7 @@ annotation. Worth running when a factor near the top has a structure with
 a ligand in it, or when you want to screen the gene's own protein.
 
 ```sh
-python -m promoter_tf_drugs.docking --gene VDR --state active \
+python -m generoutes.docking --gene VDR --state active \
     --jobs 8 --cpu 4 --library data/approved_library.tsv \
     --out results/ccr5/dock.json
 ```
@@ -112,7 +112,7 @@ python -m promoter_tf_drugs.docking --gene VDR --state active \
 Then fold it back into the analysis:
 
 ```sh
-python -m promoter_tf_drugs --gene CCR5 --direction down \
+python -m generoutes --gene CCR5 --direction down \
     --docking-results results/ccr5/dock.json --out results/ccr5
 ```
 
@@ -129,7 +129,7 @@ Two ways, depending on whether you are choosing between genes.
 **One gene.** Re-narrow the saved result — no re-run, no network:
 
 ```sh
-python -m promoter_tf_drugs.shortlist results/ccr5/results.json \
+python -m generoutes.shortlist results/ccr5/results.json \
     --preset specific
 ```
 
@@ -137,7 +137,7 @@ python -m promoter_tf_drugs.shortlist results/ccr5/results.json \
 through a staged funnel, with a housekeeping gene as a control:
 
 ```sh
-python -m promoter_tf_drugs.panel --genes GENE1,GENE2,GENE3 \
+python -m generoutes.panel --genes GENE1,GENE2,GENE3 \
     --control-gene ACTB --direction down \
     --max-regulon 600 --max-burden moderate \
     --out results/panel
@@ -150,7 +150,7 @@ unselective, not corroborated.
 Tuning a cutoff never re-runs anything:
 
 ```sh
-python -m promoter_tf_drugs.panel --renarrow results/panel/panel.json \
+python -m generoutes.panel --renarrow results/panel/panel.json \
     --max-burden low --out results/panel_strict
 ```
 
@@ -178,7 +178,7 @@ accident.
 Then the part the package cannot do for you:
 
 ```sh
-python -m promoter_tf_drugs.explain results/ccr5/results.json maraviroc
+python -m generoutes.explain results/ccr5/results.json maraviroc
 ```
 
 `explain` puts everything known about one compound in one place, and the

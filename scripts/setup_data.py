@@ -44,7 +44,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-AGENT = "Mozilla/5.0 promoter-tf-drugs-setup"
+AGENT = "Mozilla/5.0 generoutes-setup"
 FIGSHARE = "https://api.figshare.com/v2/articles/{}/files?page_size=1000"
 DEPMAP_ARTICLE = 25880521      # DepMap Public 24Q2
 PRISM_ARTICLE = 25917643       # Repurposing Public 24Q2
@@ -244,7 +244,7 @@ class Item:
 
 def _reg(key: str) -> tuple:
     """Every filename the loaders accept for a registered dataset."""
-    from promoter_tf_drugs import datasets
+    from generoutes import datasets
     for ds in datasets.registry():
         if ds.key == key:
             return tuple(ds.paths)
@@ -431,7 +431,7 @@ def _run(cmd: list):
 
 
 def _build_chip_regulon(data: Path):
-    _run([sys.executable, "-m", "promoter_tf_drugs.chipregulon",
+    _run([sys.executable, "-m", "generoutes.chipregulon",
           "--bed", data / "remap2022.bed.gz",
           "--gtf", data / "gencode.basic.gtf.gz",
           "--out", data / "chip_regulon.tsv"])
@@ -440,7 +440,7 @@ def _build_chip_regulon(data: Path):
 def build_library(data: Path, client=None):
     """data/approved_library.tsv from ChEMBL: approved small molecules with a
     structure, with the withdrawn flag and oral route when ChEMBL has them."""
-    from promoter_tf_drugs.http import Client
+    from generoutes.http import Client
     client = client or Client()
     chembl = "https://www.ebi.ac.uk/chembl/api/data"
     rows, offset = [], 0
@@ -489,7 +489,7 @@ def _fetch_bindingdb(data: Path):
             print("    unpacking about 9 GB; it is distilled and deleted next")
             with zf.open(member) as src, open(raw, "wb") as out:
                 shutil.copyfileobj(src, out, 1 << 22)
-        _run([sys.executable, "-m", "promoter_tf_drugs.localpotency",
+        _run([sys.executable, "-m", "generoutes.localpotency",
               "--distil", raw])
     finally:
         z.unlink(missing_ok=True)
@@ -506,7 +506,7 @@ def _fetch_corpora(data: Path):
             and _exists(data, "drugmatrix_down.gmt")):
         raw = data / "drugmatrix_raw.gmt"
         download(ENRICHR.format("DrugMatrix"), raw, check=gmt_ok(100))
-        _run([sys.executable, "-m", "promoter_tf_drugs.corpora",
+        _run([sys.executable, "-m", "generoutes.corpora",
               "--split", raw, "--as", "drugmatrix"])
 
 

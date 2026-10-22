@@ -47,8 +47,8 @@ days reports last month's schema and cannot see a change made last
 week. The fresh response is still written to the cache, so a normal run
 afterwards benefits.
 
-    python -m promoter_tf_drugs.services
-    python -m promoter_tf_drugs.services --key opentargets --verbose
+    python -m generoutes.services
+    python -m generoutes.services --key opentargets --verbose
 """
 
 from __future__ import annotations
@@ -393,7 +393,7 @@ def check_all(client: Client | None = None, *, keys=None) -> list:
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(
-        prog="python -m promoter_tf_drugs.services",
+        prog="python -m generoutes.services",
         description="Check that each web service still returns the shape "
                     "this package's parsers read. A renamed field does "
                     "not raise here - it returns an honest-looking zero - "

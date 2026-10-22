@@ -6,7 +6,7 @@ mechanism comparison, the ligand axis, the LINCS signature, the discovery
 comparison against the standard of care, and the screen cherry-pick list. To
 judge one candidate you currently have to find it in each of them.
 
-    python -m promoter_tf_drugs.explain results/PAH_up/results.json calcitriol
+    python -m generoutes.explain results/PAH_up/results.json calcitriol
 
 Matching is case-insensitive and substring-based, so a partial name works.
 Where several compounds match, the ambiguity is reported rather than the first
@@ -20,7 +20,7 @@ import json
 import sys
 from pathlib import Path
 
-from .provenance import check_schema
+from .provenance import check_schema, use_utf8_console
 
 
 def _matches(name: str, query: str) -> bool:
@@ -115,7 +115,7 @@ def render(found: dict) -> str:
     if not found["blocks"]:
         return (f"# {q}\n\nNot found in this results file. Check the spelling, "
                 f"or list what is present with:\n\n"
-                f"    python -m promoter_tf_drugs.shortlist <results.json> "
+                f"    python -m generoutes.shortlist <results.json> "
                 f"--preset mechanism --top 100\n")
 
     if len(names) > 1:
@@ -281,12 +281,13 @@ def render(found: dict) -> str:
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(
-        prog="promoter-tf-drugs.explain",
+        prog="generoutes.explain",
         description="Show everything a run found about one compound.")
     p.add_argument("results", help="results.json from a previous run")
     p.add_argument("drug", nargs="+", help="compound name (partial is fine)")
     p.add_argument("--out", help="write the write-up here")
     args = p.parse_args(argv)
+    use_utf8_console()
 
     data = json.loads(Path(args.results).read_text(encoding="utf-8"))
     check_schema(data, "explain")

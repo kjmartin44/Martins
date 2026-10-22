@@ -13,7 +13,7 @@ import logging
 
 import numpy as np
 
-from promoter_tf_drugs import sensitivity
+from generoutes import sensitivity
 
 NL = chr(10)
 

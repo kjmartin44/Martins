@@ -564,12 +564,12 @@ def summarise(actives: list, symbol: str | None = None) -> str:
 
 
 def main(argv=None) -> int:
-    """`python -m promoter_tf_drugs.localpotency` - prepare the file."""
+    """`python -m generoutes.localpotency` - prepare the file."""
     import argparse
     import logging
 
     p = argparse.ArgumentParser(
-        prog="python -m promoter_tf_drugs.localpotency",
+        prog="python -m generoutes.localpotency",
         description=("Prepare and inspect the local potency table. The "
                      "full BindingDB release is 9 GB across 640 columns "
                      "and seven of them are read here, so it is projected "

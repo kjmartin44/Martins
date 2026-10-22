@@ -24,8 +24,37 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-DEFAULT_CACHE = Path(os.environ.get("PTD_CACHE", Path.home() / ".cache" / "promoter_tf_drugs"))
-USER_AGENT = "promoter-tf-drugs/0.1 (research pipeline)"
+def _env(name: str, default):
+    """Read `GENEROUTES_<name>`, falling back to the old `PTD_<name>`.
+
+    The package was called promoter-tf-drugs and its variables PTD_*.
+    Both are read so a shell profile or a CI file written before the
+    rename keeps working; the new name wins where both are set.
+    """
+    return os.environ.get(f"GENEROUTES_{name}",
+                          os.environ.get(f"PTD_{name}", default))
+
+
+def _default_cache() -> Path:
+    """Where responses are cached, preferring a cache that already exists.
+
+    The directory moved with the rename. An existing
+    `~/.cache/promoter_tf_drugs` can hold gigabytes of fetched responses,
+    and refilling it costs hours of requests against services that
+    rate-limit, so it is used when the new one is not there yet. A run
+    with `--cache-dir` or the environment variable is unaffected.
+    """
+    new = Path.home() / ".cache" / "generoutes"
+    legacy = Path.home() / ".cache" / "promoter_tf_drugs"
+    if not new.exists() and legacy.exists():
+        log.info("using the cache from before the rename at %s; move or "
+                 "delete it to start a fresh one at %s", legacy, new)
+        return legacy
+    return new
+
+
+DEFAULT_CACHE = Path(_env("CACHE", _default_cache()))
+USER_AGENT = "generoutes/0.1 (research pipeline)"
 
 # Retries, and why they are this patient. Ensembl, ChEMBL and the
 # maayanlab services all return HTTP 500 when they are merely busy, so a
@@ -33,8 +62,8 @@ USER_AGENT = "promoter-tf-drugs/0.1 (research pipeline)"
 # jittered backoff spans roughly a minute, which rides out the outages
 # seen in practice; the old three attempts over 7s did not, and giving up
 # there discards every lookup the run had already completed.
-DEFAULT_RETRIES = int(os.environ.get("PTD_RETRIES", 6))
-RETRY_CAP = float(os.environ.get("PTD_RETRY_CAP", 20.0))
+DEFAULT_RETRIES = int(_env("RETRIES", 6))
+RETRY_CAP = float(_env("RETRY_CAP", 20.0))
 
 
 class HttpError(RuntimeError):

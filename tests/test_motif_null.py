@@ -17,8 +17,8 @@ from collections import Counter
 import numpy as np
 import pytest
 
-from promoter_tf_drugs import motifs as m
-from promoter_tf_drugs import pwm
+from generoutes import motifs as m
+from generoutes import pwm
 
 
 def _pairs(seq):
@@ -175,7 +175,7 @@ def test_a_noise_scan_is_still_called_noise_with_a_null():
 # ------------------------------------------------------ the run and report
 def test_the_run_takes_the_option_and_the_demo_records_the_null():
     import inspect
-    from promoter_tf_drugs import pipeline
+    from generoutes import pipeline
     assert inspect.signature(pipeline.run).parameters[
         "null_shuffles"].default == m.NULL_SHUFFLES == 30
     res = pipeline.run("DEMOGENE", demo=True, null_shuffles=10)
@@ -189,7 +189,7 @@ def test_the_run_takes_the_option_and_the_demo_records_the_null():
 
 
 def test_the_summary_line_gives_the_count_the_range_and_the_limit_of_a_site():
-    from promoter_tf_drugs import pipeline, report
+    from generoutes import pipeline, report
     res = pipeline.run("DEMOGENE", demo=True, null_shuffles=0)
     res["evidence_verdict"] = {
         "level": "degraded", "headline": "h", "reasons": [],
@@ -202,7 +202,7 @@ def test_the_summary_line_gives_the_count_the_range_and_the_limit_of_a_site():
 
 
 def test_a_window_with_unscanned_motifs_says_so_in_the_report():
-    from promoter_tf_drugs import pipeline, report
+    from generoutes import pipeline, report
     res = pipeline.run("DEMOGENE", demo=True, null_shuffles=0)
     res["results"][0]["scan_quality"]["motifs_unreachable"] = 254
     text = report.markdown_report(res)
@@ -217,7 +217,7 @@ def _run_with_windows(tmp_path, monkeypatch, *, planted_narrow: bool,
     import dataclasses
 
     from test_upstream_search import _lf_offline_run
-    from promoter_tf_drugs import genes, pipeline
+    from generoutes import genes, pipeline
     real = genes.get_promoters
     site = "ACGTACGTACGT"
     asked = []
@@ -285,7 +285,7 @@ def test_no_widen_keeps_the_requested_window(tmp_path, monkeypatch):
 
 def test_the_option_reaches_the_run_and_the_report_says_what_happened():
     import inspect
-    from promoter_tf_drugs import cli, pipeline, report
+    from generoutes import cli, pipeline, report
     assert inspect.signature(pipeline.run).parameters[
         "widen_no_signal"].default is True
     kw = cli.run_kwargs_from_args(cli.build_parser().parse_args(

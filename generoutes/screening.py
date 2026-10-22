@@ -394,7 +394,7 @@ def screen_receptor(client: Client, target_chembl_id: str, *, goal: str = "up",
         # go, and it would have raised NameError the first time a run had
         # no library at all.
         return {"target": target_chembl_id, "hits": [],
-                "error": "no screening library: no local drug table on disk and no client to fetch one. Merge one with `python -m promoter_tf_drugs.localdrugs --merge FILE...`."}
+                "error": "no screening library: no local drug table on disk and no client to fetch one. Merge one with `python -m generoutes.localdrugs --merge FILE...`."}
     actives = agonism.fetch_actives(client, target_chembl_id)
     active_ids = {a["chembl_id"] for a in actives}
 
@@ -757,7 +757,7 @@ def screen_gene_product(client, gene: str, *, uniprot: str | None = None,
         return {"gene": sym, "uniprot": uni, "hits": [],
                 "error": ("no screening library: no local drug table on "
                           "disk and no client to fetch one. Merge one with "
-                          "`python -m promoter_tf_drugs.localdrugs "
+                          "`python -m generoutes.localdrugs "
                           "--merge FILE...`.")}
 
     # By structure, not by id: see match_actives_to_library. Falling back
@@ -984,7 +984,7 @@ def screen_family(client, symbol: str, *, goal: str = "up",
             lib = approved_library(client)
     if not lib:
         return {"target": symbol, "hits": [], "family": fam.name,
-                "error": "no screening library: no local drug table on disk and no client to fetch one. Merge one with `python -m promoter_tf_drugs.localdrugs --merge FILE...`."}
+                "error": "no screening library: no local drug table on disk and no client to fetch one. Merge one with `python -m generoutes.localdrugs --merge FILE...`."}
     pooled_smiles = {a["smiles"] for a in pooled}
     pool = [d for d in lib if d["smiles"] not in pooled_smiles
             and d["smiles"] not in own_smiles]

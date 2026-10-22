@@ -115,10 +115,10 @@ def _fetch(client) -> bytes:
         # --max-requests, is retried, and trips the host breaker like every
         # other request. It used to bypass all three.
         raw = fetch(TRANS_URL, timeout=120,
-                    headers={"User-Agent": "promoter-tf-drugs"})
+                    headers={"User-Agent": "generoutes"})
     else:
         req = urllib.request.Request(
-            TRANS_URL, headers={"User-Agent": "promoter-tf-drugs"})
+            TRANS_URL, headers={"User-Agent": "generoutes"})
         with urllib.request.urlopen(req, timeout=120) as resp:
             raw = resp.read()
     if len(raw) < 100_000:

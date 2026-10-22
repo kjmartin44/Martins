@@ -3,7 +3,7 @@
 [Documentation index](index.md)
 
 ```bash
-python -m promoter_tf_drugs.panel --genes CCR5,PCSK9,LDLR --direction down \
+python -m generoutes.panel --genes CCR5,PCSK9,LDLR --direction down \
     --pfm-file data\jaspar2024.txt --chip-bed data\remap2022.bed.gz \
     --cell-type-check --expression-file data\rna_tissue_consensus.tsv \
     --control-gene ACTB --max-regulon 600 --max-burden moderate \
@@ -80,7 +80,7 @@ A fresh run costs tens of minutes per gene; tuning a cutoff should cost a
 second.
 
 ```bash
-python -m promoter_tf_drugs.panel --renarrow results\panel\panel.json \
+python -m generoutes.panel --renarrow results\panel\panel.json \
     --max-regulon 300 --out results\panel-tight
 ```
 
@@ -111,7 +111,7 @@ nothing, so the easiest gene to drug cannot quietly win the argument.
 | `exploratory` | what is there at all? |
 
 Individual flags override a preset. See the [command
-reference](cli.md#python--m-promoter_tf_drugspanel) for every option.
+reference](cli.md#python--m-generoutespanel) for every option.
 
 ## One list from docking and the rest
 
@@ -122,7 +122,7 @@ ligands at AUC 0.93). The two kinds of evidence answer different questions, so
 `combined` keeps them as separate rankings and fuses them:
 
 ```bash
-python -m promoter_tf_drugs.combined --results results/CCR5_down/results.json \
+python -m generoutes.combined --results results/CCR5_down/results.json \
     --panel results/CCR5_down_panel/panel.json \
     --docking results/CCR5_down/docking/product.json --top 40
 ```

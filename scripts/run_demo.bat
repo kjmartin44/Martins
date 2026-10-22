@@ -13,7 +13,7 @@ set "PY=python"
 if exist ".venv\Scripts\python.exe" set "PY=.venv\Scripts\python.exe"
 if exist "venv\Scripts\python.exe" set "PY=venv\Scripts\python.exe"
 
-"%PY%" -c "import promoter_tf_drugs" 2>nul
+"%PY%" -c "import generoutes" 2>nul
 if errorlevel 1 (
     echo The package is not importable by %PY%.
     echo.
@@ -23,7 +23,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-"%PY%" -m promoter_tf_drugs --demo --gene DEMOGENE --out results\demo
+"%PY%" -m generoutes --demo --gene DEMOGENE --out results\demo
 if errorlevel 1 (
     echo.
     echo The demo failed. That is an installation problem rather than a

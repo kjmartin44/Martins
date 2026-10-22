@@ -4,7 +4,7 @@ A full run takes tens of minutes. Deciding what to actually order should take a
 second. This reads the results.json a run already produced and applies filters
 to it, so you can tighten and loosen criteria interactively.
 
-    python -m promoter_tf_drugs.shortlist results/PAH_up/results.json --preset strict
+    python -m generoutes.shortlist results/PAH_up/results.json --preset strict
 
 The presets are opinionated on purpose. Each encodes a different question:
 
@@ -47,7 +47,7 @@ import json
 import sys
 from pathlib import Path
 
-from .provenance import check_schema
+from .provenance import check_schema, use_utf8_console
 
 PRESETS = {
     "strict": {
@@ -521,7 +521,7 @@ def _why_class(name: str) -> str:
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(
-        prog="promoter-tf-drugs.shortlist",
+        prog="generoutes.shortlist",
         description="Filter an existing results.json into an actionable "
                     "shortlist. No network, no re-run.")
     p.add_argument("results", help="path to results.json from a previous run")
@@ -550,6 +550,7 @@ def main(argv=None) -> int:
     p.add_argument("--top", type=int, default=40)
     p.add_argument("--out", help="write the shortlist here as markdown")
     args = p.parse_args(argv)
+    use_utf8_console()
 
     data = json.loads(Path(args.results).read_text(encoding="utf-8"))
     from . import fda as fda_mod

@@ -65,7 +65,7 @@ The local outputs and logs are under `results/validation/`, which Git ignores.
 Each run used the following command with the appropriate gene and direction:
 
 ```sh
-python -m promoter_tf_drugs --gene ABCA4 --direction down --pfm-file data/jaspar2024.txt --regulon-file data/trrust.tsv --cache-dir results/validation/cache --out results/validation/ABCA4_down -v
+python -m generoutes --gene ABCA4 --direction down --pfm-file data/jaspar2024.txt --regulon-file data/trrust.tsv --cache-dir results/validation/cache --out results/validation/ABCA4_down -v
 ```
 
 The full offline suite passed: **323 tests**, including 37 new regression cases.

@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from promoter_tf_drugs import cli
+from generoutes import cli
 
 GUIDE = (Path(__file__).resolve().parents[1] / "docs" / "cli-guide.md"
          ).read_text(encoding="utf-8")

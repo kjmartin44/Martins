@@ -13,12 +13,12 @@ import sqlite3
 
 import pytest
 
-from promoter_tf_drugs import (agonism, analogs, annotate, direct, drugs,
+from generoutes import (agonism, analogs, annotate, direct, drugs,
                                eqtl, genes, localpotency, modulators,
                                network, screening, sensitivity, signatures,
                                stabilizers)
-from promoter_tf_drugs.drugs import Drug
-from promoter_tf_drugs.http import HttpError
+from generoutes.drugs import Drug
+from generoutes.http import HttpError
 
 NL = chr(10)
 TAB = chr(9)
@@ -360,7 +360,7 @@ def test_from_hit_derives_role_from_go_terms():
 
 @pytest.fixture
 def no_local_annotation(monkeypatch):
-    from promoter_tf_drugs import localannot
+    from generoutes import localannot
     monkeypatch.setattr(localannot, "available",
                         lambda: {"hgnc": False, "goa": False})
 
@@ -873,7 +873,7 @@ def test_a_whole_offline_run_performs_the_trans_eqtl_lookup(tmp_path,
     where the client looks for its download."""
     import random
 
-    from promoter_tf_drugs import neighbours, pipeline
+    from generoutes import neighbours, pipeline
 
     # Module state that run() fills from the files below, restored after.
     monkeypatch.setattr(genes, "_TX_BY_GENE", {})

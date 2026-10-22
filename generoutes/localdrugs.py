@@ -185,7 +185,7 @@ def describe_sources() -> str:
              "hundred new moieties rather than doubling the library. Merge "
              "them and the per-source accounting says how many:")
     L.append("")
-    L.append("  python -m promoter_tf_drugs.localdrugs --merge "
+    L.append("  python -m generoutes.localdrugs --merge "
              + " ".join(s.filename for s in SOURCES[:3])
              + " --out data/library.tsv")
     L.append("")
@@ -871,11 +871,11 @@ def write_table(library: list, path) -> Path:
 
 
 def main(argv=None) -> int:
-    """`python -m promoter_tf_drugs.localdrugs` - inspect or merge tables."""
+    """`python -m generoutes.localdrugs` - inspect or merge tables."""
     import argparse
 
     p = argparse.ArgumentParser(
-        prog="python -m promoter_tf_drugs.localdrugs",
+        prog="python -m generoutes.localdrugs",
         description="Inspect a local drug table, or merge several into one "
                     "deduplicated library.",
         formatter_class=argparse.RawDescriptionHelpFormatter,

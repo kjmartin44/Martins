@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from promoter_tf_drugs import pipeline, report
-from promoter_tf_drugs import signatures as sg
+from generoutes import pipeline, report
+from generoutes import signatures as sg
 
 NL = chr(10)
 TAB = chr(9)
@@ -264,7 +264,7 @@ def _block():
 
 
 def test_a_very_broad_compound_has_its_score_halved_inside_its_tier():
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     block = _block()
     base = cat.build(block, goal="up")
     target = next(r for r in base["routes"] if r["score"] > 0)
@@ -291,7 +291,7 @@ def test_a_very_broad_compound_has_its_score_halved_inside_its_tier():
 
 
 def test_without_breadth_nothing_is_penalised_and_scores_are_unchanged():
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     block = _block()
     plain = cat.build(block, goal="up")
     again = cat.build(block, goal="up", breadth={})
@@ -335,7 +335,7 @@ def test_a_whole_run_penalises_the_very_broad_compound_and_only_that_one(
 
 
 def test_a_compound_that_is_only_broad_is_not_penalised_by_the_catalogue():
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     block = _block()
     base = cat.build(block, goal="up")
     target = next(r for r in base["routes"] if r["score"] > 0)

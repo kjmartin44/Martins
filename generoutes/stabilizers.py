@@ -412,7 +412,141 @@ PRODUCT_ROUTES = (
 )
 
 
-def product_stabilisation(gene: str, *, goal: str = "up") -> dict:
+# Which ubiquitin ligase destroys a given protein, where that is settled
+# textbook biology rather than one paper.
+#
+# Short on purpose, and absence means "not looked up here", never "not
+# degraded". `components` are the gene symbols a drug would have to act
+# on, so the approved-drug index can be asked about them directly.
+DEGRON = {
+    "BUB1B": {
+        "ligase": "APC/C with Cdc20",
+        "components": ("CDC20", "ANAPC2", "ANAPC11", "FZR1"),
+        "degron": "a KEN box and a D-box",
+        "when": "at mitotic exit, once the checkpoint is satisfied",
+        "note": "BUBR1 is a checkpoint protein that the checkpoint's own "
+                "target complex destroys, so its level is tied to the "
+                "cycle it controls. Blocking that destruction also blocks "
+                "mitotic exit, which is why this route is harder than it "
+                "looks for a gene of this kind.",
+    },
+    "TP53": {
+        "ligase": "MDM2",
+        "components": ("MDM2", "MDM4"),
+        "degron": "the MDM2-binding helix in the transactivation domain",
+        "when": "continuously, outside stress",
+        "note": "The one route on this list with approved-adjacent "
+                "chemistry: MDM2 inhibitors (nutlins, idasanutlin) are in "
+                "trials, none approved.",
+    },
+    "MYC": {
+        "ligase": "SCF with FBXW7",
+        "components": ("FBXW7",),
+        "degron": "the Thr58/Ser62 phosphodegron",
+        "when": "after GSK3 phosphorylation",
+        "note": "",
+    },
+    "CTNNB1": {
+        "ligase": "SCF with beta-TrCP",
+        "components": ("BTRC", "FBXW11"),
+        "degron": "the N-terminal phosphodegron",
+        "when": "constitutively, until Wnt signalling blocks it",
+        "note": "",
+    },
+    "HIF1A": {
+        "ligase": "the VHL complex",
+        "components": ("VHL",),
+        "degron": "a hydroxylated proline",
+        "when": "in normoxia",
+        "note": "The approved HIF stabilisers act on the prolyl "
+                "hydroxylases upstream (roxadustat and relatives), not on "
+                "VHL itself.",
+    },
+    "NFE2L2": {
+        "ligase": "the KEAP1-CUL3 complex",
+        "components": ("KEAP1",),
+        "degron": "the ETGE and DLG motifs",
+        "when": "continuously, until an electrophile modifies KEAP1",
+        "approved": "dimethyl fumarate, FDA approved, modifies KEAP1 "
+                    "covalently",
+        "note": "The clearest precedent that blocking a named "
+                "degradation route can be a medicine.",
+    },
+    "CDKN1B": {
+        "ligase": "SCF with SKP2",
+        "components": ("SKP2",),
+        "degron": "the Thr187 phosphodegron",
+        "when": "through S phase",
+        "note": "",
+    },
+}
+
+
+def degradation_of(gene: str) -> dict | None:
+    """What destroys this protein, or None when it is not recorded here."""
+    return DEGRON.get((gene or "").strip().upper())
+
+
+def degradation_route(gene: str, drug_index: dict | None = None) -> dict:
+    """The named degradation route for a gene, and any approved drug at it.
+
+    `drug_index` is `drugs.approved_target_index`'s output. Given one,
+    each component of the ligase is looked up, so the generic mechanism
+    becomes a question with an answer. Without one, the ligase is still
+    named and the drug half says it was not checked - which is the
+    distinction the evidence ledger exists to keep.
+    """
+    rec = degradation_of(gene)
+    if not rec:
+        return {}
+    out = {"gene": (gene or "").strip().upper(), **rec,
+           "components": list(rec["components"]), "drugs": [],
+           "checked": drug_index is not None}
+    for comp in rec["components"]:
+        for d in (drug_index or {}).get(comp, []):
+            out["drugs"].append({"drug": getattr(d, "name", str(d)),
+                                 "acts_on": comp,
+                                 "direction": getattr(d, "direction",
+                                                      "unclear")})
+    return out
+
+
+def summarise_degradation(rec: dict) -> str:
+    """One paragraph naming the ligase and what is known to act on it."""
+    if not rec:
+        return ""
+    head = (f"**{rec['gene']} is destroyed by {rec['ligase']}**, through "
+            f"{rec['degron']}, {rec['when']}. Blocking that specific step "
+            f"raises the protein without touching transcription, and "
+            f"without the whole-proteome cost of a proteasome inhibitor.")
+    if not rec["checked"]:
+        tail = (" No approved-drug table was available, so whether any "
+                "drug acts on that ligase was not checked.")
+    elif rec["drugs"]:
+        names = ", ".join(sorted({d["drug"] for d in rec["drugs"]})[:6])
+        tail = (f" Approved drugs recorded at {', '.join(rec['components'])}: "
+                f"{names}. Their recorded direction is what decides whether "
+                f"they would raise or lower your protein, and none was "
+                f"selected for this purpose.")
+    elif rec.get("approved"):
+        # The mechanism index is built from annotated mechanisms, so a
+        # covalent or allosteric agent can act on a ligase and be absent
+        # from it. Dimethyl fumarate at KEAP1 is the case in point.
+        tail = (f" The index records no approved drug at "
+                f"{' or '.join(rec['components'])}, but it is built from "
+                f"annotated mechanisms and misses agents that act "
+                f"covalently: {rec['approved']}.")
+    else:
+        tail = (f" No approved drug in this package's tables acts on "
+                f"{' or '.join(rec['components'])}, so this route needs "
+                f"chemistry that does not yet exist here. The index is "
+                f"built from annotated mechanisms, so a covalent agent "
+                f"could be missing from it.")
+    return head + tail + (f" {rec['note']}" if rec.get("note") else "")
+
+
+def product_stabilisation(gene: str, *, goal: str = "up",
+                          drug_index: dict | None = None) -> dict:
     """Routes that raise the protein your gene encodes, not the factor.
 
     Only meaningful for `up`: lowering a protein by accelerating its
@@ -423,6 +557,7 @@ def product_stabilisation(gene: str, *, goal: str = "up") -> dict:
         return {}
     return {
         "gene": (gene or "").strip().upper(),
+        "degradation": degradation_route(gene, drug_index),
         "routes": [dict(r) for r in PRODUCT_ROUTES],
         "notes": [
             "These leave transcription alone. If your protein is made "

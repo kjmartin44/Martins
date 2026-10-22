@@ -48,10 +48,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from promoter_tf_drugs import chemblid, localdrugs, network  # noqa: E402
-from promoter_tf_drugs import retrospective as retro  # noqa: E402
-from promoter_tf_drugs.http import Client, HttpError  # noqa: E402
-from promoter_tf_drugs.signatures import breadth_key  # noqa: E402
+from generoutes import chemblid, localdrugs, network  # noqa: E402
+from generoutes import retrospective as retro  # noqa: E402
+from generoutes.http import Client, HttpError  # noqa: E402
+from generoutes.signatures import breadth_key  # noqa: E402
 
 CHEMBL = "https://www.ebi.ac.uk/chembl/api/data"
 MAX_HOPS = 3

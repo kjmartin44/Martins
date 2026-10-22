@@ -42,10 +42,10 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import positive_fate as pf  # noqa: E402
-from promoter_tf_drugs import drugs as drugs_mod  # noqa: E402
-from promoter_tf_drugs import localdrugs, network  # noqa: E402
-from promoter_tf_drugs.http import Client  # noqa: E402
-from promoter_tf_drugs.signatures import breadth_key  # noqa: E402
+from generoutes import drugs as drugs_mod  # noqa: E402
+from generoutes import localdrugs, network  # noqa: E402
+from generoutes.http import Client  # noqa: E402
+from generoutes.signatures import breadth_key  # noqa: E402
 
 N_SEARCHED = network.UPSTREAM_FACTORS
 

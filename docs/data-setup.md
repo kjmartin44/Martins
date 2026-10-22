@@ -41,7 +41,7 @@ The demo uses synthetic fixtures and never touches the network. If this works,
 the install is good and any later problem is in the data.
 
 ```sh
-python -m promoter_tf_drugs --demo --gene DEMOGENE --out results/demo
+python -m generoutes --demo --gene DEMOGENE --out results/demo
 ```
 
 ## The three groups
@@ -111,7 +111,7 @@ ReMap peaks, so most factors get a breadth number. It is built, not downloaded,
 and needs steps 2 and 3 first. It takes a few minutes.
 
 ```sh
-python -m promoter_tf_drugs.chipregulon \
+python -m generoutes.chipregulon \
   --bed data/remap2022.bed.gz --gtf data/gencode.basic.gtf.gz \
   --out data/chip_regulon.tsv
 ```
@@ -256,8 +256,8 @@ date, for example `BindingDB_All_202610_tsv.zip`, 594 MB).
 
 ```sh
 python -m zipfile -e data/BindingDB_All_202610_tsv.zip data/
-python -m promoter_tf_drugs.localpotency --distil data/BindingDB_All.tsv
-python -m promoter_tf_drugs.localpotency --uniprot P51681     # CCR5, a quick check
+python -m generoutes.localpotency --distil data/BindingDB_All.tsv
+python -m generoutes.localpotency --uniprot P51681     # CCR5, a quick check
 ```
 
 After distilling you can delete the zip and the 9 GB TSV. Keep
@@ -300,7 +300,7 @@ database as `data/chembl.db`.
 ## Sources read over the network at run time
 
 These are not stored in `data/`. Each is requested during a run and cached for
-30 days under `~/.cache/promoter_tf_drugs`. A run with `--offline` uses only the
+30 days under `~/.cache/generoutes`. A run with `--offline` uses only the
 cache and your files.
 
 | Source | Used for |
@@ -324,7 +324,7 @@ RDKit. See [Docking](docking.md) for gnina and smina. To see what your machine
 can run:
 
 ```sh
-python -m promoter_tf_drugs.docking --check
+python -m generoutes.docking --check
 ```
 
 ## Check everything
@@ -333,8 +333,8 @@ Count what is on disk and open each file with the same loader the analysis uses.
 This catches a truncated download and a download that is really an error page.
 
 ```sh
-python -m promoter_tf_drugs.datasets --count
-python -m promoter_tf_drugs.datasets --missing      # a shopping list of what is absent
+python -m generoutes.datasets --count
+python -m generoutes.datasets --missing      # a shopping list of what is absent
 ```
 
 Then run a real gene and read the evidence table at the top of `report.md`.
@@ -346,7 +346,7 @@ Promoter sequence comes from Ensembl unless you have the hg38 genome FASTA or a
 This command runs the promoter scan with only the files above:
 
 ```sh
-python -m promoter_tf_drugs --gene BUB1B --direction up --all-tss \
+python -m generoutes --gene BUB1B --direction up --all-tss \
   --pfm-file data/jaspar2024.txt \
   --chip-bed data/remap2022.bed.gz \
   --regulon-file data/chip_regulon.tsv \

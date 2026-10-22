@@ -138,7 +138,7 @@ def test_a_collectri_file_the_package_reads_comes_out(tmp_path, monkeypatch):
     monkeypatch.setattr(sd, "download", fake)
     monkeypatch.setitem(__import__("sys").modules, "decoupler", None)
     sd._fetch_collectri(tmp_path)
-    from promoter_tf_drugs import tfactivity
+    from generoutes import tfactivity
     regs = tfactivity.load_signed_regulons(tmp_path / "collectri.tsv",
                                            min_targets=5)
     assert regs["TF0"]["G0"] == 1
@@ -299,7 +299,7 @@ def test_gencode_takes_the_newest_release_in_the_listing(tmp_path,
 
 
 def test_the_library_builder_writes_the_columns_the_loader_reads(tmp_path):
-    from promoter_tf_drugs import localdrugs
+    from generoutes import localdrugs
 
     class Chembl:
         def get(self, url, params=None, **kw):
@@ -362,13 +362,17 @@ def test_the_exit_status_says_whether_everything_arrived(tmp_path,
 def test_every_table_the_registry_names_is_fetched_or_explained():
     """A table added to datasets.py must either be fetched here or be on the
     short list of ones that cannot be."""
-    from promoter_tf_drugs import datasets
+    from generoutes import datasets
     covered = {a for it in sd.items() for alts in it.have for a in alts}
     uncovered = {ds.key for ds in datasets.registry()
                  if not any(p in covered for p in ds.paths)}
     # chembl: tens of GB and optional; genome: 3 GB and optional;
-    # fda_label_cmax: built from a finished run by build_fda_cmax.py.
-    assert uncovered == {"chembl", "genome", "fda_label_cmax"}, uncovered
+    # fda_label_cmax: built from a finished run by build_fda_cmax.py;
+    # ctd_fame: counted from your own saved runs by build_fame_table.py,
+    # so there is nothing to fetch - it does not exist until you have run
+    # some genes.
+    assert uncovered == {"chembl", "genome", "fda_label_cmax",
+                         "ctd_fame"}, uncovered
 
 
 def test_the_batch_wrapper_and_the_launcher_point_at_the_script():
@@ -416,13 +420,13 @@ def _expand(cmd: str) -> list:
 
 
 def test_the_launcher_analysis_and_funnel_commands_parse_with_the_real_parsers():
-    from promoter_tf_drugs import cli, panel
+    from generoutes import cli, panel
     text = (ROOT / "scripts" / "run_everything.bat").read_text(
         encoding="utf-8")
     cmds = _commands(text)
-    analysis = [c for c in cmds if "-m promoter_tf_drugs --gene" in c
+    analysis = [c for c in cmds if "-m generoutes --gene" in c
                 and "--all-tss" in c and "--no-grade" not in c]
-    funnel = [c for c in cmds if "-m promoter_tf_drugs.panel" in c]
+    funnel = [c for c in cmds if "-m generoutes.panel" in c]
     assert len(analysis) == 1 and len(funnel) == 1
     for cmd, parser in ((analysis[0], cli.build_parser()),
                         (funnel[0], panel.build_parser())):
@@ -439,7 +443,7 @@ def test_the_launcher_analysis_and_funnel_commands_parse_with_the_real_parsers()
 def test_the_launcher_passes_every_analysis_switch_the_cli_offers():
     """Which CLI switches the launcher leaves out is a choice made here, so a
     new analysis flag cannot be left off unnoticed."""
-    from promoter_tf_drugs import cli
+    from generoutes import cli
     text = (ROOT / "scripts" / "run_everything.bat").read_text(
         encoding="utf-8")
     left_out = {

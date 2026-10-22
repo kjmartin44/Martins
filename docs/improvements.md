@@ -85,6 +85,14 @@ saying less rather than more.
   It covers alkylators, platinums, topoisomerase poisons, DNA-incorporated
   antimetabolites and the spindle agents. It does not know a dose, a route or
   a duration, and it says nothing about compounds outside those classes.
+- **The fame table is as coarse as your results folder.** It counts
+  genes you have already run, so with eleven of them a count of 11 means
+  "every gene measured here" and a count of 2 means very little. It also
+  inherits whatever those genes have in common: a panel of eleven
+  cell-cycle genes would make the cell-cycle toxicology look universal. A
+  bulk CTD chemical-gene download would remove both limits, at the cost of
+  a large file. Nothing uses the table to improve an order, only to say
+  how much of the order is popularity.
 - **The constraint check only fires one way.** It catches
   `haploinsufficiency` declared for a gene whose pLI says otherwise. It does
   not check the reverse, and pLI is a statement about the population rather
@@ -139,7 +147,7 @@ saying less rather than more.
 
 - ~~Add periodic opt-in service contract checks.~~ **Done**, and it found
   a live bug on its first run — see below. `python -m
-  promoter_tf_drugs.services` probes each web service with a query whose
+  generoutes.services` probes each web service with a query whose
   answer cannot disappear (TP53, aspirin) and checks that the paths the
   parsers actually walk are present and populated. Four outcomes, never
   two: `ok`, `CONTRACT CHANGED`, `unreachable`, and `PROBE BROKEN` — an

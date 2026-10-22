@@ -46,6 +46,8 @@ FLAGS = {
     "direction_model": "--predict-direction (needs rdkit + scikit-learn)",
     "knockout": "--knockout-gmt, or data/knockout_*.gmt from Enrichr",
     "regulators": "--regulator-route (needs CollecTRI in data/)",
+    "fame": "on by default; needs data/ctd_fame.tsv, built by "
+            "scripts/build_fame_table.py from your saved runs",
 }
 
 # What you lose when a source is unavailable. Stated per source because
@@ -125,6 +127,12 @@ IMPACT = {
               "a costly target and can rank beside a dispensable one. "
               "Cancer cell lines say little about a post-mitotic tissue "
               "even when this does run.",
+    "fame": "No candidate was checked for being a compound the "
+            "literature records for every gene. That is the control the "
+            "retrospective found mattered most: a baseline of drug "
+            "popularity ordered these lists better than any route here, "
+            "so without it there is no way to tell, on this gene, how "
+            "much of the order is fame.",
     "sensitivity": "No drug was matched against a factor's knockout "
                    "profile, so the measured phenocopy route is absent: a "
                    "compound that behaves as though it removes the factor "
@@ -309,6 +317,29 @@ def verdict(ledger: Ledger, scan_quality: dict | None = None) -> dict:
 # field, a changed unit, a different meaning for the same key. Adding a
 # key is not such a change.
 RESULT_SCHEMA = 1
+
+
+def use_utf8_console() -> None:
+    """Print UTF-8 to the console, or the nearest thing it can manage.
+
+    Windows consoles default to cp1252, which cannot encode the arrows,
+    dashes and warning signs the reports use. Without this,
+    `generoutes-explain` ends in a UnicodeEncodeError on a result whose
+    notes hold an "A --> B" chain - a crash that looks like a bug in the
+    analysis rather than in how it was printed.
+
+    `errors="replace"` rather than a hard failure: a terminal that
+    genuinely cannot show a character should print "?" and carry on.
+    Streams that are not reconfigurable (a pipe opened in binary, an
+    older Python) are left alone.
+    """
+    import sys
+
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
 
 
 def check_schema(data: dict, tool: str) -> str | None:

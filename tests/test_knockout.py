@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import pytest
 
-from promoter_tf_drugs import knockout as ko
-from promoter_tf_drugs import outcome, pipeline, report
+from generoutes import knockout as ko
+from generoutes import outcome, pipeline, report
 
 
 def gmt(tmp_path, name, lines):

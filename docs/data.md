@@ -133,7 +133,7 @@ external binary and fetched structures. Check whether your machine can run
 it:
 
 ```
-python -m promoter_tf_drugs.docking --check
+python -m generoutes.docking --check
 ```
 
 It reports what is present and what to install. Two things are needed: a
@@ -172,7 +172,7 @@ python scripts/install_gnina_libs.py
 ```
 
 unpacks them from NVIDIA's PyPI wheels into `~/cuda-libs`. Check what was
-found with `python -m promoter_tf_drugs.wsldock`.
+found with `python -m generoutes.wsldock`.
 
 There is no Windows build of gnina, so on Windows it runs through WSL.
 Nothing about that is visible from the Windows side: the package
@@ -219,7 +219,7 @@ the only thing that changed is how many run at once. `--jobs` defaults
 to 1, so nothing changes unless you ask.
 
 ```
-python -m promoter_tf_drugs.docking --gene VDR --state active \
+python -m generoutes.docking --gene VDR --state active \
     --jobs 8 --cpu 4 --library data/approved_library.tsv
 ```
 
@@ -306,7 +306,7 @@ inhibits, which is what decides which way your gene moves.
 Then run a screen:
 
 ```
-python -m promoter_tf_drugs.docking --gene VDR --state active --top 25
+python -m generoutes.docking --gene VDR --state active --top 25
 ```
 
 ### Running the networked and Linux halves separately
@@ -320,7 +320,7 @@ known ligands and the approved library into one folder. No docking binary
 needed.
 
 ```
-python -m promoter_tf_drugs.docking --gene VDR --state active --prepare dock_vdr
+python -m generoutes.docking --gene VDR --state active --prepare dock_vdr
 ```
 
 Step two, where the docking binary is, with no network at all. WSL sees
@@ -329,14 +329,14 @@ if you are driving WSL from Windows the package converts the paths itself,
 so a Windows path works here too.
 
 ```
-python -m promoter_tf_drugs.docking --bundle /mnt/c/Users/you/dock_vdr --out dock_vdr/results.json
+python -m generoutes.docking --bundle /mnt/c/Users/you/dock_vdr --out dock_vdr/results.json
 ```
 
 Step three, back where the report is built. The hits join the route tables
 as tier 4, `TF: predicted pocket binder`.
 
 ```
-promoter-tf-drugs --gene YOURGENE --direction up --docking-results dock_vdr/results.json
+generoutes --gene YOURGENE --direction up --docking-results dock_vdr/results.json
 ```
 
 A run whose pocket failed validation contributes nothing, so a failed dock
@@ -396,7 +396,7 @@ differently is what does.
 Check what is on disk:
 
 ```
-python -m promoter_tf_drugs.corpora
+python -m generoutes.corpora
 ```
 
 | corpus | species | system | the main limit |
@@ -420,7 +420,7 @@ so it needs splitting first:
 
 ```
 curl -L -o data/drugmatrix_raw.gmt "https://maayanlab.cloud/Enrichr/geneSetLibrary?mode=text&libraryName=DrugMatrix"
-python -m promoter_tf_drugs.corpora --split data/drugmatrix_raw.gmt --as drugmatrix
+python -m generoutes.corpora --split data/drugmatrix_raw.gmt --as drugmatrix
 ```
 
 A term carrying no direction marker cannot be assigned and is dropped
@@ -484,7 +484,7 @@ file supplies all three.
 ```
 # Broad Drug Repurposing Hub: https://repurposing.broadinstitute.org/download
 # save the drugs table as data/repurposing_drugs.txt
-python -m promoter_tf_drugs.docking --gene VDR --pdb 1DB1.pdb --library data/repurposing_drugs.txt
+python -m generoutes.docking --gene VDR --pdb 1DB1.pdb --library data/repurposing_drugs.txt
 ```
 
 Around 6,800 compounds with SMILES, clinical phase, mechanism and target
@@ -568,8 +568,8 @@ than a fraction of them. Making it genuinely larger means widening the
 definition on purpose, not hunting for missing approvals.
 
 ```
-python -m promoter_tf_drugs.localdrugs --sources          # what to download
-python -m promoter_tf_drugs.localdrugs --merge data/repurposing_drugs.txt data/drugcentral.smiles data/chembl_approved.tsv --out data/library.tsv
+python -m generoutes.localdrugs --sources          # what to download
+python -m generoutes.localdrugs --merge data/repurposing_drugs.txt data/drugcentral.smiles data/chembl_approved.tsv --out data/library.tsv
 ```
 
 | source | molecules | gives | what only it gives |
@@ -641,7 +641,7 @@ It is still worth loading, for one thing no structure source has.
 
 ```
 # EOBZIP.zip from fda.gov -> data/ (the zip is read directly, ~4 MB)
-python -m promoter_tf_drugs.localdrugs --merge data/repurposing_drugs.txt --out data/library.tsv
+python -m generoutes.localdrugs --merge data/repurposing_drugs.txt --out data/library.tsv
 ```
 
 **Route of administration.** Nothing in ChEMBL, DrugCentral, the
@@ -1025,7 +1025,7 @@ beyond the curated eight.
 
 ## HTTP cache
 
-Responses are gzip JSON files under `~/.cache/promoter_tf_drugs` by default.
+Responses are gzip JSON files under `~/.cache/generoutes` by default.
 The online TTL is 30 days. Offline mode accepts older entries. Keys include URL,
 method, body, parsing mode, and supplied headers. This prevents a text response
 from being reused as parsed JSON or a GET from being reused as a POST.
@@ -1057,8 +1057,8 @@ configuration is provided by the CLI.
 
 Ensembl, ChEMBL and the maayanlab hosts all return HTTP 500 while merely
 busy, so a 500 is treated as a backoff signal rather than a verdict: six
-attempts with capped, jittered backoff, tunable with `PTD_RETRIES` and
-`PTD_RETRY_CAP`. `Retry-After` is honoured in both its seconds and HTTP-date
+attempts with capped, jittered backoff, tunable with `GENEROUTES_RETRIES` and
+`GENEROUTES_RETRY_CAP`. `Retry-After` is honoured in both its seconds and HTTP-date
 forms.
 
 Every stage has a local-file route. Ensembl sequence was the last one
@@ -1067,7 +1067,7 @@ already *writes* every window it fetched to `promoter.fa`, which makes a
 previous run its own offline source:
 
 ```bash
-python -m promoter_tf_drugs --gene YOURGENE     --promoter-fasta results\YOURGENE_up\promoter.fa ...
+python -m generoutes --gene YOURGENE     --promoter-fasta results\YOURGENE_up\promoter.fa ...
 ```
 
 Matching is on exact coordinates, so a window is reused only when it is

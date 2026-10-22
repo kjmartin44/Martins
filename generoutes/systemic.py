@@ -321,6 +321,50 @@ GENOTOXIC = frozenset({
 _GENOTOXIC_COMPACT = frozenset(_compact(m) for m in GENOTOXIC)
 
 
+# Genes where moving the dose one way is a cancer risk in itself.
+#
+# Short and conservative on purpose. These are transcription factors and
+# regulators whose role in human cancer is not in dispute, because the
+# point is to catch an obviously bad idea and not to adjudicate the
+# literature. Most genes are context-dependent and absent from both lists,
+# and absence means unexamined.
+#
+# The upgrade, if this earns its keep, is the COSMIC Cancer Gene Census
+# rather than a longer hand-written list.
+ONCOGENES = frozenset("""
+MYC MYCN MYCL MYB MYBL2 FOS FOSL1 JUN JUNB ETS1 ETS2 ERG FLI1 ETV1 ETV4
+ETV6 SPI1 RELA RELB NFKB1 STAT3 STAT5A E2F1 E2F3 FOXM1 CCND1 CCNE1 CTNNB1
+NOTCH1 GLI1 GLI2 YAP1 TAZ TWIST1 SNAI1 SNAI2 ZEB1 LMO2 TAL1 LYL1 HOXA9
+MEIS1 PAX3 PAX7 SOX2 KLF4 NANOG MDM2 MDM4 BCL2 BCL6 EZH2 BMI1 SKP2 SRC
+ABL1 KRAS HRAS NRAS PIK3CA AKT1 MTOR HIF1A
+""".split())
+
+# And the mirror: lowering one of these raises cancer risk the same way.
+TUMOUR_SUPPRESSORS = frozenset("""
+TP53 TP63 TP73 RB1 PTEN APC VHL NF1 NF2 BRCA1 BRCA2 ATM ATR CHEK2 CDKN1A
+CDKN1B CDKN2A SMAD2 SMAD3 SMAD4 STK11 WT1 RUNX3 FOXO1 FOXO3 FOXP1 MXD1
+MXI1 MNT HBP1 PML BAP1 ARID1A SMARCB1 KEAP1 TSC1 TSC2
+""".split())
+
+
+def cancer_risk_direction(symbol: str, want: str | None) -> str | None:
+    """Why moving this gene `want` is a cancer risk, or None.
+
+    `want` is the direction the route needs the gene to move, as
+    `abundance.wanted_direction` computes it. None when the role is not
+    recorded, and then no claim is made: guessing a direction here would
+    invent the very thing the caution rests on.
+    """
+    if not symbol or want not in ("up", "down"):
+        return None
+    sym = symbol.strip().upper()
+    if want == "up" and sym in ONCOGENES:
+        return f"{sym} is a proto-oncogene and this route raises it"
+    if want == "down" and sym in TUMOUR_SUPPRESSORS:
+        return f"{sym} is a tumour suppressor and this route lowers it"
+    return None
+
+
 def is_genotoxic(drug_name: str) -> bool:
     """Does this compound work by damaging DNA or chromosome segregation?
 

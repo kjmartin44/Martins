@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from promoter_tf_drugs import clusters as cl
+from generoutes import clusters as cl
 
 BENZOATES = {   # methyl to hexyl benzoate: similarity falls off along the series
     "methyl": "COC(=O)c1ccccc1", "ethyl": "CCOC(=O)c1ccccc1",
@@ -137,7 +137,7 @@ def test_the_approved_table_supplies_structures_by_normalised_name():
 
 
 def test_no_table_gives_no_structures_and_no_error(monkeypatch):
-    from promoter_tf_drugs import localdrugs
+    from generoutes import localdrugs
     monkeypatch.setattr(localdrugs, "library", lambda path=None: [])
     cl.reset()
     assert cl.smiles_index() == {}

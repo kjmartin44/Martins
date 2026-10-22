@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from promoter_tf_drugs.network import Edge, build_graph
+from generoutes.network import Edge, build_graph
 
 
 def _script():

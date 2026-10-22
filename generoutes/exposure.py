@@ -587,7 +587,7 @@ def markdown(result: dict, gene: str) -> str:
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(
-        prog="python -m promoter_tf_drugs.exposure",
+        prog="python -m generoutes.exposure",
         description=("Set each candidate drug's published human blood level "
                      "against the concentration its evidence was seen at."))
     p.add_argument("results", help="a saved results.json")

@@ -310,7 +310,7 @@ def describe() -> str:
         return ("WSL is available and no docking binary is installed in "
                 "it. gnina is the one worth having: it rescores poses "
                 "with a convolutional network rather than an empirical "
-                "function. See `python -m promoter_tf_drugs.wsldock`.")
+                "function. See `python -m generoutes.wsldock`.")
     bits = [f"{name} at {path}, through WSL."]
     if name == "gnina":
         bits.append(
@@ -336,11 +336,11 @@ def describe() -> str:
 
 
 def main(argv=None) -> int:
-    """`python -m promoter_tf_drugs.wsldock` - report what is set up."""
+    """`python -m generoutes.wsldock` - report what is set up."""
     import argparse
 
     p = argparse.ArgumentParser(
-        prog="python -m promoter_tf_drugs.wsldock",
+        prog="python -m generoutes.wsldock",
         description="What docking program is reachable through WSL.")
     p.add_argument("-v", "--verbose", action="store_true")
     args = p.parse_args(argv)

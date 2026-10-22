@@ -9,7 +9,7 @@ is generated from the parser.
 ## The least you need
 
 ```sh
-python -m promoter_tf_drugs --gene CCR5
+python -m generoutes --gene CCR5
 ```
 
 Only `--gene` is required. Everything else has a default. That one command asks for a
@@ -19,8 +19,8 @@ of the evidence, so a real run adds a few options. Three levels:
 
 | Level | Command | What it gives you |
 |---|---|---|
-| Try it | `python -m promoter_tf_drugs --demo --gene DEMOGENE --out results/demo` | Synthetic data, no network, nothing real |
-| A basic real run | `python -m promoter_tf_drugs --gene CCR5 --direction down --pfm-file data/jaspar2024.txt --out results/CCR5_down -v` | The promoter scan, factors and their drugs |
+| Try it | `python -m generoutes --demo --gene DEMOGENE --out results/demo` | Synthetic data, no network, nothing real |
+| A basic real run | `python -m generoutes --gene CCR5 --direction down --pfm-file data/jaspar2024.txt --out results/CCR5_down -v` | The promoter scan, factors and their drugs |
 | Everything | `scripts\run_everything.bat` (Windows), or the long command below | Every route, the funnel and the combined list |
 
 The long command is what the launcher runs for the analysis, without docking. Fill in the
@@ -28,7 +28,7 @@ gene, the direction and a window, and every file named must exist (`python scrip
 fetches them):
 
 ```sh
-python -m promoter_tf_drugs --gene GENE --direction up \
+python -m generoutes --gene GENE --direction up \
   --pfm-file data/jaspar2024.txt --regulon-file data/chip_regulon.tsv \
   --chip-bed data/remap2022.bed.gz --gtf data/gencode.basic.gtf.gz \
   --expression-file data/rna_tissue_consensus.tsv --cell-type-check \

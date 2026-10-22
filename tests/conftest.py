@@ -2,7 +2,7 @@
 
 import pytest
 
-from promoter_tf_drugs import fda
+from generoutes import fda
 
 
 @pytest.fixture(autouse=True)
@@ -19,5 +19,5 @@ def _no_fda_filter_unless_a_test_asks(monkeypatch):
 def _no_local_cmax_table(monkeypatch):
     """The dose check reads data/fda_label_cmax.tsv when it exists. A test
     must not depend on whether the person running it has built that file."""
-    from promoter_tf_drugs import exposure
+    from generoutes import exposure
     monkeypatch.setattr(exposure, "_default_tables", lambda: {})

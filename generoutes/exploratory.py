@@ -1080,7 +1080,7 @@ def markdown(res: dict) -> str:
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(
-        prog="python -m promoter_tf_drugs.exploratory",
+        prog="python -m generoutes.exploratory",
         description=("Dock the approved library into a pocket transplanted "
                      "onto an AlphaFold model. The result is not validated."))
     p.add_argument("--gene", required=True)

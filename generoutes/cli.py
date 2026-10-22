@@ -1,7 +1,7 @@
 """Command-line interface.
 
-    python -m promoter_tf_drugs --demo --gene DEMOGENE --out results/
-    python -m promoter_tf_drugs --gene SMN2 --upstream 2000 --downstream 500 \
+    python -m generoutes --demo --gene DEMOGENE --out results/
+    python -m generoutes --gene SMN2 --upstream 2000 --downstream 500 \
         --pfm-file data/jaspar2024.txt \
         --chip-bed data/remap2022.bed.gz --out results/SMN2
 """
@@ -14,12 +14,13 @@ import sys
 
 from .pipeline import run, write_outputs, markdown_report
 from .http import HttpError
+from . import provenance as _prov
 from . import progress as _progress
 
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="promoter-tf-drugs",
+        prog="generoutes",
         description="Find a gene's promoter, the TFs predicted to bind it, and "
                     "approved drugs that push those TFs in whichever direction "
                     "moves your target gene (--direction up|down).",
@@ -259,7 +260,7 @@ def add_analysis_args(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
                         "in. Required by --tf-activity")
     p.add_argument("--docking-results", metavar="JSON",
                    help="fold in a docking run performed elsewhere. "
-                        "Written by `python -m promoter_tf_drugs.docking "
+                        "Written by `python -m generoutes.docking "
                         "--bundle DIR --out JSON`, which is the step "
                         "that needs Linux. Prepare and report here, "
                         "dock there")
@@ -451,14 +452,7 @@ def main(argv=None) -> int:
     if args.top < 1:
         parser.error("--top must be a positive integer")
 
-    # Windows consoles default to cp1252, which cannot encode the characters
-    # used in the report tables. Print UTF-8 where possible; degrade to "?"
-    # rather than crashing on terminals that genuinely cannot display it.
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(encoding="utf-8", errors="replace")
-        except (AttributeError, ValueError):
-            pass
+    _prov.use_utf8_console()
     logging.basicConfig(
         level=[logging.WARNING, logging.INFO, logging.DEBUG][min(args.verbose, 2)],
         format="%(levelname)s %(name)s: %(message)s",

@@ -12,7 +12,7 @@ import logging
 
 import pytest
 
-from promoter_tf_drugs import pipeline, regulon, tfactivity
+from generoutes import pipeline, regulon, tfactivity
 
 TAB = chr(9)
 NL = chr(10)

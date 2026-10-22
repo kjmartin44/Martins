@@ -151,8 +151,9 @@ efficiency), and a distance from the gene. This table says where each search
 lands.
 
 The promoter motif route is in the table with the rest, and not above it.
-The package is named after that route because it was written first, which is
-a fact about the history and not a ranking. It is the only route whose
+The package was called `promoter-tf-drugs` after that route because it was
+written first, which is a fact about the history and not a ranking. It is
+the only route whose
 factor-to-gene step is a sequence resemblance rather than a record of
 anything, so it is the one most weakened by a noisy scan, and above a false
 discovery proportion of 25% its tiers are capped (see

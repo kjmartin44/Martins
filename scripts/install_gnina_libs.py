@@ -39,7 +39,7 @@ WHEELS = {
 }
 
 DEST = Path(os.path.expanduser("~/cuda-libs"))
-UA = {"User-Agent": "promoter-tf-drugs"}
+UA = {"User-Agent": "generoutes"}
 
 
 def newest_linux_wheel(pkg: str) -> tuple:

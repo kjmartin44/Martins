@@ -14,7 +14,7 @@ unless the user asks.
 
 ## Package layout
 
-- `promoter_tf_drugs/pipeline.py` orchestrates the analysis and writes reports.
+- `generoutes/pipeline.py` orchestrates the analysis and writes reports.
 - `cli.py` parses options; `shortlist.py` and `explain.py` read saved results.
 - `http.py` owns caching, offline behavior, throttling, and request retries.
 - The other package modules implement data adapters and analysis stages.

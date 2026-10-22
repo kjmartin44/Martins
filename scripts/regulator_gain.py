@@ -36,13 +36,13 @@ sys.path.insert(0, str(ROOT))
 
 import numpy as np  # noqa: E402
 
-from promoter_tf_drugs import catalogue as cat  # noqa: E402
-from promoter_tf_drugs import drugs as drugs_mod  # noqa: E402
-from promoter_tf_drugs import localdrugs, regulators  # noqa: E402
-from promoter_tf_drugs import retrospective as rt  # noqa: E402
-from promoter_tf_drugs import tfactivity as tfa  # noqa: E402
-from promoter_tf_drugs.http import Client  # noqa: E402
-from promoter_tf_drugs.signatures import breadth_key  # noqa: E402
+from generoutes import catalogue as cat  # noqa: E402
+from generoutes import drugs as drugs_mod  # noqa: E402
+from generoutes import localdrugs, regulators  # noqa: E402
+from generoutes import retrospective as rt  # noqa: E402
+from generoutes import tfactivity as tfa  # noqa: E402
+from generoutes.http import Client  # noqa: E402
+from generoutes.signatures import breadth_key  # noqa: E402
 
 VARIANTS = ["baseline", "collectri", "knockout, TFs", "knockout, any",
             "both", "knockout, TFs, 1 experiment",

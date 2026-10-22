@@ -70,7 +70,7 @@ manual lookup guidance; do not read that as a completed trans-eQTL analysis.
 
 ## Gates that demote a route
 
-Four checks can lower a route after it is built. None deletes anything, and
+Five checks can lower a route after it is built. None deletes anything, and
 each says on the row what it did and why. They were added after a review of a
 BUB1B run that produced confident tier-2 candidates on evidence that did not
 support them.
@@ -102,6 +102,23 @@ taxanes — drops to tier 5 with its score cut tenfold. It is for a patient who
 already has chromosomal instability or is cancer-predisposed, where such an
 agent causes the problem it is being offered for. The rows stay in the report
 so the search remains visible.
+
+**A compound the literature records for every gene loses a little
+score.** This is the control the retrospective found mattered most. Across
+the saved runs, a baseline that counts only how many OTHER genes record a
+drug predicts CTD with an AUC of 0.93, while the routes score 0.53, and
+among drugs of equal fame the routes fall to chance (0.53 on
+reported-or-not, 0.50 on the right direction). That finding lived in
+[checks](checks.md) and a reader of one gene's report never saw it.
+`scripts/build_fame_table.py` counts, over your saved results, how many
+distinct genes name each chemical; a candidate in the top decile loses 15%
+of its score and keeps its tier. Slight on purpose: being well studied is
+not evidence of being wrong, and the claim is only that such a row says
+little about your gene in particular. Tetrachlorodibenzodioxin,
+benzo(a)pyrene and bisphenol A are recorded for every gene in the runs
+here, which is what the confound looks like. The table's resolution is
+however many genes you have run, every message states the denominator, and
+a compound the table does not hold gets no verdict.
 
 **A declared scenario is checked against the population data.**
 `--scenario haploinsufficiency` asserts one allele is lost and the other is

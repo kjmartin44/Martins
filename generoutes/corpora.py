@@ -163,7 +163,7 @@ format the LINCS files already use. Fetch the ones you want into data/:
 
   DrugMatrix  (one library; up and down are distinguished in the term name)
     curl -L -o data/drugmatrix_raw.gmt "https://maayanlab.cloud/Enrichr/geneSetLibrary?mode=text&libraryName=DrugMatrix"
-    python -m promoter_tf_drugs.corpora --split data/drugmatrix_raw.gmt --as drugmatrix
+    python -m generoutes.corpora --split data/drugmatrix_raw.gmt --as drugmatrix
 
   TG-GATEs is not on Enrichr. Open TG-GATEs publishes the raw arrays at
   https://dbarchive.biosciencedbc.jp/en/open-tggates/ ; a derived up/down
@@ -369,11 +369,11 @@ def summarise(results: dict, agreed: list | None = None) -> str:
 
 
 def main(argv=None) -> int:
-    """`python -m promoter_tf_drugs.corpora` - status and splitting."""
+    """`python -m generoutes.corpora` - status and splitting."""
     import argparse
 
     p = argparse.ArgumentParser(
-        prog="python -m promoter_tf_drugs.corpora",
+        prog="python -m generoutes.corpora",
         description="Which perturbation corpora are on disk, and how to "
                     "prepare the ones that need it.",
         formatter_class=argparse.RawDescriptionHelpFormatter,

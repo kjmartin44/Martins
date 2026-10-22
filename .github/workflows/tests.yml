@@ -24,11 +24,11 @@ jobs:
       # be fine locally and unimportable here. Say so in one line, before
       # anything is installed, rather than as an error per test file.
       - name: Source must parse on this Python
-        run: python -m compileall -q promoter_tf_drugs scripts tests
+        run: python -m compileall -q generoutes scripts tests
       - run: python -m pip install -e ".[dev,chemistry]"
       - run: python -m pytest -q
         env:
-          PTD_CACHE: ${{ runner.temp }}/ptd-cache
+          GENEROUTES_CACHE: ${{ runner.temp }}/ptd-cache
       - run: python scripts/generate_cli_docs.py
         if: matrix.python == '3.12'
       - run: git diff --exit-code -- docs/cli.md
@@ -37,9 +37,9 @@ jobs:
       - name: Install and test the wheel outside the checkout
         shell: bash
         run: |
-          python -m pip uninstall -y promoter-tf-drugs
+          python -m pip uninstall -y generoutes
           python -m pip install --no-deps dist/*.whl
           cd "$RUNNER_TEMP"
-          promoter-tf-drugs --demo --gene DEMOGENE --out wheel-demo
-          promoter-tf-drugs-shortlist --help
-          promoter-tf-drugs-explain --help
+          generoutes --demo --gene DEMOGENE --out wheel-demo
+          generoutes-shortlist --help
+          generoutes-explain --help

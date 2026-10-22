@@ -60,10 +60,10 @@ why so much of the package is evidence that a site is real rather than
 predicted, and why a noisy scan now caps that branch's tiers.
 
 That weakness belongs to the motif route and not to the others. The
-package is named after it because it was written first. The routes that
-rest on a measurement of the gene — the literature record, the LINCS
-signature, the sensitivity phenocopy — carry better evidence that the gene
-moves, and worse evidence about why.
+package was named after it, as `promoter-tf-drugs`, because it was written
+first. The routes that rest on a measurement of the gene — the literature
+record, the LINCS signature, the sensitivity phenocopy — carry better
+evidence that the gene moves, and worse evidence about why.
 
 ## The groups
 
@@ -71,7 +71,7 @@ moves, and worse evidence about why.
 
 | Module | What it is |
 | --- | --- |
-| `cli.py` | the single-gene command, `python -m promoter_tf_drugs` |
+| `cli.py` | the single-gene command, `python -m generoutes` |
 | `panel.py` | several candidate genes, narrowed through a staged funnel |
 | `pipeline.py` | `run()`, the orchestration everything else feeds |
 | `shortlist.py` | re-narrow a saved `results.json`, no re-run |
@@ -228,6 +228,7 @@ Generated from each module's own first docstring line.
 | `explain.py` | Everything the pipeline knows about one compound, in one place. |
 | `exploratory.py` | Exploratory docking into a pocket that has no co-crystallised ligand. |
 | `exposure.py` | Can the drug reach the concentration at which the evidence was seen? |
+| `fame.py` | How many other genes the literature records a compound as moving. |
 | `fda.py` | Show only drugs the FDA has approved. |
 | `fdalabel.py` | Human peak plasma concentrations read from FDA drug labels. |
 | `genes.py` | Resolve a gene symbol to a transcription start site and pull the promoter. |

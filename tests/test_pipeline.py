@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from promoter_tf_drugs import pwm, motifs, pipeline
-from promoter_tf_drugs.demo_data import consensus_to_pfm, demo_motifs, demo_promoter_sequence
+from generoutes import pwm, motifs, pipeline
+from generoutes.demo_data import consensus_to_pfm, demo_motifs, demo_promoter_sequence
 
 
 FLAT = np.full(4, 0.25)
@@ -181,7 +181,7 @@ def test_repeat_masking_suppresses_low_complexity_hits():
 
 
 # ------------------------------------------------------------- coordinates
-from promoter_tf_drugs.genes import Promoter, select_transcripts  # noqa: E402
+from generoutes.genes import Promoter, select_transcripts  # noqa: E402
 
 
 def _prom(strand: int) -> Promoter:
@@ -217,7 +217,7 @@ def test_promoter_window_spans_tss_on_both_strands():
 def test_bed_coordinates_flip_with_strand():
     """A hit at sequence index 0 is the far-upstream end on both strands, but
     lands at opposite genomic edges of the window."""
-    from promoter_tf_drugs.pipeline import write_outputs
+    from generoutes.pipeline import write_outputs
     import tempfile, pathlib
 
     # Plus strand: index 0 is genomic 999_000 (1-based) -> BED start 998_999.
@@ -296,7 +296,7 @@ def test_cluster_representative_prefers_mane():
 
 
 # ------------------------------------------------------------- direction
-from promoter_tf_drugs.drugs import desired_direction  # noqa: E402
+from generoutes.drugs import desired_direction  # noqa: E402
 
 
 def test_desired_direction_inverts_with_goal():
@@ -348,8 +348,8 @@ def test_down_mode_report_language():
 
 
 # ----------------------------------------------------------- drug grading
-from promoter_tf_drugs import drug_scoring as dsc          # noqa: E402
-from promoter_tf_drugs.demo_data import demo_evidence, DEMO_DRUGS  # noqa: E402
+from generoutes import drug_scoring as dsc          # noqa: E402
+from generoutes.demo_data import demo_evidence, DEMO_DRUGS  # noqa: E402
 
 
 def test_potency_normalisation_endpoints():
@@ -428,7 +428,7 @@ def test_grades_are_sorted_and_present_in_report():
 
 
 # --------------------------------------------------- agonism / conformation
-from promoter_tf_drugs import agonism, docking          # noqa: E402
+from generoutes import agonism, docking          # noqa: E402
 
 _CORES = ["c1ccccc1O", "c1ccc2ccccc2c1O", "c1ccc(cc1)c1ccccc1O", "Oc1ccc(cc1)C(C)C",
           "Oc1ccc2c(c1)CCCC2", "Oc1ccc(cc1)CC", "Oc1ccc(cc1)CCC",
@@ -530,10 +530,10 @@ def test_apo_structure_is_unknown_not_guessed():
 def test_docking_requires_both_conformations(monkeypatch=None):
     """Without both states there is no directional signal, and the module must
     say so rather than returning a score."""
-    from promoter_tf_drugs.drugs import Drug
+    from generoutes.drugs import Drug
     drug = Drug("Test", "CHEMBL1", "VDR", "AGONIST", None, True, 4.0, 2000,
                 False, True, "up", "test")
-    import promoter_tf_drugs.docking as dk
+    import generoutes.docking as dk
     orig = dk.find_structures
     dk.find_structures = lambda *a, **k: []
     try:
@@ -547,8 +547,8 @@ def test_docking_requires_both_conformations(monkeypatch=None):
 def test_direction_conflict_penalises_and_flags():
     """The point of the direction model: disagreement with the database is a
     warning to go read the literature, not a silent re-label."""
-    from promoter_tf_drugs.drug_scoring import apply_direction_check, DrugGrade
-    from promoter_tf_drugs.agonism import AgonismPrediction
+    from generoutes.drug_scoring import apply_direction_check, DrugGrade
+    from generoutes.agonism import AgonismPrediction
 
     def fresh():
         return DrugGrade("VDR", "TestDrug", 60.0, "B", 0.7, 0.8, {}, {}, [])
@@ -572,7 +572,7 @@ def test_direction_conflict_penalises_and_flags():
 
 
 # --------------------------------------------- transcriptional specificity
-from promoter_tf_drugs import regulon as rg, direct as dr   # noqa: E402
+from generoutes import regulon as rg, direct as dr   # noqa: E402
 
 
 def test_global_regulator_scores_far_below_narrow_tf():
@@ -678,7 +678,7 @@ def test_no_direct_hits_reports_honestly():
 
 
 # ------------------------------------------- outcome chain & virtual screen
-from promoter_tf_drugs import outcome as oc, screening as scr   # noqa: E402
+from generoutes import outcome as oc, screening as scr   # noqa: E402
 
 
 class _FakeTF:
@@ -714,7 +714,7 @@ def test_chip_evidence_raises_the_promoter_link():
 def test_ambiguous_direction_raises_the_serm_flag():
     """Partial H12 engagement is where tamoxifen lives: direction becomes a
     property of the cell type, not the molecule."""
-    from promoter_tf_drugs.agonism import AgonismPrediction
+    from generoutes.agonism import AgonismPrediction
     borderline = AgonismPrediction("X", "ESR1", "agonist",
                                    probability_agonist=0.52, confidence="moderate")
     est = oc.estimate("X", "ESR1", "GREB1", prediction=borderline,
@@ -724,7 +724,7 @@ def test_ambiguous_direction_raises_the_serm_flag():
 
 
 def test_low_confidence_prediction_shrinks_toward_coinflip():
-    from promoter_tf_drugs.agonism import AgonismPrediction
+    from generoutes.agonism import AgonismPrediction
     hi = AgonismPrediction("X", "V", "agonist", probability_agonist=0.95,
                            confidence="high")
     lo = AgonismPrediction("X", "V", "agonist", probability_agonist=0.95,
@@ -805,7 +805,7 @@ def test_enrichment_check_is_relative_not_absolute():
 
 
 # ------------------------------------------------- discovery / superiority
-from promoter_tf_drugs import discovery as disc          # noqa: E402
+from generoutes import discovery as disc          # noqa: E402
 
 
 def _axes(s, sp, e, evidence="predicted"):
@@ -923,7 +923,7 @@ def test_gene_with_no_incumbent_says_so():
 
 
 # --------------------------------------------------- ChIP evidence routing
-from promoter_tf_drugs import evidence as ev_mod          # noqa: E402
+from generoutes import evidence as ev_mod          # noqa: E402
 
 
 class _FakeClient:
@@ -973,11 +973,11 @@ def test_chip_evidence_returns_empty_when_neither_source_given():
 
 
 # ------------------------------------------- mechanism classes / allostery
-from promoter_tf_drugs import modulators as mods          # noqa: E402
+from generoutes import modulators as mods          # noqa: E402
 
 
 def _drug(action, name="X", symbol="VDR"):
-    from promoter_tf_drugs.drugs import Drug
+    from generoutes.drugs import Drug
     return Drug(name, "CHEMBL1", symbol, action, None, True, 4.0, 2000,
                 False, True, "up", "test")
 
@@ -1056,7 +1056,7 @@ def test_mechanism_section_renders_with_the_dependency_warning():
 
 
 # --------------------------------------------- multi-hop upstream network
-from promoter_tf_drugs import network as net          # noqa: E402
+from generoutes import network as net          # noqa: E402
 
 
 def _toy_network():
@@ -1145,7 +1145,7 @@ def test_path_describes_its_own_mechanism():
 
 def test_repressor_tf_inverts_the_required_direction():
     """To raise a gene through a repressor you must LOWER the repressor."""
-    from promoter_tf_drugs import report as rep
+    from generoutes import report as rep
     edges = _toy_network()
     act = net.find_upstream_targets(None, "TF", goal="up", tf_role="activator",
                                     edges=edges)
@@ -1189,7 +1189,7 @@ def test_upstream_flag_does_not_collide_with_promoter_window():
 
 
 # ------------------------------------------------------ cell-cycle phase
-from promoter_tf_drugs import cellcycle as cc          # noqa: E402
+from generoutes import cellcycle as cc          # noqa: E402
 
 
 def test_e2f_blocked_in_post_mitotic_tissue():
@@ -1282,7 +1282,7 @@ def test_cell_cycle_section_renders_when_restricted_factors_present():
 
 
 # ------------------------------------------- LINCS signatures / genetics
-from promoter_tf_drugs import signatures as sig, genetics as gen   # noqa: E402
+from generoutes import signatures as sig, genetics as gen   # noqa: E402
 
 
 def test_landmark_vs_inferred_changes_evidence_weight():
@@ -1381,7 +1381,7 @@ def test_genetics_evidence_serialises():
 
 
 # ------------------------------------------------- delivery / cell type
-from promoter_tf_drugs import delivery as dlv          # noqa: E402
+from generoutes import delivery as dlv          # noqa: E402
 
 _DIAZEPAM = "CN1C(=O)CN=C(c2ccccc2)c2cc(Cl)ccc21"
 _CAFFEINE = "CN1C=NC2=C1C(=O)N(C)C(=O)N2C"
@@ -1493,7 +1493,7 @@ def test_drug_scoring_now_uses_cns_mpo():
 
 
 # ------------------------------------- stabilisers / glues / degradation
-from promoter_tf_drugs import stabilizers as stab          # noqa: E402
+from generoutes import stabilizers as stab          # noqa: E402
 
 
 def test_pocketless_tf_with_nothing_curated_is_not_called_actionable():
@@ -1595,7 +1595,7 @@ def test_stabilisation_section_renders():
 def test_cli_parser_builds_without_conflicts():
     """--upstream (bp of promoter) and --upstream-network (hops) are different
     flags; registering both under one name silently breaks every invocation."""
-    from promoter_tf_drugs.cli import build_parser
+    from generoutes.cli import build_parser
     parser = build_parser()
     args = parser.parse_args(["--gene", "PAH", "--upstream", "2000",
                               "--upstream-network"])
@@ -1605,7 +1605,7 @@ def test_cli_parser_builds_without_conflicts():
 
 def test_cli_accepts_the_full_flag_set():
     """Guard against a future flag collision anywhere in the parser."""
-    from promoter_tf_drugs.cli import build_parser
+    from generoutes.cli import build_parser
     args = build_parser().parse_args([
         "--gene", "PAH", "--direction", "down", "--upstream", "5000",
         "--downstream", "1000", "--all-tss", "--pvalue", "1e-5",
@@ -1689,7 +1689,7 @@ def test_partially_ordered_model_restricts_to_folded_region():
 
 # --- screen design --------------------------------------------------------
 def test_guides_found_and_ranked_by_crispra_window():
-    from promoter_tf_drugs import screens
+    from generoutes import screens
     prom = _prom(1)
     prom.sequence = demo_promoter_sequence()
     guides = screens.find_guides(prom.sequence, prom.offset_to_tss)
@@ -1701,7 +1701,7 @@ def test_guides_found_and_ranked_by_crispra_window():
 
 
 def test_guide_with_pol3_terminator_is_flagged():
-    from promoter_tf_drugs import screens
+    from generoutes import screens
     seq = "A" * 50 + "TTTT" + "GCGCGCGCGCGCGCGC" + "AGG" + "A" * 50
     guides = screens.find_guides(seq, lambda i: i - 50)
     flagged = [g for g in guides if "TTTT" in g.sequence]
@@ -1710,7 +1710,7 @@ def test_guide_with_pol3_terminator_is_flagged():
 
 
 def test_guides_outside_window_are_warned():
-    from promoter_tf_drugs import screens
+    from generoutes import screens
     prom = _prom(1)
     prom.sequence = demo_promoter_sequence()
     guides = screens.find_guides(prom.sequence, prom.offset_to_tss, max_guides=40)
@@ -1721,7 +1721,7 @@ def test_guides_outside_window_are_warned():
 
 def test_reporter_plan_includes_the_mutant_control():
     """The scrambled-motif control is what makes a hit interpretable."""
-    from promoter_tf_drugs import screens
+    from generoutes import screens
     prom = _prom(1)
     plan = screens.reporter_plan(prom)
     joined = " ".join(plan["controls"])
@@ -1731,7 +1731,7 @@ def test_reporter_plan_includes_the_mutant_control():
 
 
 def test_compound_plan_prioritises_direct_agents_first():
-    from promoter_tf_drugs import screens
+    from generoutes import screens
     plan = screens.compound_plan(
         [{"drug_name": "DrugB", "tf_symbol": "VDR", "grade": "A"}],
         [{"drug": "DrugA"}])
@@ -1741,7 +1741,7 @@ def test_compound_plan_prioritises_direct_agents_first():
 
 
 def test_expectations_state_what_a_negative_result_means():
-    from promoter_tf_drugs import screens
+    from generoutes import screens
     e = screens.expectations()
     assert "Z'" in e["quality_metric"]
     assert "enhancer" in e["what_a_negative_result_means"]
@@ -1787,7 +1787,7 @@ def test_bar_is_per_axis_best_not_one_drug():
     """A challenger must beat the best established value on each axis. Using a
     single summed-score incumbent lets it 'win' on specificity while another
     established drug is more specific still."""
-    from promoter_tf_drugs import discovery as d
+    from generoutes import discovery as d
     strong = d.Candidate("Strong", "direct", None,
                          d.Axes(0.95, 0.30, 0.50, "measured"), previously_linked=True)
     specific = d.Candidate("Specific", "direct", None,
@@ -1811,7 +1811,7 @@ def test_dominated_novel_candidates_are_listed_not_dropped():
 
 
 # ------------------------------------------- unified route catalogue
-from promoter_tf_drugs import catalogue as cat            # noqa: E402
+from generoutes import catalogue as cat            # noqa: E402
 
 
 def test_evidence_tier_outranks_score_always():
@@ -1950,8 +1950,8 @@ def test_catalogue_renders_in_report():
 def test_masked_sequence_failure_falls_back_to_unmasked():
     """Repeat masking is an optimisation. Ensembl intermittently 500s on
     mask=soft; that must not kill the run."""
-    from promoter_tf_drugs import genes as g
-    from promoter_tf_drugs.http import HttpError
+    from generoutes import genes as g
+    from generoutes.http import HttpError
 
     class C:
         def __init__(self):
@@ -1972,8 +1972,8 @@ def test_masked_sequence_failure_falls_back_to_unmasked():
 
 
 def test_unmasked_failure_raises_an_actionable_error():
-    from promoter_tf_drugs import genes as g
-    from promoter_tf_drugs.http import HttpError
+    from generoutes import genes as g
+    from generoutes.http import HttpError
     import pytest
 
     class C:
@@ -1985,7 +1985,7 @@ def test_unmasked_failure_raises_an_actionable_error():
 
 
 def test_masked_success_preserves_lowercase():
-    from promoter_tf_drugs import genes as g
+    from generoutes import genes as g
 
     class C:
         def get(self, url, params=None, **kw):
@@ -1996,7 +1996,7 @@ def test_masked_success_preserves_lowercase():
 
 
 # ------------------------------------------- direct modality design
-from promoter_tf_drugs import modalities as mo          # noqa: E402
+from generoutes import modalities as mo          # noqa: E402
 
 _TX = ("ATG" + "".join(np.random.default_rng(5).choice(list("ACGT"), size=1200)))
 
@@ -2056,7 +2056,7 @@ def test_gapmer_flags_cpg_and_g_quadruplex():
 
 def test_crispri_window_differs_from_crispra():
     """KRAB silencing works near the TSS; VP64 activation works well upstream."""
-    from promoter_tf_drugs import screens
+    from generoutes import screens
     assert mo.CRISPRI_WINDOW != screens.CRISPRA_WINDOW
     assert mo.CRISPRI_WINDOW[1] > 0        # CRISPRi extends downstream of TSS
     assert screens.CRISPRA_WINDOW[1] < 0   # CRISPRa stays upstream
@@ -2095,7 +2095,7 @@ def test_modality_section_renders():
 
 
 # ----------------------------------------------- post-hoc shortlisting
-from promoter_tf_drugs import shortlist as sl          # noqa: E402
+from generoutes import shortlist as sl          # noqa: E402
 
 
 def _result_for_shortlist():
@@ -2175,13 +2175,13 @@ def test_shortlist_cli_runs(tmp_path):
 def test_expected_false_positives_matches_the_null():
     """800 motifs x 6000 bp x 2 strands x 1e-4 = 960. If a scan returns ~953,
     it found nothing — this is the check that says so."""
-    from promoter_tf_drugs import motifs as m
+    from generoutes import motifs as m
     assert abs(m.expected_false_positives(800, 6000, 1e-4) - 960.0) < 1e-6
     assert abs(m.expected_false_positives(800, 1200, 1e-5) - 19.2) < 1e-6
 
 
 def test_scan_quality_calls_noise_noise():
-    from promoter_tf_drugs import motifs as m
+    from generoutes import motifs as m
     q = m.scan_quality(953, 800, 6000, 1e-4)
     assert q["verdict"] == "no signal"
     assert q["enrichment"] < 1.2
@@ -2190,14 +2190,14 @@ def test_scan_quality_calls_noise_noise():
 
 
 def test_scan_quality_recognises_real_enrichment():
-    from promoter_tf_drugs import motifs as m
+    from generoutes import motifs as m
     q = m.scan_quality(200, 800, 1200, 1e-5)
     assert q["verdict"] == "enriched" and q["enrichment"] > 2
 
 
 def test_no_signal_warning_reaches_the_report():
-    from promoter_tf_drugs import pipeline as pl
-    from promoter_tf_drugs import report as rep
+    from generoutes import pipeline as pl
+    from generoutes import report as rep
     res = pl.run("DEMOGENE", demo=True, offline=True)
     res["results"][0]["scan_quality"] = {
         "verdict": "no signal", "observed": 953, "expected_by_chance": 960.0,
@@ -2210,7 +2210,7 @@ def test_no_signal_warning_reaches_the_report():
 def test_expression_failure_warns_once_then_disables():
     """A schema error fails identically for every gene; 11 identical warnings
     is noise, and continuing to ask wastes the run."""
-    from promoter_tf_drugs import delivery as d
+    from generoutes import delivery as d
     d._EXPR_DISABLED["value"] = False
 
     class C:
@@ -2241,7 +2241,7 @@ def test_post_redirect_is_followed_with_body(tmp_path):
     """urllib will not replay a POST body across 307/308, so it surfaces the
     redirect as an error. LINCS returns 307."""
     import urllib.error, io
-    from promoter_tf_drugs.http import Client
+    from generoutes.http import Client
 
     # Fresh cache dir per run: a persistent one serves the second call from
     # cache and the test silently stops exercising the redirect path.
@@ -2278,7 +2278,7 @@ def test_post_redirect_is_followed_with_body(tmp_path):
 def test_hpa_long_format_uses_symbol_not_ensembl_id(tmp_path):
     """HPA ships both 'Gene' (Ensembl id) and 'Gene name' (symbol). Scanning
     columns positionally grabs the id, which then matches nothing."""
-    from promoter_tf_drugs import delivery as d
+    from generoutes import delivery as d
     f = tmp_path / "hpa.tsv"
     f.write_text("Gene\tGene name\tTissue\tnTPM\n"
                  "ENSG1\tCCR5\tspleen\t42.0\n"
@@ -2296,7 +2296,7 @@ def test_hpa_long_format_uses_symbol_not_ensembl_id(tmp_path):
 
 
 def test_gtex_wide_format_parsed(tmp_path):
-    from promoter_tf_drugs import delivery as d
+    from generoutes import delivery as d
     f = tmp_path / "gtex.tsv"
     f.write_text("Name\tDescription\tWhole Blood\tLiver\n"
                  "ENSG1\tCCR5\t30.5\t0.1\n", encoding="utf-8")
@@ -2309,7 +2309,7 @@ def test_gtex_wide_format_parsed(tmp_path):
 
 def test_local_expression_table_bypasses_the_api(tmp_path):
     """A loaded table must take priority, so a broken endpoint is irrelevant."""
-    from promoter_tf_drugs import delivery as d
+    from generoutes import delivery as d
 
     class Boom:
         def post(self, *a, **k): raise AssertionError("API was called")
@@ -2325,7 +2325,7 @@ def test_local_expression_table_bypasses_the_api(tmp_path):
 
 
 def test_local_signature_table_respects_direction_and_landmark(tmp_path):
-    from promoter_tf_drugs import signatures as sg
+    from generoutes import signatures as sg
     f = tmp_path / "sig.csv"
     f.write_text("drug,gene,score,cell_line,is_landmark\n"
                  "DrugA,CCR5,3.2,PC3,1\n"
@@ -2346,7 +2346,7 @@ def test_local_signature_table_respects_direction_and_landmark(tmp_path):
 
 
 def test_local_signature_table_filters_weak_scores(tmp_path):
-    from promoter_tf_drugs import signatures as sg
+    from generoutes import signatures as sg
     f = tmp_path / "s.tsv"
     f.write_text("drug\tgene\tscore\nWeak\tCCR5\t0.4\nStrong\tCCR5\t4.0\n",
                  encoding="utf-8")
@@ -2358,7 +2358,7 @@ def test_expression_file_accepts_zip_gz_or_plain(tmp_path):
     """HPA ships a .zip, GTEx a .gz, and both get saved under a .tsv name.
     Sniff the magic bytes rather than trusting the extension."""
     import gzip, zipfile
-    from promoter_tf_drugs import delivery as d
+    from generoutes import delivery as d
 
     rows = ("Gene\tGene name\tTissue\tnTPM\n"
             "ENSG1\tCCR5\tspleen\t42.0\n"
@@ -2379,7 +2379,7 @@ def test_expression_file_accepts_zip_gz_or_plain(tmp_path):
 
 
 def test_html_error_page_reported_as_failed_download(tmp_path):
-    from promoter_tf_drugs import delivery as d
+    from generoutes import delivery as d
     import pytest
     f = tmp_path / "bad.tsv"
     f.write_text("<!DOCTYPE html><html>404 not found</html>", encoding="utf-8")
@@ -2388,7 +2388,7 @@ def test_html_error_page_reported_as_failed_download(tmp_path):
 
 
 def test_missing_expression_file_says_so(tmp_path):
-    from promoter_tf_drugs import delivery as d
+    from generoutes import delivery as d
     import pytest
     with pytest.raises(FileNotFoundError):
         d.load_expression_file(tmp_path / "nope.tsv")
@@ -2396,7 +2396,7 @@ def test_missing_expression_file_says_so(tmp_path):
 
 def test_unrecognised_table_names_the_header(tmp_path):
     """The error must say what it saw, or you cannot tell which file is wrong."""
-    from promoter_tf_drugs import delivery as d
+    from generoutes import delivery as d
     import pytest
     f = tmp_path / "wrong.tsv"
     f.write_text("alpha\tbeta\tgamma\n1\t2\t3\n", encoding="utf-8")
@@ -2408,7 +2408,7 @@ def test_unrecognised_table_names_the_header(tmp_path):
 def test_remap_response_shapes_all_parse():
     """The API has changed shape between versions and a wrong guess yields an
     empty list rather than an error."""
-    from promoter_tf_drugs import evidence as ev
+    from generoutes import evidence as ev
 
     shapes = [
         [{"target": "CTCF"}, {"target": "NR3C1"}],
@@ -2425,7 +2425,7 @@ def test_remap_response_shapes_all_parse():
 def test_sparse_chip_result_is_flagged_not_trusted(caplog):
     """One TF over a promoter is a parsing failure, not biology. Silently
     treating every TF as unbound skews the whole ranking."""
-    from promoter_tf_drugs import evidence as ev
+    from generoutes import evidence as ev
 
     class C:
         def get(self, url, params=None, **kw):
@@ -2440,7 +2440,7 @@ def test_sparse_chip_result_is_flagged_not_trusted(caplog):
 
 
 def test_healthy_chip_result_is_not_flagged(caplog):
-    from promoter_tf_drugs import evidence as ev
+    from generoutes import evidence as ev
 
     class C:
         def get(self, url, params=None, **kw):
@@ -2460,7 +2460,7 @@ def test_remote_disconnected_is_retried_not_raised(tmp_path):
     the whole run — which is exactly what happened with LINCS."""
     import http.client
     import urllib.request
-    from promoter_tf_drugs.http import Client, HttpError
+    from generoutes.http import Client, HttpError
 
     c = Client(cache_dir=tmp_path / "c", offline=False, min_interval=0)
     attempts = []
@@ -2483,7 +2483,7 @@ def test_remote_disconnected_is_retried_not_raised(tmp_path):
 
 def test_connection_reset_also_retried(tmp_path):
     import urllib.request
-    from promoter_tf_drugs.http import Client, HttpError
+    from generoutes.http import Client, HttpError
     import pytest
 
     c = Client(cache_dir=tmp_path / "c2", offline=False, min_interval=0)
@@ -2504,7 +2504,7 @@ def test_connection_reset_also_retried(tmp_path):
 
 
 def test_optional_helper_swallows_any_failure(caplog):
-    from promoter_tf_drugs.pipeline import _optional
+    from generoutes.pipeline import _optional
 
     def boom():
         raise RuntimeError("service is down")
@@ -2521,7 +2521,7 @@ def test_optional_helper_swallows_any_failure(caplog):
 def test_dead_lincs_does_not_abort_the_pipeline(monkeypatch):
     """A dead third-party API should cost you that section, not the run."""
     import http.client
-    from promoter_tf_drugs import pipeline as pl, signatures as sg
+    from generoutes import pipeline as pl, signatures as sg
 
     def boom(*a, **k):
         raise http.client.RemoteDisconnected("closed")
@@ -2533,7 +2533,7 @@ def test_dead_lincs_does_not_abort_the_pipeline(monkeypatch):
 
 
 # ------------------------------- endogenous ligand modulation
-from promoter_tf_drugs import ligands as lg          # noqa: E402
+from generoutes import ligands as lg          # noqa: E402
 
 
 def test_strategy_determines_direction():
@@ -2606,7 +2606,7 @@ def test_ligand_independent_tf_says_so():
 
 
 def test_ligand_routes_enter_the_catalogue():
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     block = {"ligand_axes": {"ESR1": lg.assess("ESR1", "down")}}
     routes = cat.build(block, goal="down", include_chromatin=False)["routes"]
     assert routes
@@ -2615,7 +2615,7 @@ def test_ligand_routes_enter_the_catalogue():
 
 
 def test_tissue_selective_scores_more_specific_in_catalogue():
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     block = {"ligand_axes": {"AR": lg.assess("AR", "down")}}
     routes = cat.build(block, goal="down", include_chromatin=False)["routes"]
     by_drug = {r["drug"]: r for r in routes}
@@ -2686,7 +2686,7 @@ def test_report_lists_chains_and_uncovered_tfs():
 
 
 # --------------------------------------------- per-compound expansion
-from promoter_tf_drugs import explain as ex          # noqa: E402
+from generoutes import explain as ex          # noqa: E402
 
 
 def _demo_result():
@@ -2758,7 +2758,7 @@ def test_explain_cli_writes_a_file(tmp_path):
 def test_every_category_has_a_guide_entry():
     """A category with no explanation is a column header the reader cannot
     act on."""
-    from promoter_tf_drugs import catalogue as c
+    from generoutes import catalogue as c
     missing = [cat for cat in c.CATEGORIES if cat not in c.CATEGORY_GUIDE]
     assert not missing, f"no guide entry for: {missing}"
     for cat, g in c.CATEGORY_GUIDE.items():
@@ -2781,7 +2781,7 @@ def test_only_direct_gene_product_changes_activity_rather_than_abundance():
     moves how much product exists, so RT-qPCR sees it. A drug on the product
     itself changes what existing protein does and barely moves its level —
     which is why ivacaftor reads as a failure on a western blot."""
-    from promoter_tf_drugs import catalogue as c
+    from generoutes import catalogue as c
     activity = {cat for cat, g in c.CATEGORY_GUIDE.items()
                 if "ACTIVITY" in g["changes"].upper()}
     # Both product categories qualify and nothing else may. The predicted
@@ -2798,7 +2798,7 @@ def test_only_direct_gene_product_changes_activity_rather_than_abundance():
 
 def test_guide_distinguishes_the_confusable_pairs():
     """These four pairs are the ones that get conflated."""
-    from promoter_tf_drugs import catalogue as c
+    from generoutes import catalogue as c
     g = c.CATEGORY_GUIDE
 
     # abundance vs activity
@@ -2837,7 +2837,7 @@ def test_glossary_leads_with_the_assay_distinction():
 
 # ------------------------------- CTD reported links, expanded
 def test_link_direction_parses_ctd_actions():
-    from promoter_tf_drugs.discovery import link_direction
+    from generoutes.discovery import link_direction
     assert link_direction(["increases^expression"]) == "up"
     assert link_direction(["decreases^expression"]) == "down"
     assert link_direction(["increases^expression", "decreases^expression"]) == "both"
@@ -2848,7 +2848,7 @@ def test_wrong_direction_links_are_separated_not_hidden():
     """A chemical reported to RAISE your gene is a lead when you want it up
     and a warning when you want it down. Mixing them would be actively
     misleading."""
-    from promoter_tf_drugs.discovery import summarise_links
+    from generoutes.discovery import summarise_links
     links = {"dexamethasone": ["increases^expression"],
              "tretinoin": ["decreases^expression"]}
 
@@ -2864,7 +2864,7 @@ def test_wrong_direction_links_are_separated_not_hidden():
 def test_compounds_reported_but_not_predicted_are_surfaced():
     """The interesting group: measured effect on the gene, no mechanism from
     this analysis. Reporting only a count buries them."""
-    from promoter_tf_drugs.discovery import summarise_links
+    from generoutes.discovery import summarise_links
     links = {"dexamethasone": ["increases^expression"],
              "sirolimus": ["increases^expression"],
              # An exposure, not a candidate anyone could have proposed. It
@@ -2886,7 +2886,7 @@ def test_compounds_reported_but_not_predicted_are_surfaced():
 
 
 def test_both_direction_links_counted_as_context_dependent():
-    from promoter_tf_drugs.discovery import summarise_links
+    from generoutes.discovery import summarise_links
     s = summarise_links({"valproic acid":
                          ["increases^expression", "decreases^expression"]},
                         "up", set())
@@ -2896,7 +2896,7 @@ def test_both_direction_links_counted_as_context_dependent():
 
 
 def test_substring_matching_credits_the_candidate():
-    from promoter_tf_drugs.discovery import summarise_links
+    from generoutes.discovery import summarise_links
     s = summarise_links({"all-trans retinoic acid": ["increases^expression"]},
                         "up", {"Retinoic Acid"})
     assert s["wanted_direction"][0]["in_candidates"] is True
@@ -2988,7 +2988,7 @@ def test_links_that_are_not_measured_are_left_out_without_a_lecture():
 def test_binding_model_trains_where_a_direction_model_cannot():
     """The core fix: /activity has hundreds of actives where /mechanism has
     two, so a screen that used to refuse can now run."""
-    from promoter_tf_drugs import screening as sc
+    from generoutes import screening as sc
     rng = np.random.default_rng(3)
 
     # actives share a scaffold; decoys do not
@@ -3010,7 +3010,7 @@ def test_screen_reports_actives_not_mechanism_labels():
     """Error text must name the real limit, so a data gap is not read as a
     judgement about the receptor."""
     import inspect
-    from promoter_tf_drugs import screening as sc
+    from generoutes import screening as sc
     src = inspect.getsource(sc.screen_receptor)
     assert "measured actives" in src
     assert "data gap, not a judgement" in src
@@ -3020,7 +3020,7 @@ def test_screen_reports_actives_not_mechanism_labels():
 def test_direction_is_an_annotation_not_a_gate():
     """Missing direction labels must not block the screen — they used to."""
     import inspect
-    from promoter_tf_drugs import screening as sc
+    from generoutes import screening as sc
     src = inspect.getsource(sc.screen_receptor)
     i_bind = src.index("build_binding_model")
     i_dir = src.index("fetch_labelled_ligands")
@@ -3030,7 +3030,7 @@ def test_direction_is_an_annotation_not_a_gate():
 
 # ------------------------- undirected drug-gene links must not masquerade
 def _undirected(name, direction, source="DGIdb", score=None):
-    from promoter_tf_drugs.drugs import Drug
+    from generoutes.drugs import Drug
     d = Drug(name, None, "GATA2", "UNKNOWN" if direction == "unclear" else "AGONIST",
              None, True, 4.0, None, False, None, direction, source)
     d.interaction_score = score
@@ -3041,7 +3041,7 @@ def test_undirected_links_are_held_back_by_default():
     """The reported problem: a table where every row reads UNKNOWN / unclear.
     An undirected link cannot answer a question that is entirely about
     direction."""
-    from promoter_tf_drugs.drugs import filter_drugs_by_goal
+    from generoutes.drugs import filter_drugs_by_goal
     drugs = {"GATA2": [_undirected("Cisplatin", "unclear", score=0.3),
                        _undirected("RealAgonist", "up")]}
     anns = {"GATA2": {"role": "activator"}}
@@ -3052,7 +3052,7 @@ def test_undirected_links_are_held_back_by_default():
 
 
 def test_unknown_direction_can_be_opted_back_in():
-    from promoter_tf_drugs.drugs import filter_drugs_by_goal
+    from generoutes.drugs import filter_drugs_by_goal
     drugs = {"GATA2": [_undirected("Cisplatin", "unclear"), _undirected("RealAgonist", "up")]}
     anns = {"GATA2": {"role": "activator"}}
     actionable, unknown = filter_drugs_by_goal(
@@ -3062,7 +3062,7 @@ def test_unknown_direction_can_be_opted_back_in():
 
 
 def test_undirected_links_sorted_by_confidence():
-    from promoter_tf_drugs.drugs import filter_drugs_by_goal
+    from generoutes.drugs import filter_drugs_by_goal
     drugs = {"GATA2": [_undirected("Weak", "unclear", score=0.1),
                        _undirected("Strong", "unclear", score=0.9)]}
     _, unknown = filter_drugs_by_goal(drugs, {"GATA2": {"role": "activator"}}, "up")
@@ -3071,7 +3071,7 @@ def test_undirected_links_sorted_by_confidence():
 
 def test_chembl_record_wins_but_keeps_dgidb_provenance():
     """Deduplication used to discard DGIdb's score and source list entirely."""
-    from promoter_tf_drugs.drugs import Drug
+    from generoutes.drugs import Drug
     chembl = Drug("Calcitriol", "CHEMBL1", "VDR", "AGONIST", "VDR agonist",
                   True, 4.0, 1978, False, True, "up", "ChEMBL")
     dgidb = Drug("Calcitriol", None, "VDR", "AGONIST", None, True, 4.0, None,
@@ -3108,7 +3108,7 @@ def test_undirected_section_explains_itself():
 # --------------------- CNS assessment must not overstate what it knows
 def test_mpo_refuses_below_three_parameters():
     """'MPO 0.5/1' reads like an assessment but rests on one descriptor."""
-    from promoter_tf_drugs import delivery as d
+    from generoutes import delivery as d
     a = d.assess_delivery("Tamibarotene", compartment="cns",
                           properties={"hbd": 1})
     assert a.cns_mpo is None
@@ -3118,13 +3118,13 @@ def test_mpo_refuses_below_three_parameters():
 
 
 def test_mpo_reports_which_parameters_were_missing():
-    from promoter_tf_drugs import delivery as d
+    from generoutes import delivery as d
     a = d.assess_delivery("X", compartment="cns", properties={"mw": 300})
     assert "(mw)" in a.notes[0], a.notes[0]
 
 
 def test_three_parameters_is_enough():
-    from promoter_tf_drugs import delivery as d
+    from generoutes import delivery as d
     a = d.assess_delivery("Y", compartment="cns",
                           properties={"mw": 300, "tpsa": 60, "logp": 2.0})
     assert a.cns_mpo is not None and a.mpo_parameters == 3
@@ -3134,7 +3134,7 @@ def test_three_parameters_is_enough():
 def test_drug_scoring_tissue_term_uses_the_same_floor():
     """Otherwise the grade silently scores a tissue term the report refuses
     to state."""
-    from promoter_tf_drugs import delivery as dl
+    from generoutes import delivery as dl
     thin = dsc.DrugEvidence(properties={"full_mwt": 300})
     score, note = dsc._tissue(thin, "cns")
     assert "not assessed" in note
@@ -3220,7 +3220,7 @@ def test_approved_drug_table_respects_top_n():
 
 # ------------- null expectation must match what was actually scanned
 def test_scannable_length_excludes_masked_and_ambiguous():
-    from promoter_tf_drugs import motifs as m
+    from generoutes import motifs as m
     # lowercase = soft-masked repeat (scannable only when masking is off);
     # N = genuinely ambiguous and never scannable
     seq = "ACGT" * 1000 + "acgt" * 500 + "N" * 500
@@ -3232,7 +3232,7 @@ def test_expectation_uses_scannable_not_window_length():
     """The nonsense line: '293 sites is what chance alone predicts (1055)'.
     293 is nowhere near 1055 — the null was computed over the whole 6 kb
     window while masking had removed most of it from the scan."""
-    from promoter_tf_drugs import motifs as m
+    from generoutes import motifs as m
     full = m.scan_quality(293, 879, 6000, 1e-4)
     real = m.scan_quality(293, 879, 1500, 1e-4)
     assert full["expected_by_chance"] > 1000
@@ -3243,7 +3243,7 @@ def test_expectation_uses_scannable_not_window_length():
 def test_fewer_hits_than_chance_is_worded_correctly():
     """A count far BELOW the null is a different situation from matching it,
     and saying 'is what chance predicts' there is simply false."""
-    from promoter_tf_drugs import motifs as m
+    from generoutes import motifs as m
     q = m.scan_quality(293, 879, 6000, 1e-4)
     assert q["verdict"] == "no signal"
     assert "FEWER than chance" in q["advice"]
@@ -3254,7 +3254,7 @@ def test_fewer_hits_than_chance_is_worded_correctly():
 
 
 def test_scan_quality_reports_the_basis_of_its_claim():
-    from promoter_tf_drugs import motifs as m
+    from generoutes import motifs as m
     for n in (100, 1050, 5000):
         q = m.scan_quality(n, 879, 1200, 1e-4)
         assert "scannable bases" in q["advice"]
@@ -3288,13 +3288,13 @@ def test_remap_target_read_from_documented_nested_path():
     """ReMap nests the TF at peaks[].peakValues.name.data.TF. Reading
     row['target'] at the top level found nothing, which is why an entire
     promoter came back with one TF."""
-    from promoter_tf_drugs import evidence as ev
+    from generoutes import evidence as ev
     c = _RemapClient(_REMAP_DOC_SHAPE)
     assert ev.peaks_from_api(c, "15", 100, 200) == {"CTCF": 2, "NR3C1": 1}
 
 
 def test_remap_url_matches_the_documented_structure():
-    from promoter_tf_drugs import evidence as ev
+    from generoutes import evidence as ev
     c = _RemapClient({"peaks": []})
     ev.peaks_from_api(c, "15", 100, 200, datatype="nr")
     url = c.urls[0]
@@ -3305,7 +3305,7 @@ def test_remap_url_matches_the_documented_structure():
 
 def test_flat_and_string_fallbacks_still_work():
     """Other releases or a changed schema must not silently yield nothing."""
-    from promoter_tf_drugs import evidence as ev
+    from generoutes import evidence as ev
     assert ev._target_of({"TF": "FOXA1"}) == "FOXA1"
     assert ev._target_of({"target": "GATA1"}) == "GATA1"
     assert ev._target_of({"name": {"data": {"TF": "SP1"}}}) == "SP1"
@@ -3314,7 +3314,7 @@ def test_flat_and_string_fallbacks_still_work():
 
 
 def test_unparseable_records_are_reported_not_silently_zero(caplog):
-    from promoter_tf_drugs import evidence as ev
+    from generoutes import evidence as ev
     c = _RemapClient({"peaks": [{"chrom": "chr1", "chromStart": 1}] * 40})
     with caplog.at_level("WARNING"):
         counts = ev.peaks_from_api(c, "15", 100, 200)
@@ -3323,7 +3323,7 @@ def test_unparseable_records_are_reported_not_silently_zero(caplog):
 
 
 def test_realistic_promoter_result_is_not_flagged_as_broken(caplog):
-    from promoter_tf_drugs import evidence as ev
+    from generoutes import evidence as ev
     peaks = {"peaks": [
         {"peakValues": {"name": {"data": {"TF": tf}}}}
         for tf in ("CTCF", "SP1", "JUN", "FOS", "MYC", "NR3C1", "GATA2")]}
@@ -3418,7 +3418,7 @@ def test_known_binder_already_linked_is_a_confirmation_not_a_lead():
 
 
 def test_quadrant_axes_are_independent():
-    from promoter_tf_drugs.screening import _quadrant
+    from generoutes.screening import _quadrant
     assert _quadrant(0.9, 0.9, True, True, False) == \
         "ESTABLISHED LIGAND, untested on this gene"
     assert _quadrant(0.9, 0.9, True, True, True) == "confirms a reported link"
@@ -3435,7 +3435,7 @@ def test_established_binders_rank_below_direct_agents_but_above_curated():
     receptor-to-gene step is a hypothesis, whereas a curated tier-3 route is
     annotation on both halves. They stay below tier 1 because a direct agent
     acts on the gene itself and skips the receptor-to-gene inference."""
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     block = {
         "direct_therapies": [{
             "drug": "DirectAgent", "modality": "small molecule",
@@ -3472,7 +3472,7 @@ def test_established_binders_rank_below_direct_agents_but_above_curated():
 def test_established_binder_explains_how_it_reaches_the_gene():
     """A bare "measured binder" label does not say what it would do to the
     target gene, which is the question being asked of it."""
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     block = {"screens": {"VDR": {
         "enrichment": {"usable": True},
         "hits": [{"drug": "Doxercalciferol", "probability": 0.93,
@@ -3491,7 +3491,7 @@ def test_established_binder_explains_how_it_reaches_the_gene():
 def test_false_discovery_proportion_is_the_chance_share_not_its_complement():
     """The direction of this number is the whole point, and it is easy to
     invert: 1 - expected/observed is the share that is REAL."""
-    from promoter_tf_drugs import motifs as m
+    from generoutes import motifs as m
     # 900 observed against ~744 expected: overwhelmingly noise.
     q = m.scan_quality(900, 879, 4230, 1e-4)
     assert q["false_discovery_proportion"] > 0.75
@@ -3503,7 +3503,7 @@ def test_false_discovery_proportion_is_the_chance_share_not_its_complement():
 
 
 def test_fdp_and_enrichment_tell_the_same_story():
-    from promoter_tf_drugs import motifs as m
+    from generoutes import motifs as m
     for n in (50, 300, 900, 2000):
         q = m.scan_quality(n, 879, 4230, 1e-4)
         if q["enrichment"] >= 2.0:
@@ -3516,7 +3516,7 @@ def test_broken_chip_api_is_a_failure_not_measured_absence():
     """A ReMap response yielding one or two factors over a promoter is a
     parsing failure. Scoring it as 'binding measured and absent' zeroes the
     20-point evidence axis for every factor on a lie."""
-    from promoter_tf_drugs import evidence as ev
+    from generoutes import evidence as ev
 
     class _C:
         def get(self, url): return {"peaks": [{"peakValues": {"name": {
@@ -3533,7 +3533,7 @@ def test_broken_chip_api_is_a_failure_not_measured_absence():
 def test_empty_local_bed_is_a_real_negative():
     """Contrast with the above: a BED that parsed and found nothing IS
     evidence of absence, and must not be downgraded to a failure."""
-    from promoter_tf_drugs import evidence as ev
+    from generoutes import evidence as ev
     import tempfile, os
     fd, path = tempfile.mkstemp(suffix=".bed")
     with os.fdopen(fd, "w") as fh:
@@ -3547,14 +3547,14 @@ def test_empty_local_bed_is_a_real_negative():
 
 
 def test_unrequested_chip_is_not_a_failure():
-    from promoter_tf_drugs import evidence as ev
+    from generoutes import evidence as ev
     _, status = ev.chip_evidence_status(_prom(1))
     assert status["requested"] is False
     assert status["ok"] is False
 
 
 def test_ledger_distinguishes_not_requested_from_failed():
-    from promoter_tf_drugs import provenance as p
+    from generoutes import provenance as p
     led = p.Ledger()
     led.record("chip", requested=False, ok=False)
     led.record("lincs", requested=True, ok=False, detail="API down")
@@ -3570,7 +3570,7 @@ def test_ledger_distinguishes_not_requested_from_failed():
 def test_ledger_keeps_the_best_outcome_across_promoters():
     """With --all-tss the same source is recorded per TSS. One region with no
     peaks must not mark a working source as broken."""
-    from promoter_tf_drugs import provenance as p
+    from generoutes import provenance as p
     led = p.Ledger()
     led.record("chip", requested=True, ok=False, detail="nothing here")
     led.record("chip", requested=True, ok=True, yielded=40, detail="40 TFs")
@@ -3578,7 +3578,7 @@ def test_ledger_keeps_the_best_outcome_across_promoters():
 
 
 def test_verdict_refuses_a_noise_scan_with_no_measurement():
-    from promoter_tf_drugs import provenance as p, motifs as m
+    from generoutes import provenance as p, motifs as m
     led = p.Ledger()
     led.record("chip", requested=True, ok=False)
     v = p.verdict(led, m.scan_quality(900, 879, 4230, 1e-4))
@@ -3587,7 +3587,7 @@ def test_verdict_refuses_a_noise_scan_with_no_measurement():
 
 
 def test_verdict_upgrades_when_measurement_exists():
-    from promoter_tf_drugs import provenance as p, motifs as m
+    from generoutes import provenance as p, motifs as m
     led = p.Ledger()
     led.record("chip", requested=True, ok=True, yielded=40)
     v = p.verdict(led, m.scan_quality(200, 800, 1200, 1e-5))
@@ -3596,7 +3596,7 @@ def test_verdict_upgrades_when_measurement_exists():
 
 # --------------------------------------------------------------- congeners
 def test_salt_forms_collapse_to_one_active_moiety():
-    from promoter_tf_drugs import congeners as c
+    from generoutes import congeners as c
     assert c.salt_free_name("Liothyronine Sodium") == "liothyronine"
     assert c.salt_free_name("Elacestrant Hydrochloride") == "elacestrant"
     assert c.salt_free_name("Seladelpar Lysine") == "seladelpar"
@@ -3606,14 +3606,14 @@ def test_salt_forms_collapse_to_one_active_moiety():
 def test_leading_counterion_is_not_stripped():
     """'Sodium Fluoride' is a drug; reducing it to 'fluoride' would be wrong.
     Only trailing counterions are salts."""
-    from promoter_tf_drugs import congeners as c
+    from generoutes import congeners as c
     assert c.salt_free_name("Sodium Fluoride") == "sodium fluoride"
 
 
 def test_esters_are_grouped_but_never_merged():
     """Fluticasone Propionate and Fluticasone Furoate are different molecules.
     Merging them would be a pharmacological claim, not a dedup."""
-    from promoter_tf_drugs import congeners as c
+    from generoutes import congeners as c
     assert c.salt_free_name("Fluticasone Furoate") != \
            c.salt_free_name("Fluticasone Propionate")
     fam = c.family_of(["Fluticasone Furoate", "Fluticasone Propionate"])
@@ -3622,7 +3622,7 @@ def test_esters_are_grouped_but_never_merged():
 
 
 def test_collapse_keeps_the_winner_and_names_the_alternates():
-    from promoter_tf_drugs import congeners as c
+    from generoutes import congeners as c
 
     class G:
         def __init__(self, n, t, s):
@@ -3642,7 +3642,7 @@ def test_collapse_keeps_the_winner_and_names_the_alternates():
 
 def test_same_drug_at_two_tfs_stays_two_routes():
     """Those are genuinely different mechanisms, not duplicate chemistry."""
-    from promoter_tf_drugs import congeners as c
+    from generoutes import congeners as c
 
     class G:
         def __init__(self, n, t):
@@ -3694,7 +3694,7 @@ def test_tiny_curated_regulon_is_understudied_not_specific():
     """The trap: TRRUST is literature-derived, so a TF with 2 recorded targets
     is almost certainly under-assayed rather than narrow. Scoring that as
     perfect specificity rewards obscurity."""
-    from promoter_tf_drugs import regulon as r
+    from generoutes import regulon as r
     ev = r.regulon_evidence("SP1", {"SP1": {"A", "B"}})
     assert ev.understudied is True
     assert ev.trustworthy is False
@@ -3708,13 +3708,13 @@ def test_tiny_curated_regulon_is_understudied_not_specific():
 
 def test_bundled_tier_is_not_a_trustworthy_count():
     """5000 is an order-of-magnitude bucket someone typed, not a measurement."""
-    from promoter_tf_drugs import regulon as r
+    from generoutes import regulon as r
     ev = r.regulon_evidence("SP1")
     assert ev.trustworthy is False and "bucket" in ev.note
 
 
 def test_a_real_regulon_above_the_floor_is_trusted():
-    from promoter_tf_drugs import regulon as r
+    from generoutes import regulon as r
     big = {"MYTF": {f"G{i}" for i in range(40)}}
     ev = r.regulon_evidence("MYTF", big)
     assert ev.trustworthy is True and ev.understudied is False
@@ -3722,7 +3722,7 @@ def test_a_real_regulon_above_the_floor_is_trusted():
 
 
 def test_unknown_regulon_is_unmeasured_not_narrow():
-    from promoter_tf_drugs import regulon as r
+    from generoutes import regulon as r
     ev = r.regulon_evidence("ZZZ9FAKE")
     assert ev.n is None and ev.trustworthy is False
     assert "not the same as narrow" in ev.note
@@ -3733,7 +3733,7 @@ def test_glucocorticoid_is_flagged_despite_a_spotless_profile():
     """The reason this module exists. Dexamethasone is clean, potent and
     selective — and acts on the whole body. selectivity counts proteins,
     regulon counts genes; neither counts systems."""
-    from promoter_tf_drugs import systemic as s
+    from generoutes import systemic as s
     b = s.clinical_burden("Dexamethasone", notes="", target="NR3C1")
     assert b.assessed and b.level == "high"
     assert b.drug_class == "glucocorticoid"
@@ -3741,7 +3741,7 @@ def test_glucocorticoid_is_flagged_despite_a_spotless_profile():
 
 def test_global_regulator_target_raises_burden_for_an_unlisted_drug():
     """The receptor is systemic even when the drug is not in the table."""
-    from promoter_tf_drugs import systemic as s
+    from generoutes import systemic as s
     b = s.clinical_burden("SomeNovelCompound", notes="", target="SP1")
     assert b.assessed and b.score >= 0.85
     assert any("global regulator" in r for r in b.reasons)
@@ -3749,7 +3749,7 @@ def test_global_regulator_target_raises_burden_for_an_unlisted_drug():
 
 def test_unlisted_drug_is_unassessed_not_cleared():
     """A clean row means 'not on our list', never 'safe'."""
-    from promoter_tf_drugs import systemic as s
+    from generoutes import systemic as s
     b = s.clinical_burden("Maraviroc", notes="", target="CCR5")
     assert b.assessed is False
     assert "not the same as clean" in " ".join(b.reasons)
@@ -3758,14 +3758,14 @@ def test_unlisted_drug_is_unassessed_not_cleared():
 def test_salt_form_resolves_to_its_class():
     """Otherwise pipeline's salt collapsing and this table disagree about
     what a drug is."""
-    from promoter_tf_drugs import systemic as s
+    from generoutes import systemic as s
     assert s.classify("Levothyroxine Sodium").name == "thyroid hormone"
     assert s.classify("Elacestrant Hydrochloride").name == "sex steroid"
 
 
 def test_burden_reads_the_same_withdrawn_strings_as_shortlist():
     """Two spellings of 'withdrawn' would give one report two verdicts."""
-    from promoter_tf_drugs import systemic as s
+    from generoutes import systemic as s
     b = s.clinical_burden("Plicamycin", notes="WITHDRAWN from market")
     assert b.level == "prohibitive"
     row = {"_notes": "WITHDRAWN from market"}
@@ -3773,7 +3773,7 @@ def test_burden_reads_the_same_withdrawn_strings_as_shortlist():
 
 
 def test_black_box_is_high_but_not_prohibitive():
-    from promoter_tf_drugs import systemic as s
+    from generoutes import systemic as s
     b = s.clinical_burden("SomeDrug", notes="black-box warning")
     assert b.level == "high" and b.assessed
 
@@ -3783,7 +3783,7 @@ def test_tissue_breadth_refuses_a_fraction_without_a_denominator():
     """'Expressed in 30 tissues' means different things against HPA's ~50,
     GTEx's ~54 and Open Targets' variable vocabulary. No denominator, no
     score — inventing 50 would be fabricating the number."""
-    from promoter_tf_drugs import delivery as d
+    from generoutes import delivery as d
     d._LOCAL_EXPRESSION.clear()
     assert d.tissue_universe_size() is None
     r = d.expression_breadth("GATA2")
@@ -3793,7 +3793,7 @@ def test_tissue_breadth_refuses_a_fraction_without_a_denominator():
 def test_tissue_breadth_is_higher_for_a_narrower_factor():
     """Direction must match regulon.transcriptional_specificity — higher is
     narrower. A sign flip here would invert the whole axis silently."""
-    from promoter_tf_drugs import delivery as d
+    from generoutes import delivery as d
     d._LOCAL_EXPRESSION.clear()
     d._LOCAL_EXPRESSION.update({
         "NARROW": {"liver": 5.0},
@@ -3812,7 +3812,7 @@ def test_nuclear_receptor_is_not_penalised_on_an_expression_proxy():
     """mRNA presence is not activity. VDR is transcribed nearly everywhere
     while 1,25-D signalling is not — and NRs were 201 of 216 routes in the
     real CCR5 run, so a bad proxy here biases against the whole output."""
-    from promoter_tf_drugs import delivery as d
+    from generoutes import delivery as d
     d._LOCAL_EXPRESSION.clear()
     d._LOCAL_EXPRESSION.update({"VDR": {f"t{i}": 5.0 for i in range(40)}})
     try:
@@ -3826,7 +3826,7 @@ def test_nuclear_receptor_is_not_penalised_on_an_expression_proxy():
 def test_cns_mpo_is_never_a_tissue_breadth_basis():
     """The tempting wrong shortcut: MPO predicts crossing ONE barrier, and
     says nothing about how many tissues a drug reaches."""
-    from promoter_tf_drugs import delivery as d
+    from generoutes import delivery as d
     d._LOCAL_EXPRESSION.clear()
     d._LOCAL_EXPRESSION.update({"X": {"liver": 3.0}})
     try:
@@ -3858,7 +3858,7 @@ def test_cherry_pick_states_its_provenance_and_its_limit():
 # ===================================================================== #
 # Multi-gene panel: choosing between candidate genes.                   #
 # ===================================================================== #
-from promoter_tf_drugs import panel as pn          # noqa: E402
+from generoutes import panel as pn          # noqa: E402
 
 
 def _panel_of(*genes, **kw):
@@ -4107,7 +4107,7 @@ def test_panel_cli_runs_end_to_end(tmp_path):
 
 
 # ------------------------------------- is the scanned window this gene's?
-from promoter_tf_drugs import neighbours as nbr        # noqa: E402
+from generoutes import neighbours as nbr        # noqa: E402
 
 
 class _NbClient:
@@ -4178,7 +4178,7 @@ def test_disjoint_windows_report_no_overlap():
 # The headline answer: predicted medications, with the reasoning, first; #
 # experimental protocol last.                                            #
 # ===================================================================== #
-from promoter_tf_drugs import predictions as prd        # noqa: E402
+from generoutes import predictions as prd        # noqa: E402
 
 
 def _demo_report(**kw):
@@ -4287,7 +4287,7 @@ def test_empty_prediction_list_is_explained_not_blank():
 def test_baseline_expression_schema_is_parsed():
     """Target.expressions was removed, so every gene 400'd and the whole
     tissue axis went dark. baselineExpression replaces it."""
-    from promoter_tf_drugs import delivery as d
+    from generoutes import delivery as d
 
     class C:
         def post(self, url, payload):
@@ -4306,7 +4306,7 @@ def test_baseline_expression_schema_is_parsed():
 
     d._LOCAL_EXPRESSION.clear()
     d._EXPR_DISABLED["value"] = False
-    import promoter_tf_drugs.genetics as gen
+    import generoutes.genetics as gen
     old = gen._resolve_ensembl
     gen._resolve_ensembl = lambda c, s: "ENSG0"
     try:
@@ -4322,7 +4322,7 @@ def test_each_unit_is_thresholded_against_its_own_floor():
     """TPM and CPM(pseudobulk) are different measurements on different data,
     so they are kept but never compared against a single cutoff. A value of
     0.5 is below the floor in either unit; 1000 clears it in either."""
-    from promoter_tf_drugs import delivery as d
+    from generoutes import delivery as d
 
     def client_with(rows):
         class C:
@@ -4334,7 +4334,7 @@ def test_each_unit_is_thresholded_against_its_own_floor():
     cpm = "CPM(pseudobulk sum[counts])"
     d._LOCAL_EXPRESSION.clear()
     d._EXPR_DISABLED["value"] = False
-    import promoter_tf_drugs.genetics as gen
+    import generoutes.genetics as gen
     old = gen._resolve_ensembl
     gen._resolve_ensembl = lambda c, s: "ENSG0"
     try:
@@ -4358,7 +4358,7 @@ def test_each_unit_is_thresholded_against_its_own_floor():
 
 
 def test_old_schema_still_parses_if_a_deployment_serves_it():
-    from promoter_tf_drugs import delivery as d
+    from generoutes import delivery as d
 
     class C:
         def post(self, url, payload):
@@ -4370,7 +4370,7 @@ def test_old_schema_still_parses_if_a_deployment_serves_it():
 
     d._LOCAL_EXPRESSION.clear()
     d._EXPR_DISABLED["value"] = False
-    import promoter_tf_drugs.genetics as gen
+    import generoutes.genetics as gen
     old = gen._resolve_ensembl
     gen._resolve_ensembl = lambda c, s: "ENSG0"
     try:
@@ -4382,7 +4382,7 @@ def test_old_schema_still_parses_if_a_deployment_serves_it():
 def test_api_route_still_refuses_to_supply_a_denominator():
     """The API vocabulary is a variable biosample set, not a fixed tissue
     panel, so a fraction against it would be fabricated."""
-    from promoter_tf_drugs import delivery as d
+    from generoutes import delivery as d
     d._LOCAL_EXPRESSION.clear()
     assert d.tissue_universe_size() is None
 
@@ -4390,7 +4390,7 @@ def test_api_route_still_refuses_to_supply_a_denominator():
 # ===================================================================== #
 # Paralog families: can a selective ligand exist at this receptor?      #
 # ===================================================================== #
-from promoter_tf_drugs import paralogs as pl          # noqa: E402
+from generoutes import paralogs as pl          # noqa: E402
 
 
 def test_family_members_are_recognised_as_relatives():
@@ -4420,7 +4420,7 @@ def test_unlisted_factor_is_unassessed_not_selective():
 def test_a_large_family_with_a_selective_agent_is_not_penalised():
     """trifarotene exists BECAUSE the RAR pocket is conserved. Penalising the
     molecule developed to solve the problem would be backwards."""
-    from promoter_tf_drugs import panel as p
+    from generoutes import panel as p
     row = {"_paralog_score": 0.4, "_paralog_selective_agents":
            ["trifarotene (RARG-selective)"]}
     assert p._p_min_paralog_specificity(row, 0.9)
@@ -4429,7 +4429,7 @@ def test_a_large_family_with_a_selective_agent_is_not_penalised():
 
 
 def test_missing_paralog_data_never_removes_a_row():
-    from promoter_tf_drugs import panel as p
+    from generoutes import panel as p
     assert p._p_min_paralog_specificity({"_paralog_score": None}, 0.9)
 
 
@@ -4450,7 +4450,7 @@ def test_cross_reactive_pairs_names_the_selective_agents():
 
 
 def test_paralog_stage_is_in_the_funnel():
-    from promoter_tf_drugs import panel as p
+    from generoutes import panel as p
     names = [s.name for s in p.default_stages()]
     assert "Selective ligand achievable" in names
     stage = [s for s in p.default_stages(min_paralog_specificity=0.6)
@@ -4471,7 +4471,7 @@ def test_ctd_counts_as_measured_evidence():
     """A curator recorded that someone dosed cells and the gene moved. That
     is an observation, not an inference from a motif — and it is often the
     only empirical source standing when LINCS is unreachable."""
-    from promoter_tf_drugs import provenance as pv
+    from generoutes import provenance as pv
     led = pv.Ledger()
     led.record("chip", requested=True, ok=False)
     led.record("lincs", requested=True, ok=False)
@@ -4482,7 +4482,7 @@ def test_ctd_counts_as_measured_evidence():
 
 
 def test_verdict_names_the_evidence_that_did_arrive():
-    from promoter_tf_drugs import provenance as pv, motifs as m
+    from generoutes import provenance as pv, motifs as m
     led = pv.Ledger()
     led.record("chip", requested=True, ok=False)
     led.record("ctd", requested=True, ok=True, yielded=152)
@@ -4496,7 +4496,7 @@ def test_verdict_names_the_evidence_that_did_arrive():
 
 
 def test_empty_ctd_is_a_failure_not_silence():
-    from promoter_tf_drugs import provenance as pv
+    from generoutes import provenance as pv
     led = pv.Ledger()
     led.record("ctd", requested=True, ok=False, yielded=0)
     assert led.get("ctd").state == "FAILED"
@@ -4575,7 +4575,7 @@ def test_overlapping_tss_windows_are_reported():
     """CCR5's two --all-tss windows shared 71% of their sequence, so they
     were largely one analysis counted twice. window_overlap existed but was
     never called."""
-    from promoter_tf_drugs import neighbours as nbr
+    from generoutes import neighbours as nbr
     res = pipeline.run("DEMOGENE", demo=True, offline=True)
     # one promoter in demo mode, so nothing to overlap
     assert res["tss_window_overlap"] == []
@@ -4606,7 +4606,7 @@ def test_single_gene_report_names_the_receptor_family():
 
 
 def test_family_clause_is_silent_for_a_lone_receptor():
-    from promoter_tf_drugs import predictions as prd
+    from generoutes import predictions as prd
     assert prd._family_clause("NR1H4") == ""      # FXR, no paralogue
     assert prd._family_clause(None) == ""
     assert prd._family_clause("NHLH1") == ""      # not a receptor at all
@@ -4700,7 +4700,7 @@ def test_one_unreachable_window_does_not_abort_the_run(monkeypatch):
     """With --all-tss a gene has several windows. A transient 500 on one of
     them used to raise after transcript selection, regulons and expression
     had already been built — discarding all of it."""
-    from promoter_tf_drugs import genes as gm
+    from generoutes import genes as gm
     calls = {"n": 0}
 
     def flaky(client, species, chrom, start, end, strand, mask=None):
@@ -4729,7 +4729,7 @@ def test_every_window_failing_still_raises(monkeypatch):
     """An empty promoter list would read downstream as 'this gene has no
     promoter', which is a different and wrong claim."""
     import pytest
-    from promoter_tf_drugs import genes as gm
+    from generoutes import genes as gm
 
     def dead(*a, **k):
         raise gm.HttpError("HTTP 500")
@@ -4747,7 +4747,7 @@ def test_every_window_failing_still_raises(monkeypatch):
 def test_a_local_fasta_replaces_the_ensembl_sequence_call(tmp_path):
     """Ensembl was the one stage with no offline route. The package already
     writes promoter.fa, so a previous run is its own offline source."""
-    from promoter_tf_drugs import genes as gm
+    from generoutes import genes as gm
     fa = tmp_path / "promoter.fa"
     fa.write_text(">GENE|ENST1|chr7:1000-1011|strand=1|-1000/+200\n"
                   "ACGTACGTACGT\n", encoding="utf-8")
@@ -4763,7 +4763,7 @@ def test_a_local_fasta_replaces_the_ensembl_sequence_call(tmp_path):
 
 
 def test_local_fasta_is_preferred_over_the_network(tmp_path, monkeypatch):
-    from promoter_tf_drugs import genes as gm
+    from generoutes import genes as gm
     fa = tmp_path / "p.fa"
     fa.write_text(">G|T1|chr3:1-1200|strand=1|-1000/+200\n"
                   + "A" * 1200 + "\n", encoding="utf-8")
@@ -4788,7 +4788,7 @@ def test_local_fasta_is_preferred_over_the_network(tmp_path, monkeypatch):
 def test_the_real_promoter_fa_output_round_trips():
     """The offline route only works if this package's own output is readable
     by it. Round-trip its FASTA rather than a hand-built one."""
-    from promoter_tf_drugs import genes as gm
+    from generoutes import genes as gm
     import tempfile
     from pathlib import Path as _P
     res = pipeline.run("DEMOGENE", demo=True, offline=True)
@@ -4807,7 +4807,7 @@ def test_the_real_promoter_fa_output_round_trips():
 def test_a_500_is_treated_as_backoff_not_a_verdict():
     """Public bioinformatics endpoints 500 under load as often as they 429.
     Three attempts over 7s gave up while Ensembl was merely busy."""
-    from promoter_tf_drugs import http as h
+    from generoutes import http as h
     assert h.DEFAULT_RETRIES >= 5
     assert h.RETRY_CAP >= 10
 
@@ -4865,7 +4865,7 @@ def test_both_clis_share_one_declaration_of_the_analysis_flags():
     """They used to be shared by reaching into the other parser's private
     _actions and registering the same Action objects in two parsers, which
     shares mutable state between them."""
-    from promoter_tf_drugs import cli, panel as pnl
+    from generoutes import cli, panel as pnl
     import inspect
 
     assert hasattr(cli, "add_analysis_args")
@@ -4895,7 +4895,7 @@ def test_the_two_parsers_do_not_share_action_objects():
     for the second parser's actions, which made an earlier version of this
     test fail at random.
     """
-    from promoter_tf_drugs import cli, panel as pnl
+    from generoutes import cli, panel as pnl
     single = cli.build_parser()
     multi = pnl.build_parser()
     shared = {id(x) for x in single._actions} & {id(x) for x in multi._actions}
@@ -4916,7 +4916,7 @@ def test_curated_tables_are_internally_consistent():
     """A hand-entered table that is quietly wrong is worse than one known to
     be incomplete, because the report presents both with equal confidence.
     This is the check that runs on every commit."""
-    from promoter_tf_drugs import audit
+    from generoutes import audit
     problems = audit.check_internal()
     bad = {k: v for k, v in problems.items() if v}
     assert not bad, audit.summarise(problems)
@@ -4925,7 +4925,7 @@ def test_curated_tables_are_internally_consistent():
 def test_audit_catches_a_drug_placed_in_two_systemic_classes():
     """It would make `classify` depend on table declaration order, so the
     burden a drug reports would change if someone reordered the file."""
-    from promoter_tf_drugs import audit, systemic
+    from generoutes import audit, systemic
     extra = systemic.SystemicClass(
         "invented", 0.5, "a" * 50, frozenset({"dexamethasone"}))
     orig = systemic.CLASSES
@@ -4942,7 +4942,7 @@ def test_audit_catches_a_drug_placed_in_two_systemic_classes():
 def test_audit_catches_a_name_that_would_not_survive_salt_stripping():
     """classify() looks up the salt-free form, so a member stored WITH a
     counterion could never be found."""
-    from promoter_tf_drugs import audit, systemic
+    from generoutes import audit, systemic
     extra = systemic.SystemicClass(
         "invented", 0.5, "b" * 50, frozenset({"levothyroxine sodium"}))
     orig = systemic.CLASSES
@@ -4958,14 +4958,14 @@ def test_audit_catches_a_name_that_would_not_survive_salt_stripping():
 def test_audit_offline_needs_no_network():
     """The consistency pass must work with no client at all, so it can run as
     a test rather than only as a manual chore."""
-    from promoter_tf_drugs import audit
+    from generoutes import audit
     assert isinstance(audit.check_internal(), dict)
     assert "internally consistent" in audit.summarise(
         {k: [] for k in audit.check_internal()})
 
 
 def test_audit_reports_unresolvable_names_without_claiming_correctness():
-    from promoter_tf_drugs import audit
+    from generoutes import audit
 
     class C:
         def get(self, url, params=None):
@@ -4984,7 +4984,7 @@ def test_audit_reports_unresolvable_names_without_claiming_correctness():
 def test_audit_counts_lookup_errors_separately_from_unresolved():
     """A name ChEMBL could not answer for is UNKNOWN, not missing — the same
     distinction the evidence ledger makes everywhere else."""
-    from promoter_tf_drugs import audit
+    from generoutes import audit
 
     class Boom:
         def get(self, url, params=None):
@@ -4998,7 +4998,7 @@ def test_audit_counts_lookup_errors_separately_from_unresolved():
 def test_direction_model_health_is_recorded_not_inferred():
     """A ChEMBL outage and a target with genuinely few ligands both end as
     'no direction model'. The ledger must say which."""
-    from promoter_tf_drugs import provenance as pv
+    from generoutes import provenance as pv
     assert "direction_model" in pv.FLAGS
     assert "direction_model" in pv.IMPACT
     led = pv.Ledger()
@@ -5011,7 +5011,7 @@ def test_direction_model_health_is_recorded_not_inferred():
 def test_every_panel_preset_sets_the_specificity_axes():
     """The paralog axis was the one axis absent from the presets, which made
     the four axes inconsistently active."""
-    from promoter_tf_drugs import panel as p
+    from generoutes import panel as p
     for name in ("narrow", "narrow+clean"):
         pre = p.PANEL_PRESETS[name]
         for axis in ("max_regulon", "max_burden", "min_paralog_specificity"):
@@ -5022,7 +5022,7 @@ def test_paralog_axis_stays_off_by_default_and_says_why():
     """It is a structural prior rather than a measurement, so auto-deleting
     routes on it would be the thing this package criticises elsewhere. The
     Family column is populated either way."""
-    from promoter_tf_drugs import panel as p
+    from generoutes import panel as p
     stage = [s for s in p.default_stages()
              if s.name == "Selective ligand achievable"][0]
     assert stage.filters["min_paralog_specificity"] is None
@@ -5033,7 +5033,7 @@ def test_paralog_axis_stays_off_by_default_and_says_why():
 def test_audit_covers_every_curated_drug_table():
     """A 'full' audit that skipped direct.CURATED would leave unchecked the
     one table the report prints FIRST and calls the better starting point."""
-    from promoter_tf_drugs import audit
+    from generoutes import audit
     tables = audit.all_curated_names()
     for expected in ("systemic.CLASSES", "stabilizers.CURATED",
                      "delivery.PGP_SUBSTRATES", "ligands.ROUTES",
@@ -5047,7 +5047,7 @@ def test_withdrawn_disagreement_is_directional():
     """We-say-available/ChEMBL-says-withdrawn puts a withdrawn drug at the
     top of the report unflagged. The reverse is far less serious, because
     approvals are regional and ChEMBL is not the regulator."""
-    from promoter_tf_drugs import audit, direct
+    from generoutes import audit, direct
 
     class C:
         def __init__(self, withdrawn_names):
@@ -5075,7 +5075,7 @@ def test_withdrawn_disagreement_is_directional():
 def test_unanswerable_names_are_unchecked_not_agreed():
     """A name ChEMBL could not answer for is UNKNOWN. Counting it as
     agreement would be the absence-of-evidence bug again."""
-    from promoter_tf_drugs import audit
+    from generoutes import audit
 
     class Boom:
         def get(self, url, params=None):
@@ -5090,7 +5090,7 @@ def test_no_curated_entry_is_presented_as_available_while_flagged_withdrawn():
     """Internal version of the online check: our own table must not contain
     an entry that is both withdrawn and presented as raising protein without
     the flag being visible downstream."""
-    from promoter_tf_drugs import direct
+    from generoutes import direct
     rows = direct.CURATED
     vals = list(rows.values()) if isinstance(rows, dict) else list(rows)
     for v in vals:
@@ -5103,7 +5103,7 @@ def test_no_curated_entry_is_presented_as_available_while_flagged_withdrawn():
 def _no_local_gtf(monkeypatch):
     """Force the network path. A local GTF now answers first, so a test that
     wants to exercise the Ensembl route has to say so."""
-    from promoter_tf_drugs import neighbours as nbr
+    from generoutes import neighbours as nbr
     monkeypatch.setattr(nbr, "DEFAULT_GTF_PATHS", ())
     monkeypatch.setattr(nbr, "_GTF_GENES", [])
 
@@ -5132,7 +5132,7 @@ def test_a_local_gtf_is_preferred_over_the_network(tmp_path, monkeypatch):
     """The whole point of the offline route: Ensembl's overlap endpoint 500s
     under load, and when it does this check silently reports 'not checked'
     for every promoter."""
-    from promoter_tf_drugs import neighbours as nbr2
+    from generoutes import neighbours as nbr2
     gtf = tmp_path / "mini.gtf"
     rows = [
         ["chr3", "X", "gene", "46363984", "46407184", ".", "-", ".",
@@ -5205,7 +5205,7 @@ def test_ptc_moves_readthrough_to_the_front():
     """For a nonsense allele, readthrough and NMD address the problem and
     extra transcription does not - doubling transcription doubles the amount
     of message that gets destroyed."""
-    from promoter_tf_drugs import posttranscriptional as ptx
+    from generoutes import posttranscriptional as ptx
     with_ptc = ptx.routes_for("up", has_ptc=True)
     assert with_ptc[0].mechanism == "nonsense readthrough"
     assert "nonsense-mediated" in with_ptc[1].mechanism
@@ -5219,7 +5219,7 @@ def test_ataluren_is_not_recorded_as_fda_approved():
     """It has EMA conditional approval and the FDA did not approve it. The
     user's criterion is FDA, so overstating this would be the one thing
     that makes the list useless."""
-    from promoter_tf_drugs import posttranscriptional as ptx
+    from generoutes import posttranscriptional as ptx
     rt = [r for r in ptx.ROUTES if r.mechanism == "nonsense readthrough"][0]
     joined = " ".join(rt.drugs)
     assert "Ataluren" in joined
@@ -5228,7 +5228,7 @@ def test_ataluren_is_not_recorded_as_fda_approved():
 
 
 def test_post_transcriptional_states_what_is_not_approved():
-    from promoter_tf_drugs import posttranscriptional as ptx
+    from generoutes import posttranscriptional as ptx
     nmd = [r for r in ptx.ROUTES if "nonsense-mediated" in r.mechanism][0]
     assert nmd.status == "investigational"
     assert "No approved NMD inhibitor" in " ".join(nmd.drugs)
@@ -5238,7 +5238,7 @@ def test_post_transcriptional_states_what_is_not_approved():
 def test_compensation_finds_the_documented_substitutes():
     """You may not need to raise your gene. SMN2 for SMN1 and HBG for HBB
     are how the field's clearest successes actually worked."""
-    from promoter_tf_drugs import compensation as comp
+    from generoutes import compensation as comp
     for gene, paralog in (("SMN1", "SMN2"), ("HBB", "HBG1/HBG2"),
                           ("DMD", "UTRN")):
         r = comp.assess(gene, goal="up")
@@ -5249,7 +5249,7 @@ def test_compensation_finds_the_documented_substitutes():
 def test_compensation_distinguishes_no_paralog_from_unknown():
     """Absence from a short curated table is not evidence that no paralog
     substitutes."""
-    from promoter_tf_drugs import compensation as comp
+    from generoutes import compensation as comp
     none = comp.assess("SERPINA1", goal="up")
     assert none["recommended"] is False          # genuinely none
 
@@ -5262,7 +5262,7 @@ def test_compensation_is_not_the_receptor_family_question():
     """paralogs.py asks how many relatives share a BINDING POCKET, as a
     cross-reactivity risk. This asks whether a relative shares the gene's
     FUNCTION, as an opportunity. Same word, inverted use."""
-    from promoter_tf_drugs import compensation as comp, paralogs as par
+    from generoutes import compensation as comp, paralogs as par
     assert comp.assess("HBB", goal="up")["recommended"] is True
     assert par.paralog_specificity("HBB")["assessed"] is False
 
@@ -5271,14 +5271,14 @@ def test_compensation_is_not_the_receptor_family_question():
 def test_imprinted_gene_is_flagged_as_a_different_problem():
     """A silenced allele needs a brake released, not more transcription -
     and pushing the active copy harder is the wrong move."""
-    from promoter_tf_drugs import reactivation as react
+    from generoutes import reactivation as react
     r = react.assess("UBE3A", goal="up")
     assert r["applicable"] is True
     assert "imprinted locus" in " ".join(r["notes"])
 
 
 def test_unlisted_gene_says_silencing_was_never_measured():
-    from promoter_tf_drugs import reactivation as react
+    from generoutes import reactivation as react
     r = react.assess("ZZZ9FAKE", goal="up")
     assert r["applicable"] is False
     joined = " ".join(r["notes"])
@@ -5288,7 +5288,7 @@ def test_unlisted_gene_says_silencing_was_never_measured():
 def test_reactivation_states_where_selectivity_comes_from():
     """Every mechanism here is non-specific by default; the selectivity has
     to come from somewhere else or the route is unusable."""
-    from promoter_tf_drugs import reactivation as react
+    from generoutes import reactivation as react
     for r in react.ROUTES:
         assert r.specificity and len(r.specificity) > 20
     demeth = [r for r in react.ROUTES if "methylation" in r.mechanism][0]
@@ -5297,7 +5297,7 @@ def test_reactivation_states_where_selectivity_comes_from():
 
 # ------------------------------------------- target-protein stabilisation
 def test_product_stabilisation_is_about_the_gene_product_not_the_factor():
-    from promoter_tf_drugs import stabilizers as st
+    from generoutes import stabilizers as st
     r = st.product_stabilisation("MYGENE", goal="up")
     mechs = {x["mechanism"] for x in r["routes"]}
     assert "proteasome inhibition" in mechs
@@ -5308,7 +5308,7 @@ def test_product_stabilisation_is_about_the_gene_product_not_the_factor():
 def test_only_the_chaperone_route_is_selective():
     """Three of the four raise most of the proteome, which makes them good
     diagnostics and poor therapies."""
-    from promoter_tf_drugs import stabilizers as st
+    from generoutes import stabilizers as st
     routes = {x["mechanism"]: x for x in
               st.product_stabilisation("G", goal="up")["routes"]}
     assert routes["proteasome inhibition"]["specificity"] < 0.1
@@ -5319,7 +5319,7 @@ def test_only_the_chaperone_route_is_selective():
 def test_beyond_transcription_only_runs_for_up():
     """Lowering a gene post-transcriptionally is the ASO/siRNA story, which
     modalities already designs properly."""
-    from promoter_tf_drugs import (posttranscriptional as ptx,
+    from generoutes import (posttranscriptional as ptx,
                                    compensation as comp,
                                    reactivation as react,
                                    stabilizers as st)
@@ -5348,7 +5348,7 @@ def test_opentargets_is_a_third_drug_source():
     """The API was already being called for genetics and expression and
     never asked for drugs. It is a separate curation, so it finds compounds
     ChEMBL and DGIdb miss - eldecalcitol at VDR, tiratricol at THRB."""
-    from promoter_tf_drugs import drugs as dr
+    from generoutes import drugs as dr
 
     class C:
         def post(self, url, payload):
@@ -5371,7 +5371,7 @@ def test_opentargets_is_a_third_drug_source():
                         "mechanismsOfAction": {"rows": []}}},
                 ]}}}}
 
-    import promoter_tf_drugs.genetics as gen
+    import generoutes.genetics as gen
     old = gen._resolve_ensembl
     gen._resolve_ensembl = lambda c, s: "ENSG0"
     try:
@@ -5391,7 +5391,7 @@ def test_opentargets_is_a_third_drug_source():
 def test_opentargets_action_type_maps_to_a_direction():
     """DGIdb gives no action type, so direction has to be inferred or the
     row cannot be filtered by goal. Open Targets does give one."""
-    from promoter_tf_drugs.drugs import _direction_for_action
+    from generoutes.drugs import _direction_for_action
     # The vocabulary must be the one the FILTER compares against - "up",
     # "down", "unclear" - not the dataclass comment's stale "increases TF
     # activity". Following the comment meant every Open Targets drug failed
@@ -5416,13 +5416,13 @@ def test_opentargets_action_type_maps_to_a_direction():
 
 def test_opentargets_schema_change_degrades_rather_than_raising():
     """knownDrugs was removed before API v26.9 and this field may go too."""
-    from promoter_tf_drugs import drugs as dr
+    from generoutes import drugs as dr
 
     class C:
         def post(self, url, payload):
             return {"errors": [{"message": "Cannot query field"}]}
 
-    import promoter_tf_drugs.genetics as gen
+    import generoutes.genetics as gen
     old = gen._resolve_ensembl
     gen._resolve_ensembl = lambda c, s: "ENSG0"
     try:
@@ -5436,7 +5436,7 @@ def test_analog_search_subtracts_what_is_already_annotated():
     """The naive version rediscovers its own input: a compound similar to a
     known ligand that anyone assayed at the target is already annotated
     there. Only the leftover is a new pair."""
-    from promoter_tf_drugs import analogs
+    from generoutes import analogs
 
     class C:
         def get(self, url, params=None):
@@ -5464,7 +5464,7 @@ def test_analog_search_subtracts_what_is_already_annotated():
 def test_analog_search_picks_the_parent_not_an_ester():
     """A plain search for tretinoin returns TRETINOIN TOCOFERIL first, whose
     similarity neighbourhood is the ester's and therefore the wrong one."""
-    from promoter_tf_drugs import analogs
+    from generoutes import analogs
 
     class C:
         def get(self, url, params=None):
@@ -5482,7 +5482,7 @@ def test_analog_search_picks_the_parent_not_an_ester():
 
 
 def test_analog_search_collapses_salt_forms_of_the_query():
-    from promoter_tf_drugs import analogs
+    from generoutes import analogs
 
     class C:
         def get(self, url, params=None):
@@ -5505,7 +5505,7 @@ def test_analog_search_collapses_salt_forms_of_the_query():
 def test_analog_rows_state_that_similarity_is_not_activity():
     """Beta carotene came back 80% similar to tretinoin and is a retinoid
     PRECURSOR, not an RAR ligand. The caveat has to be on every row."""
-    from promoter_tf_drugs import analogs
+    from generoutes import analogs
     a = analogs.Analog(drug="X", chembl_id="C1", similarity=80.0,
                        similar_to="tretinoin", target="RARA")
     a.caveats = ["Similarity is not activity.", "flip agonist to antagonist"]
@@ -5513,7 +5513,7 @@ def test_analog_rows_state_that_similarity_is_not_activity():
 
 
 def test_empty_analog_result_is_explained():
-    from promoter_tf_drugs import analogs
+    from generoutes import analogs
     s = analogs.summarise({})
     assert "common outcome" in s and "already in the tables above" in s
 
@@ -5524,7 +5524,7 @@ def test_opentargets_drugs_actually_survive_the_direction_filter():
     a role annotation every Open Targets row vanished - and not even into
     the unknown-direction bucket. An earlier test missed it because the mock
     had no role, which makes `want` "either" and keeps everything."""
-    from promoter_tf_drugs import drugs as dr
+    from generoutes import drugs as dr
 
     class C:
         def post(self, url, payload):
@@ -5547,7 +5547,7 @@ def test_opentargets_drugs_actually_survive_the_direction_filter():
         def get(self, url, params=None):
             return {}
 
-    import promoter_tf_drugs.genetics as gen
+    import generoutes.genetics as gen
     old = gen._resolve_ensembl
     gen._resolve_ensembl = lambda c, s: "ENSG0"
     try:
@@ -5565,7 +5565,7 @@ def test_opentargets_drugs_actually_survive_the_direction_filter():
 
 def test_the_drug_direction_vocabulary_is_consistent_across_sources():
     """ChEMBL writes "up"/"down"; anything else silently fails the filter."""
-    from promoter_tf_drugs import drugs as dr
+    from generoutes import drugs as dr
     assert dr.desired_direction("activator", "up") == "up"
     assert dr.desired_direction("activator", "down") == "down"
     for action in ("AGONIST", "ANTAGONIST", "INHIBITOR", "MODULATOR"):
@@ -5711,7 +5711,7 @@ def test_bbb_does_not_reorder_anything():
     candidates that cannot reach brain - which is irrelevant to it.
 
     Flipping every verdict must leave both orderings byte-identical."""
-    from promoter_tf_drugs import predictions as pr
+    from generoutes import predictions as pr
 
     block = {
         "all_routes": {"routes": [
@@ -5745,7 +5745,7 @@ def test_footnote_describes_only_the_states_present():
     """A note warning about a borderline pass in a table with none is
     noise; one that stays silent about unknowns when 20 rows are unknown is
     worse."""
-    from promoter_tf_drugs import report as rep
+    from generoutes import report as rep
     only_unknown = " ".join(rep._bbb_footnote({"—": 5}))
     assert "is not a no" in only_unknown
     assert "question mark" not in only_unknown
@@ -5759,7 +5759,7 @@ def test_footnote_describes_only_the_states_present():
 
 
 def test_footnote_states_what_a_yes_does_not_establish():
-    from promoter_tf_drugs import report as rep
+    from generoutes import report as rep
     note = " ".join(rep._bbb_footnote({"yes": 3}))
     assert "passive diffusion" in note
     assert "P-glycoprotein" in note
@@ -5783,7 +5783,7 @@ def test_measured_lincs_evidence_outranks_a_curated_ligand():
     it - so every offline LINCS hit landed at tier 4, BELOW the tier-3
     curated ligands. A drug observed to move the gene was being ranked
     under a drug that merely binds a factor near it."""
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     measured = cat.from_lincs(_lincs_hit(feature_space="landmark"))[0]
     assert measured.tier == 2, "a measured observation must beat a ligand"
 
@@ -5795,7 +5795,7 @@ def test_the_three_level_feature_space_is_not_collapsed_to_a_binary():
     """CLUE records three confidence levels and the old flag had two, so
     the 9,196 `best inferred` genes - which includes most genes anyone
     asks about - were lumped in with pure prediction."""
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     tiers = {fs: cat.from_lincs(_lincs_hit(feature_space=fs))[0].tier
              for fs in ("landmark", "best inferred", "inferred")}
     assert tiers["landmark"] == 2          # measured on the array
@@ -5807,13 +5807,13 @@ def test_the_three_level_feature_space_is_not_collapsed_to_a_binary():
 def test_unknown_feature_space_is_tiered_as_predicted_not_as_measured():
     """Without the geneinfo table nothing is known about the gene, and the
     safe direction is to claim less."""
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     assert cat.from_lincs(_lincs_hit(feature_space=None))[0].tier == 4
 
 
 def test_is_landmark_true_still_promotes_for_the_csv_path():
     """--lincs-file carries is_landmark directly and must keep working."""
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     r = cat.from_lincs(_lincs_hit(is_landmark=True, feature_space=None))[0]
     assert r.tier == 2
 
@@ -5823,7 +5823,7 @@ def test_geneinfo_table_distinguishes_the_three_levels():
     the suite does not depend on a 1.1 MB download."""
     import pathlib
     import pytest
-    from promoter_tf_drugs import signatures as sg
+    from generoutes import signatures as sg
     if not any(pathlib.Path(p).exists()
                for p in sg.DEFAULT_GENEINFO_PATHS):
         pytest.skip("data/lincs_geneinfo.txt not present")
@@ -5838,7 +5838,7 @@ def test_confidence_note_says_which_level_it_is():
     """A tier is a number; the note is what makes it checkable."""
     import pathlib
     import pytest
-    from promoter_tf_drugs import signatures as sg
+    from generoutes import signatures as sg
     if not any(pathlib.Path(p).exists()
                for p in sg.DEFAULT_GENEINFO_PATHS):
         pytest.skip("data/lincs_geneinfo.txt not present")
@@ -5849,7 +5849,7 @@ def test_confidence_note_says_which_level_it_is():
 def test_geneinfo_load_is_idempotent():
     """feature_space() calls it on every lookup, so a non-idempotent load
     would re-parse the table once per gene."""
-    from promoter_tf_drugs import signatures as sg
+    from generoutes import signatures as sg
     first = sg.load_geneinfo()
     assert sg.load_geneinfo() == first
     assert sg.load_geneinfo() == first
@@ -5883,7 +5883,7 @@ def test_rank_normalise_is_invariant_to_monotone_rescaling():
     logFC distribution is heavy-tailed with an arbitrary scale, so ranking
     first is what makes the null exact - and makes the answer independent
     of whether the signature arrived as logFC, a t statistic or a z."""
-    from promoter_tf_drugs import tfactivity as ta
+    from generoutes import tfactivity as ta
     import numpy as np
     rng = np.random.default_rng(3)
     sig = {f"G{i}": float(rng.normal()) for i in range(2000)}
@@ -5900,7 +5900,7 @@ def test_erfinv_is_accurate_enough_to_trust_the_tails():
     """A distorted tail would inflate the variance of every NES, which is
     the kind of error that makes a p-value wrong without making it look
     wrong."""
-    from promoter_tf_drugs import tfactivity as ta
+    from generoutes import tfactivity as ta
     import numpy as np
     x = np.linspace(-0.9999, 0.9999, 4001)
     # erf(erfinv(x)) must return x
@@ -5913,8 +5913,8 @@ def test_null_is_calibrated():
     """If the statistic is right, random regulons on a random signature
     produce NES with unit variance. A systematically wide null would make
     every factor look significant."""
-    from promoter_tf_drugs import report as rep
-    from promoter_tf_drugs import tfactivity as ta
+    from generoutes import report as rep
+    from generoutes import tfactivity as ta
     import numpy as np
     rng = np.random.default_rng(11)
     genes = [f"G{i}" for i in range(4000)]
@@ -5934,7 +5934,7 @@ def test_null_is_calibrated():
 
 
 def test_a_planted_active_factor_is_recovered_and_ranked_first():
-    from promoter_tf_drugs import tfactivity as ta
+    from generoutes import tfactivity as ta
     sig, regs, _ = _planted_signature()
     acts = ta.activity(sig, regs, check_confounding=False)
     assert acts[0].tf == "REAL"
@@ -5946,7 +5946,7 @@ def test_a_planted_active_factor_is_recovered_and_ranked_first():
 
 def test_the_direction_flips_with_the_signature():
     """If it did not, the sign would be decoration."""
-    from promoter_tf_drugs import tfactivity as ta
+    from generoutes import tfactivity as ta
     sig, regs, _ = _planted_signature()
     flipped = {g: -v for g, v in sig.items()}
     real = [a for a in ta.activity(flipped, regs, check_confounding=False)
@@ -5959,7 +5959,7 @@ def test_unsigned_edges_support_magnitude_but_refuse_a_direction():
     """TRRUST records no mode for 46% of its human edges. Those cannot say
     which way the factor went, and claiming otherwise would put activators
     and repressors in the same bucket."""
-    from promoter_tf_drugs import tfactivity as ta
+    from generoutes import tfactivity as ta
     import numpy as np
     rng = np.random.default_rng(5)
     genes = [f"G{i}" for i in range(2000)]
@@ -5978,7 +5978,7 @@ def test_unsigned_edges_support_magnitude_but_refuse_a_direction():
 def test_too_few_targets_is_skipped_not_scored():
     """A 3-target regulon reaches |NES| 2 by chance often enough to be
     worthless, and reporting it would fill the table with noise."""
-    from promoter_tf_drugs import tfactivity as ta
+    from generoutes import tfactivity as ta
     sig = {f"G{i}": float(i) for i in range(500)}
     out = ta.activity(sig, {"TINY": {"G1": 1, "G2": -1, "G3": 1}},
                       check_confounding=False)
@@ -5989,7 +5989,7 @@ def test_regulon_overlap_is_reported_so_a_stolen_signal_is_visible():
     """Co-regulated targets cannot distinguish a factor from its
     neighbour. VIPER corrects for this; here it is measured and named,
     which is the honest minimum."""
-    from promoter_tf_drugs import tfactivity as ta
+    from generoutes import tfactivity as ta
     import numpy as np
     rng = np.random.default_rng(9)
     genes = [f"G{i}" for i in range(2000)]
@@ -6007,7 +6007,7 @@ def test_contradictory_edges_are_demoted_to_unsigned(tmp_path):
     """TRRUST really does record activation in one paper and repression in
     another for the same pair. Picking a winner would be inventing a
     consensus that the literature does not have."""
-    from promoter_tf_drugs import tfactivity as ta
+    from generoutes import tfactivity as ta
     f = tmp_path / "r.tsv"
     f.write_text("TFX\tTARGET1\tActivation\t1\n"
                  "TFX\tTARGET1\tRepression\t2\n"
@@ -6021,7 +6021,7 @@ def test_dorothea_numeric_weights_are_read_as_signs():
     """CollecTRI/DoRothEA ship a numeric weight rather than a word, and
     these tables are the reason to support a second format at all: they
     are fully signed where TRRUST is half-signed."""
-    from promoter_tf_drugs import tfactivity as ta
+    from generoutes import tfactivity as ta
     import pathlib
     f = pathlib.Path(str(ta.__file__)).parent  # any writable tmp is fine
     import tempfile
@@ -6039,7 +6039,7 @@ def test_set_based_test_is_used_for_lincs_shaped_data():
     """Enrichr's LINCS .gmt gives top-N up and down gene lists and no
     scores. Rank-transforming a ternary vector would invent precision, so
     the statistic changes to a binomial sign test to match the data."""
-    from promoter_tf_drugs import tfactivity as ta
+    from generoutes import tfactivity as ta
     genes = [f"G{i}" for i in range(400)]
     regulon = {g: 1 for g in genes[:100]}
     regulon.update({g: -1 for g in genes[100:200]})
@@ -6060,8 +6060,8 @@ def test_set_based_test_is_calibrated_under_the_null():
     nominal rate. Demanding ZERO rejections would be wrong - at q<0.05 the
     occasional one IS the error rate - so this checks the rate over several
     replicates instead."""
-    from promoter_tf_drugs import report as rep
-    from promoter_tf_drugs import tfactivity as ta
+    from generoutes import report as rep
+    from generoutes import tfactivity as ta
     import numpy as np
     rng = np.random.default_rng(13)
     N = 8000
@@ -6093,7 +6093,7 @@ def test_tissue_signature_treats_a_missing_tissue_as_low_not_unmeasured():
     """The expression table is loaded with a min_value floor, so a gene
     carries only the tissues where it cleared it. Dropping the absent ones
     would bias every regulon toward broadly expressed genes."""
-    from promoter_tf_drugs import tfactivity as ta
+    from generoutes import tfactivity as ta
     table = {
         "HIGH": {"liver": 100.0, "brain": 1.0},
         "ABSENT": {"brain": 50.0},            # not expressed in liver at all
@@ -6105,7 +6105,7 @@ def test_tissue_signature_treats_a_missing_tissue_as_low_not_unmeasured():
 
 
 def test_tissue_signature_without_a_table_refuses_rather_than_guessing():
-    from promoter_tf_drugs import tfactivity as ta
+    from generoutes import tfactivity as ta
     assert ta.tissue_signature("liver", table={}) == {}
     assert ta.tissue_activity("liver", {"TF": {"A": 1}}, table={}) == []
 
@@ -6113,7 +6113,7 @@ def test_tissue_signature_without_a_table_refuses_rather_than_guessing():
 def test_analytic_pvalue_says_it_is_anticonservative():
     """The null assumes targets are independent and co-expression is
     exactly the structure being measured, so the caveat is not optional."""
-    from promoter_tf_drugs import tfactivity as ta
+    from generoutes import tfactivity as ta
     sig, regs, _ = _planted_signature()
     a = ta.activity(sig, regs, check_confounding=False)[0]
     assert any("anticonservative" in c for c in a.caveats)
@@ -6129,7 +6129,7 @@ def test_summarise_does_not_claim_a_starting_point_when_there_is_none():
     """The real CCR5 run produced zero factors with both a site and a
     perturbed regulon, and the first draft still said 'that is where to
     start'."""
-    from promoter_tf_drugs import tfactivity as ta
+    from generoutes import tfactivity as ta
     sig, regs, _ = _planted_signature()
     acts = ta.activity(sig, regs, check_confounding=False)
 
@@ -6146,7 +6146,7 @@ def test_summarise_explains_an_empty_result_as_a_table_limit():
     """With TRRUST most of the ~1,600 human TFs have too few curated
     targets to test, so an empty result says something about the regulon
     table and nothing about the factors."""
-    from promoter_tf_drugs import tfactivity as ta
+    from generoutes import tfactivity as ta
     msg = ta.summarise([])
     assert "regulon table" in msg
     assert "not about the factors" in msg
@@ -6156,7 +6156,7 @@ def test_activity_section_renders_and_states_its_limits():
     """Injected into a real demo result rather than a hand-built dict, so
     the section is exercised against the shape the pipeline actually
     produces."""
-    from promoter_tf_drugs import tfactivity as ta
+    from generoutes import tfactivity as ta
     sig, regs, _ = _planted_signature()
     acts = ta.activity(sig, regs, check_confounding=False)
 
@@ -6219,7 +6219,7 @@ def test_tf_table_reports_how_many_other_genes_each_factor_controls():
 def test_regulon_count_carries_its_provenance():
     """A curated count and a bundled tier estimate are different claims and
     must not render as the same number."""
-    from promoter_tf_drugs import regulon as reg
+    from generoutes import regulon as reg
     res = pipeline.run("DEMOGENE", demo=True, offline=True)
     rows = res["results"][0]["tfs"]
     assert all(t.get("regulon_provenance") for t in rows)
@@ -6234,8 +6234,8 @@ def test_regulon_count_carries_its_provenance():
 def test_a_factor_with_no_regulon_entry_says_not_counted():
     """Absence from the table is not a small number. Rendering it as 0 - or
     omitting it - would read as maximal specificity."""
-    from promoter_tf_drugs import report as rep
-    from promoter_tf_drugs import regulon as reg
+    from generoutes import report as rep
+    from generoutes import regulon as reg
     n, prov = reg.regulon_size("TOTALLYFAKETF9", None)
     assert n is None
     assert prov == "unknown"
@@ -6250,8 +6250,8 @@ def test_small_curated_regulon_is_flagged_as_understudied_not_selective():
     """The trap on this column. A factor with eight curated targets is far
     more likely under-studied than specific, and reading a small count as
     specificity selects for obscurity."""
-    from promoter_tf_drugs import report as rep
-    from promoter_tf_drugs import regulon as reg
+    from generoutes import report as rep
+    from generoutes import regulon as reg
     note = " ".join(rep._regulon_column_note(
         True, True, [{"n_regulon": 4, "regulon_provenance": "regulon file"}]))
     assert "understudied than" in note
@@ -6260,14 +6260,14 @@ def test_small_curated_regulon_is_flagged_as_understudied_not_selective():
 
 
 def test_regulon_note_says_counts_measure_curation_too():
-    from promoter_tf_drugs import report as rep
+    from generoutes import report as rep
     note = " ".join(rep._regulon_column_note(True, False, []))
     assert "literature curation" in note
     assert "SP1" in note
 
 
 def test_regulon_column_absent_without_a_regulon_source():
-    from promoter_tf_drugs import report as rep
+    from generoutes import report as rep
     note = " ".join(rep._regulon_column_note(False, False, []))
     assert "--regulon-file" in note
     assert "no basis" in note
@@ -6336,7 +6336,7 @@ def test_report_says_why_the_same_receptors_appear_for_every_gene():
     """The user-visible symptom: the screen lists retinoids whatever gene
     is run. It is a property of which receptors have enough medicinal
     chemistry to train a model, not a result about the gene."""
-    from promoter_tf_drugs import report as rep
+    from generoutes import report as rep
     note = " ".join(rep._screen_scope_note(["RARA"], ["VDR"]))
     assert "whatever gene you run" in note
     assert "retinoid" in note
@@ -6349,7 +6349,7 @@ def test_report_says_why_the_same_receptors_appear_for_every_gene():
 
 
 def test_scope_note_names_what_ran_and_what_did_not():
-    from promoter_tf_drugs import report as rep
+    from generoutes import report as rep
     note = " ".join(rep._screen_scope_note(["RARA", "RXRA"], ["VDR"]))
     assert "**Screened:** RARA, RXRA" in note
     assert "**Not screened:** VDR" in note
@@ -6358,8 +6358,8 @@ def test_scope_note_names_what_ran_and_what_did_not():
 def test_pchembl_cutoff_is_one_constant_not_two_numbers():
     """The report cites the floor the fetch applies. If they drifted apart
     the report would describe a screen that did not happen."""
-    from promoter_tf_drugs import report as rep
-    from promoter_tf_drugs import agonism as ag
+    from generoutes import report as rep
+    from generoutes import agonism as ag
     import inspect
     sig = inspect.signature(ag.fetch_actives)
     assert sig.parameters["pchembl_cutoff"].default == ag.PCHEMBL_CUTOFF
@@ -6374,7 +6374,7 @@ def test_collectri_loads_from_tsv_and_csv(tmp_path):
     """Both ship in the wild, and the loader hardcoded a tab - so a
     CollecTRI CSV parsed as zero regulons and reported no error, which is
     the worst way to fail."""
-    from promoter_tf_drugs import tfactivity as ta
+    from generoutes import tfactivity as ta
     body = [("source", "target", "weight"), ("MYC", "TERT", "1"),
             ("MYC", "CDKN1A", "-1"), ("SP1", "VEGFA", "1")]
     for name, sep in (("c.tsv", "\t"), ("c.csv", ",")):
@@ -6388,7 +6388,7 @@ def test_collectri_loads_from_tsv_and_csv(tmp_path):
 
 def test_separator_is_sniffed_not_taken_from_the_extension():
     """Both formats are routinely saved under the wrong suffix."""
-    from promoter_tf_drugs import tfactivity as ta
+    from generoutes import tfactivity as ta
     import inspect
     src = inspect.getsource(ta.load_signed_regulons)
     assert "suffix" not in src
@@ -6398,7 +6398,7 @@ def test_separator_is_sniffed_not_taken_from_the_extension():
 def test_autoload_prefers_collectri_over_trrust(tmp_path, monkeypatch):
     """CollecTRI signs every edge and covers about three times as many
     factors, which is the binding constraint on how many can be tested."""
-    from promoter_tf_drugs import tfactivity as ta
+    from generoutes import tfactivity as ta
     assert ta.DEFAULT_REGULON_PATHS[0].endswith("collectri.tsv")
     assert any("trrust" in p for p in ta.DEFAULT_REGULON_PATHS)
     assert (ta.DEFAULT_REGULON_PATHS.index("data/collectri.tsv")
@@ -6417,7 +6417,7 @@ def test_autoload_prefers_collectri_over_trrust(tmp_path, monkeypatch):
 
 def test_autoload_returns_empty_rather_than_raising(tmp_path, monkeypatch):
     """A missing regulon file costs the activity section and nothing else."""
-    from promoter_tf_drugs import tfactivity as ta
+    from generoutes import tfactivity as ta
     monkeypatch.chdir(tmp_path)
     assert ta.autoload_regulons() == ({}, None)
 
@@ -6425,7 +6425,7 @@ def test_autoload_returns_empty_rather_than_raising(tmp_path, monkeypatch):
 def test_report_points_at_collectri_when_a_thinner_table_was_used():
     """Coverage is the live constraint on this section, and it is fixable,
     so the report should say how rather than only state the limit."""
-    from promoter_tf_drugs import tfactivity as ta
+    from generoutes import tfactivity as ta
     sig, regs, _ = _planted_signature()
     acts = ta.activity(sig, regs, check_confounding=False)
     res = pipeline.run("DEMOGENE", demo=True, offline=True)
@@ -6459,7 +6459,7 @@ def test_a_drug_moving_a_regulon_is_found_without_any_binding_record(tmp_path):
     """The gap this closes. drugs.py can only return compounds somebody
     assayed at the target, so a factor with no medicinal chemistry comes
     back empty however important it is."""
-    from promoter_tf_drugs import tfactivity as ta
+    from generoutes import tfactivity as ta
     up_t = [f"UP{i}" for i in range(20)]
     dn_t = [f"DN{i}" for i in range(20)]
     regulon = {g: 1 for g in up_t}
@@ -6492,7 +6492,7 @@ def test_a_compound_profiled_once_is_never_reported(tmp_path):
     """33,000 signatures against one regulon produce striking singletons by
     the thousand. Repetition is the only cheap defence, and LINCS supplies
     it because most compounds are profiled several times."""
-    from promoter_tf_drugs import tfactivity as ta
+    from generoutes import tfactivity as ta
     up_t = [f"UP{i}" for i in range(20)]
     regulon = {g: 1 for g in up_t}
     u, d = tmp_path / "up.gmt", tmp_path / "down.gmt"
@@ -6506,7 +6506,7 @@ def test_a_compound_profiled_once_is_never_reported(tmp_path):
 def test_significance_is_counted_after_multiplicity_correction():
     """A nominal p<0.05 over ~33,000 signatures is met about 1,650 times by
     chance, so counting raw p-values would make every factor look busy."""
-    from promoter_tf_drugs import tfactivity as ta
+    from generoutes import tfactivity as ta
     import inspect
     src = inspect.getsource(ta.drugs_moving_factor)
     assert "_bh(" in src, "no BH correction across signatures"
@@ -6516,7 +6516,7 @@ def test_significance_is_counted_after_multiplicity_correction():
 def test_consistency_alone_does_not_admit_a_tiny_effect():
     """SP1 returned mitoxantrone at 72% consistency over 32 profiles with a
     median z of -0.30: agreement about an effect too small to matter."""
-    from promoter_tf_drugs import tfactivity as ta
+    from generoutes import tfactivity as ta
     assert ta.MIN_MEDIAN_Z >= 1.0
     assert ta.MIN_SIGNIFICANT >= 2
     import inspect
@@ -6527,7 +6527,7 @@ def test_consistency_alone_does_not_admit_a_tiny_effect():
 def test_every_hit_denies_being_a_binding_claim(tmp_path):
     """The one misreading that would matter: a row here is not evidence the
     compound touches the factor."""
-    from promoter_tf_drugs import tfactivity as ta
+    from generoutes import tfactivity as ta
     up_t = [f"UP{i}" for i in range(20)]
     regulon = {g: 1 for g in up_t}
     u, d = tmp_path / "up.gmt", tmp_path / "down.gmt"
@@ -6541,7 +6541,7 @@ def test_every_hit_denies_being_a_binding_claim(tmp_path):
 
 
 def test_single_cell_line_is_flagged_as_repetition_not_replication(tmp_path):
-    from promoter_tf_drugs import tfactivity as ta
+    from generoutes import tfactivity as ta
     up_t = [f"UP{i}" for i in range(20)]
     regulon = {g: 1 for g in up_t}
     u, d = tmp_path / "up.gmt", tmp_path / "down.gmt"
@@ -6553,7 +6553,7 @@ def test_single_cell_line_is_flagged_as_repetition_not_replication(tmp_path):
 
 
 def test_missing_gmt_returns_nothing_rather_than_raising(tmp_path):
-    from promoter_tf_drugs import tfactivity as ta
+    from generoutes import tfactivity as ta
     regulon = {f"UP{i}": 1 for i in range(20)}
     assert ta.drugs_moving_factor(
         "MYTF", regulon, up_path=tmp_path / "nope.gmt",
@@ -6564,7 +6564,7 @@ def test_activity_drugs_enter_the_routes_as_tier_three():
     """Tier 2 is 'target engagement is observed'. Nothing about engagement
     is observed here - the TARGETS moved - so the observation is real and
     the attribution is an inference, which is tier 3."""
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     block = {"activity_drugs": {"TP53": [{
         "drug": "mitoxantrone", "tf": "TP53", "direction": "activated",
         "median_z": 2.53, "n_signatures": 11, "n_significant": 7,
@@ -6583,7 +6583,7 @@ def test_the_new_category_is_explained_in_the_glossary():
     """It is the only category that can reach a factor with no chemistry,
     and the only one whose evidence is about the factor's targets rather
     than the factor, so it needs its own entry."""
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     g = cat.CATEGORY_GUIDE["TF: inferred activity change"]
     assert "no medicinal chemistry" in g["why"]
     assert "arrests the cell cycle" in g["cost"]
@@ -6602,7 +6602,7 @@ def test_an_empty_drug_scan_is_a_negative_not_a_failure():
 
 
 def test_report_section_states_the_proliferation_confound():
-    from promoter_tf_drugs import tfactivity as ta
+    from generoutes import tfactivity as ta
     res = pipeline.run("DEMOGENE", demo=True, offline=True)
     res["results"][0]["activity_drugs"] = {"TP53": [{
         "drug": "mitoxantrone", "tf": "TP53", "direction": "activated",
@@ -6624,7 +6624,7 @@ def test_curated_description_beats_the_class_fallback():
     """A specific entry says 'plaque psoriasis and acne, topical only'.
     The class fallback would say 'retinoid'. Both are true and only one is
     useful for deciding whether a row is applicable."""
-    from promoter_tf_drugs import indications as ind
+    from generoutes import indications as ind
     d = ind.describe("Tazarotene")
     assert d["source"] == "curated"
     assert "topical" in d["treats"]
@@ -6634,7 +6634,7 @@ def test_curated_description_beats_the_class_fallback():
 def test_salt_forms_share_one_description():
     """Otherwise the glossary carries the same sentence under sodium,
     hydrochloride and the parent."""
-    from promoter_tf_drugs import indications as ind
+    from generoutes import indications as ind
     assert (ind.describe("Levothyroxine Sodium")["treats"]
             == ind.describe("levothyroxine")["treats"])
 
@@ -6645,7 +6645,7 @@ def test_salt_forms_share_one_description():
 def test_class_fallback_covers_a_drug_with_no_curated_entry():
     """The curated list is short by construction, so an uncurated
     glucocorticoid must still say what kind of thing it is."""
-    from promoter_tf_drugs import indications as ind
+    from generoutes import indications as ind
     assert "amcinonide" not in ind.CURATED,         "pick another uncurated example; this test is about the fallback"
     d = ind.describe("Amcinonide")
     assert d["source"] == "class"
@@ -6654,7 +6654,7 @@ def test_class_fallback_covers_a_drug_with_no_curated_entry():
 
 
 def test_an_unknown_compound_says_so_rather_than_inventing_a_use():
-    from promoter_tf_drugs import indications as ind
+    from generoutes import indications as ind
     d = ind.describe("Totallyfakedrug9")
     assert d["treats"] is None
     assert d["source"] == "unknown"
@@ -6664,7 +6664,7 @@ def test_chembl_indications_prefer_approved_over_merely_studied():
     """ChEMBL's drug_indication includes uses that were trialled and
     abandoned. Presenting those as approved would be the single most
     misleading thing this column could do."""
-    from promoter_tf_drugs import indications as ind
+    from generoutes import indications as ind
 
     class FakeClient:
         def get(self, url, params=None):
@@ -6680,7 +6680,7 @@ def test_chembl_indications_prefer_approved_over_merely_studied():
 
 
 def test_studied_only_indications_are_labelled_as_such():
-    from promoter_tf_drugs import indications as ind
+    from generoutes import indications as ind
 
     class FakeClient:
         def get(self, url, params=None):
@@ -6692,7 +6692,7 @@ def test_studied_only_indications_are_labelled_as_such():
 
 
 def test_indication_lookup_survives_a_dead_api():
-    from promoter_tf_drugs import indications as ind
+    from generoutes import indications as ind
 
     class Boom:
         def get(self, url, params=None):
@@ -6704,7 +6704,7 @@ def test_indication_lookup_survives_a_dead_api():
 
 
 def test_no_network_call_without_a_chembl_id():
-    from promoter_tf_drugs import indications as ind
+    from generoutes import indications as ind
 
     class Tripwire:
         def get(self, *a, **k):
@@ -6744,7 +6744,7 @@ def test_the_glossary_lists_each_drug_once():
 
 
 def test_glossary_does_not_present_itself_as_a_label():
-    from promoter_tf_drugs import indications as ind
+    from generoutes import indications as ind
     msg = ind.summarise({"a": {"source": "curated"},
                          "b": {"source": "class"}})
     assert "None of these is a label" in msg
@@ -6758,8 +6758,8 @@ def test_compounds_with_no_indication_are_named_not_dropped():
     """CTD contributes environmental agents and research chemicals, which
     have no indication because they are not drugs. Silently omitting them
     would make the glossary look complete when it is not."""
-    from promoter_tf_drugs import report as rep
-    from promoter_tf_drugs import indications as ind
+    from generoutes import report as rep
+    from generoutes import indications as ind
     out = ind.describe_all(["Tazarotene", "Totallyfakedrug9"])
     assert out["Totallyfakedrug9"]["treats"] is None
 
@@ -6773,7 +6773,7 @@ def test_retinoid_rows_now_distinguish_topical_from_systemic():
     """The user's actual complaint was a block of retinoids that looked
     interchangeable. Four of them are topical-only and three are oncology
     agents, and nothing in the table said which was which."""
-    from promoter_tf_drugs import indications as ind
+    from generoutes import indications as ind
     topical = ["Adapalene", "Trifarotene", "Tazarotene"]
     for name in topical:
         assert "topical" in ind.describe(name)["treats"], name
@@ -6785,7 +6785,7 @@ def test_us_and_inn_spellings_resolve_to_one_entry():
     """Calcipotriene and calcipotriol are the same molecule under two
     naming conventions. salt_free_name cannot bridge them - they are
     different words, not different salts - so a synonym table does."""
-    from promoter_tf_drugs import indications as ind
+    from generoutes import indications as ind
     assert (ind.describe("Calcipotriene")["treats"]
             == ind.describe("calcipotriol")["treats"])
     assert ind.describe("Calcipotriene")["source"] == "curated"
@@ -6795,7 +6795,7 @@ def test_us_and_inn_spellings_resolve_to_one_entry():
 def test_every_synonym_points_at_a_real_curated_entry():
     """A synonym mapping to a missing key would silently fall through to
     the class fallback, which is the failure it exists to prevent."""
-    from promoter_tf_drugs import indications as ind
+    from generoutes import indications as ind
     missing = [k for k, v in ind.SYNONYMS.items() if v not in ind.CURATED]
     assert not missing, f"synonyms with no curated target: {missing}"
 
@@ -6814,7 +6814,7 @@ def test_screen_hits_carry_what_the_drug_is():
 
 
 def test_quadrant_table_shows_the_indication():
-    from promoter_tf_drugs import indications as ind
+    from generoutes import indications as ind
     res = pipeline.run("DEMOGENE", demo=True, offline=True)
     d = ind.describe("Tazarotene")
     res["results"][0]["screens"] = {"RARA": {
@@ -6893,7 +6893,7 @@ def test_depmap_separates_pan_essential_from_dispensable(tmp_path):
     """The reason to load this at all: a factor every cell needs is a
     different proposition from one no cell misses, and the curated regulon
     count cannot tell them apart."""
-    from promoter_tf_drugs import depmap as dm
+    from generoutes import depmap as dm
     eff, mod = _depmap_release(
         tmp_path, {"RPL5": "pan", "MYC": "most", "CCR5": "none"})
     deps = dm.assess_many(["RPL5", "MYC", "CCR5"],
@@ -6909,7 +6909,7 @@ def test_depmap_separates_pan_essential_from_dispensable(tmp_path):
 def test_entrez_suffix_is_stripped_from_column_names(tmp_path):
     """Every DepMap column is `SYMBOL (entrez)`. A plain symbol match
     against the raw header finds nothing, silently."""
-    from promoter_tf_drugs import depmap as dm
+    from generoutes import depmap as dm
     assert dm._symbol("A1BG (1)") == "A1BG"
     assert dm._symbol("TP53 (7157)") == "TP53"
     eff, _ = _depmap_release(tmp_path, {"TP53": "pan"})
@@ -6920,7 +6920,7 @@ def test_entrez_suffix_is_stripped_from_column_names(tmp_path):
 def test_a_gene_absent_from_the_release_is_omitted_not_called_safe(tmp_path):
     """'Not in this release' and 'knockout did nothing' are different
     statements, and only one of them is reassuring."""
-    from promoter_tf_drugs import depmap as dm
+    from generoutes import depmap as dm
     eff, _ = _depmap_release(tmp_path, {"RPL5": "pan"})
     deps = dm.assess_many(["RPL5", "NOTINRELEASE"], effect_path=eff)
     assert "RPL5" in deps
@@ -6930,7 +6930,7 @@ def test_a_gene_absent_from_the_release_is_omitted_not_called_safe(tmp_path):
 def test_a_sparsely_scored_gene_is_refused(tmp_path):
     """Summarising ten cell lines as if they were a thousand would put a
     confident verdict on nothing."""
-    from promoter_tf_drugs import depmap as dm
+    from generoutes import depmap as dm
     eff, _ = _depmap_release(tmp_path, {"SPARSE1": "sparse", "RPL5": "pan"})
     deps = dm.assess_many(["SPARSE1", "RPL5"], effect_path=eff)
     assert "SPARSE1" not in deps
@@ -6943,7 +6943,7 @@ def test_a_sparsely_scored_gene_is_refused(tmp_path):
 def test_a_selective_dependency_is_localised_to_its_lineage(tmp_path):
     """The informative case. A factor needed in a minority of lines has a
     context, and the lineage is where to look for what it is."""
-    from promoter_tf_drugs import depmap as dm
+    from generoutes import depmap as dm
     eff, mod = _depmap_release(tmp_path, {"MEIS1": "selective"})
     d = dm.assess_many(["MEIS1"], effect_path=eff, model_path=mod)["MEIS1"]
     assert d.selective is True
@@ -6957,7 +6957,7 @@ def test_model_csv_is_found_beside_the_effect_file(tmp_path):
     """DepMap ships them in one download. Looking only in data/ dropped
     the whole lineage column for anyone who pointed --depmap-file at their
     download folder."""
-    from promoter_tf_drugs import depmap as dm
+    from generoutes import depmap as dm
     eff, mod = _depmap_release(tmp_path, {"MEIS1": "selective"})
     assert mod.parent == eff.parent
     lin = dm.load_lineages(beside=eff)
@@ -6967,7 +6967,7 @@ def test_model_csv_is_found_beside_the_effect_file(tmp_path):
 
 
 def test_missing_depmap_file_costs_only_this_section(tmp_path):
-    from promoter_tf_drugs import depmap as dm
+    from generoutes import depmap as dm
     assert dm.resolve(str(tmp_path / "nope.csv")) is None
     assert dm.assess_many(["TP53"],
                           effect_path=str(tmp_path / "nope.csv")) == {}
@@ -6980,7 +6980,7 @@ def test_every_dependency_says_it_is_cancer_lines_in_a_dish(tmp_path):
     """The limit that decides whether any of this transfers. A factor
     whose job is in a post-mitotic cell looks dispensable for reasons that
     have nothing to do with its importance."""
-    from promoter_tf_drugs import depmap as dm
+    from generoutes import depmap as dm
     eff, _ = _depmap_release(tmp_path, {"RPL5": "pan", "CCR5": "none"})
     deps = dm.assess_many(["RPL5", "CCR5"], effect_path=eff)
     for d in deps.values():
@@ -6994,7 +6994,7 @@ def test_every_dependency_says_it_is_cancer_lines_in_a_dish(tmp_path):
 def test_pan_essential_is_a_caution_not_a_veto(tmp_path):
     """Essential genes are drugged successfully at partial occupancy, and
     knockout removes scaffolding a ligand would not touch."""
-    from promoter_tf_drugs import depmap as dm
+    from generoutes import depmap as dm
     eff, _ = _depmap_release(tmp_path, {"RPL5": "pan"})
     d = dm.assess_many(["RPL5"], effect_path=eff)["RPL5"]
     joined = " ".join(d.caveats)
@@ -7012,7 +7012,7 @@ def test_depmap_column_appears_only_when_there_is_data():
 
 
 def test_depmap_column_and_section_render(tmp_path):
-    from promoter_tf_drugs import depmap as dm
+    from generoutes import depmap as dm
     eff, mod = _depmap_release(
         tmp_path, {"RARA": "pan", "RXRA": "selective", "VDR": "none"})
     deps = dm.assess_many(["RARA", "RXRA", "VDR"],
@@ -7041,8 +7041,8 @@ def test_depmap_column_and_section_render(tmp_path):
 def test_dispensable_factor_shows_no_most_dependent_lineage(tmp_path):
     """For a factor nothing depends on, the 'most dependent' lineage is
     whichever drifted furthest below zero - noise dressed as a finding."""
-    from promoter_tf_drugs import report as rep
-    from promoter_tf_drugs import depmap as dm
+    from generoutes import report as rep
+    from generoutes import depmap as dm
     eff, mod = _depmap_release(tmp_path, {"VDR": "none"})
     deps = dm.assess_many(["VDR"], effect_path=eff, model_path=mod)
     res = pipeline.run("DEMOGENE", demo=True, offline=True)
@@ -7060,7 +7060,7 @@ def test_ctd_entry_kinds_separate_drugs_from_toxicants_and_headings():
     """CTD indexes MeSH, not a drug list. Reporting an exposure and a
     category against a "did this run predict it" column makes a correct
     answer look like a broken join - which is how it read."""
-    from promoter_tf_drugs import discovery as disc
+    from generoutes import discovery as disc
     assert disc.entry_kind("Celecoxib") == "chemical"
     assert disc.entry_kind("formaldehyde") == "exposure"
     assert disc.entry_kind("Asbestos, Crocidolite") == "exposure"
@@ -7073,7 +7073,7 @@ def test_ctd_entry_kinds_separate_drugs_from_toxicants_and_headings():
 def test_unplaceable_names_stay_eligible_to_match():
     """The default has to be permissive: a wrong "exposure" label would
     quietly hide a real lead."""
-    from promoter_tf_drugs import discovery as disc
+    from generoutes import discovery as disc
     assert disc.entry_kind("Sch 23390") == "chemical"
     assert disc.entry_kind("some-new-compound-42") == "chemical"
     assert disc.entry_kind("") == "chemical"
@@ -7082,7 +7082,7 @@ def test_unplaceable_names_stay_eligible_to_match():
 def test_a_matching_candidate_is_reported_as_predicted():
     """The thing the column exists for. If this ever reads no, the match
     really is broken."""
-    from promoter_tf_drugs import discovery as disc
+    from generoutes import discovery as disc
     links = {"dexamethasone": ["decreases^expression"],
              "formaldehyde": ["decreases^expression"]}
     s = disc.summarise_links(links, "down", {"Dexamethasone", "Calcitriol"})
@@ -7094,7 +7094,7 @@ def test_a_matching_candidate_is_reported_as_predicted():
 def test_salt_forms_match_the_ctd_parent_name():
     """CTD lists the parent and a drug table often lists a salt. Every
     other name comparison in this package is salt-free; this one was not."""
-    from promoter_tf_drugs import discovery as disc
+    from generoutes import discovery as disc
     s = disc.summarise_links({"levothyroxine": ["increases^expression"]},
                              "up", {"Levothyroxine Sodium"})
     assert s["wanted_direction"][0]["in_candidates"] is True
@@ -7103,7 +7103,7 @@ def test_salt_forms_match_the_ctd_parent_name():
 def test_a_category_heading_is_blank_not_no():
     """"Anti-HIV Agents" is not a compound, so "did this run predict it"
     has no answer rather than the answer no."""
-    from promoter_tf_drugs import discovery as disc
+    from generoutes import discovery as disc
     s = disc.summarise_links({"anti-hiv agents": ["decreases^expression"]},
                              "down", {"Maraviroc"})
     e = s["wanted_direction"][0]
@@ -7116,7 +7116,7 @@ def test_exposures_are_not_counted_as_things_the_scan_missed():
     """The old framing said an unmatched row was "a clue that the scan is
     wrong". With a list led by asbestos and formaldehyde, that indicted
     the scan for not proposing formaldehyde."""
-    from promoter_tf_drugs import discovery as disc
+    from generoutes import discovery as disc
     links = {"formaldehyde": ["decreases^expression"],
              "asbestos, crocidolite": ["decreases^expression"],
              "plant extracts": ["decreases^expression"],
@@ -7130,7 +7130,7 @@ def test_cross_direction_match_count_is_reported():
     """A bucket with no match reads as a broken join when the matching
     worked elsewhere. On the real CCR5 run the wanted bucket matched 0 of
     39 while 3 matched overall."""
-    from promoter_tf_drugs import discovery as disc
+    from generoutes import discovery as disc
     links = {"clofibrate": ["increases^expression"],
              "celecoxib": ["decreases^expression"]}
     s = disc.summarise_links(links, "down", {"Clofibrate"})
@@ -7141,7 +7141,7 @@ def test_cross_direction_match_count_is_reported():
 def test_report_says_a_no_is_expected():
     """The user read a column of 39 nos as a bug. It was correct, and the
     report never said so."""
-    from promoter_tf_drugs import discovery as disc
+    from generoutes import discovery as disc
     links = {f"toxicant{i}": ["decreases^expression"] for i in range(6)}
     links["formaldehyde"] = ["decreases^expression"]
     links["plant extracts"] = ["decreases^expression"]
@@ -7175,7 +7175,7 @@ def test_pains_match_lowers_confidence_in_the_evidence():
     """A PAINS hit says activity measured for this molecule may be an
     assay artefact. It does not say the drug is unsafe - quercetin and
     doxorubicin are both flagged and doxorubicin is approved."""
-    from promoter_tf_drugs import liabilities as lb
+    from generoutes import liabilities as lb
     q = lb.assess("quercetin", _QUERCETIN)
     assert q.assessed and q.pains
     assert q.evidence_multiplier < 1.0
@@ -7185,7 +7185,7 @@ def test_pains_match_lowers_confidence_in_the_evidence():
 
 
 def test_a_clean_molecule_is_not_penalised():
-    from promoter_tf_drugs import liabilities as lb
+    from generoutes import liabilities as lb
     d = lb.assess("diazepam", _DIAZEPAM_S)
     assert d.assessed
     assert not d.pains
@@ -7196,7 +7196,7 @@ def test_an_approved_drug_is_not_demoted_for_failing_lead_like_rules():
     """Doxorubicin breaks three Lipinski rules and carries Brenk alerts,
     and is approved and in use. Filtering on those would discard the best
     candidates in the report."""
-    from promoter_tf_drugs import liabilities as lb
+    from generoutes import liabilities as lb
     d = lb.assess("doxorubicin", _DOXORUBICIN)
     assert d.lipinski_violations >= 2
     # only PAINS moves the multiplier, and only as an evidence discount
@@ -7211,14 +7211,14 @@ def test_the_pains_set_is_not_exhaustive_and_says_so():
     """Curcumin is the most cited interference compound in the literature
     and is NOT in Baell's SMARTS set. A clean PAINS result is therefore
     weak evidence of a clean compound, and the module documents it."""
-    from promoter_tf_drugs import liabilities as lb
+    from generoutes import liabilities as lb
     assert not lb.assess("curcumin", _CURCUMIN).pains
     assert "Curcumin does not" in lb.__doc__
     assert "Read it one way only" in lb.__doc__
 
 
 def test_no_structure_is_not_a_clean_result():
-    from promoter_tf_drugs import liabilities as lb
+    from generoutes import liabilities as lb
     x = lb.assess("mystery", None)
     assert x.assessed is False
     assert x.evidence_multiplier == 1.0
@@ -7247,7 +7247,7 @@ def _dock_sets(n_act=20, n_dec=180):
 
 
 def test_roc_auc_and_enrichment_agree_with_hand_worked_cases():
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     # perfect separation, lower is better
     assert dk.roc_auc([-10, -9, -1, 0], [1, 1, 0, 0]) == 1.0
     # perfectly inverted
@@ -7268,7 +7268,7 @@ def test_a_pocket_that_cannot_rank_its_own_ligands_is_refused():
     """The gate. Docking is the method here most able to produce confident
     nonsense, so it has to recover known binders before anything it says
     about an unknown is reported."""
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     import pathlib
     act, dec = _dock_sets()
     v = dk.validate_pocket(pathlib.Path("x.pdb"), act, dec,
@@ -7279,7 +7279,7 @@ def test_a_pocket_that_cannot_rank_its_own_ligands_is_refused():
 
 
 def test_a_pocket_that_recovers_its_ligands_is_allowed_through():
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     import pathlib
     act, dec = _dock_sets()
     v = dk.validate_pocket(pathlib.Path("x.pdb"), act, dec,
@@ -7293,7 +7293,7 @@ def test_enrichment_is_a_harsher_gate_than_auc():
     """A method can hold a respectable AUC while putting nothing useful in
     the top 1%, which is the only part of a ranked list anyone reads. Both
     gates exist because AUC alone would pass that."""
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     import pathlib
     act, dec = _dock_sets()
     v = dk.validate_pocket(pathlib.Path("x.pdb"), act, dec,
@@ -7304,7 +7304,7 @@ def test_enrichment_is_a_harsher_gate_than_auc():
 
 
 def test_too_few_known_ligands_means_the_dock_cannot_be_validated():
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     import pathlib
     act, dec = _dock_sets()
     v = dk.validate_pocket(pathlib.Path("x.pdb"), act[:3], dec,
@@ -7316,7 +7316,7 @@ def test_too_few_known_ligands_means_the_dock_cannot_be_validated():
 def test_the_library_is_not_docked_when_the_pocket_fails():
     """The validation is cheap and the library is not. Running 4,000 docks
     to then discard them would be the expensive way to learn nothing."""
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     import pathlib
     act, dec = _dock_sets()
     lib = [{"name": f"d{i}", "smiles": f"LIB{i}"} for i in range(500)]
@@ -7333,7 +7333,7 @@ def test_the_library_is_not_docked_when_the_pocket_fails():
 
 
 def test_a_validated_screen_returns_a_sorted_shortlist():
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     import pathlib
     act, dec = _dock_sets()
     lib = [{"name": f"d{i}", "smiles": f"LIB{i}"} for i in range(500)]
@@ -7353,7 +7353,7 @@ def test_missing_docking_binary_is_reported_not_raised(monkeypatch):
     """Reported, never raised: a machine without the engine should lose
     this section and nothing else. Forced, because the engine is now
     installed here and the branch would not otherwise fire."""
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     import pathlib
     monkeypatch.setattr(dk, "_docking_binary", lambda: None)
     act, dec = _dock_sets()
@@ -7367,7 +7367,7 @@ def test_missing_docking_binary_is_reported_not_raised(monkeypatch):
 def test_consensus_needs_both_methods_to_agree():
     """The reason to run two. A dock reads the pocket and a ligand model
     reads chemistry measured at the receptor; they share no input."""
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     import pathlib
     act, dec = _dock_sets()
     lib = [{"name": f"d{i}", "smiles": f"LIB{i}"} for i in range(500)]
@@ -7386,7 +7386,7 @@ def test_docking_module_states_it_will_not_widen_coverage():
     """The honest limit, and the one most likely to be misread: docking
     needs a pocket, so it adds confidence on the receptors already in the
     report rather than reaching the undruggable factors."""
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     src = dk.__doc__ + (dk.screen_by_docking.__doc__ or "")
     import inspect
     body = inspect.getsource(dk)
@@ -7402,7 +7402,7 @@ def test_family_transfer_is_measured_on_held_out_target_ligands():
     TARGET's own ligands, or it is just the family's pharmacology wearing
     the target's name."""
     import inspect
-    from promoter_tf_drugs import screening as scr
+    from generoutes import screening as scr
     src = inspect.getsource(scr.screen_family)
     assert "transfer_auc" in src
     assert "MIN_TRANSFER_AUC" in src
@@ -7415,13 +7415,13 @@ def test_family_screen_refuses_when_it_cannot_validate():
     """Without enough of the target's own ligands there is nothing to
     measure transfer against, and an unvalidated family model is exactly
     what fills a report with a family's chemistry."""
-    from promoter_tf_drugs import screening as scr
+    from generoutes import screening as scr
     assert scr.MIN_VALIDATION_ACTIVES >= 5
     assert scr.MIN_TRANSFER_AUC == scr.MIN_BINDING_AUC
 
 
 def test_transfer_auc_returns_none_rather_than_guessing():
-    from promoter_tf_drugs import screening as scr
+    from generoutes import screening as scr
     assert scr.transfer_auc(None, [], []) is None
     assert scr.transfer_auc(None, [{"smiles": "C"}], []) is None
 
@@ -7467,7 +7467,7 @@ def _fake_pdb(with_ligand=True, coactivator=True, n_lig=24):
 def test_solvent_and_ions_are_never_mistaken_for_the_ligand():
     """Every structure has waters, a sulfate and often a zinc. Boxing on
     one of them puts the search 50 angstroms from the site."""
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     groups = dk.hetatm_groups(_fake_pdb())
     names = {g["resname"] for g in groups}
     assert "LIG" in names
@@ -7478,7 +7478,7 @@ def test_solvent_and_ions_are_never_mistaken_for_the_ligand():
 
 
 def test_a_fragment_is_too_small_to_mark_a_drug_pocket():
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     assert dk.best_ligand(_fake_pdb(n_lig=4)) is None
     assert dk.MIN_LIGAND_ATOMS >= 10
 
@@ -7487,7 +7487,7 @@ def test_receptor_preparation_empties_the_pocket(tmp_path):
     """Docking into a structure with its crystal ligand still in place is
     docking into an occupied site, and every compound scores weakly for a
     reason that has nothing to do with the compounds."""
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     text = _fake_pdb()
     out = dk.prepare_receptor(text, tmp_path / "rec.pdb", keep_chain="A")
     body = out.read_text()
@@ -7502,7 +7502,7 @@ def test_the_box_sits_on_the_ligand_and_has_a_floor(tmp_path):
     --autobox_ligand is a smina flag and AutoDock Vina has no equivalent."""
     import pytest
     from pathlib import Path
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     text = _fake_pdb()
     lig = dk.best_ligand(text)
     lp = dk.write_ligand_pdb(text, lig, tmp_path / "lig.pdb")
@@ -7518,7 +7518,7 @@ def test_the_box_sits_on_the_ligand_and_has_a_floor(tmp_path):
 
 
 def test_written_ligand_contains_only_that_ligand(tmp_path):
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     text = _fake_pdb()
     lp = dk.write_ligand_pdb(text, dk.best_ligand(text), tmp_path / "l.pdb")
     body = lp.read_text()
@@ -7546,7 +7546,7 @@ def test_choose_pocket_skips_apo_and_reads_the_conformation(tmp_path):
     one a compound that RAISES your gene has to fit."""
     import pytest
     from pathlib import Path
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     pk = dk.choose_pocket(_FakeRCSB(), "P00000", tmp_path)
     assert pk is not None
     assert pk.pdb_id == "2HOL"
@@ -7559,7 +7559,7 @@ def test_choose_pocket_skips_apo_and_reads_the_conformation(tmp_path):
 def test_no_holo_structure_is_refused_rather_than_guessed(tmp_path):
     """A guessed box is the commonest way a docking campaign quietly
     measures nothing."""
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     assert dk.choose_pocket(_FakeRCSB(apo_only=True), "P0", tmp_path) is None
 
     res = dk.dock_screen_for_target(
@@ -7572,7 +7572,7 @@ def test_no_holo_structure_is_refused_rather_than_guessed(tmp_path):
 
 
 def test_orchestrator_runs_end_to_end_and_ranks(tmp_path):
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     import random
     rng = random.Random(0)
     actives = [{"smiles": f"ACT{i}"} for i in range(15)]
@@ -7598,7 +7598,7 @@ def test_orchestrator_runs_end_to_end_and_ranks(tmp_path):
 
 def test_check_setup_names_what_is_missing(monkeypatch):
     """The first thing anyone runs, and it has to say what to install."""
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     monkeypatch.setattr(dk, "_docking_binary", lambda: None)
     chk = dk.check_setup()
     assert chk["ok"] is False
@@ -7611,7 +7611,7 @@ def test_setup_text_covers_windows():
     """conda-forge ships smina for win-64. An earlier version of this text
     said there was no Windows build, which sent people to WSL for no
     reason - so the correction is pinned rather than left to drift back."""
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     assert "Windows" in dk.SETUP
     assert "conda install -c conda-forge smina" in dk.SETUP
     assert "no Windows build" not in dk.SETUP
@@ -7628,7 +7628,7 @@ class _BundleClient(_FakeRCSB):
 
 
 def _patch_chembl(monkeypatch, n_actives=14):
-    from promoter_tf_drugs import agonism as ag, screening as scr, drugs as dr
+    from generoutes import agonism as ag, screening as scr, drugs as dr
     monkeypatch.setattr(ag, "fetch_actives", lambda c, t, **k: [
         {"chembl_id": f"CHEMBL{i}", "smiles": f"ACT{i}",
          "pchembl": 7.0 + i / 10} for i in range(n_actives)])
@@ -7643,7 +7643,7 @@ def _patch_chembl(monkeypatch, n_actives=14):
 def test_bundle_captures_everything_the_dock_needs(tmp_path, monkeypatch):
     """The networked half and the docking half are rarely on one machine:
     on Windows the network is here and smina is not, in WSL the reverse."""
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     _patch_chembl(monkeypatch)
     man = dk.write_bundle(_BundleClient(), "VDR", "P11473", tmp_path,
                           library_limit=200)
@@ -7663,8 +7663,8 @@ def test_docking_from_a_bundle_touches_no_network(tmp_path, monkeypatch):
     """The whole point. If anything reaches for the network here, an
     offline WSL cannot run the dock."""
     import random
-    from promoter_tf_drugs import docking as dk
-    from promoter_tf_drugs import agonism as ag, screening as scr
+    from generoutes import docking as dk
+    from generoutes import agonism as ag, screening as scr
     _patch_chembl(monkeypatch)
     dk.write_bundle(_BundleClient(), "VDR", "P11473", tmp_path,
                     library_limit=200)
@@ -7694,7 +7694,7 @@ def test_a_bundle_with_too_few_ligands_warns_at_prepare_time(tmp_path,
                                                              monkeypatch):
     """Better to learn the dock will refuse before carrying the folder to
     another machine than after."""
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     _patch_chembl(monkeypatch, n_actives=2)
     man = dk.write_bundle(_BundleClient(), "VDR", "P11473", tmp_path)
     assert man["ready"] is False
@@ -7703,7 +7703,7 @@ def test_a_bundle_with_too_few_ligands_warns_at_prepare_time(tmp_path,
 
 def test_a_supplied_structure_without_a_ligand_is_refused(tmp_path,
                                                           monkeypatch):
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     _patch_chembl(monkeypatch)
     apo = tmp_path / "apo.pdb"
     apo.write_text(_fake_pdb(with_ligand=False))
@@ -7714,7 +7714,7 @@ def test_a_supplied_structure_without_a_ligand_is_refused(tmp_path,
 
 
 def test_missing_bundle_says_to_run_prepare_first(tmp_path):
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     import pytest
     with pytest.raises(FileNotFoundError, match="prepare step"):
         dk.load_bundle(tmp_path)
@@ -7727,7 +7727,7 @@ def test_every_computed_source_reaches_the_catalogue():
     entered any table. A source that is computed and then dropped is worse
     than one that was never added, because the section says it ran."""
     import inspect
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     src = inspect.getsource(pipeline.run)
     start = src.index("block_for_catalogue = {")
     # Brace-match to the real end. Stopping at the first "}" meant a
@@ -7757,7 +7757,7 @@ def test_docking_results_from_another_machine_reach_the_report(tmp_path):
     """Step three of the split: prepare where the network is, dock where
     the binary is, fold the JSON back in here."""
     import json
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
 
     results = {
         "target": "VDR", "usable": True, "auc": 0.95, "ef1": 11.0,
@@ -7788,7 +7788,7 @@ def test_docking_results_from_another_machine_reach_the_report(tmp_path):
 def test_an_unvalidated_docking_run_contributes_nothing(tmp_path):
     """Its scores carry no information, so they must not become routes."""
     import json
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     bad = {"target": "VDR", "usable": False, "auc": 0.51,
            "error": "pocket did not validate",
            "hits": [{"drug": "Anything", "score": -12.0}]}
@@ -7806,7 +7806,7 @@ def test_docking_routes_carry_the_pocket_validation_not_the_score():
     """A docking score separates binders from non-binders and ranks them
     badly, so per-compound strength would overstate what was measured.
     The axis carries the pocket's validated enrichment instead."""
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     run = {"target": "VDR", "usable": True, "auc": 0.88, "ef1": 6.0,
            "pocket": {"pdb_id": "1DB1", "state": "active"},
            "hits": [{"drug": "A", "score": -11.0},
@@ -7821,7 +7821,7 @@ def test_docking_routes_carry_the_pocket_validation_not_the_score():
 
 
 def test_a_malformed_results_file_says_how_to_make_a_real_one(tmp_path):
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     import pytest
     f = tmp_path / "junk.json"
     f.write_text('{"something": "else"}', encoding="utf-8")
@@ -7842,7 +7842,7 @@ def _corpus_fixture(tmp_path, monkeypatch):
     """Three corpora on disk: a shared hit, a corpus-specific hit, and a
     compound that moves the regulon opposite ways in two of them."""
     from pathlib import Path as _P
-    from promoter_tf_drugs import corpora as cp
+    from generoutes import corpora as cp
     up = [f"UP{i}" for i in range(25)]
     dn = [f"DN{i}" for i in range(25)]
     regulon = {g: 1 for g in up}
@@ -7886,7 +7886,7 @@ def test_a_corpus_that_is_absent_is_not_one_that_found_nothing(
     """The distinction the whole package turns on. TG-GATEs has no files
     here, and reporting it as no hits would claim a negative it never
     measured."""
-    from promoter_tf_drugs import corpora as cp
+    from generoutes import corpora as cp
     regulon = _corpus_fixture(tmp_path, monkeypatch)
     res = cp.scan("MYTF", regulon)
     assert res["lincs"].available is True
@@ -7901,7 +7901,7 @@ def test_agreement_across_corpora_is_the_headline(tmp_path, monkeypatch):
     """These differ in species, tissue, platform and dose, so they share
     few systematic errors. No amount of replication inside one corpus can
     substitute for a second corpus."""
-    from promoter_tf_drugs import corpora as cp
+    from generoutes import corpora as cp
     regulon = _corpus_fixture(tmp_path, monkeypatch)
     agreed = cp.agreement(cp.scan("MYTF", regulon))
     by = {a["drug"]: a for a in agreed}
@@ -7915,7 +7915,7 @@ def test_conflicting_directions_are_shown_not_hidden(tmp_path, monkeypatch):
     """Rat liver in vivo and a human cell line can disagree without either
     being wrong. Hiding it would make the agreeing rows look more uniform
     than the data is."""
-    from promoter_tf_drugs import corpora as cp
+    from generoutes import corpora as cp
     regulon = _corpus_fixture(tmp_path, monkeypatch)
     agreed = cp.agreement(cp.scan("MYTF", regulon))
     flip = next(a for a in agreed if a["drug"] == "flipdrug")
@@ -7926,7 +7926,7 @@ def test_conflicting_directions_are_shown_not_hidden(tmp_path, monkeypatch):
 
 
 def test_one_corpus_can_never_produce_agreement(tmp_path, monkeypatch):
-    from promoter_tf_drugs import corpora as cp
+    from generoutes import corpora as cp
     regulon = _corpus_fixture(tmp_path, monkeypatch)
     assert cp.agreement(cp.scan("MYTF", regulon, keys=["lincs"])) == []
 
@@ -7936,7 +7936,7 @@ def test_splitting_a_signed_gmt_drops_unlabelled_terms(tmp_path):
     name. A term carrying neither marker cannot be assigned, so it is
     dropped rather than guessed onto one side."""
     from pathlib import Path as _P
-    from promoter_tf_drugs import corpora as cp
+    from generoutes import corpora as cp
     src = tmp_path / "signed.gmt"
     src.write_text("DrugA-rat-liver-up\t\tG1\tG2\n"
                    "DrugA-rat-liver-dn\t\tG3\tG4\n"
@@ -7951,7 +7951,7 @@ def test_splitting_a_signed_gmt_drops_unlabelled_terms(tmp_path):
 def test_non_human_corpora_carry_a_species_caveat():
     """DrugMatrix is rat. A symbol crossing a species boundary is a real
     limit and has to travel with the result."""
-    from promoter_tf_drugs import corpora as cp
+    from generoutes import corpora as cp
     dm = cp.BY_KEY["drugmatrix"]
     assert dm.species == "rat"
     assert any("species boundary" in c for c in dm.caveats)
@@ -7962,7 +7962,7 @@ def test_archs4_is_not_offered_as_a_drug_corpus():
     """It is uniformly reprocessed RNA-seq, not perturbation data.
     Listing it beside LINCS would invite reading co-expression as a drug
     effect."""
-    from promoter_tf_drugs import corpora as cp
+    from generoutes import corpora as cp
     assert "archs4" not in cp.BY_KEY
     assert "ARCHS4" in cp.__doc__
     assert "not a perturbation corpus" in cp.__doc__
@@ -7971,7 +7971,7 @@ def test_archs4_is_not_offered_as_a_drug_corpus():
 def test_report_says_when_only_one_corpus_was_available():
     """With one corpus, internal replication cannot detect an error common
     to all of its signatures."""
-    from promoter_tf_drugs import report as rep
+    from generoutes import report as rep
     res = pipeline.run("DEMOGENE", demo=True, offline=True)
     res["results"][0]["corpus_scans"] = {
         "TP53": {"lincs": {"available": True},
@@ -8041,7 +8041,7 @@ def test_summary_states_the_approved_indication_for_every_row():
 def test_summary_never_truncates_mid_word():
     """A cut like "renal fai" reads as a rendering bug and costs the
     reader the one fact the column carries."""
-    from promoter_tf_drugs import report as rep
+    from generoutes import report as rep
     assert rep._clip("short", 58) == "short"
     long = ("hypocalcaemia and secondary hyperparathyroidism in renal "
             "failure")
@@ -8155,7 +8155,7 @@ def test_summary_deduplicates_a_drug_reached_by_one_route_twice():
 def test_the_direction_the_factor_must_move_is_explicit():
     """Getting this backwards recommends the drug that moves your gene the
     wrong way, so all four combinations are pinned."""
-    from promoter_tf_drugs import abundance as ab
+    from generoutes import abundance as ab
     assert ab.wanted_direction("up", "activator") == "up"
     assert ab.wanted_direction("up", "repressor") == "down"
     assert ab.wanted_direction("down", "activator") == "down"
@@ -8165,7 +8165,7 @@ def test_the_direction_the_factor_must_move_is_explicit():
 def test_a_factor_with_no_recorded_role_gives_no_direction():
     """There is no way to say which way would help, so it is skipped and
     named rather than guessed into one column."""
-    from promoter_tf_drugs import abundance as ab
+    from generoutes import abundance as ab
     for role in ("unknown", "dual", "", None):
         assert ab.wanted_direction("up", role) is None
     skipped = ab.undirected_factors(
@@ -8179,7 +8179,7 @@ def test_abundance_tier_is_one_below_a_measurement_on_your_own_gene():
     """catalogue.from_lincs calls a landmark measurement of YOUR GENE tier
     2. Here the compound was measured against the FACTOR, and the
     factor-to-gene step is an inference."""
-    from promoter_tf_drugs import abundance as ab
+    from generoutes import abundance as ab
     assert ab._tier_for("landmark") == 3
     assert ab._tier_for("best inferred") == 3
     assert ab._tier_for(None) == 4
@@ -8189,7 +8189,7 @@ def test_a_ligand_gated_receptor_carries_the_abundance_caveat(tmp_path):
     """More VDR is not more VDR activity: the receptor is near-ubiquitous
     and its signalling is not. These are most of the drug tables, so the
     caveat has to travel with the row."""
-    from promoter_tf_drugs import abundance as ab
+    from generoutes import abundance as ab
     up = tmp_path / "up.gmt"
     down = tmp_path / "down.gmt"
     up.write_text("".join(
@@ -8208,7 +8208,7 @@ def test_a_ligand_gated_receptor_carries_the_abundance_caveat(tmp_path):
 def test_one_row_per_compound_not_one_per_signature(tmp_path):
     """The .gmt holds a consensus per cell line and dose, so a compound
     recurs. The recurrence is evidence; repeating the row is noise."""
-    from promoter_tf_drugs import abundance as ab
+    from generoutes import abundance as ab
     up = tmp_path / "up.gmt"
     down = tmp_path / "down.gmt"
     up.write_text("".join(
@@ -8223,7 +8223,7 @@ def test_one_row_per_compound_not_one_per_signature(tmp_path):
 
 
 def test_a_compound_seen_once_is_not_reported(tmp_path):
-    from promoter_tf_drugs import abundance as ab
+    from generoutes import abundance as ab
     up = tmp_path / "up.gmt"
     down = tmp_path / "down.gmt"
     up.write_text("E0 X 6H-oneshot-10.0\t\tMYTF\n", encoding="utf-8")
@@ -8256,7 +8256,7 @@ def _route(drug, acts_on, tier, score, category, source, mechanism="",
     directness - one at a time. Building the real object means the fixture
     cannot drift from the dataclass.
     """
-    from promoter_tf_drugs.catalogue import Route, Axes
+    from generoutes.catalogue import Route, Axes
     r = Route(drug=drug, category=category, mechanism=mechanism,
               acts_on=acts_on, tier=tier, directness=directness,
               axes=Axes(0.5, 0.5, 0.5, "test"), approved=True,
@@ -8286,7 +8286,7 @@ def _as_all_routes(routes):
 def test_the_all_routes_stand_in_matches_the_real_shape():
     """So a key added to catalogue.build cannot silently break every test
     that hand-builds this dict."""
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     real = cat.build({"direct_therapies": [{
         "drug": "X", "gene": "G", "modality": "siRNA", "approved": True,
         "specificity": 0.9, "raises_protein": True, "mechanism": "m",
@@ -8399,7 +8399,7 @@ def test_windows_has_a_native_docking_path():
     does ship a Windows executable, and the PDBQT conversion it needs is
     pip-installable, so WSL is now a preference rather than a
     requirement."""
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     assert hasattr(dk, "dock_one_vina")
     assert "no WSL needed" in dk.VINA_SETUP_WINDOWS
     assert "meeko" in dk.VINA_SETUP_WINDOWS
@@ -8412,7 +8412,7 @@ def test_vina_is_no_longer_rejected_outright(tmp_path, monkeypatch):
     """It used to raise 'install smina instead'. Now it routes to the path
     that prepares PDBQT."""
     import pytest
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     monkeypatch.setattr(dk, "_docking_binary", lambda: "/usr/bin/vina")
     with pytest.raises(dk._NeedsVinaPath):
         dk.dock_one_boxed(tmp_path / "r.pdb", tmp_path / "l.sdf",
@@ -8420,7 +8420,7 @@ def test_vina_is_no_longer_rejected_outright(tmp_path, monkeypatch):
 
 
 def test_missing_vina_prep_names_the_pip_install():
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     ok, why = dk.vina_prep_available()
     if not ok:
         assert "pip install meeko" in why
@@ -8430,7 +8430,7 @@ def test_the_receptor_pdbqt_is_converted_once_per_screen():
     """It is the same file for every compound, and converting it a few
     thousand times would dominate the run."""
     import inspect
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     assert isinstance(dk._REC_CACHE, dict)
     src = inspect.getsource(dk.dock_one_vina)
     assert "receptor_pdbqt_cache" in src
@@ -8487,7 +8487,7 @@ def test_one_local_table_replaces_the_whole_chembl_dependency(tmp_path):
     ligands for the gate, and the library. A corporate network that blocks
     or 500s those stops the analysis, and one annotated file removes all
     three."""
-    from promoter_tf_drugs import localdrugs as ld
+    from generoutes import localdrugs as ld
     rows = ld.read_table(_hub_table(tmp_path))
     names = {r["name"] for r in rows}
     assert "calcitriol" in names
@@ -8502,7 +8502,7 @@ def test_one_local_table_replaces_the_whole_chembl_dependency(tmp_path):
 def test_a_local_table_carries_no_potency_and_says_so(tmp_path):
     """It records that a compound acts on a target, not how hard it binds.
     A fabricated pChEMBL would feed the potency axis a made-up number."""
-    from promoter_tf_drugs import localdrugs as ld
+    from generoutes import localdrugs as ld
     rows = ld.read_table(_hub_table(tmp_path))
     acts = ld.actives_for("VDR", rows)
     assert all(a["pchembl"] is None for a in acts)
@@ -8513,7 +8513,7 @@ def test_a_local_table_carries_no_potency_and_says_so(tmp_path):
 def test_the_delimiter_is_sniffed_not_taken_from_the_extension(tmp_path):
     """The Hub ships .txt that is tab separated, and people save it as
     .csv. Guessing from the suffix parses the whole file as one column."""
-    from promoter_tf_drugs import localdrugs as ld
+    from generoutes import localdrugs as ld
     p = tmp_path / "comma.txt"
     p.write_text("name,clinical_phase,smiles\n"
                  "drugA,launched,CCO\ndrugB,launched,CCCO\n",
@@ -8523,7 +8523,7 @@ def test_the_delimiter_is_sniffed_not_taken_from_the_extension(tmp_path):
 
 
 def test_a_table_with_no_structures_is_refused_with_the_reason(tmp_path):
-    from promoter_tf_drugs import localdrugs as ld
+    from generoutes import localdrugs as ld
     import pytest
     p = tmp_path / "nosmiles.tsv"
     p.write_text("name\tphase\ndrugA\tlaunched\n", encoding="utf-8")
@@ -8535,7 +8535,7 @@ def test_a_missing_table_returns_empty_and_names_the_source(tmp_path,
                                                             monkeypatch):
     """Absent is reported, never treated as an empty library, because an
     empty library would make every screen silently find nothing."""
-    from promoter_tf_drugs import localdrugs as ld
+    from generoutes import localdrugs as ld
     monkeypatch.chdir(tmp_path)
     assert ld.library() == []
     assert "repurposing.broadinstitute.org" in ld.SOURCE
@@ -8547,7 +8547,7 @@ def test_docking_prefers_a_local_table_over_the_network(tmp_path,
     """On a blocked network the ChEMBL calls are the step that stops
     everything, so they must be the fallback and not the default."""
     import inspect
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     src = inspect.getsource(dk.write_bundle)
     i_local = src.index("localdrugs")
     i_net = src.index("approved_library(client)")
@@ -8561,7 +8561,7 @@ def test_the_circuit_breaker_also_trips_on_http_500(monkeypatch):
     """ChEMBL is called hundreds of times a run. If a 500 did not trip the
     breaker, every call would pay the full retry budget."""
     import inspect
-    from promoter_tf_drugs import http as ph
+    from generoutes import http as ph
     src = inspect.getsource(ph.Client.request)
     # the 500 branch must leave the loop so the breaker code below runs
     i500 = src.index("429, 500, 502, 503, 504")
@@ -8591,7 +8591,7 @@ def _annot_files(tmp_path):
 
 
 def _reset_annot():
-    from promoter_tf_drugs import localannot as la
+    from generoutes import localannot as la
     la._HGNC.clear()
     la._GOA.clear()
     la._GWAS.clear()
@@ -8602,7 +8602,7 @@ def test_role_comes_from_the_same_go_terms_online_and_offline():
     than having only one, so the offline path imports the term sets rather
     than restating them."""
     import inspect
-    from promoter_tf_drugs import localannot as la, annotate as an
+    from generoutes import localannot as la, annotate as an
     assert "from .annotate import" in inspect.getsource(la)
     assert la.ACTIVATOR_GO is an.ACTIVATOR_GO
     assert la.REPRESSOR_GO is an.REPRESSOR_GO
@@ -8610,7 +8610,7 @@ def test_role_comes_from_the_same_go_terms_online_and_offline():
 
 def test_hgnc_and_goa_give_role_uniprot_and_the_nr_flag(tmp_path,
                                                         monkeypatch):
-    from promoter_tf_drugs import localannot as la
+    from generoutes import localannot as la
     monkeypatch.chdir(tmp_path)
     _annot_files(tmp_path)
     _reset_annot()
@@ -8626,7 +8626,7 @@ def test_a_not_qualified_go_annotation_is_evidence_against(tmp_path,
     """GAF NOT means the term does not apply. Counting it would make REST
     read as dual, an activator and a repressor, from a row saying the
     opposite."""
-    from promoter_tf_drugs import localannot as la
+    from generoutes import localannot as la
     monkeypatch.chdir(tmp_path)
     _annot_files(tmp_path)
     _reset_annot()
@@ -8637,7 +8637,7 @@ def test_an_alias_keeps_its_role(tmp_path, monkeypatch):
     """GOA is keyed on the approved symbol, so an alias has to be followed
     to it or it loses the role - and abundance.py skips any factor without
     one."""
-    from promoter_tf_drugs import localannot as la
+    from generoutes import localannot as la
     monkeypatch.chdir(tmp_path)
     _annot_files(tmp_path)
     _reset_annot()
@@ -8648,7 +8648,7 @@ def test_an_alias_keeps_its_role(tmp_path, monkeypatch):
 
 
 def test_an_unknown_symbol_is_blank_not_guessed(tmp_path, monkeypatch):
-    from promoter_tf_drugs import localannot as la
+    from generoutes import localannot as la
     monkeypatch.chdir(tmp_path)
     _annot_files(tmp_path)
     _reset_annot()
@@ -8659,7 +8659,7 @@ def test_an_unknown_symbol_is_blank_not_guessed(tmp_path, monkeypatch):
 
 def test_annotate_tfs_tries_local_before_mygene():
     import inspect
-    from promoter_tf_drugs import annotate as an
+    from generoutes import annotate as an
     src = inspect.getsource(an.annotate_tfs)
     assert src.index("localannot") < src.index("MYGENE"), (
         "the network must be the fallback, not the first attempt")
@@ -8670,7 +8670,7 @@ def test_gwas_is_labelled_as_weaker_than_an_l2g_score(tmp_path,
     """The catalogue names the gene mapped to a signal, which is not the
     causal gene at that locus. Presenting it as Open Targets genetics
     would overstate it."""
-    from promoter_tf_drugs import localannot as la
+    from generoutes import localannot as la
     monkeypatch.chdir(tmp_path)
     d = tmp_path / "data"
     d.mkdir(exist_ok=True)
@@ -8690,7 +8690,7 @@ def test_gwas_is_labelled_as_weaker_than_an_l2g_score(tmp_path,
 
 def test_no_gwas_file_is_not_absence_of_genetic_support(tmp_path,
                                                         monkeypatch):
-    from promoter_tf_drugs import localannot as la
+    from generoutes import localannot as la
     monkeypatch.chdir(tmp_path)
     _reset_annot()
     g = la.genetic_support("VDR")
@@ -8704,7 +8704,7 @@ def test_a_censored_potency_is_dropped_not_converted():
     10 uM. Recording it as pChEMBL 5 would turn a failed experiment into a
     weak binding constant, and those rows are common enough to bias every
     potency downward."""
-    from promoter_tf_drugs import localpotency as lp
+    from generoutes import localpotency as lp
     assert lp.to_pchembl("1") == (9.0, False)
     assert lp.to_pchembl("1000") == (6.0, False)
     assert lp.to_pchembl(">10000")[1] is True
@@ -8727,7 +8727,7 @@ def _bindingdb(tmp_path, rows):
 
 
 def test_potency_comes_from_a_local_file(tmp_path, monkeypatch):
-    from promoter_tf_drugs import localpotency as lp
+    from generoutes import localpotency as lp
     monkeypatch.chdir(tmp_path)
     _bindingdb(tmp_path, [
         ["CCO", "CHEMBL1", "1.0", "", "", "", "P11473"],
@@ -8745,7 +8745,7 @@ def test_repeated_measurements_use_the_median_not_the_best(tmp_path,
     """Taking the best would favour compounds assayed many times, which is
     study effort rather than potency - the confound the regulon axis
     already corrects for."""
-    from promoter_tf_drugs import localpotency as lp
+    from generoutes import localpotency as lp
     monkeypatch.chdir(tmp_path)
     _bindingdb(tmp_path, [
         ["CCO", "C1", "1.0", "", "", "", "P1"],
@@ -8761,7 +8761,7 @@ def test_equilibrium_constants_are_preferred_over_ic50(tmp_path,
                                                        monkeypatch):
     """Ki and Kd are equilibrium constants; IC50 depends on how the assay
     was run."""
-    from promoter_tf_drugs import localpotency as lp
+    from generoutes import localpotency as lp
     monkeypatch.chdir(tmp_path)
     _bindingdb(tmp_path, [["CCO", "C1", "100.0", "", "1.0", "", "P1"]])
     rec = lp.load_bindingdb(["P1"])["P1"][0]
@@ -8769,7 +8769,7 @@ def test_equilibrium_constants_are_preferred_over_ic50(tmp_path,
 
 
 def test_no_potency_file_leaves_potency_unmeasured(tmp_path, monkeypatch):
-    from promoter_tf_drugs import localpotency as lp
+    from generoutes import localpotency as lp
     monkeypatch.chdir(tmp_path)
     assert lp.load_bindingdb(["P1"]) == {}
     assert lp.actives_for("P1") == []
@@ -8782,7 +8782,7 @@ def test_the_drug_table_prefers_measured_potency_when_a_file_exists(
         tmp_path, monkeypatch):
     """localdrugs said plainly it could not supply potency. With a potency
     file on disk that should stop being the answer."""
-    from promoter_tf_drugs import localdrugs as ld
+    from generoutes import localdrugs as ld
     monkeypatch.chdir(tmp_path)
     _bindingdb(tmp_path, [["CCO", "CHEMBL1", "1.0", "", "", "", "P11473"]])
     rows = [{"name": "calcitriol", "smiles": "CCO", "targets": ["VDR"],
@@ -8822,7 +8822,7 @@ def test_an_inchikey_alone_does_not_merge_salts():
 
 
 def test_the_parent_key_merges_salts_and_separates_real_drugs():
-    from promoter_tf_drugs import localdrugs as ld
+    from generoutes import localdrugs as ld
     assert ld.parent_key(_METFORMIN) == ld.parent_key(_METFORMIN_HCL)
     assert ld.parent_key(_T4) == ld.parent_key(_T4_NA)
     # and two genuinely different drugs stay apart
@@ -8833,7 +8833,7 @@ def test_the_parent_key_merges_salts_and_separates_real_drugs():
 def test_merging_collapses_salt_forms_across_sources(tmp_path):
     """Screening the hydrochloride and the free base as two candidates
     doubles the compute and finds the same thing twice."""
-    from promoter_tf_drugs import localdrugs as ld
+    from generoutes import localdrugs as ld
     a = _tbl(tmp_path, "hub.txt",
              ["pert_iname", "clinical_phase", "target", "smiles"],
              [["metformin", "launched", "PRKAB1", _METFORMIN],
@@ -8854,7 +8854,7 @@ def test_merging_collapses_salt_forms_across_sources(tmp_path):
 def test_min_phase_is_the_dial_that_actually_enlarges_the_library(tmp_path):
     """There are no missing FDA approvals to find. Widening the definition
     is what adds molecules, and each step changes what a hit means."""
-    from promoter_tf_drugs import localdrugs as ld
+    from generoutes import localdrugs as ld
     t = _tbl(tmp_path, "mixed.txt",
              ["pert_iname", "clinical_phase", "target", "smiles"],
              [["approveddrug", "launched", "VDR", _METFORMIN],
@@ -8882,7 +8882,7 @@ def test_min_phase_is_the_dial_that_actually_enlarges_the_library(tmp_path):
 def test_a_row_with_an_unparseable_structure_is_kept_by_name(tmp_path):
     """Dropping it silently would lose a real drug. It is keyed on the name
     instead and flagged, so the fallback is visible."""
-    from promoter_tf_drugs import localdrugs as ld
+    from generoutes import localdrugs as ld
     t = _tbl(tmp_path, "broken.txt",
              ["pert_iname", "clinical_phase", "target", "smiles"],
              [["weirddrug", "launched", "VDR", "C(C(C"]])
@@ -8895,7 +8895,7 @@ def test_the_count_explanation_names_what_20000_counts(tmp_path):
     """The premise of "I only have 3,000 of 20,000" is a counting
     difference, and saying so is more useful than adding salt forms to
     reach the number."""
-    from promoter_tf_drugs import localdrugs as ld
+    from generoutes import localdrugs as ld
     t = _tbl(tmp_path, "one.txt",
              ["pert_iname", "clinical_phase", "target", "smiles"],
              [["metformin", "launched", "PRKAB1", _METFORMIN]])
@@ -8907,7 +8907,7 @@ def test_the_count_explanation_names_what_20000_counts(tmp_path):
 
 
 def test_a_merged_library_can_be_written_and_read_back(tmp_path):
-    from promoter_tf_drugs import localdrugs as ld
+    from generoutes import localdrugs as ld
     t = _tbl(tmp_path, "src.txt",
              ["pert_iname", "clinical_phase", "target", "smiles"],
              [["metformin", "launched", "PRKAB1|AMPK", _METFORMIN],
@@ -8922,7 +8922,7 @@ def test_a_merged_library_can_be_written_and_read_back(tmp_path):
 
 
 def test_a_source_that_fails_to_parse_is_reported_not_silent(tmp_path):
-    from promoter_tf_drugs import localdrugs as ld
+    from generoutes import localdrugs as ld
     good = _tbl(tmp_path, "good.txt",
                 ["pert_iname", "clinical_phase", "target", "smiles"],
                 [["metformin", "launched", "X", _METFORMIN]])
@@ -8973,7 +8973,7 @@ def test_every_source_format_parses_with_the_right_name(tmp_path):
     """Getting a name column wrong does not raise - the name silently
     falls back to the SMILES string, which is then what the report prints
     and what the dedup fallback keys on. All four of these did that."""
-    from promoter_tf_drugs import localdrugs as ld
+    from generoutes import localdrugs as ld
     for p in _write_sources(tmp_path):
         rows = ld.read_table(p, approved_only=False)
         assert rows, p.name
@@ -8987,7 +8987,7 @@ def test_a_headerless_smiles_file_is_read_not_rejected(tmp_path):
     """ZINC's curated subsets have no header: the first line is already a
     molecule, so DictReader ate a real compound as the header and then
     reported no SMILES column."""
-    from promoter_tf_drugs import localdrugs as ld
+    from generoutes import localdrugs as ld
     p = tmp_path / "zinc_fda.smi"
     p.write_text(_SOURCE_SAMPLES["zinc_fda.smi"], encoding="utf-8")
     rows = ld.read_table(p, approved_only=False)
@@ -8999,7 +8999,7 @@ def test_a_headerless_smiles_file_is_read_not_rejected(tmp_path):
 def test_a_header_is_still_detected_when_one_exists(tmp_path):
     """The headerless check must not misfire on a real table, or a column
     row becomes a compound."""
-    from promoter_tf_drugs import localdrugs as ld
+    from generoutes import localdrugs as ld
     p = tmp_path / "withheader.tsv"
     p.write_text("name\tsmiles\nmetformin\tCN(C)C(=N)N=C(N)N\n",
                  encoding="utf-8")
@@ -9011,7 +9011,7 @@ def test_one_molecule_merges_across_five_differently_shaped_sources(
         tmp_path):
     """The point of keying on structure: the ZINC row identifies metformin
     only by a ZINC id, so no name-based merge could join it to the rest."""
-    from promoter_tf_drugs import localdrugs as ld
+    from generoutes import localdrugs as ld
     res = ld.merge(_write_sources(tmp_path), min_phase=0)
     by_name = {r["name"]: r for r in res["library"]}
     met = next(r for r in res["library"]
@@ -9025,7 +9025,7 @@ def test_one_molecule_merges_across_five_differently_shaped_sources(
 def test_the_source_registry_says_what_each_one_adds():
     """They overlap heavily, so the useful question is not how many
     molecules a source has but what it has that the others do not."""
-    from promoter_tf_drugs import localdrugs as ld
+    from generoutes import localdrugs as ld
     keys = {s.key for s in ld.SOURCES}
     assert {"repurposing_hub", "drugcentral", "chembl_approved",
             "zinc_fda"} <= keys
@@ -9041,7 +9041,7 @@ def test_the_source_registry_says_what_each_one_adds():
 
 def test_source_status_reports_presence_without_guessing(tmp_path,
                                                          monkeypatch):
-    from promoter_tf_drugs import localdrugs as ld
+    from generoutes import localdrugs as ld
     monkeypatch.chdir(tmp_path)
     before = {s["key"]: s["present"] for s in ld.source_status()}
     assert not any(before.values())
@@ -9082,7 +9082,7 @@ _OB_ROWS = [
 
 
 def _orange_book(tmp_path):
-    from promoter_tf_drugs import orangebook as ob
+    from generoutes import orangebook as ob
     d = tmp_path / "data"
     d.mkdir(exist_ok=True)
     p = d / "products.txt"
@@ -9097,7 +9097,7 @@ def test_twenty_thousand_products_are_not_twenty_thousand_molecules(
     """The FDA's figure counts products: each strength, dosage form and
     applicant separately. Metformin is four rows here and one molecule, so
     the product list cannot enlarge a screening library."""
-    from promoter_tf_drugs import orangebook as ob
+    from generoutes import orangebook as ob
     monkeypatch.chdir(tmp_path)
     _orange_book(tmp_path)
     assert ob.load() == 5
@@ -9108,7 +9108,7 @@ def test_twenty_thousand_products_are_not_twenty_thousand_molecules(
 def test_the_tilde_delimiter_is_handled(tmp_path, monkeypatch):
     """The Orange Book is tilde-delimited, not tab. A tab reader returns
     one enormous column and raises nothing."""
-    from promoter_tf_drugs import orangebook as ob
+    from generoutes import orangebook as ob
     monkeypatch.chdir(tmp_path)
     _orange_book(tmp_path)
     assert ob.load() == 5
@@ -9119,7 +9119,7 @@ def test_route_decides_whether_a_drug_can_reach_the_target(tmp_path,
     """The reason to load this at all. No structure source says a drug is
     a gel, and a topical-only retinoid is not a route to a gene in the
     liver however well it binds the receptor."""
-    from promoter_tf_drugs import orangebook as ob
+    from generoutes import orangebook as ob
     monkeypatch.chdir(tmp_path)
     _orange_book(tmp_path)
     taz = ob.lookup("tazarotene")
@@ -9134,7 +9134,7 @@ def test_route_decides_whether_a_drug_can_reach_the_target(tmp_path,
 def test_the_salt_free_join_reaches_the_parent(tmp_path, monkeypatch):
     """The Orange Book has no structures, so the only join is on the
     ingredient name - and that name carries the salt."""
-    from promoter_tf_drugs import orangebook as ob
+    from generoutes import orangebook as ob
     monkeypatch.chdir(tmp_path)
     _orange_book(tmp_path)
     assert ob.lookup("Metformin Hydrochloride") == ob.lookup("metformin")
@@ -9143,7 +9143,7 @@ def test_the_salt_free_join_reaches_the_parent(tmp_path, monkeypatch):
 
 def test_generic_availability_comes_from_the_applicant_count(tmp_path,
                                                              monkeypatch):
-    from promoter_tf_drugs import orangebook as ob
+    from generoutes import orangebook as ob
     monkeypatch.chdir(tmp_path)
     _orange_book(tmp_path)
     assert ob.lookup("metformin")["generic_available"] is True
@@ -9154,7 +9154,7 @@ def test_a_combination_only_approval_is_not_evidence_for_one_agent(
         tmp_path, monkeypatch):
     """Olmesartan appears only inside a fixed-dose combination here, so
     its approval says nothing about the agent on its own."""
-    from promoter_tf_drugs import orangebook as ob
+    from generoutes import orangebook as ob
     monkeypatch.chdir(tmp_path)
     _orange_book(tmp_path)
     olm = ob.lookup("olmesartan medoxomil")
@@ -9165,7 +9165,7 @@ def test_a_combination_only_approval_is_not_evidence_for_one_agent(
 
 def test_an_unmatched_name_means_unknown_route_not_no_approval(
         tmp_path, monkeypatch):
-    from promoter_tf_drugs import orangebook as ob
+    from generoutes import orangebook as ob
     monkeypatch.chdir(tmp_path)
     _orange_book(tmp_path)
     assert ob.lookup("nosuchdrug") is None
@@ -9176,7 +9176,7 @@ def test_an_unmatched_name_means_unknown_route_not_no_approval(
 
 def test_no_orange_book_is_not_every_drug_being_systemic(tmp_path,
                                                          monkeypatch):
-    from promoter_tf_drugs import orangebook as ob
+    from generoutes import orangebook as ob
     monkeypatch.chdir(tmp_path)
     ob._PRODUCTS.clear()
     acc = ob.enrich([{"name": "metformin"}])
@@ -9185,7 +9185,7 @@ def test_no_orange_book_is_not_every_drug_being_systemic(tmp_path,
 
 
 def test_enrich_attaches_the_reach_to_each_row(tmp_path, monkeypatch):
-    from promoter_tf_drugs import orangebook as ob
+    from generoutes import orangebook as ob
     monkeypatch.chdir(tmp_path)
     _orange_book(tmp_path)
     lib = [{"name": "tazarotene"}, {"name": "metformin"}]
@@ -9206,7 +9206,7 @@ def test_the_orange_book_route_reaches_the_drug_description(tmp_path,
     """`indications.describe` hand-typed "topical only" for seventy drugs.
     The FDA publishes the route for every approved ingredient, so the
     Orange Book is consulted first and the hand list is the fallback."""
-    from promoter_tf_drugs import orangebook as ob, indications as ind
+    from generoutes import orangebook as ob, indications as ind
     monkeypatch.chdir(tmp_path)
     _orange_book(tmp_path)
     d = ind.describe("tazarotene")
@@ -9220,7 +9220,7 @@ def test_no_orange_book_leaves_the_route_unknown_not_systemic(tmp_path,
                                                               monkeypatch):
     """The failure that matters: a missing file must not read as a drug
     that reaches everywhere."""
-    from promoter_tf_drugs import orangebook as ob, indications as ind
+    from generoutes import orangebook as ob, indications as ind
     monkeypatch.chdir(tmp_path)
     ob._PRODUCTS.clear()
     d = ind.describe("tazarotene")
@@ -9232,13 +9232,13 @@ def test_drug_scoring_reads_a_local_potency_file_before_chembl(monkeypatch):
     """On a blocked network the ChEMBL activity call is what emptied this
     axis, and potency-unknown is treated as neutral - so a nanomolar
     ligand and an untested one ranked identically."""
-    from promoter_tf_drugs import drug_scoring as ds, localpotency as lp
-    from promoter_tf_drugs import localannot as la
+    from generoutes import drug_scoring as ds, localpotency as lp
+    from generoutes import localannot as la
 
     # The real Drug dataclass has target_symbol and target_chembl_id and
     # NO uniprot field. An earlier version of this test invented one, so it
     # passed while the product never took the branch at all.
-    from promoter_tf_drugs.drugs import Drug
+    from generoutes.drugs import Drug
     import dataclasses
     assert not any(f.name == "uniprot" for f in dataclasses.fields(Drug)),         "Drug grew a uniprot field; this test is now testing the wrong thing"
 
@@ -9268,8 +9268,8 @@ def test_pains_discounts_a_predicted_route_in_the_report(monkeypatch):
     """liabilities.py was written to discount confidence in a predicted
     route and for a long while was imported by nothing. This pins it to
     the table."""
-    from promoter_tf_drugs import pipeline as pl
-    from promoter_tf_drugs import report as rep
+    from generoutes import pipeline as pl
+    from generoutes import report as rep
     import inspect
     src = inspect.getsource(pl.corroboration)
     assert "liab_mod.assess" in src, "liabilities is not called"
@@ -9280,8 +9280,8 @@ def test_pains_discounts_a_predicted_route_in_the_report(monkeypatch):
 def test_the_reach_column_is_rendered_and_its_absence_is_explained():
     """A blank Reach column has to say it means unknown route. Silently
     blank reads as "fine"."""
-    from promoter_tf_drugs import pipeline as pl
-    from promoter_tf_drugs import report as rep
+    from generoutes import pipeline as pl
+    from generoutes import report as rep
     import inspect
     src = inspect.getsource(pl.corroboration_table)
     assert "Reach" in src
@@ -9299,8 +9299,8 @@ def test_the_reach_column_is_rendered_and_its_absence_is_explained():
 
 
 def test_the_reach_and_pains_footnotes_fire_on_the_right_rows():
-    from promoter_tf_drugs import pipeline as pl
-    from promoter_tf_drugs import report as rep
+    from generoutes import pipeline as pl
+    from generoutes import report as rep
     import inspect
     src = inspect.getsource(pl.corroboration_table)
     assert "approved only by local routes" in src
@@ -9309,8 +9309,8 @@ def test_the_reach_and_pains_footnotes_fire_on_the_right_rows():
 
 
 def test_route_cell_marks_local_only_and_leaves_unknown_blank():
-    from promoter_tf_drugs import pipeline as pl
-    from promoter_tf_drugs import report as rep
+    from generoutes import pipeline as pl
+    from generoutes import report as rep
     assert rep._route_cell({"route": "local only"}) == "**local only**"
     assert rep._route_cell({"route": "systemic"}) == "systemic"
     assert rep._route_cell({"route": "unclear"}) == "unclear"
@@ -9322,7 +9322,7 @@ def test_local_gwas_is_offered_as_the_weaker_evidence_it_is(tmp_path,
                                                             monkeypatch):
     """GWAS was described in a report as "a weaker kind of evidence" and
     genetics.py did not reference it at all."""
-    from promoter_tf_drugs import genetics as gen, localannot as la
+    from generoutes import genetics as gen, localannot as la
     monkeypatch.chdir(tmp_path)
     d = tmp_path / "data"
     d.mkdir(exist_ok=True)
@@ -9341,7 +9341,7 @@ def test_local_gwas_is_offered_as_the_weaker_evidence_it_is(tmp_path,
 
 def test_no_local_gwas_returns_none_rather_than_an_empty_verdict(
         tmp_path, monkeypatch):
-    from promoter_tf_drugs import genetics as gen, localannot as la
+    from generoutes import genetics as gen, localannot as la
     monkeypatch.chdir(tmp_path)
     la._GWAS.clear()
     assert gen.local_support("PCSK9") is None
@@ -9351,9 +9351,9 @@ def test_a_gwas_file_read_with_no_hits_is_not_a_genetics_success(
         tmp_path, monkeypatch):
     """Read-and-found-nothing is assessed but not evidence. The ledger
     says ok only when something arrived."""
-    from promoter_tf_drugs import genetics as gen, localannot as la
-    from promoter_tf_drugs import pipeline as pl
-    from promoter_tf_drugs import report as rep
+    from generoutes import genetics as gen, localannot as la
+    from generoutes import pipeline as pl
+    from generoutes import report as rep
     monkeypatch.chdir(tmp_path)
     d = tmp_path / "data"
     d.mkdir(exist_ok=True)
@@ -9369,8 +9369,8 @@ def test_a_gwas_file_read_with_no_hits_is_not_a_genetics_success(
 
 
 def test_genetics_detail_names_which_source_found_what():
-    from promoter_tf_drugs import pipeline as pl
-    from promoter_tf_drugs import report as rep
+    from generoutes import pipeline as pl
+    from generoutes import report as rep
     both = pl._genetics_detail(
         [{"trait": "x"}], {"n_significant": 3, "assessed": True})
     assert "Open Targets" in both and "GWAS Catalog" in both
@@ -9392,7 +9392,7 @@ def test_no_module_needs_python_3_12_to_import():
     """
     import re
     from pathlib import Path
-    from promoter_tf_drugs import __file__ as pkg
+    from generoutes import __file__ as pkg
     bs = chr(92)
     pat = re.compile(r"\{[^{}]*" + bs + bs + r"[^{}]*\}")
     offenders = []
@@ -9436,7 +9436,7 @@ def test_no_f_string_needs_python_3_12_to_parse():
 
     root = Path(__file__).resolve().parent.parent
     offenders = []
-    files = (sorted((root / "promoter_tf_drugs").glob("*.py"))
+    files = (sorted((root / "generoutes").glob("*.py"))
              + sorted((root / "tests").glob("*.py"))
              + sorted((root / "scripts").glob("*.py")))
     for f in files:
@@ -9517,7 +9517,7 @@ def test_consensus_accepts_the_json_that_crosses_machines():
     """Docking runs on the machine with the binary and comes back as JSON.
     Requiring the dataclass meant this could not be called on a real split
     run - which is the only kind of run the docking path supports."""
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     both = dk.consensus(_dock_run(), _ligand_hits(), top_frac=0.5)
     assert [h["drug"] for h in both] == ["calcitriol"]
     assert both[0]["docking_score"] == -11.6
@@ -9528,7 +9528,7 @@ def test_consensus_accepts_the_json_that_crosses_machines():
 def test_consensus_refuses_an_unvalidated_pocket():
     """A pocket that could not separate actives from decoys has not been
     shown to rank anything, so agreement with it is not agreement."""
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     assert dk.consensus(_dock_run(usable=False), _ligand_hits(),
                         top_frac=0.5) == []
     assert dk.consensus(_dock_run(), [], top_frac=0.5) == []
@@ -9538,7 +9538,7 @@ def test_consensus_refuses_an_unvalidated_pocket():
 def test_consensus_survives_a_hit_with_no_score():
     """A bundle written by an older run may omit `score`. Previously this
     raised KeyError in the middle of a report."""
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     run = _dock_run()
     del run["hits"][0]["score"]
     both = dk.consensus(run, _ligand_hits(), top_frac=0.5)
@@ -9546,8 +9546,8 @@ def test_consensus_survives_a_hit_with_no_score():
 
 
 def test_the_docking_section_reports_validation_and_disagreement():
-    from promoter_tf_drugs import pipeline as pl
-    from promoter_tf_drugs import report as rep
+    from generoutes import pipeline as pl
+    from generoutes import report as rep
     out = "\n".join(rep._docking_section([_dock_run()], {}))
     assert "ROC AUC" in out and "0.95" in out and "3.4x" in out
     assert "Validated" in out
@@ -9557,17 +9557,17 @@ def test_the_docking_section_reports_validation_and_disagreement():
 
 
 def test_an_unvalidated_pocket_is_flagged_not_hidden():
-    from promoter_tf_drugs import pipeline as pl
-    from promoter_tf_drugs import report as rep
+    from generoutes import pipeline as pl
+    from generoutes import report as rep
     out = "\n".join(rep._docking_section([_dock_run(usable=False)], {}))
     assert "did not validate" in out
     assert "**no**" in out
 
 
 def test_the_consensus_table_names_both_methods_that_found_each_drug():
-    from promoter_tf_drugs import pipeline as pl
-    from promoter_tf_drugs import report as rep
-    from promoter_tf_drugs import docking as dk
+    from generoutes import pipeline as pl
+    from generoutes import report as rep
+    from generoutes import docking as dk
     both = {"VDR": dk.consensus(_dock_run(), _ligand_hits(), top_frac=0.5)}
     out = "\n".join(rep._docking_section([_dock_run()], both))
     assert "picked by both methods" in out
@@ -9577,8 +9577,8 @@ def test_the_consensus_table_names_both_methods_that_found_each_drug():
 
 
 def test_no_docking_means_no_section_rather_than_an_empty_one():
-    from promoter_tf_drugs import pipeline as pl
-    from promoter_tf_drugs import report as rep
+    from generoutes import pipeline as pl
+    from generoutes import report as rep
     assert rep._docking_section([], {}) == []
 
 
@@ -9614,7 +9614,7 @@ def test_inhibiting_a_repressor_needs_an_activator_of_its_upstream_node(
     lower TFREP, which means RAISING the kinase. The old expression read
     net_sign alone and asked for a kinase INHIBITOR, which raises the
     repressor and lowers the gene - the opposite of the request."""
-    from promoter_tf_drugs import drugs as drugs_mod
+    from generoutes import drugs as drugs_mod
     monkeypatch.setattr(drugs_mod, "chembl_drugs", _both_directions)
 
     hits = net.find_upstream_targets(None, "TFREP", goal="up",
@@ -9629,7 +9629,7 @@ def test_inhibiting_a_repressor_needs_an_activator_of_its_upstream_node(
 
 
 def test_the_activator_case_still_asks_for_an_activator(monkeypatch):
-    from promoter_tf_drugs import drugs as drugs_mod
+    from generoutes import drugs as drugs_mod
     monkeypatch.setattr(drugs_mod, "chembl_drugs", _both_directions)
     hits = net.find_upstream_targets(None, "TFACT", goal="up",
                                      tf_role="activator",
@@ -9655,7 +9655,7 @@ def test_the_hit_carries_the_wanted_tf_direction():
 def test_attach_drugs_falls_back_to_its_argument_for_a_bare_hit(monkeypatch):
     """A hit built by hand has no want_tf_sign, so goal_on_node is used -
     which is what that parameter was always for and never did."""
-    from promoter_tf_drugs import drugs as drugs_mod
+    from generoutes import drugs as drugs_mod
     monkeypatch.setattr(drugs_mod, "chembl_drugs", _both_directions)
     h = net.UpstreamHit(node="KINASE", tf_symbol="TF", best_path={},
                         n_paths=1, score=1.0, rwr_score=0.0, net_sign=1)
@@ -9670,7 +9670,7 @@ def test_attach_drugs_falls_back_to_its_argument_for_a_bare_hit(monkeypatch):
 # ===================================================================== #
 def test_the_accession_is_a_dict_key_not_an_attribute():
     """The shape that caused three silent failures, pinned directly."""
-    from promoter_tf_drugs.annotate import TFAnnotation
+    from generoutes.annotate import TFAnnotation
     a = TFAnnotation(symbol="VDR", uniprot="P11473")
     assert isinstance(a, dict)
     assert a.get("uniprot") == "P11473"
@@ -9680,7 +9680,7 @@ def test_the_accession_is_a_dict_key_not_an_attribute():
 
 
 def _hgnc(tmp_path, rows=(("VDR", "P11473"),)):
-    from promoter_tf_drugs import localannot as la
+    from generoutes import localannot as la
 
     d = tmp_path / "data"
     d.mkdir(exist_ok=True)
@@ -9693,7 +9693,7 @@ def _hgnc(tmp_path, rows=(("VDR", "P11473"),)):
 
 
 def test_uniprot_for_resolves_a_symbol_and_an_alias(tmp_path, monkeypatch):
-    from promoter_tf_drugs import localannot as la
+    from generoutes import localannot as la
     monkeypatch.chdir(tmp_path)
     _hgnc(tmp_path)
     assert la.uniprot_for("VDR") == "P11473"
@@ -9704,7 +9704,7 @@ def test_uniprot_for_resolves_a_symbol_and_an_alias(tmp_path, monkeypatch):
 
 def test_no_hgnc_table_means_unknown_not_a_gene_without_a_protein(
         tmp_path, monkeypatch):
-    from promoter_tf_drugs import localannot as la
+    from generoutes import localannot as la
     monkeypatch.chdir(tmp_path)
     la._HGNC.clear()
     assert la.uniprot_for("VDR") is None
@@ -9714,7 +9714,7 @@ def test_the_docking_cli_can_resolve_a_gene_symbol():
     """It could not: both sites read the accession with getattr, so every
     `--gene` run printed "Pass --uniprot" even when the lookup worked."""
     import inspect
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     src = inspect.getsource(dk)
     assert 'getattr(info, "uniprot"' not in src
     assert src.count('(info or {}).get("uniprot")') == 2
@@ -9725,7 +9725,7 @@ def test_the_docking_cli_can_resolve_a_gene_symbol():
 # ===================================================================== #
 def test_screen_family_resolves_ligands_from_files_with_no_client(
         tmp_path, monkeypatch):
-    from promoter_tf_drugs import screening as scr, localpotency as lp
+    from generoutes import screening as scr, localpotency as lp
     monkeypatch.chdir(tmp_path)
     _hgnc(tmp_path, [("RARA", "P10826"), ("RARB", "P10826")])
     monkeypatch.setattr(lp, "available", lambda: {"bindingdb": "x"})
@@ -9739,7 +9739,7 @@ def test_screen_family_with_no_source_says_so_rather_than_blaming_the_family(
         tmp_path, monkeypatch):
     """"The family is as under-studied as the receptor" is a claim about
     biology. With no readable source it is a claim about the filesystem."""
-    from promoter_tf_drugs import screening as scr
+    from generoutes import screening as scr
     monkeypatch.chdir(tmp_path)
     res = scr.screen_family(None, "RARA", goal="up")
     assert res["source"] is None
@@ -9750,7 +9750,7 @@ def test_screen_family_honours_the_goal_it_accepts():
     """It took `goal` and then passed goal="up" to screen(), so a run
     asking to LOWER a gene was screened for compounds that raise it."""
     import inspect
-    from promoter_tf_drugs import screening as scr
+    from generoutes import screening as scr
     src = inspect.getsource(scr.screen_family)
     assert 'goal="up"' not in src.split('"""', 2)[-1], (
         "screen_family hardcodes a goal again")
@@ -9761,14 +9761,14 @@ def test_the_library_guard_in_screen_receptor_has_the_names_it_uses():
     """The guard was first written into screen_receptor, where `fam` does
     not exist - a NameError on the first run with no library at all."""
     import inspect
-    from promoter_tf_drugs import screening as scr
+    from generoutes import screening as scr
     src = inspect.getsource(scr.screen_receptor)
     assert "fam.name" not in src
     assert "no screening library" in src
 
 
 def test_orange_book_annotates_a_merged_library_offline(tmp_path, monkeypatch):
-    from promoter_tf_drugs import orangebook as ob
+    from generoutes import orangebook as ob
     monkeypatch.chdir(tmp_path)
     _orange_book(tmp_path)
     lib = [{"name": "tazarotene"}, {"name": "metformin"},
@@ -9781,7 +9781,7 @@ def test_orange_book_annotates_a_merged_library_offline(tmp_path, monkeypatch):
 
 
 def test_the_merge_cli_exposes_the_orange_book(tmp_path, monkeypatch):
-    from promoter_tf_drugs import localdrugs as ld
+    from generoutes import localdrugs as ld
     monkeypatch.chdir(tmp_path)
     _orange_book(tmp_path)
     (tmp_path / "a.tsv").write_text(
@@ -9792,7 +9792,7 @@ def test_the_merge_cli_exposes_the_orange_book(tmp_path, monkeypatch):
 
 
 def test_depmap_reads_its_own_common_essential_list(tmp_path, monkeypatch):
-    from promoter_tf_drugs import depmap as dm
+    from generoutes import depmap as dm
     monkeypatch.chdir(tmp_path)
     d = tmp_path / "data"
     d.mkdir(exist_ok=True)
@@ -9809,7 +9809,7 @@ def test_depmap_reads_its_own_common_essential_list(tmp_path, monkeypatch):
 def test_a_list_nobody_loaded_is_not_a_gene_being_cleared():
     """None, never False. A gene absent from a list that was never read
     has not been shown to be dispensable."""
-    from promoter_tf_drugs import depmap as dm
+    from generoutes import depmap as dm
     d = dm.assess("VDR", [-0.05] * 14)
     assert d.depmap_common_essential is None
 
@@ -9817,7 +9817,7 @@ def test_a_list_nobody_loaded_is_not_a_gene_being_cleared():
 def test_depmap_reports_a_disagreement_rather_than_choosing(tmp_path):
     """DepMap's call is over the whole release; the fraction here is over
     whatever lines were handed in. Where they differ, both are shown."""
-    from promoter_tf_drugs import depmap as dm
+    from generoutes import depmap as dm
     d = dm.assess("POLR2A", [-0.1] * 14, common_essentials={"POLR2A"})
     assert d.depmap_common_essential is True
     assert any("common-essential" in c and "better-powered" in c
@@ -9834,7 +9834,7 @@ def test_no_public_function_accepts_a_parameter_it_never_reads():
     you want a gene up or down was one of them."""
     import ast
     import pathlib
-    from promoter_tf_drugs import __file__ as pkg
+    from generoutes import __file__ as pkg
 
     skip = {"self", "cls", "client", "kwargs", "args"}
     # Reporting helpers whose signature is kept uniform on purpose.
@@ -9866,7 +9866,7 @@ def test_smiles_to_sdf_embeds_the_number_of_conformers_asked_for():
     from pathlib import Path
     pytest.importorskip("rdkit")
     from rdkit import Chem
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     import tempfile
     with tempfile.TemporaryDirectory() as td:
         one = dk.smiles_to_sdf("CCCCCCCC(=O)O", Path(td) / "a.sdf")
@@ -9885,7 +9885,7 @@ def test_a_plain_smiles_file_says_it_cannot_filter_on_approval(
     """ZINC's `world` subset is not approved. Accepting approved_only and
     ignoring it let that file read as an approved library."""
     import logging
-    from promoter_tf_drugs import localdrugs as ld
+    from generoutes import localdrugs as ld
     f = tmp_path / "world.smi"
     f.write_text("CCO zinc1\nCCN zinc2\n", encoding="utf-8")
     with caplog.at_level(logging.WARNING):
@@ -9895,7 +9895,7 @@ def test_a_plain_smiles_file_says_it_cannot_filter_on_approval(
 
 
 def test_the_drug_scan_summary_states_which_way_the_factor_moves():
-    from promoter_tf_drugs import tfactivity as tfa
+    from generoutes import tfactivity as tfa
     res = {"VDR": [{"drug": "x"}]}
     assert "raise" in tfa.summarise_drug_scan(res, want="up")
     assert "lower" in tfa.summarise_drug_scan(res, want="down")
@@ -9904,7 +9904,7 @@ def test_the_drug_scan_summary_states_which_way_the_factor_moves():
 def test_annotate_hits_with_chip_actually_annotates_the_hits(tmp_path):
     """It computed the counts, returned them, and never touched a hit -
     while its docstring said otherwise."""
-    from promoter_tf_drugs import evidence as ev
+    from generoutes import evidence as ev
     bed = tmp_path / "peaks.bed"
     bed.write_text("chr1\t1000\t1100\tVDR\n" * 3, encoding="utf-8")
 
@@ -9919,7 +9919,7 @@ def test_annotate_hits_with_chip_actually_annotates_the_hits(tmp_path):
 
 
 def test_no_chip_bed_marks_the_hits_unchecked_rather_than_zero(tmp_path):
-    from promoter_tf_drugs import evidence as ev
+    from generoutes import evidence as ev
     hits = [{"tf_symbols": ["VDR"]}]
     assert ev.annotate_hits_with_chip(hits, None, None) == {}
     assert hits[0]["chip_checked"] is False
@@ -10039,8 +10039,8 @@ def test_the_upstream_mechanism_text_agrees_with_the_drug_chosen(monkeypatch):
     """`from_upstream` kept the same inverted expression attach_drugs had,
     so the pipeline selected an activator of the node while the report
     printed "inhibit" it. The two disagreed on screen."""
-    from promoter_tf_drugs import catalogue as cat
-    from promoter_tf_drugs import drugs as drugs_mod
+    from generoutes import catalogue as cat
+    from generoutes import drugs as drugs_mod
     monkeypatch.setattr(drugs_mod, "chembl_drugs", _both_directions)
 
     edges = [net.Edge(source="KINASE", target="TFREP", sign=-1,
@@ -10060,7 +10060,7 @@ def test_an_old_result_without_the_sign_does_not_guess_a_direction():
     """A results.json written before want_tf_sign existed cannot have the
     direction recovered, so it says "move" rather than printing one that
     may be backwards."""
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     h = {"node": "KINASE", "net_sign": -1,
          "best_path": {"hops": 1, "confidence": 0.8, "specificity": 0.5,
                        "description": "KINASE -| TFREP"},
@@ -10070,7 +10070,7 @@ def test_an_old_result_without_the_sign_does_not_guess_a_direction():
 
 
 def test_the_hop_count_reads_as_english():
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     h = {"node": "K", "net_sign": 1, "want_tf_sign": 1,
          "best_path": {"hops": 1, "confidence": 0.8, "specificity": 0.5,
                        "description": "x"},
@@ -10087,7 +10087,7 @@ def test_the_hop_count_reads_as_english():
 def test_the_conformation_follows_role_and_goal_together():
     """To raise a gene you want an activator ON and a repressor OFF, so
     the same goal needs opposite conformations for the two roles."""
-    from promoter_tf_drugs.docking import state_for
+    from generoutes.docking import state_for
     assert state_for("activator", "up") == "active"
     assert state_for("repressor", "up") == "inactive"
     assert state_for("activator", "down") == "inactive"
@@ -10099,8 +10099,8 @@ def test_an_unresolved_role_does_not_guess_a_conformation():
     only pocket with a co-crystallised ligand and refuse the dock. That
     is stricter than drugs.desired_direction, which folds dual in with
     activator because there a wrong guess only reorders a table."""
-    from promoter_tf_drugs.docking import state_for
-    from promoter_tf_drugs.drugs import desired_direction
+    from generoutes.docking import state_for
+    from generoutes.drugs import desired_direction
     assert state_for("dual", "up") is None
     assert state_for("unknown", "up") is None
     assert state_for(None, "up") is None
@@ -10111,7 +10111,7 @@ def test_an_unresolved_role_does_not_guess_a_conformation():
 
 def test_the_state_flag_is_derived_not_demanded():
     import inspect
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     src = inspect.getsource(dk.main)
     assert "want_state = args.state" in src
     assert "state_for(" in src
@@ -10125,7 +10125,7 @@ def test_a_conformation_filter_is_not_reported_as_a_missing_structure():
     surface as "the PDB has none", sending the user after the wrong
     problem."""
     import inspect
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     src = inspect.getsource(dk.dock_screen_for_target)
     assert "excluded_by_conformation" in src
     assert "choose_pocket(client, uniprot, work_dir)" in src, (
@@ -10143,7 +10143,7 @@ def _route_run(target="VDR", state="active"):
 
 
 def test_the_pocket_conformation_is_related_to_the_direction_wanted():
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     cases = {
         ("activator", "active"): "supports",
         ("activator", "inactive"): "opposes",
@@ -10160,7 +10160,7 @@ def test_an_opposing_conformation_is_flagged_and_not_dropped():
     """Docking does not measure whether a compound agonises or
     antagonises, and an antagonist can bind the active conformation. So
     an opposing pocket is a warning, never grounds to delete the route."""
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     routes = cat.from_docking(_route_run(state="active"), goal="up",
                               tf_roles={"VDR": "repressor"})
     assert len(routes) == 1
@@ -10170,14 +10170,14 @@ def test_an_opposing_conformation_is_flagged_and_not_dropped():
 
 
 def test_an_unknown_conformation_stays_unaddressed():
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     r = cat.from_docking(_route_run(state="unknown"), goal="up",
                          tf_roles={"VDR": "activator"})[0]
     assert "supports" not in r.mechanism and "opposes" not in r.mechanism
 
 
 def test_without_roles_nothing_is_claimed_about_direction():
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     r = cat.from_docking(_route_run(), goal="up", tf_roles=None)[0]
     assert "supports" not in r.mechanism and "opposes" not in r.mechanism
     assert r.category == "TF: predicted pocket binder"
@@ -10189,7 +10189,7 @@ def test_without_roles_nothing_is_claimed_about_direction():
 def test_a_dock_against_a_non_factor_is_not_called_a_direct_binder():
     """It came back as "TF: predicted pocket binder" with directness 1,
     claiming a direct relationship with a gene it has no path to."""
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     off = cat.from_docking(_route_run(target="MTOR"), goal="up",
                            tf_roles={"VDR": "activator"})[0]
     assert off.category == "off-pathway pocket binder"
@@ -10198,7 +10198,7 @@ def test_a_dock_against_a_non_factor_is_not_called_a_direct_binder():
 
 
 def test_a_dock_against_a_factor_here_is_unchanged():
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     on = cat.from_docking(_route_run(target="VDR"), goal="up",
                           tf_roles={"VDR": "activator"})[0]
     assert on.category == "TF: predicted pocket binder"
@@ -10206,7 +10206,7 @@ def test_a_dock_against_a_factor_here_is_unchanged():
 
 
 def test_the_off_pathway_route_scores_below_the_on_pathway_one():
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     on = cat.from_docking(_route_run(target="VDR"), goal="up",
                           tf_roles={"VDR": "activator"})[0]
     off = cat.from_docking(_route_run(target="MTOR"), goal="up",
@@ -10217,7 +10217,7 @@ def test_the_off_pathway_route_scores_below_the_on_pathway_one():
 def test_the_new_category_is_registered_and_explained():
     """categories_absent is built from CATEGORIES, and the report prints a
     guide entry per category - a category in neither is invisible."""
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     assert "off-pathway pocket binder" in cat.CATEGORIES
     guide = cat.CATEGORY_GUIDE["off-pathway pocket binder"]
     assert set(guide) >= {"changes", "assay", "what", "why", "cost",
@@ -10268,7 +10268,7 @@ def test_a_family_model_route_rests_on_the_measured_transfer_auc():
     on relatives ranks VDR's own known ligands - and is what the route
     carries. Wiring screen_family into the pipeline sent its hits through
     from_screen, which dropped all of this."""
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     r = cat.from_screen(_fam_screen())[0]
     assert r.axes.strength == 0.78, "the in-model probability leaked back in"
     assert "transfer AUC 0.78" in r.axes.evidence
@@ -10278,7 +10278,7 @@ def test_a_family_model_route_rests_on_the_measured_transfer_auc():
 
 
 def test_a_receptor_model_route_is_unchanged():
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     own = {"VDR": {"enrichment": {"usable": True},
                    "hits": [{"drug": "cpd-1", "quadrant": "NOVEL HYPOTHESIS",
                              "probability": 0.95}]}}
@@ -10291,7 +10291,7 @@ def test_an_established_ligand_keeps_its_tier_under_a_family_model():
     """The binding was measured at this receptor whichever model surfaced
     it, so tier 2 is still right - but the route says the model only
     ranked it."""
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     sc = _fam_screen(hits=[{"drug": "calcitriol",
                             "quadrant": "ESTABLISHED LIGAND, untested on "
                                         "this gene"}])
@@ -10303,8 +10303,8 @@ def test_an_established_ligand_keeps_its_tier_under_a_family_model():
 def test_a_q_value_of_zero_is_the_most_significant_not_the_least():
     """`value or 1` reads 0.0 as missing. tfactivity._q exists for this and
     the pipeline reimplemented the broken version."""
-    from promoter_tf_drugs import pipeline as pl
-    from promoter_tf_drugs import report as rep
+    from generoutes import pipeline as pl
+    from generoutes import report as rep
     assert rep._sig_q(0.0) == 0.0
     assert rep._sig_q(None) == 1.0
     assert rep._sig_q(0.04) == 0.04
@@ -10313,7 +10313,7 @@ def test_a_q_value_of_zero_is_the_most_significant_not_the_least():
 def test_a_zscore_of_zero_is_not_swapped_for_another_column():
     """A gene that did not move has z = 0.0. `a or b` substituted a
     different field's value for it."""
-    from promoter_tf_drugs import signatures as sig
+    from generoutes import signatures as sig
     import inspect
     src = inspect.getsource(sig)
     assert 'float(r.get("zscore") or r.get("score") or 0.0)' not in src
@@ -10352,7 +10352,7 @@ def test_the_p_value_matches_a_reference_t_distribution():
     import pytest
     st = pytest.importorskip("scipy.stats")
     import numpy as np
-    from promoter_tf_drugs import sensitivity as sn
+    from generoutes import sensitivity as sn
     for r, n in ((0.5, 30), (0.2, 100), (0.8, 10), (0.05, 500)):
         df = n - 2
         t = abs(r) * np.sqrt(df / (1 - r * r))
@@ -10362,7 +10362,7 @@ def test_the_p_value_matches_a_reference_t_distribution():
 def test_the_partial_correlation_equals_a_regression_residual():
     """The definition, checked against the thing it is defined to be."""
     import numpy as np
-    from promoter_tf_drugs import sensitivity as sn
+    from generoutes import sensitivity as sn
     rng = np.random.default_rng(3)
     z = rng.normal(size=400)
     x = 0.8 * z + 0.6 * rng.normal(size=400)
@@ -10385,7 +10385,7 @@ def test_pure_noise_produces_no_significant_hit():
     """2,000 tests against a random profile. If BH is wrong this section
     invents drugs."""
     import numpy as np
-    from promoter_tf_drugs import sensitivity as sn
+    from generoutes import sensitivity as sn
     rng = np.random.default_rng(0)
     prism = {"models": [f"ACH-{i}" for i in range(200)],
              "columns": [f"BRD-{j}" for j in range(2000)],
@@ -10409,7 +10409,7 @@ def test_a_column_with_no_information_is_nan_not_a_correlation():
     not be computed is not a correlation of none.
     """
     import numpy as np
-    from promoter_tf_drugs.sensitivity import _pairwise_r
+    from generoutes.sensitivity import _pairwise_r
 
     target = np.array([0.1, -0.4, 0.9, -1.2, 0.3, 0.7])
     flat = np.array([0.3 + k * 1e-17 for k in range(6)])
@@ -10425,7 +10425,7 @@ def test_the_flatness_test_is_relative_to_the_values_own_scale():
     beside values near 0.001, so an absolute threshold would be wrong
     in one direction or the other."""
     import numpy as np
-    from promoter_tf_drugs.sensitivity import _is_flat
+    from generoutes.sensitivity import _is_flat
 
     big_noise = np.array([1000.0 + k * 1e-12 for k in range(6)])
     assert _is_flat(big_noise), "1e-12 beside 1000 is rounding noise"
@@ -10444,7 +10444,7 @@ def test_the_flatness_tolerance_never_discards_real_variation():
     fold change column.
     """
     import numpy as np
-    from promoter_tf_drugs.sensitivity import _is_flat, _pairwise_r
+    from generoutes.sensitivity import _is_flat, _pairwise_r
 
     target = np.array([0.1, -0.4, 0.9, -1.2, 0.3, 0.7])
     # Relative spread ~1e-6: far smaller than any real PRISM column,
@@ -10460,7 +10460,7 @@ def test_both_correlation_sites_share_one_guard():
     `.std() > 0` in the other - around two copies of the same formula,
     which is how they came to disagree."""
     import inspect
-    from promoter_tf_drugs import sensitivity
+    from generoutes import sensitivity
     src = inspect.getsource(sensitivity)
     assert src.count("def _pearson") == 1
     # Neither site may hand-roll the division any more.
@@ -10472,7 +10472,7 @@ def test_both_correlation_sites_share_one_guard():
 
 
 def test_a_planted_phenocopy_is_recovered_with_the_right_sign():
-    from promoter_tf_drugs import sensitivity as sn
+    from generoutes import sensitivity as sn
     prism, target, names = _sens_panel()
     res = sn.correlate(prism, target, gene="VDR", names=names)
     by = {h.drug: h for h in res.hits}
@@ -10486,7 +10486,7 @@ def test_a_planted_phenocopy_is_recovered_with_the_right_sign():
 
 
 def test_too_few_shared_lines_is_refused_not_scored():
-    from promoter_tf_drugs import sensitivity as sn
+    from generoutes import sensitivity as sn
     prism, target, names = _sens_panel()
     few = dict(list(target.items())[:10])
     res = sn.correlate(prism, few, gene="VDR", names=names)
@@ -10495,14 +10495,14 @@ def test_too_few_shared_lines_is_refused_not_scored():
 
 
 def test_a_missing_matrix_is_not_an_absence_of_correlated_drugs():
-    from promoter_tf_drugs import sensitivity as sn
+    from generoutes import sensitivity as sn
     res = sn.correlate({}, {"ACH-1": 0.5}, gene="VDR")
     assert not res.assessed
     assert "missing file, not an absence" in res.error
 
 
 def test_a_gene_absent_from_depmap_says_so(tmp_path, monkeypatch):
-    from promoter_tf_drugs import sensitivity as sn
+    from generoutes import sensitivity as sn
     monkeypatch.chdir(tmp_path)
     d = tmp_path / "data"
     d.mkdir(exist_ok=True)
@@ -10522,7 +10522,7 @@ def test_the_two_readouts_have_opposite_expected_signs():
     POSITIVE correlation. Expression runs the other way, so sensitivity
     rising with expression is NEGATIVE. Getting this backwards would
     invert every call in the section."""
-    from promoter_tf_drugs import sensitivity as sn
+    from generoutes import sensitivity as sn
     prism, target, names = _sens_panel()
     ph = sn.correlate(prism, target, readout="phenocopy", gene="VDR",
                       names=names)
@@ -10537,7 +10537,7 @@ def test_the_two_readouts_have_opposite_expected_signs():
 
 # ---- the route ------------------------------------------------------
 def _sens_block():
-    from promoter_tf_drugs import sensitivity as sn
+    from generoutes import sensitivity as sn
     prism, target, names = _sens_panel()
     res = sn.correlate(prism, target, gene="VDR", names=names)
     return {"VDR": res.to_dict()}
@@ -10548,7 +10548,7 @@ def test_a_phenocopy_route_is_kept_only_where_it_moves_the_right_way():
     the factor lowered and works against one that needs it raised. Unlike
     docking, the direction here was measured, so a wrong-way route is
     dropped rather than flagged."""
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     block = _sens_block()
     cases = {
         ("activator", "up"): "opposer",
@@ -10565,14 +10565,14 @@ def test_a_phenocopy_route_is_kept_only_where_it_moves_the_right_way():
 def test_an_unknown_role_keeps_both_directions():
     """desired_direction returns "either" for an unresolved role, so
     nothing is dropped on a guess."""
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     kept = sorted(r.drug for r in cat.from_sensitivity(
         _sens_block(), goal="up", tf_roles={"VDR": "unknown"}))
     assert kept == ["opposer", "phenocopier"]
 
 
 def test_the_route_rests_on_the_partial_not_the_raw_correlation():
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     block = _sens_block()
     r = cat.from_sensitivity(block, goal="down",
                              tf_roles={"VDR": "activator"})[0]
@@ -10585,14 +10585,14 @@ def test_the_route_rests_on_the_partial_not_the_raw_correlation():
 
 
 def test_an_unassessed_scan_contributes_no_routes():
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     assert cat.from_sensitivity(
         {"VDR": {"assessed": False, "error": "no file"}}, goal="up") == []
 
 
 def test_the_section_reports_a_scan_that_found_nothing(tmp_path):
-    from promoter_tf_drugs import pipeline as pl
-    from promoter_tf_drugs import report as rep
+    from generoutes import pipeline as pl
+    from generoutes import report as rep
     out = "\n".join(rep._sensitivity_section(
         {"VDR": {"assessed": True, "n_drugs_tested": 4000, "hits": []}}))
     assert "none cleared" in out
@@ -10600,8 +10600,8 @@ def test_the_section_reports_a_scan_that_found_nothing(tmp_path):
 
 
 def test_the_section_says_when_nothing_could_be_scanned():
-    from promoter_tf_drugs import pipeline as pl
-    from promoter_tf_drugs import report as rep
+    from generoutes import pipeline as pl
+    from generoutes import report as rep
     out = "\n".join(rep._sensitivity_section(
         {"VDR": {"assessed": False, "error": "no PRISM matrix loaded"}}))
     assert "Nothing was scanned" in out
@@ -10609,8 +10609,8 @@ def test_the_section_says_when_nothing_could_be_scanned():
 
 
 def test_the_section_warns_that_a_correlation_is_not_a_target():
-    from promoter_tf_drugs import pipeline as pl
-    from promoter_tf_drugs import report as rep
+    from generoutes import pipeline as pl
+    from generoutes import report as rep
     out = "\n".join(rep._sensitivity_section(_sens_block()))
     assert "This is not a target" in out
     assert "Partial r" in out
@@ -10626,7 +10626,7 @@ def test_the_cli_flag_reaches_the_pipeline():
     signature now, so no literal `x=args.x` exists to find, and the
     value arriving is the thing that actually matters.
     """
-    from promoter_tf_drugs import cli
+    from generoutes import cli
     args = cli.build_parser().parse_args(
         ["--gene", "X", "--sensitivity-scan", "--prism-file", "p.csv"])
     kw = cli.run_kwargs_from_args(args)
@@ -10647,7 +10647,7 @@ def test_the_fragility_control_removes_a_false_signal_it_is_built_for():
     standing between them and the report.
     """
     import numpy as np
-    from promoter_tf_drugs import sensitivity as sn
+    from generoutes import sensitivity as sn
 
     rng = np.random.default_rng(7)
     n = 120
@@ -10698,7 +10698,7 @@ def test_screen_actually_inverts_its_ranking_for_a_down_goal():
     the same molecule.
     """
     import numpy as np
-    from promoter_tf_drugs import screening as scr, agonism
+    from generoutes import screening as scr, agonism
 
     class _Clf:
         """One likely agonist and one likely antagonist."""
@@ -10738,7 +10738,7 @@ def test_the_q_helper_treats_zero_as_the_most_significant_value():
     its output at Q_FLOOR so no real q ever reaches 0.0. The helper is
     the guard for data that does not come from `_bh`.
     """
-    from promoter_tf_drugs import tfactivity as tfa
+    from generoutes import tfactivity as tfa
     assert tfa._q(0.0) == 0.0
     assert tfa._q(0.0, 1.0) == 0.0, "a falsy zero fell through to default"
     assert tfa._q(None) == 1.0
@@ -10749,7 +10749,7 @@ def test_the_q_helper_treats_zero_as_the_most_significant_value():
 def test_bh_never_emits_a_zero_that_a_falsy_test_would_drop():
     """The invariant the helper above is paired with, pinned explicitly
     because other modules rely on it without saying so."""
-    from promoter_tf_drugs import stats, tfactivity as tfa
+    from generoutes import stats, tfactivity as tfa
     qs = tfa._bh([0.0, 1e-300, 1e-12, 0.5, None])
     assert all(q is None or q >= stats.Q_FLOOR for q in qs)
     assert qs[4] is None, "a missing p-value must stay missing"
@@ -10764,7 +10764,7 @@ def test_a_zscore_of_zero_survives_the_parse():
     replaced by whatever is in the `score` field, which is a different
     quantity.
     """
-    from promoter_tf_drugs import signatures as sig
+    from generoutes import signatures as sig
 
     class _Client:
         def post(self, url, payload):
@@ -10775,7 +10775,7 @@ def test_a_zscore_of_zero_survives_the_parse():
                  "meta": {"pert_name": "real-drug"}},
             ]}
 
-    import promoter_tf_drugs.signatures as _s
+    import generoutes.signatures as _s
     real_is_landmark = _s.is_landmark
     _s.is_landmark = lambda gene, client=None: True
     try:
@@ -10802,7 +10802,7 @@ def test_the_sensitivity_flag_parses_and_the_pipeline_accepts_it():
     over with a grep that would pass either way.
     """
     import inspect
-    from promoter_tf_drugs import cli, pipeline as pl
+    from generoutes import cli, pipeline as pl
 
     args = cli.build_parser().parse_args(
         ["--gene", "X", "--sensitivity-scan", "--prism-file", "p.csv"])
@@ -10826,7 +10826,7 @@ def test_the_scan_is_suppressed_in_demo_mode(monkeypatch):
     not. Disabling the suppression left it green. It now makes the loader
     itself fail loudly, so the only way to pass is never to call it.
     """
-    from promoter_tf_drugs import sensitivity as sens
+    from generoutes import sensitivity as sens
 
     def _loud(*a, **k):
         raise AssertionError("demo mode read the PRISM matrix")
@@ -10861,7 +10861,7 @@ def test_the_compounds_that_crowded_a_real_shortlist_are_classified():
     passed every one. An antiproliferative moves the abundance of a great
     many transcription factors, which is why they dominate an
     expression-signature shortlist without being evidence of a route."""
-    from promoter_tf_drugs import systemic as sy
+    from generoutes import systemic as sy
     unclassified = [n for n in _CROWDERS if sy.classify(n) is None]
     assert not unclassified, f"still unclassified: {unclassified}"
     for n in _CROWDERS:
@@ -10871,7 +10871,7 @@ def test_the_compounds_that_crowded_a_real_shortlist_are_classified():
 def test_the_drug_that_should_win_is_not_swept_up_with_them():
     """Maraviroc is the correct tier-1 answer for lowering CCR5. A filter
     that removes the noise by removing everything has done nothing."""
-    from promoter_tf_drugs import systemic as sy
+    from generoutes import systemic as sy
     assert sy.classify("Maraviroc") is None
     assert sy.clinical_burden("Maraviroc").level == "low"
     assert sy.clinical_burden("Maraviroc").assessed is False
@@ -10881,13 +10881,13 @@ def test_a_code_name_resolves_however_it_is_spaced():
     """LINCS writes "RAF 265" where ChEMBL writes "RAF265". The
     head-token fallback looked up "raf" and missed, because for a code
     name the number is part of the identity."""
-    from promoter_tf_drugs import systemic as sy
+    from generoutes import systemic as sy
     names = {sy.classify(n).name for n in ("RAF 265", "RAF-265", "raf265")}
     assert names == {"antineoplastic kinase inhibitor"}
 
 
 def test_the_head_token_fallback_still_serves_real_multiword_names():
-    from promoter_tf_drugs import systemic as sy
+    from generoutes import systemic as sy
     assert sy.classify("Fluticasone Propionate HFA").name == "glucocorticoid"
     assert sy.classify("Levothyroxine Sodium").name == "thyroid hormone"
 
@@ -10895,7 +10895,7 @@ def test_the_head_token_fallback_still_serves_real_multiword_names():
 def test_the_head_token_fallback_does_not_fire_on_a_code_stem():
     """Without this guard "raf 265" would look up "raf", and any future
     member starting with a shared stem would collect unrelated rows."""
-    from promoter_tf_drugs import systemic as sy
+    from generoutes import systemic as sy
     assert sy.classify("imatinib 400") is None
     # A two-token name containing a digit must not fall back to its head.
     assert sy.classify("nosuchdrug 123") is None
@@ -10905,7 +10905,7 @@ def test_an_lxr_agonist_is_not_filed_as_a_kinase_inhibitor():
     """gw 3965 survived the filter and should: it is a nuclear receptor
     agonist. Sweeping every unfamiliar code name into the kinase class
     would make the filter look effective by being wrong."""
-    from promoter_tf_drugs import systemic as sy
+    from generoutes import systemic as sy
     assert sy.classify("gw 3965 hydrochloride") is None
 
 
@@ -10913,14 +10913,14 @@ def test_the_table_still_satisfies_its_own_audit():
     """A member in two classes makes `classify` order-dependent, and a
     name that changes under salt_free_name is never matched at all. The
     audit caught one of each while this table was being extended."""
-    from promoter_tf_drugs import audit
+    from generoutes import audit
     problems = {k: v for k, v in audit.check_internal().items()
                 if v and "systemic" in k}
     assert not problems, problems
 
 
 def test_salt_forms_of_the_new_members_resolve():
-    from promoter_tf_drugs import systemic as sy
+    from generoutes import systemic as sy
     assert sy.classify("Mitoxantrone Dihydrochloride").name.startswith(
         "cytotoxic")
     assert sy.classify("Ruxolitinib Phosphate").name == (
@@ -10929,7 +10929,7 @@ def test_salt_forms_of_the_new_members_resolve():
 
 # ---- the selection filters -------------------------------------------
 def test_max_burden_drops_high_burden_routes():
-    from promoter_tf_drugs import shortlist as sl
+    from generoutes import shortlist as sl
     rows = [
         {"drug": "dinaciclib", "burden": "high", "_burden_assessed": True,
          "_burden_score": 0.8},
@@ -10944,14 +10944,14 @@ def test_an_unassessed_drug_passes_the_burden_filter():
     """The class table is hand-maintained and incomplete. Dropping what it
     does not list would select for obscurity, which is the trap the
     regulon count already has."""
-    from promoter_tf_drugs import shortlist as sl
+    from generoutes import shortlist as sl
     row = {"drug": "something-new", "burden": "low",
            "_burden_assessed": False}
     assert sl.keep(row, max_burden="low")
 
 
 def test_an_unknown_burden_level_is_an_error_not_a_pass():
-    from promoter_tf_drugs import shortlist as sl
+    from generoutes import shortlist as sl
     import pytest
     row = {"drug": "x", "burden": "high", "_burden_assessed": True}
     with pytest.raises(ValueError):
@@ -10960,14 +10960,14 @@ def test_an_unknown_burden_level_is_an_error_not_a_pass():
 
 def test_max_dependency_burden_keeps_an_unscored_factor():
     """Absent from DepMap is not the same as safe."""
-    from promoter_tf_drugs import shortlist as sl
+    from generoutes import shortlist as sl
     assert sl.keep({"_dependency_burden": None}, max_dependency_burden=0.5)
     assert not sl.keep({"_dependency_burden": 0.9},
                        max_dependency_burden=0.5)
 
 
 def test_the_new_filters_are_registered_and_validated():
-    from promoter_tf_drugs import shortlist as sl
+    from generoutes import shortlist as sl
     import pytest
     for name in ("max_burden", "exclude_drug_classes",
                  "max_dependency_burden", "require_verified_approval"):
@@ -10981,7 +10981,7 @@ def test_a_negative_approval_needs_a_real_library_behind_it():
     """The curated tables hold a few hundred names, so a miss against
     them says the drug is uncurated and nothing about its approval -
     vemurafenib is approved and is not in them."""
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     assert cat.verify_approval("maraviroc") is True
     if not cat._APPROVED_FROM_LIBRARY:
         assert cat.verify_approval("CGP-60474") is None
@@ -10991,7 +10991,7 @@ def test_a_negative_approval_needs_a_real_library_behind_it():
 def test_require_verified_approval_keeps_what_could_not_be_checked():
     """With no drug table on disk that is every row, and a filter that
     empties itself on a missing file teaches nothing."""
-    from promoter_tf_drugs import shortlist as sl
+    from generoutes import shortlist as sl
     assert sl.keep({"approval_verified": None},
                    require_verified_approval=True)
     assert sl.keep({"approval_verified": True},
@@ -11003,7 +11003,7 @@ def test_require_verified_approval_keeps_what_could_not_be_checked():
 def test_routes_carry_a_checked_approval_field():
     """Ten of the eleven collectors hardcode approved=True, so that field
     means "came from a drug table", not "is an approved drug"."""
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     block = {"direct_therapies": [], "drug_grades": [],
              "lincs": {"hits": [{"drug": "Maraviroc", "tier": 2,
                                  "score": -2.5, "direction": "down",
@@ -11017,7 +11017,7 @@ def test_strict_carries_the_burden_criterion():
     """It is the criterion that takes a real CCR5 shortlist from 21 rows
     to 4, so a silent removal would be a large regression that no count
     assertion elsewhere would notice."""
-    from promoter_tf_drugs import shortlist as sl
+    from generoutes import shortlist as sl
     assert sl.PRESETS["strict"].get("max_burden") == "moderate"
 
 
@@ -11026,7 +11026,7 @@ def test_strict_drops_a_cytotoxic_and_keeps_the_direct_agent():
     survives while an antiproliferative reaching it through a factor's
     abundance does not. A filter that cleaned up by removing everything
     would pass a count assertion and be useless."""
-    from promoter_tf_drugs import shortlist as sl
+    from generoutes import shortlist as sl
     rows = [
         {"drug": "Maraviroc", "tier": 1, "score": 60.0, "category":
          "direct: gene product", "axes": {"specificity": 0.55},
@@ -11047,7 +11047,7 @@ def test_the_other_presets_are_left_alone():
     """strict is the one that answers "what would I order next week?".
     `novel` and `empirical` exist to show what is there, so silently
     narrowing them would hide the thing they are for."""
-    from promoter_tf_drugs import shortlist as sl
+    from generoutes import shortlist as sl
     for name in ("mechanism", "empirical", "novel", "specific"):
         assert "max_burden" not in sl.PRESETS[name], name
 
@@ -11060,7 +11060,7 @@ def _olol_actives():
     binding model has something real to learn. Skips when no library is
     on disk, because this needs real chemistry rather than fixtures."""
     import pytest
-    from promoter_tf_drugs import localdrugs as ld
+    from generoutes import localdrugs as ld
     lib = ld.library()
     fam = [d for d in lib
            if d["name"].lower().endswith("olol") and d.get("smiles")
@@ -11081,7 +11081,7 @@ def test_the_product_screen_recovers_ligands_it_never_trained_on():
     """
     import pytest
     pytest.importorskip("sklearn")
-    from promoter_tf_drugs import screening as scr
+    from generoutes import screening as scr
     lib, actives = _olol_actives()
     res = scr.screen_gene_product(None, "ADRB1", uniprot="P08588",
                                   library=lib, actives=actives,
@@ -11104,7 +11104,7 @@ def test_the_product_screen_refuses_a_model_that_cannot_rank():
     import pytest
     import random
     pytest.importorskip("sklearn")
-    from promoter_tf_drugs import screening as scr
+    from generoutes import screening as scr
     lib, actives = _olol_actives()
     rng = random.Random(0)
     noise = rng.sample([d for d in lib if d.get("chembl_id")], 25)
@@ -11122,7 +11122,7 @@ def test_no_ligand_source_is_a_missing_source_not_a_bad_target():
     """The intent, which survived the message becoming more specific: a
     refusal here must point at what is missing on disk, never imply the
     protein is undruggable."""
-    from promoter_tf_drugs import screening as scr
+    from generoutes import screening as scr
     res = scr.screen_gene_product(None, "NOSUCHGENE", library=[
         {"name": "x", "smiles": "CCO", "chembl_id": "C1"}])
     assert res["hits"] == []
@@ -11138,7 +11138,7 @@ def test_only_the_unannotated_candidates_become_routes():
     """The known binders are already reported by `from_direct` at tier 1.
     Emitting them here too would double-count the same drug and bury the
     one thing this screen adds."""
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     screen = {
         "is_gene_product": True, "gene": "ADRB1", "model_auc": 0.95,
         "enrichment": {"usable": True},
@@ -11157,7 +11157,7 @@ def test_only_the_unannotated_candidates_become_routes():
 
 
 def test_a_product_screen_that_did_not_validate_contributes_nothing():
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     assert cat.from_product_screen(
         {"is_gene_product": True, "enrichment": {"usable": False},
          "hits": [{"drug": "x", "quadrant": "NOVEL HYPOTHESIS",
@@ -11167,7 +11167,7 @@ def test_a_product_screen_that_did_not_validate_contributes_nothing():
 
 def test_a_tf_screen_is_not_mistaken_for_a_product_screen():
     """Both return the same shape; only the product one carries the flag."""
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     assert cat.from_product_screen(
         {"enrichment": {"usable": True},
          "hits": [{"drug": "x", "quadrant": "NOVEL HYPOTHESIS",
@@ -11176,7 +11176,7 @@ def test_a_tf_screen_is_not_mistaken_for_a_product_screen():
 
 def test_the_product_route_warns_that_rtqpcr_will_not_see_it():
     import inspect
-    from promoter_tf_drugs import screening as scr
+    from generoutes import screening as scr
     src = inspect.getsource(scr.screen_gene_product)
     assert "RT-qPCR will not see" in src
     assert "binding is not direction" in src
@@ -11188,7 +11188,7 @@ def test_the_library_reader_keeps_the_identifier_column():
     library the training actives could be sampled as decoys."""
     import tempfile
     from pathlib import Path
-    from promoter_tf_drugs import localdrugs as ld
+    from generoutes import localdrugs as ld
     TAB, NL = chr(9), chr(10)
     with tempfile.TemporaryDirectory() as td:
         f = Path(td) / "lib.tsv"
@@ -11204,7 +11204,7 @@ def test_the_library_reader_keeps_the_identifier_column():
 
 def test_the_product_screen_flag_reaches_the_pipeline():
     import inspect
-    from promoter_tf_drugs import cli, pipeline as pl
+    from generoutes import cli, pipeline as pl
     assert "screen_product" in inspect.signature(pl.run).parameters
     args = cli.build_parser().parse_args(["--gene", "X", "--screen-product"])
     assert cli.run_kwargs_from_args(args)["screen_product"] is True
@@ -11214,8 +11214,8 @@ def test_the_gene_accession_exists_even_without_the_direct_step():
     """`uniprot` was assigned only inside `if include_direct:`, so the
     product screen would have raised NameError on a --no-direct run."""
     import inspect
-    from promoter_tf_drugs import pipeline as pl
-    from promoter_tf_drugs import report as rep
+    from generoutes import pipeline as pl
+    from generoutes import report as rep
     src = inspect.getsource(pl.run)
     i = src.index("uniprot = None")
     j = src.index("if include_direct:")
@@ -11249,7 +11249,7 @@ def test_a_feature_must_beat_the_promoter_s_own_shuffles():
     composition alone. Proposing an agent for those would propose one for
     most of the genome, so each count is tested against dinucleotide
     shuffles of the same sequence."""
-    from promoter_tf_drugs import promoterdna as pd
+    from generoutes import promoterdna as pd
     scan = pd.scan_features(_gc_rich(), shuffles=60, seed=0)
     gc = scan["features"]["gc_box"]
     assert gc["n_observed"] > 0, "the fixture should carry GC-boxes"
@@ -11259,7 +11259,7 @@ def test_a_feature_must_beat_the_promoter_s_own_shuffles():
 
 
 def test_a_real_enrichment_is_reported():
-    from promoter_tf_drugs import promoterdna as pd
+    from generoutes import promoterdna as pd
     # One quadruplex dropped into an AT-rich background: composition
     # cannot explain it, so the shuffles should not reproduce it.
     seq = _at_rich(400) + "GGGTTAGGGTTAGGGTTAGGG" + _at_rich(400)
@@ -11272,7 +11272,7 @@ def test_a_real_enrichment_is_reported():
 
 
 def test_nothing_enriched_proposes_nothing():
-    from promoter_tf_drugs import promoterdna as pd
+    from generoutes import promoterdna as pd
     scan = pd.scan_features(_gc_rich(), shuffles=60, seed=0)
     assert pd.candidates(scan) == []
     text = pd.summarise(scan, [])
@@ -11283,7 +11283,7 @@ def test_the_dinucleotide_shuffle_preserves_composition():
     """A mononucleotide shuffle would destroy GG pairs and call every
     GC-rich promoter enriched for quadruplexes."""
     import random
-    from promoter_tf_drugs import promoterdna as pd
+    from generoutes import promoterdna as pd
     seq = _gc_rich(500)
     sh = pd._dinucleotide_shuffle(seq, random.Random(0))
     assert len(sh) == len(seq)
@@ -11292,14 +11292,14 @@ def test_the_dinucleotide_shuffle_preserves_composition():
 
 
 def test_a_short_sequence_is_refused_not_scanned():
-    from promoter_tf_drugs import promoterdna as pd
+    from generoutes import promoterdna as pd
     scan = pd.scan_features("ACGT" * 5)
     assert "too short" in scan.get("error", "")
     assert pd.candidates(scan) == []
 
 
 def test_the_dna_route_says_what_it_cannot_tell_you():
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     dna = {"candidates": [{
         "drug": "Pyridostatin", "prefers": "g4", "feature": "G-quadruplex",
         "n_sites": 3, "expected": 0.4, "p_value": 0.008,
@@ -11322,7 +11322,7 @@ def test_the_dna_route_says_what_it_cannot_tell_you():
 
 
 def test_an_approved_dna_agent_is_not_labelled_unapproved():
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     dna = {"candidates": [{
         "drug": "Mithramycin", "prefers": "gc_box", "feature": "SP1 GC-box",
         "n_sites": 11, "expected": 6.1, "p_value": 0.02,
@@ -11333,7 +11333,7 @@ def test_an_approved_dna_agent_is_not_labelled_unapproved():
 
 
 def test_every_curated_dna_agent_declares_its_feature():
-    from promoter_tf_drugs import promoterdna as pd
+    from generoutes import promoterdna as pd
     keys = {"g4", "imotif", "gc_box", "at_tract"}
     for a in pd.AGENTS:
         assert a.prefers in keys, (a.name, a.prefers)
@@ -11358,21 +11358,21 @@ def _burden_rows():
 
 
 def test_a_high_burden_row_is_set_aside_not_deleted():
-    from promoter_tf_drugs import shortlist as sl
+    from generoutes import shortlist as sl
     kept, aside = sl.split_by_burden(_burden_rows(), max_burden="moderate")
     assert [r["drug"] for r in kept] == ["Maraviroc"]
     assert [r["drug"] for r in aside] == ["dinaciclib"]
 
 
 def test_with_no_burden_criterion_nothing_is_set_aside():
-    from promoter_tf_drugs import shortlist as sl
+    from generoutes import shortlist as sl
     kept, aside = sl.split_by_burden(_burden_rows())
     assert aside == []
     assert len(kept) == 2
 
 
 def test_the_burden_table_warns_that_they_are_cytotoxic():
-    from promoter_tf_drugs import shortlist as sl
+    from generoutes import shortlist as sl
     text = sl.render([], {}, 2, set_aside=[_burden_rows()[0]])
     assert "These are cytotoxic or otherwise high-burden drugs" in text
     assert "only if nothing in the table above will do" in text
@@ -11382,7 +11382,7 @@ def test_the_burden_table_warns_that_they_are_cytotoxic():
 
 
 def test_the_burden_table_explains_why_the_class_qualifies():
-    from promoter_tf_drugs import shortlist as sl
+    from generoutes import shortlist as sl
     text = sl.render([], {}, 2, set_aside=[_burden_rows()[0]])
     assert "Why these are set aside, by class" in text
     assert "stop cells dividing" in text
@@ -11394,7 +11394,7 @@ def test_the_burden_table_explains_why_the_class_qualifies():
 def test_the_product_screen_annotates_direction_when_it_can():
     import pytest
     pytest.importorskip("sklearn")
-    from promoter_tf_drugs import screening as scr, localdrugs as ld, agonism
+    from generoutes import screening as scr, localdrugs as ld, agonism
     lib = ld.library()
     ant = [d for d in lib if d["name"].lower().endswith("olol")
            and d.get("smiles")]
@@ -11418,7 +11418,7 @@ def test_the_product_screen_annotates_direction_when_it_can():
 def test_too_few_labels_declares_direction_unknown_rather_than_guessing():
     import pytest
     pytest.importorskip("sklearn")
-    from promoter_tf_drugs import screening as scr, localdrugs as ld
+    from generoutes import screening as scr, localdrugs as ld
     lib = ld.library()
     ant = [d for d in lib if d["name"].lower().endswith("olol")
            and d.get("smiles")]
@@ -11447,7 +11447,7 @@ def _dock_on(target, state="inactive"):
 def test_docking_the_gene_s_own_product_is_the_most_direct_route():
     """It is not one of the promoter's factors, so the off-pathway test
     called it the longest route when it is the shortest."""
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     r = cat.from_docking(_dock_on("CCR5"), goal="down",
                          tf_roles={"VDR": "activator"}, gene="CCR5")[0]
     assert r.category == "direct: predicted product binder"
@@ -11458,7 +11458,7 @@ def test_docking_the_gene_s_own_product_is_the_most_direct_route():
 def test_the_three_docking_targets_keep_their_order():
     """Gene product, then a factor at this promoter, then anything else.
     The directness gradient is what the score penalty reads."""
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     roles = {"VDR": "activator"}
     got = {}
     for target in ("CCR5", "VDR", "MTOR"):
@@ -11473,7 +11473,7 @@ def test_the_three_docking_targets_keep_their_order():
 
 
 def test_the_product_pocket_warns_about_the_readout():
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     r = cat.from_docking(_dock_on("CCR5"), goal="down", tf_roles={},
                          gene="CCR5")[0]
     joined = " ".join(r.notes)
@@ -11484,7 +11484,7 @@ def test_the_product_pocket_warns_about_the_readout():
 def test_the_product_conformation_follows_the_goal_directly():
     """No factor role in between: wanting more of the gene's activity
     wants the agonist-bound structure and wanting less wants the other."""
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     cases = {("up", "active"): "supports", ("up", "inactive"): "opposes",
              ("down", "inactive"): "supports", ("down", "active"): "opposes"}
     for (goal, state), expect in cases.items():
@@ -11494,7 +11494,7 @@ def test_the_product_conformation_follows_the_goal_directly():
 
 
 def test_state_for_product_needs_no_role():
-    from promoter_tf_drugs.docking import state_for_product, state_for
+    from generoutes.docking import state_for_product, state_for
     assert state_for_product("up") == "active"
     assert state_for_product("down") == "inactive"
     # Same answer as an activator factor, for a different reason - which
@@ -11504,7 +11504,7 @@ def test_state_for_product_needs_no_role():
 
 def test_the_docking_cli_offers_the_product_flag():
     import inspect
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     src = inspect.getsource(dk.main)
     assert '"--product"' in src
     assert "state_for_product(args.direction)" in src
@@ -11513,7 +11513,7 @@ def test_the_docking_cli_offers_the_product_flag():
 def test_without_a_gene_nothing_is_called_a_product_dock():
     """`gene` is optional, and a bundle read without it must not promote
     an arbitrary target to directness 0."""
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     r = cat.from_docking(_dock_on("CCR5"), goal="down",
                          tf_roles={"VDR": "activator"})[0]
     assert r.category == "off-pathway pocket binder"
@@ -11522,7 +11522,7 @@ def test_without_a_gene_nothing_is_called_a_product_dock():
 
 def test_the_pipeline_tells_the_catalogue_which_gene_is_the_target():
     import inspect
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     src = inspect.getsource(cat.build)
     assert 'gene=result_block.get("gene_symbol")' in src
 
@@ -11552,7 +11552,7 @@ def test_a_promiscuous_factor_is_dropped_during_the_scan(tmp_path):
     AGO1 bound 23,318 promoters and was carried the whole way before being
     discarded. The cap bites while reading now, so the structure is
     bounded by factors x cap rather than factors x genome."""
-    from promoter_tf_drugs import chipregulon as cr
+    from generoutes import chipregulon as cr
     gtf = tmp_path / "g.gtf"
     _gtf_genes(gtf, 12)
     bed = tmp_path / "p.bed"
@@ -11576,7 +11576,7 @@ def test_cell_type_support_promotes_only_when_a_second_appears(tmp_path):
     """One int per edge until a second cell type shows up. 98% of edges
     never see one, which is why a thousand-bit mask per edge was the
     wrong representation."""
-    from promoter_tf_drugs import chipregulon as cr
+    from generoutes import chipregulon as cr
     gtf = tmp_path / "g.gtf"
     _gtf_genes(gtf, 1)
     bed = tmp_path / "p.bed"
@@ -11589,7 +11589,7 @@ def test_cell_type_support_promotes_only_when_a_second_appears(tmp_path):
 
 
 def test_one_cell_type_stays_one(tmp_path):
-    from promoter_tf_drugs import chipregulon as cr
+    from generoutes import chipregulon as cr
     gtf = tmp_path / "g.gtf"
     _gtf_genes(gtf, 1)
     bed = tmp_path / "p.bed"
@@ -11600,7 +11600,7 @@ def test_one_cell_type_stays_one(tmp_path):
 
 
 def test_support_reads_both_representations():
-    from promoter_tf_drugs import chipregulon as cr
+    from generoutes import chipregulon as cr
     assert cr._support(3) == 1
     assert cr._support({1, 2, 5}) == 3
 
@@ -11610,7 +11610,7 @@ def test_the_scan_does_not_allocate_a_mask_per_edge():
     is roughly 150 bytes with ReMap's ~1,000 cell lines, on 16.5 million
     placements."""
     import inspect
-    from promoter_tf_drugs import chipregulon as cr
+    from generoutes import chipregulon as cr
     src = inspect.getsource(cr.build)
     assert "1 <<" not in src
     assert "bit_count" not in inspect.getsource(cr)
@@ -11621,7 +11621,7 @@ def test_remap_lists_every_cell_line_a_merged_peak_was_seen_in():
     Taking the whole field as one name found 564,344 distinct cell types
     in a file with a few hundred, and scored a peak reproduced in 37 cell
     lines as support 1."""
-    from promoter_tf_drugs.chipregulon import _tf_cells
+    from generoutes.chipregulon import _tf_cells
     tf, cells = _tf_cells("CTCF:hiPSC,HCT-116,HEK293,K-562,WA09")
     assert tf == "CTCF"
     assert cells == ["HIPSC", "HCT-116", "HEK293", "K-562", "WA09"]
@@ -11630,7 +11630,7 @@ def test_remap_lists_every_cell_line_a_merged_peak_was_seen_in():
 
 
 def test_a_merged_peak_counts_every_cell_line_it_names(tmp_path):
-    from promoter_tf_drugs import chipregulon as cr
+    from generoutes import chipregulon as cr
     gtf = tmp_path / "g.gtf"
     _gtf_genes(gtf, 1)
     bed = tmp_path / "p.bed"
@@ -11642,7 +11642,7 @@ def test_a_merged_peak_counts_every_cell_line_it_names(tmp_path):
 
 def test_cell_lines_union_across_peaks(tmp_path):
     """Two peaks naming overlapping sets give the union, not the sum."""
-    from promoter_tf_drugs import chipregulon as cr
+    from generoutes import chipregulon as cr
     gtf = tmp_path / "g.gtf"
     _gtf_genes(gtf, 1)
     bed = tmp_path / "p.bed"
@@ -11658,7 +11658,7 @@ def test_the_magnitude_statistic_gets_a_q_value():
     from the directional p, which is None without signed edges. A fully
     unsigned regulon therefore produced no q at all and the run reported
     "0 reached q<0.05" when nothing had been tested at that level."""
-    from promoter_tf_drugs import tfactivity as tfa
+    from generoutes import tfactivity as tfa
     sig = {f"G{i}": float(i % 7) - 3 for i in range(400)}
     reg = {"TF1": {f"G{i}": 0 for i in range(40)},
            "TF2": {f"G{i}": 0 for i in range(40, 80)}}
@@ -11673,7 +11673,7 @@ def test_the_magnitude_statistic_gets_a_q_value():
 def test_an_oversized_regulon_is_flagged_as_not_factor_specific():
     """A set covering a tenth of the measured genes inherits the
     signature's structure, so the test on it is near-guaranteed."""
-    from promoter_tf_drugs import tfactivity as tfa
+    from generoutes import tfactivity as tfa
     sig = {f"G{i}": float(i % 5) - 2 for i in range(300)}
     reg = {"BIG": {f"G{i}": 0 for i in range(150)},
            "SMALL": {f"G{i}": 0 for i in range(12)}}
@@ -11689,7 +11689,7 @@ def test_half_the_factors_moving_is_reported_as_a_warning():
     """Factors do not act in concert. When a large share move, and mostly
     the same way, the statistic is reading the signature rather than the
     factors."""
-    from promoter_tf_drugs import tfactivity as tfa
+    from generoutes import tfactivity as tfa
 
     class _A:
         def __init__(self, i):
@@ -11716,7 +11716,7 @@ def test_half_the_factors_moving_is_reported_as_a_warning():
 
 
 def test_a_normal_result_carries_no_such_warning():
-    from promoter_tf_drugs import tfactivity as tfa
+    from generoutes import tfactivity as tfa
     sig = {f"G{i}": float((i * 7) % 11) - 5 for i in range(500)}
     reg = {f"TF{k}": {f"G{i}": (1 if i % 2 else -1)
                       for i in range(k, k + 15)} for k in range(0, 60, 15)}
@@ -11730,7 +11730,7 @@ def test_the_potency_refusal_distinguishes_its_three_causes(monkeypatch):
     query this package makes is about a transcription factor rather than a
     gene's own product. Telling someone to fetch a file they have sends
     them to fix the wrong thing."""
-    from promoter_tf_drugs import screening as scr, localpotency as lp
+    from generoutes import screening as scr, localpotency as lp
 
     lib = [{"name": "x", "smiles": "CCO", "chembl_id": "C1"}]
 
@@ -11755,7 +11755,7 @@ def test_the_potency_refusal_distinguishes_its_three_causes(monkeypatch):
 
 
 def test_a_thin_target_is_not_blamed_on_a_missing_file():
-    from promoter_tf_drugs import screening as scr
+    from generoutes import screening as scr
     res = scr.screen_gene_product(
         None, "X", uniprot="P1",
         library=[{"name": "x", "smiles": "CCO", "chembl_id": "C1"}],
@@ -11792,7 +11792,7 @@ def test_the_fetch_merges_into_the_file_already_in_use(tmp_path,
     first CANDIDATE path created a second file that shadowed it - adding
     CCR5 took ESR1 from 2,020 actives to zero, because the new file won
     the lookup and held only CCR5."""
-    from promoter_tf_drugs import localpotency as lp
+    from generoutes import localpotency as lp
     monkeypatch.chdir(tmp_path)
     d = tmp_path / "data"
     d.mkdir()
@@ -11817,7 +11817,7 @@ def test_the_fetch_merges_into_the_file_already_in_use(tmp_path,
 
 def test_the_fetch_keeps_columns_the_existing_file_had(tmp_path,
                                                        monkeypatch):
-    from promoter_tf_drugs import localpotency as lp
+    from generoutes import localpotency as lp
     monkeypatch.chdir(tmp_path)
     d = tmp_path / "data"
     d.mkdir()
@@ -11835,7 +11835,7 @@ def test_the_fetch_keeps_columns_the_existing_file_had(tmp_path,
 
 
 def test_a_failed_target_does_not_lose_the_others(tmp_path, monkeypatch):
-    from promoter_tf_drugs import localpotency as lp
+    from generoutes import localpotency as lp
     monkeypatch.chdir(tmp_path)
     (tmp_path / "data").mkdir()
 
@@ -11862,7 +11862,7 @@ def test_actives_match_the_library_by_structure_not_by_id():
     actives, could hand a real binder to the model as a negative."""
     import pytest
     pytest.importorskip("rdkit")
-    from promoter_tf_drugs import screening as scr
+    from generoutes import screening as scr
     # Same molecule, different source spellings and different ids.
     actives = [{"chembl_id": None, "smiles": "OC(=O)Cc1ccccc1",
                 "pchembl": 8.0}]
@@ -11876,7 +11876,7 @@ def test_actives_match_the_library_by_structure_not_by_id():
 def test_a_salt_form_still_matches_its_parent():
     import pytest
     pytest.importorskip("rdkit")
-    from promoter_tf_drugs import screening as scr
+    from generoutes import screening as scr
     actives = [{"smiles": "CN(C)C(=N)NC(N)=N", "pchembl": 8.0}]
     lib = [{"name": "salt", "chembl_id": "C1",
             "smiles": "CN(C)C(=N)NC(N)=N.Cl"}]
@@ -11886,7 +11886,7 @@ def test_a_salt_form_still_matches_its_parent():
 def test_an_unmatchable_active_set_warns_rather_than_silently_passing(
         caplog):
     import logging
-    from promoter_tf_drugs import screening as scr
+    from generoutes import screening as scr
     with caplog.at_level(logging.WARNING):
         scr.screen_gene_product(
             None, "X", uniprot="P1",
@@ -11943,7 +11943,7 @@ def test_cnn_affinity_is_not_confused_with_its_own_variance():
     a variance is a small positive number, so half the affinities came
     back near 0.2 and looked like weak binders rather than like a parse
     error. Nothing raised; the numbers were just wrong."""
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     poses = dk._parse_poses(GNINA_SDF, "", "gnina")
     assert len(poses) == 2, [p.cnn_affinity for p in poses]
     assert poses[0].cnn_affinity == 8.5596036911
@@ -11960,7 +11960,7 @@ def test_pose_scores_are_returned_in_one_direction():
     tighter when larger. Ranking them together without a convention sorts
     the CNN backwards, which puts the worst pose first while every number
     on the row still looks right."""
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     tight = dk.PoseScore(affinity=-12.0, cnn_score=0.95, cnn_affinity=8.5)
     loose = dk.PoseScore(affinity=-6.0, cnn_score=0.20, cnn_affinity=6.0)
     for metric in ("affinity", "cnn_score", "cnn_affinity"):
@@ -11973,7 +11973,7 @@ def test_pose_scores_are_returned_in_one_direction():
 def test_vina_scores_are_read_from_its_table_when_the_sdf_has_no_tags():
     """vina and older smina print a table and tag nothing, so a parser
     that only reads SDF tags silently returns no poses at all for them."""
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     stdout = ("mode |   affinity | dist from best mode\n"
               "-----+------------+--------------------\n"
               "   1       -9.400          0.000\n"
@@ -11986,7 +11986,7 @@ def test_vina_scores_are_read_from_its_table_when_the_sdf_has_no_tags():
 def test_cnn_rescoring_is_requested_only_of_gnina(tmp_path):
     """--cnn_scoring is the whole reason to run gnina, and it is not a
     flag smina or vina accept - passing it to them makes the run fail."""
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     box = (1.0, 2.0, 3.0, 20.0, 20.0, 20.0)
     args = dk._dock_args("/home/u/bin/gnina", tmp_path / "r.pdb",
                          tmp_path / "l.sdf", tmp_path / "o.sdf", box,
@@ -12004,8 +12004,8 @@ def test_paths_are_translated_only_for_the_side_the_binary_runs_on(
     """A WSL binary handed C:\\... reports that the receptor does not
     exist, which reads like a missing file rather than a path that was
     never converted."""
-    from promoter_tf_drugs import docking as dk
-    from promoter_tf_drugs import wsldock as wd
+    from generoutes import docking as dk
+    from generoutes import wsldock as wd
     box = (0.0, 0.0, 0.0, 20.0, 20.0, 20.0)
     rec = tmp_path / "r.pdb"
     args = dk._dock_args("/home/u/bin/gnina", rec, tmp_path / "l.sdf",
@@ -12021,7 +12021,7 @@ def test_paths_are_translated_only_for_the_side_the_binary_runs_on(
 
 
 def test_windows_drive_letters_become_mount_points():
-    from promoter_tf_drugs import wsldock as wd
+    from generoutes import wsldock as wd
     got = wd.to_wsl_path("C:\\Users\\x\\y.pdb")
     assert got.startswith("/mnt/c/"), got
     assert "\\" not in got
@@ -12043,7 +12043,7 @@ def test_a_windows_path_converts_the_same_way_on_every_host():
     The conversion is its own function so it can be run here, on any
     host, rather than only on the one it was broken on.
     """
-    from promoter_tf_drugs import wsldock as wd
+    from generoutes import wsldock as wd
     cases = {
         "C:\\Users\\x\\y.pdb": "/mnt/c/Users/x/y.pdb",
         "D:/data/r.pdb": "/mnt/d/data/r.pdb",
@@ -12058,7 +12058,7 @@ def test_only_a_drive_absolute_path_is_converted():
     """Everything else is left to the caller, as it always was: a POSIX
     path, a relative path, `C:file` (relative to the drive's current
     directory, so it names no fixed place) and a UNC share."""
-    from promoter_tf_drugs import wsldock as wd
+    from generoutes import wsldock as wd
     for given in ("/home/u/x.pdb", "relative/x.pdb", "C:relative.pdb",
                   "\\\\server\\share\\x.pdb", ""):
         assert wd._from_windows_path(given) is None, given
@@ -12073,7 +12073,7 @@ def test_scripts_reach_wsl_as_bytes_with_unix_newlines(monkeypatch):
     a `bash -c` argument is rebuilt by the interop layer on the way
     through: `wsl.exe -- bash -c "echo $PATH"` comes back a syntax error.
     """
-    from promoter_tf_drugs import wsldock as wd
+    from generoutes import wsldock as wd
     seen = {}
 
     def fake_run(cmd, **kw):
@@ -12096,7 +12096,7 @@ def test_nul_bytes_are_stripped_from_wsl_output(monkeypatch):
     """The interop layer interleaves NUL bytes into the output. They make
     every comparison against it fail in a way that reads like the command
     having produced nothing at all."""
-    from promoter_tf_drugs import wsldock as wd
+    from generoutes import wsldock as wd
 
     def fake_run(cmd, **kw):
         import subprocess as sp
@@ -12114,8 +12114,8 @@ def test_nul_bytes_are_stripped_from_wsl_output(monkeypatch):
 def test_a_linux_gnina_is_preferred_over_a_windows_vina(monkeypatch):
     """The only reason to reach into WSL is that the better programs are
     Linux software, so a Windows vina on PATH must not win over it."""
-    from promoter_tf_drugs import docking as dk
-    from promoter_tf_drugs import wsldock as wd
+    from generoutes import docking as dk
+    from generoutes import wsldock as wd
     monkeypatch.setattr(wd, "find_binary",
                         lambda prefer=None: ("gnina", "/home/u/bin/gnina"))
     monkeypatch.setattr(dk.shutil, "which",
@@ -12126,8 +12126,8 @@ def test_a_linux_gnina_is_preferred_over_a_windows_vina(monkeypatch):
 def test_a_windows_binary_is_still_used_when_wsl_has_none(monkeypatch):
     """WSL being unusable must degrade to the Windows binary, not to an
     exception - most machines running this have no WSL at all."""
-    from promoter_tf_drugs import docking as dk
-    from promoter_tf_drugs import wsldock as wd
+    from generoutes import docking as dk
+    from generoutes import wsldock as wd
 
     def boom(prefer=None):
         raise OSError("wsl.exe not found")
@@ -12141,7 +12141,7 @@ def test_a_windows_binary_is_still_used_when_wsl_has_none(monkeypatch):
 def test_a_failed_docking_run_returns_nothing_rather_than_a_zero_score():
     """A score of 0 from a crashed run is a confident claim of a weak
     binder. The absence of a result has to stay absent."""
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     poses = dk._parse_poses("", "", "gnina")
     assert poses == []
 
@@ -12256,7 +12256,7 @@ def test_no_local_is_read_before_it_is_assigned():
     docking CLI's --gene path died with UnboundLocalError the first time
     anyone used it. Eight hundred and eighty-five tests passed."""
     import pathlib
-    from promoter_tf_drugs import __file__ as pkg
+    from generoutes import __file__ as pkg
     bad = []
     for f in sorted(pathlib.Path(pkg).parent.glob("*.py")):
         bad += _reads_before_assignment(f)
@@ -12293,10 +12293,10 @@ def _unread_cli_flags(path):
     # are derived from run()'s signature rather than listed by hand.
     forwarded = set()
     try:
-        from promoter_tf_drugs import cli as _cli
+        from generoutes import cli as _cli
         forwarded = set(_cli._ARG_TO_RUN) | set(_cli._NEGATED_ARGS)
         import inspect as _inspect
-        from promoter_tf_drugs import pipeline as _pl
+        from generoutes import pipeline as _pl
         forwarded |= set(_inspect.signature(_pl.run).parameters)
     except Exception:                                       # noqa: BLE001
         pass
@@ -12320,7 +12320,7 @@ def test_every_cli_flag_is_read_somewhere_in_its_module():
     an attribute of `args`, which that check skips by design.
     """
     import pathlib
-    from promoter_tf_drugs import __file__ as pkg
+    from generoutes import __file__ as pkg
     bad = []
     for f in sorted(pathlib.Path(pkg).parent.glob("*.py")):
         bad += _unread_cli_flags(f)
@@ -12378,7 +12378,7 @@ def test_every_run_argument_has_a_validation_rule():
     about fifteen were enforced; the other annotations were comments.
     A new argument with no rule fails here rather than failing later
     somewhere that looks unrelated."""
-    from promoter_tf_drugs import pipeline, validation
+    from generoutes import pipeline, validation
     missing, extra = validation.coverage(pipeline.RUN_SPECS, pipeline.run)
     assert not missing, f"run() arguments with no validation rule: {missing}"
     assert not extra, f"rules for arguments run() does not take: {extra}"
@@ -12389,8 +12389,8 @@ def test_a_flag_given_a_string_is_refused():
     flag on and the run proceeded - the one case where a bad value
     silently does something rather than failing."""
     import pytest
-    from promoter_tf_drugs import pipeline as pl
-    from promoter_tf_drugs import report as rep
+    from generoutes import pipeline as pl
+    from generoutes import report as rep
     with pytest.raises(ValueError, match="all_tss"):
         pl.run("CCR5", all_tss="yes", demo=True)
     with pytest.raises(ValueError, match="activity_permutations"):
@@ -12401,8 +12401,8 @@ def test_a_true_flag_is_not_accepted_as_a_window_size():
     """bool subclasses int, so an unguarded isinstance(x, int) lets True
     through as 1 and the window silently becomes one base."""
     import pytest
-    from promoter_tf_drugs import pipeline as pl
-    from promoter_tf_drugs import report as rep
+    from generoutes import pipeline as pl
+    from generoutes import report as rep
     with pytest.raises(ValueError, match="upstream"):
         pl.run("CCR5", upstream=True, demo=True)
 
@@ -12410,8 +12410,8 @@ def test_a_true_flag_is_not_accepted_as_a_window_size():
 def test_the_old_validation_rules_all_still_hold():
     """Behaviour preservation for the hand-written block this replaced."""
     import pytest
-    from promoter_tf_drugs import pipeline as pl
-    from promoter_tf_drugs import report as rep
+    from generoutes import pipeline as pl
+    from generoutes import report as rep
     bad = [
         dict(gene=""),
         dict(gene="X", upstream=-1),
@@ -12434,8 +12434,8 @@ def test_a_missing_input_file_is_a_filenotfounderror_not_a_valueerror():
     """A missing file and a malformed argument are different problems and
     the caller usually needs to tell them apart."""
     import pytest
-    from promoter_tf_drugs import pipeline as pl
-    from promoter_tf_drugs import report as rep
+    from generoutes import pipeline as pl
+    from generoutes import report as rep
     with pytest.raises(FileNotFoundError, match="pfm_file"):
         pl.run("CCR5", pfm_file="definitely_not_here.txt", demo=True)
 
@@ -12444,7 +12444,7 @@ def test_none_is_allowed_only_where_it_means_something():
     """has_ptc=None means unknown, which is not False: whether the
     transcript carries a premature stop decides whether raising the gene
     helps or just makes more truncated protein."""
-    from promoter_tf_drugs import validation as v
+    from generoutes import validation as v
     spec = v.Spec("bool", optional=True)
     v.check("has_ptc", None, spec)            # unknown is a real state
     v.check("has_ptc", False, spec)
@@ -12460,8 +12460,8 @@ def test_a_validator_reports_what_a_bad_value_would_do():
     saying pvalue must be under 1 states the rule; saying that at 1.0
     every position calls a site says what you got wrong."""
     import pytest
-    from promoter_tf_drugs import pipeline as pl
-    from promoter_tf_drugs import report as rep
+    from generoutes import pipeline as pl
+    from generoutes import report as rep
     with pytest.raises(ValueError) as exc:
         pl.run("CCR5", pvalue=1.0, demo=True)
     assert "every position" in str(exc.value)
@@ -12474,7 +12474,7 @@ def test_validation_does_not_add_a_runtime_dependency():
     hold."""
     import ast
     import pathlib
-    from promoter_tf_drugs import validation
+    from generoutes import validation
     tree = ast.parse(pathlib.Path(validation.__file__).read_text(
         encoding="utf-8"))
     imported = set()
@@ -12493,7 +12493,7 @@ def test_a_chip_regulon_is_not_reported_as_curated():
     it. Binding is not regulation, so calling both "curated" promotes
     one of them a tier in the one line of the report whose job is to say
     where the evidence came from."""
-    from promoter_tf_drugs import regulon as r
+    from generoutes import regulon as r
     chip = "AATF\tAACS\tUnknown\tReMap_cells:1\n" * 20
     cur = "AATF\tBAX\tRepression\t22909821\n" * 20
     import pathlib
@@ -12525,7 +12525,7 @@ def test_parallel_docking_preserves_order_and_scores():
     """
     import pathlib
     import time
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
 
     smiles = [f"C{'C' * i}O" for i in range(12)]
 
@@ -12548,7 +12548,7 @@ def test_a_failure_in_one_parallel_job_does_not_shift_the_others():
     failure dropped out of the list instead, every score after it would
     belong to a different drug."""
     import pathlib
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
 
     smiles = ["CCO", "BAD", "CCCO", "BAD", "CCCCO"]
 
@@ -12568,7 +12568,7 @@ def test_jobs_defaults_to_one_so_nothing_changes_unasked():
     """Concurrency is opt-in: a caller that never heard of --jobs gets
     exactly the behaviour it had."""
     import inspect
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     for fn in (dk._dock_smiles, dk.validate_pocket, dk.screen_by_docking,
                dk.dock_screen_for_target):
         assert inspect.signature(fn).parameters["jobs"].default == 1, fn
@@ -12598,7 +12598,7 @@ def test_a_modified_amino_acid_is_not_mistaken_for_a_ligand():
     a residue of the peptide backbone written as HETATM only because it
     is non-standard. The box then sits on the protein, and the whole
     library is screened against a site that does not exist."""
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     only_modified = _het("TYS", "A", "10", 16)
     assert dk.best_ligand(only_modified) is None
     # A real ligand in the same file is still found.
@@ -12614,7 +12614,7 @@ def test_nmr_models_are_not_pooled_into_one_giant_ligand():
     became the average of ten conformations - a point no model occupies.
     Largest-group-wins then ranks every multi-model structure above a
     real crystal ligand."""
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     models = "\n".join(_het("LIG", "A", "501", 12, model=m)
                        for m in range(1, 11))
     groups = dk.hetatm_groups(models)
@@ -12627,7 +12627,7 @@ def test_a_crystallisation_lipid_loses_to_a_real_ligand():
     """Monoolein is the largest group in most GPCR structures and lies
     against the membrane face. Taking the largest outright screens the
     outside of the protein."""
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     text = (_het("OLC", "A", "601", 40) + "\n"
             + _het("MRV", "A", "501", 20, start=(40.0, 40.0, 40.0)))
     got = dk.best_ligand(text)
@@ -12639,7 +12639,7 @@ def test_a_lipid_is_still_used_when_it_is_all_there_is_and_is_flagged():
     """Excluding lipids outright would be wrong: for a lipid receptor the
     fatty acid IS the ligand. So it is used and marked, which leaves a
     visible caveat rather than a silent wrong answer."""
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     got = dk.best_ligand(_het("OLC", "A", "601", 40))
     assert got is not None
     assert got["resname"] == "OLC"
@@ -12651,7 +12651,7 @@ def test_an_unreadable_conformation_is_not_reported_as_the_wrong_one():
     which only nuclear receptors carry, so it returns unknown for every
     GPCR structure. Saying "none in the inactive conformation" would
     turn a measurement that was never made into a negative result."""
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     res = dk.dock_screen_for_target(
         None, "CCR5", "P51681", [{"name": "x", "smiles": "CCO"}],
         actives=[], want_state="inactive",
@@ -12666,7 +12666,7 @@ def test_the_conformation_caveat_survives_into_the_saved_result():
     """A screen run with --state any is still a screen. It just cannot
     support a claim about direction, and that has to reach the file
     rather than being mentioned once on a terminal."""
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     pocket = dk.PocketChoice(
         pdb_id="4MBS", path="r.pdb", ligand_path="l.pdb",
         ligand_resname="MRV", box=(0, 0, 0, 20, 20, 20),
@@ -12679,7 +12679,7 @@ def test_the_validation_gate_is_sampled_at_random_not_by_potency():
     recover and raise the AUC, which is tuning the gate to pass rather
     than measuring whether the pocket works."""
     import inspect
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     src = inspect.getsource(dk.dock_screen_for_target)
     assert "MAX_VALIDATION_ACTIVES" in src
     assert "random.Random(seed).sample" in src
@@ -12695,7 +12695,7 @@ def test_a_wsl_binary_is_never_executed_as_a_windows_path(monkeypatch):
     catches at DEBUG and records as None - so every compound in a library
     scores None and the run reports an EMPTY screen, not a broken one."""
     import pathlib
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     seen = {}
 
     def fake_run_dock(binary, args, out, **kw):
@@ -12721,7 +12721,7 @@ def test_cnn_scores_reach_the_hits(monkeypatch):
     """The screen used to keep one number per compound, the Vina-style
     affinity, which for gnina discards the entire reason to run it."""
     import pathlib
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
 
     lib = [{"name": f"d{i}", "smiles": "C" * (i + 2)} for i in range(6)]
 
@@ -12751,7 +12751,7 @@ def test_an_engine_without_a_cnn_gets_no_empty_cnn_columns(monkeypatch):
     """A smina run carrying cnn_score: None would read as a measurement
     that came out blank rather than one that was never made."""
     import pathlib
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
 
     lib = [{"name": "d", "smiles": "CCO"}]
     monkeypatch.setattr(
@@ -12775,7 +12775,7 @@ def test_the_gate_measures_every_metric_it_has(monkeypatch):
     whether the CNN separates binders better for a given pocket, and the
     poses are already scored so it costs nothing."""
     import pathlib
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
 
     # The CNN separates perfectly; the affinity is pure noise.
     def fake(smiles_list, receptor, autobox, **kw):
@@ -12840,7 +12840,7 @@ def test_every_documented_command_uses_flags_its_parser_accepts():
     """A command example that does not run is worse than no example:
     the reader assumes their setup is broken rather than the page.
 
-    This checks every `python -m promoter_tf_drugs.X` line in docs and
+    This checks every `python -m generoutes.X` line in docs and
     the README against that module's own parser, so a renamed flag
     cannot leave the documentation behind.
     """
@@ -12859,7 +12859,7 @@ def test_every_documented_command_uses_flags_its_parser_accepts():
         # this guard let a renamed flag on the second line through when
         # it was first checked against a real page.
         for m in re.finditer(
-                r"python -m (promoter_tf_drugs\.[a-z_]+)"
+                r"python -m (generoutes\.[a-z_]+)"
                 r"((?:[^\n`]*\\\n)*[^\n`]*)", text):
             mod, rest = m.group(1), m.group(2)
             if mod not in cache:
@@ -12877,11 +12877,11 @@ def test_the_documented_command_check_would_notice_a_renamed_flag(
         tmp_path):
     """The guard reporting zero proves nothing until it has gone red."""
     import re
-    flags = _parser_flags("promoter_tf_drugs.docking")
+    flags = _parser_flags("generoutes.docking")
     assert flags, "docking parser produced no flags"
     assert "--jobs" in flags and "--state" in flags
     # A flag that does not exist must be detected by the same matching.
-    fake = "python -m promoter_tf_drugs.docking --not-a-real-flag"
+    fake = "python -m generoutes.docking --not-a-real-flag"
     found = re.findall(r"--[a-z0-9][a-z0-9-]*", fake.split("docking")[1])
     assert found == ["--not-a-real-flag"]
     assert found[0] not in flags
@@ -12892,7 +12892,7 @@ def test_an_unreadable_conformation_is_explained_on_the_route():
     as though the question was never asked. It was asked and could not be
     answered, which for a GPCR is permanent - the classifier reads
     coactivator peptides and a GPCR has none."""
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     run = {"target": "CCR5", "usable": True, "auc": 0.8, "ef1": 10,
            "pocket": {"pdb_id": "4MBS", "ligand_resname": "MRV",
                       "state": "unknown"},
@@ -12907,7 +12907,7 @@ def test_an_unreadable_conformation_is_explained_on_the_route():
 def test_a_readable_conformation_still_states_the_fit():
     """The explanatory note must not replace the real conformation
     reasoning when the structure can actually be classified."""
-    from promoter_tf_drugs import catalogue as cat
+    from generoutes import catalogue as cat
     run = {"target": "VDR", "usable": True, "auc": 0.9, "ef1": 12,
            "pocket": {"pdb_id": "1DB1", "ligand_resname": "VDX",
                       "state": "active"},
@@ -12926,7 +12926,7 @@ def test_the_reason_a_compound_is_absent_is_counted_not_guessed():
     and one whose docking crashed are different problems and send you to
     different places."""
     import pathlib
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
 
     def embed(smi, path, **kw):
         if smi.startswith("BAD"):
@@ -12957,7 +12957,7 @@ def test_the_reason_a_compound_is_absent_is_counted_not_guessed():
 
 def test_the_absent_compound_caveat_states_measured_counts(monkeypatch):
     import pathlib
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
 
     lib = [{"name": f"d{i}", "smiles": "CCO"} for i in range(10)]
 
@@ -12992,7 +12992,7 @@ def test_impossible_flag_combinations_are_refused_before_any_work():
     AGENTS.md: validate user input before expensive work.
     """
     import pytest
-    from promoter_tf_drugs import cli, panel
+    from generoutes import cli, panel
     for mod in (cli, panel):
         gene_flag = (["--gene", "CCR5"] if mod is cli
                      else ["--genes", "CCR5"])
@@ -13005,8 +13005,8 @@ def test_the_library_call_still_degrades_rather_than_raising():
     """The CLI check must not become a pipeline check. A library caller
     may want everything else the run produces, and the ledger recording
     a failed source is the honest way to say one of them did not."""
-    from promoter_tf_drugs import pipeline as pl
-    from promoter_tf_drugs import report as rep
+    from generoutes import pipeline as pl
+    from generoutes import report as rep
     res = pl.run("DEMOGENE", demo=True, tf_activity=True,
                  activity_tissue=None)
     sources = res["evidence_sources"]["sources"]
@@ -13023,8 +13023,8 @@ def test_tf_activity_that_works_does_not_change_the_factor_count(
     table - hundreds of factors - instead of the factors with a site in
     this promoter window.
     """
-    from promoter_tf_drugs import pipeline as pl
-    from promoter_tf_drugs import tfactivity as tfa
+    from generoutes import pipeline as pl
+    from generoutes import tfactivity as tfa
 
     # More testable factors than the window can possibly contain, which is
     # the realistic case: a regulon table covers the genome.
@@ -13051,7 +13051,7 @@ def test_a_flag_that_would_do_nothing_is_refused_too():
     """--activity-permutations without --tf-activity is accepted silently
     and has no effect, which reads as though the null model ran."""
     import pytest
-    from promoter_tf_drugs import cli
+    from generoutes import cli
     with pytest.raises(SystemExit):
         cli.main(["--gene", "CCR5", "--activity-permutations", "100",
                   "--demo"])
@@ -13065,7 +13065,7 @@ def test_every_evidence_source_says_what_its_failure_cost():
     IMPACT covered 7 of the 14 sources a real run records; the rest were
     added when their features were and the table was not.
     """
-    from promoter_tf_drugs import pipeline as pl, provenance as prov
+    from generoutes import pipeline as pl, provenance as prov
     res = pl.run("DEMOGENE", demo=True)
     names = set(res["evidence_sources"]["sources"])
     missing = sorted(n for n in names if not prov.IMPACT.get(n))
@@ -13078,8 +13078,8 @@ def test_a_failed_source_bullet_is_never_bare():
     """Belt and braces for the table above: even a source nobody wrote
     an impact for must say something, because a bullet that stops after
     the dash is worse than the plain fact."""
-    from promoter_tf_drugs import pipeline as pl
-    from promoter_tf_drugs import report as rep
+    from generoutes import pipeline as pl
+    from generoutes import report as rep
     res = pl.run("DEMOGENE", demo=True, tf_activity=True,
                  activity_tissue=None)
     report = pl.markdown_report(res)
@@ -13101,7 +13101,7 @@ def test_the_winners_curse_margin_never_crosses_a_tier():
     says so itself - and being the only route at the strongest tier is
     the opposite of a tie.
     """
-    from promoter_tf_drugs import panel as pnl
+    from generoutes import panel as pnl
     rows = [
         {"gene": "G", "tier": 1, "drug": "Top", "score": 60.0,
          "acts_on": "X", "grade": None},
@@ -13118,7 +13118,7 @@ def test_the_winners_curse_margin_never_crosses_a_tier():
 
 
 def test_a_same_tier_runner_up_still_gets_a_margin():
-    from promoter_tf_drugs import panel as pnl
+    from generoutes import panel as pnl
     rows = [
         {"gene": "G", "tier": 3, "drug": "A", "score": 65.7,
          "acts_on": "X", "grade": "B"},
@@ -13143,7 +13143,7 @@ def test_both_clis_forward_every_run_argument_they_parse():
     every gene is deprived equally, so they agree.
     """
     import inspect
-    from promoter_tf_drugs import cli, panel, pipeline
+    from generoutes import cli, panel, pipeline
     params = {n for n in inspect.signature(pipeline.run).parameters
               if n != "gene"}
     for mod, base in ((cli, ["--gene", "CCR5"]),
@@ -13157,7 +13157,7 @@ def test_both_clis_forward_every_run_argument_they_parse():
 def test_a_requested_source_is_not_silently_turned_off():
     """The specific failure: asking for a source and having the result
     record it as not requested."""
-    from promoter_tf_drugs import cli, panel
+    from generoutes import cli, panel
     for mod, base in ((cli, ["--gene", "CCR5"]),
                       (panel, ["--genes", "CCR5"])):
         args = mod.build_parser().parse_args(
@@ -13177,7 +13177,7 @@ def test_negated_flags_keep_their_sense():
     """`--no-grade` sets grade_drugs=False, and `--include-investigational`
     sets approved_only=False. Getting one of these backwards would
     silently invert a default rather than fail."""
-    from promoter_tf_drugs import cli
+    from generoutes import cli
     plain = cli.run_kwargs_from_args(
         cli.build_parser().parse_args(["--gene", "X"]))
     assert plain["grade_drugs"] is True
@@ -13201,7 +13201,7 @@ def test_unique_kills_cannot_exceed_removals():
     what the table says it reports, and unique counted rows. A drug
     reaching one gene through three factors is one pair and three rows.
     """
-    from promoter_tf_drugs import panel as pnl
+    from generoutes import panel as pnl
     rows = []
     for i in range(6):
         # One drug, one gene, three different factors: one pair, three
@@ -13228,7 +13228,7 @@ def test_the_funnel_counts_reconcile():
     """Every stage's in must equal removed plus remaining, and each
     stage's in must be the previous stage's remaining - which catches a
     stage filtering a stale list."""
-    from promoter_tf_drugs import panel as pnl
+    from generoutes import panel as pnl
     rows = [{"gene": "G", "drug": f"D{i}", "acts_on": f"T{i % 4}",
              "tier": 3, "score": 50.0,
              "_burden_level": "prohibitive" if i % 2 else "low",
@@ -13323,7 +13323,7 @@ def test_inverse_agonist_is_not_read_as_an_agonist():
     opposite. A substring test in the wrong order labels every inverse
     agonist as an agonist, and a wrong direction label is worse than a
     missing one - it trains the classifier to predict backwards."""
-    from promoter_tf_drugs import agonism as ag
+    from generoutes import agonism as ag
     assert ag.label_from_text("serotonin inverse agonist") == "antagonist"
     assert ag.label_from_text("partial agonist") == "agonist"
     assert ag.label_from_text("negative allosteric modulator") == "antagonist"
@@ -13332,14 +13332,14 @@ def test_inverse_agonist_is_not_read_as_an_agonist():
 
 def test_an_ambiguous_mechanism_gets_no_label():
     """"kinase modulator" names no direction. None, not a guess."""
-    from promoter_tf_drugs import agonism as ag
+    from generoutes import agonism as ag
     for text in ("kinase modulator", "binder", "", None, "unknown",
                  "receptor ligand"):
         assert ag.label_from_text(text) is None, text
 
 
 def test_direction_labels_come_from_a_local_table_without_a_network():
-    from promoter_tf_drugs import agonism as ag
+    from generoutes import agonism as ag
     rows = [
         {"name": "a", "smiles": "CCO", "targets": ["CCR5"],
          "moa": "CCR5 antagonist"},
@@ -13362,7 +13362,7 @@ def test_a_molecule_unlike_the_training_set_is_left_uncalled():
     import pytest
     pytest.importorskip("sklearn")
     pytest.importorskip("rdkit")
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
 
     ago = ["CC(=O)Oc1ccccc1C(=O)O", "CCOC(=O)c1ccccc1",
            "COc1ccccc1C(=O)O", "CC(=O)Nc1ccccc1", "CCc1ccccc1C(=O)O",
@@ -13392,7 +13392,7 @@ def test_a_molecule_unlike_the_training_set_is_left_uncalled():
 def test_too_few_labels_refuses_rather_than_annotating():
     """A per-receptor classifier needs examples of both directions. With
     too few it says so instead of calling every hit."""
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
 
     class _Run:
         hits = [{"drug": "x", "smiles": "CCO"}]
@@ -13412,7 +13412,7 @@ def test_direction_never_changes_the_ranking():
     import pytest
     pytest.importorskip("sklearn")
     pytest.importorskip("rdkit")
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
 
     hits = [{"drug": f"d{i}", "smiles": s, "score": -5.0 - i}
             for i, s in enumerate(
@@ -13444,7 +13444,7 @@ def test_a_run_does_not_inherit_the_previous_run_expression_table(tmp_path):
     The panel runs several genes in one process, so this is not
     hypothetical.
     """
-    from promoter_tf_drugs import delivery as dlv
+    from generoutes import delivery as dlv
     f = tmp_path / "expr.tsv"
     f.write_text(
         "Gene\tGene name\tTissue\tnTPM\n"
@@ -13467,7 +13467,7 @@ def test_a_run_does_not_inherit_the_previous_run_expression_table(tmp_path):
 def test_the_run_clears_the_table_when_it_was_not_given_one():
     """The clear has to happen inside run(), not be left to the caller."""
     import inspect
-    from promoter_tf_drugs import pipeline as pl
+    from generoutes import pipeline as pl
     src = inspect.getsource(pl.run)
     i = src.index("reset_expression()")
     j = src.index("load_expression_file(")
@@ -13478,7 +13478,7 @@ def test_a_disabled_lookup_does_not_outlive_the_run_it_names():
     """expression_status calls it "disabled for this run" and it was
     outliving the run it named, so a later analysis was told a lookup had
     failed that it never attempted."""
-    from promoter_tf_drugs import delivery as dlv
+    from generoutes import delivery as dlv
     dlv._EXPR_DISABLED["value"] = True
     dlv._EXPR_DISABLED["reason"] = "schema change"
     assert dlv.expression_source_status()["ok"] is False
@@ -13492,7 +13492,7 @@ def test_the_query_block_records_every_argument_the_run_was_given():
     that produced it. It is also what hid the panel dropping arguments
     on the way in: the ones it dropped were not among those recorded."""
     import inspect
-    from promoter_tf_drugs import pipeline as pl
+    from generoutes import pipeline as pl
     res = pl.run("DEMOGENE", demo=True)
     params = set(inspect.signature(pl.run).parameters)
     missing = sorted(params - set(res["query"]))
@@ -13502,7 +13502,7 @@ def test_the_query_block_records_every_argument_the_run_was_given():
 def test_the_query_block_keeps_the_keys_it_always_had():
     """AGENTS.md: preserve the meaning of saved result fields. Anything
     reading an older result must still find what it read before."""
-    from promoter_tf_drugs import pipeline as pl
+    from generoutes import pipeline as pl
     was = {"gene", "species", "upstream", "downstream", "pvalue", "demo",
            "mask_repeats", "goal", "tissue", "tf_weight", "proliferation",
            "cell_type_check", "use_lincs", "use_genetics", "regulon_file",
@@ -13519,7 +13519,7 @@ def test_the_query_block_stays_json_serialisable():
     that cannot be written is a run thrown away at the last step."""
     import json
     import pathlib
-    from promoter_tf_drugs import pipeline as pl
+    from generoutes import pipeline as pl
     q = pl.query_block({"gene": "X", "pfm_file": pathlib.Path("a/b.txt"),
                         "lincs_gmt": ("u.gmt", "d.gmt")}, n_motifs=3)
     json.dumps(q)
@@ -13532,7 +13532,7 @@ def test_the_query_block_cannot_drift_from_the_signature():
     signature - so a new argument appears in the result the moment it
     exists, rather than when somebody remembers."""
     import inspect
-    from promoter_tf_drugs import pipeline as pl
+    from generoutes import pipeline as pl
     src = inspect.getsource(pl.query_block)
     assert "RUN_SPECS" in src
     assert "for name in RUN_SPECS" in src
@@ -13542,7 +13542,7 @@ def test_parity_notices_a_gene_run_without_the_docking_results():
     """The check exists so a gene that lost a stage for want of evidence
     is not read as biologically worse. It could not see most arguments
     because the result did not record them."""
-    from promoter_tf_drugs import panel as pnl
+    from generoutes import panel as pnl
     import inspect
     src = inspect.getsource(pnl.parity)
     for field in ("docking_results", "tf_activity", "upstream_network",
@@ -13556,7 +13556,7 @@ def test_parity_notices_a_gene_run_without_the_docking_results():
 def test_progress_never_writes_to_stdout(capsys):
     """stdout carries the report. A progress line spliced into the
     middle of the markdown would corrupt a piped run."""
-    from promoter_tf_drugs import pipeline as pl, progress
+    from generoutes import pipeline as pl, progress
     progress.enable()                       # defaults to stderr
     try:
         pl.run("DEMOGENE", demo=True)
@@ -13571,7 +13571,7 @@ def test_progress_is_off_unless_asked(capsys):
     """run() is a library function and a library that prints is a
     nuisance. The commands turn it on; an embedding program does not get
     it by accident."""
-    from promoter_tf_drugs import pipeline as pl, progress
+    from generoutes import pipeline as pl, progress
     progress.disable()
     pl.run("DEMOGENE", demo=True)
     out, err = capsys.readouterr()
@@ -13581,7 +13581,7 @@ def test_progress_is_off_unless_asked(capsys):
 def test_a_broken_stream_does_not_take_the_run_down():
     """A closed pipe or a console that cannot encode the text must not
     lose a fifteen-minute run at the last step."""
-    from promoter_tf_drugs import progress
+    from generoutes import progress
 
     class _Broken:
         def write(self, _):
@@ -13603,7 +13603,7 @@ def test_a_broken_stream_does_not_take_the_run_down():
 def test_every_stage_reports_a_checkpoint():
     """Ten stages, ten checkpoints. A gap reads as a stage that hung."""
     import io
-    from promoter_tf_drugs import pipeline as pl, progress
+    from generoutes import pipeline as pl, progress
     buf = io.StringIO()
     progress.enable(buf)
     try:
@@ -13619,7 +13619,7 @@ def test_a_checkpoint_says_what_the_stage_found():
     """"scanning motifs" tells you nothing you did not know from the
     command. The count it found is the part worth printing."""
     import io
-    from promoter_tf_drugs import pipeline as pl, progress
+    from generoutes import pipeline as pl, progress
     buf = io.StringIO()
     progress.enable(buf)
     try:
@@ -13634,7 +13634,7 @@ def test_a_checkpoint_says_what_the_stage_found():
 
 
 def test_both_commands_can_turn_progress_off():
-    from promoter_tf_drugs import cli, panel
+    from generoutes import cli, panel
     for mod, base in ((cli, ["--gene", "X"]), (panel, ["--genes", "X"])):
         flags = {o for a in mod.build_parser()._actions
                  for o in a.option_strings}
@@ -13652,11 +13652,11 @@ def test_a_missing_optional_file_is_reported_once_not_per_lookup(
     buries the log and reads like a recurring fault rather than a file
     that is simply absent."""
     import logging
-    from promoter_tf_drugs import orangebook as ob
+    from generoutes import orangebook as ob
     monkeypatch.setattr(ob, "DEFAULT_PATHS", ())   # nothing on disk, whatever data/ holds
     ob.reset()
     with caplog.at_level(logging.INFO,
-                         logger="promoter_tf_drugs.orangebook"):
+                         logger="generoutes.orangebook"):
         for name in ("aspirin", "ibuprofen", "maraviroc") * 30:
             ob.lookup(name)
     said = sum(1 for r in caplog.records
@@ -13670,7 +13670,7 @@ def test_a_file_appearing_after_a_miss_is_still_found(tmp_path, monkeypatch):
     A guard that skipped the lookup made a file dropped into place after
     an earlier miss invisible for the rest of the process - which broke
     ten tests that write a file and then read it."""
-    from promoter_tf_drugs import orangebook as ob
+    from generoutes import orangebook as ob
     monkeypatch.setattr(ob, "DEFAULT_PATHS", ())   # nothing on disk, whatever data/ holds
     ob.reset()
     assert ob.load() == 0                      # absent, reported once
@@ -13692,11 +13692,11 @@ def test_the_missing_file_notice_is_a_whole_sentence(caplog, monkeypatch):
     "Approved Drug Products with Therapeutic Equivalence" and stops.
     Logging once means it can afford to finish."""
     import logging
-    from promoter_tf_drugs import orangebook as ob
+    from generoutes import orangebook as ob
     monkeypatch.setattr(ob, "DEFAULT_PATHS", ())   # nothing on disk, whatever data/ holds
     ob.reset()
     with caplog.at_level(logging.INFO,
-                         logger="promoter_tf_drugs.orangebook"):
+                         logger="generoutes.orangebook"):
         ob.load()
     msg = " ".join(r.getMessage() for r in caplog.records)
     assert "not the same as every row being systemic" in msg
@@ -13714,7 +13714,7 @@ def test_a_tab_in_a_name_does_not_shift_every_column(tmp_path):
     became five lines with four, five, two and three fields."""
     import csv
     import io
-    from promoter_tf_drugs import pipeline as pl, report as rep
+    from generoutes import pipeline as pl, report as rep
 
     res = pl.run("DEMOGENE", demo=True)
     tfs = res["results"][0]["tfs"]
@@ -13739,7 +13739,7 @@ def test_an_ordinary_table_is_not_quoted_needlessly(tmp_path):
     """QUOTE_MINIMAL: a file with nothing to escape should look exactly
     as it did before, or every downstream reader sees a change it did
     not ask for."""
-    from promoter_tf_drugs import pipeline as pl, report as rep
+    from generoutes import pipeline as pl, report as rep
     res = pl.run("DEMOGENE", demo=True)
     rep.write_outputs(res, tmp_path)
     text = (tmp_path / "tf_summary.tsv").read_text(encoding="utf-8")
@@ -13750,7 +13750,7 @@ def test_the_bed_name_field_never_contains_whitespace(tmp_path):
     """BED cannot be quoted - the format forbids whitespace in the name
     field, and a browser would read a space as the start of the score
     column. So it is sanitised, which is lossy by necessity."""
-    from promoter_tf_drugs import pipeline as pl, report as rep
+    from generoutes import pipeline as pl, report as rep
     res = pl.run("DEMOGENE", demo=True)
     res["results"][0]["hits"][0]["motif_name"] = "spaced motif name"
     rep.write_outputs(res, tmp_path)
@@ -13773,7 +13773,7 @@ def test_a_result_records_what_produced_it():
     file argument. A run from six months ago against a since-replaced
     ReMap file is otherwise indistinguishable from one against the
     current one."""
-    from promoter_tf_drugs import pipeline as pl, provenance as prov
+    from generoutes import pipeline as pl, provenance as prov
     res = pl.run("DEMOGENE", demo=True)
     pv = res["provenance"]
     assert pv["schema"] == prov.RESULT_SCHEMA
@@ -13786,7 +13786,7 @@ def test_only_the_files_actually_given_are_recorded(tmp_path):
     """An argument that was not given must not appear as an input. The
     query block already says it was absent; repeating it here would
     imply a file was read."""
-    from promoter_tf_drugs import pipeline as pl
+    from generoutes import pipeline as pl
     f = tmp_path / "motifs.txt"
     f.write_text(">MA0001.1\tTEST\nA [ 1 2 ]\nC [ 1 2 ]\nG [ 1 2 ]\n"
                  "T [ 1 2 ]\n", encoding="utf-8")
@@ -13802,7 +13802,7 @@ def test_a_file_too_large_to_hash_says_so(tmp_path, monkeypatch):
     """A missing hash with no explanation reads like a file nobody
     looked at, which is a different claim from one too large to bother
     with."""
-    from promoter_tf_drugs import provenance as prov
+    from generoutes import provenance as prov
     f = tmp_path / "big.bin"
     f.write_bytes(b"x" * 4096)
     monkeypatch.setattr(prov, "HASH_LIMIT_BYTES", 1024)
@@ -13813,7 +13813,7 @@ def test_a_file_too_large_to_hash_says_so(tmp_path, monkeypatch):
 
 
 def test_an_unreadable_input_is_recorded_as_an_error_not_a_blank():
-    from promoter_tf_drugs import provenance as prov
+    from generoutes import provenance as prov
     got = prov.describe_input("definitely/not/here.tsv")
     assert "error" in got
     assert "sha256" not in got
@@ -13823,7 +13823,7 @@ def test_a_newer_result_warns_rather_than_being_read_blind(capsys):
     """shortlist and explain read a file some other run wrote. A field
     whose meaning changed would be read with the old meaning and nothing
     would say so."""
-    from promoter_tf_drugs import shortlist as sl, explain as ex
+    from generoutes import shortlist as sl, explain as ex
     newer = {"provenance": {"schema": 99, "package_version": "9.9.9"}}
     for mod, name in ((sl, "shortlist"), (ex, "explain")):
         assert mod.check_schema(newer, name)
@@ -13834,7 +13834,7 @@ def test_a_newer_result_warns_rather_than_being_read_blind(capsys):
 def test_a_result_this_version_wrote_is_read_without_a_warning(capsys):
     """And one with no schema at all predates the field, so warning
     about it every time would train the warning away."""
-    from promoter_tf_drugs import pipeline as pl, shortlist as sl
+    from generoutes import pipeline as pl, shortlist as sl
     res = pl.run("DEMOGENE", demo=True)
     capsys.readouterr()
     assert sl.check_schema(res, "shortlist") is None
@@ -13901,7 +13901,7 @@ def test_the_removed_examples_say_they_were_removed():
     SURVIVED because nothing could judge them, the next lists rows the
     stage REMOVED. A bare "e.g." between them reads as examples of the
     sentence before it, and was read that way."""
-    from promoter_tf_drugs import panel as pnl
+    from generoutes import panel as pnl
     rows = [{"gene": "G", "drug": f"D{i}", "acts_on": "T",
              "tier": 3, "score": 50.0,
              "_burden": "prohibitive" if i < 3 else "low",
@@ -13930,7 +13930,7 @@ def test_a_failed_ctd_lookup_is_not_a_novelty_claim():
 
     The function's own docstring calls under-calling a link "the one
     genuinely embarrassing failure mode"."""
-    from promoter_tf_drugs import discovery as disc
+    from generoutes import discovery as disc
     linked, why = disc.check_novelty("aspirin", None)
     assert linked is False
     assert why and "failed" in why, "a failed lookup must say so"
@@ -13939,8 +13939,8 @@ def test_a_failed_ctd_lookup_is_not_a_novelty_claim():
 
 
 def test_a_failed_lookup_returns_none_not_an_empty_answer(monkeypatch):
-    from promoter_tf_drugs import discovery as disc
-    from promoter_tf_drugs.http import HttpError
+    from generoutes import discovery as disc
+    from generoutes.http import HttpError
 
     class _Boom:
         def get(self, *a, **k):
@@ -13953,7 +13953,7 @@ def test_the_ledger_says_which_kind_of_nothing_ctd_returned():
     """"none returned" covered both a lookup that failed and one that
     succeeded and found nothing. Only the second supports calling
     anything novel."""
-    from promoter_tf_drugs import discovery as disc
+    from generoutes import discovery as disc
 
     found = disc.ctd_ledger_detail(153, 39, assessed=True)
     searched = disc.ctd_ledger_detail(0, 0, assessed=True)
@@ -13968,7 +13968,7 @@ def test_the_ledger_says_which_kind_of_nothing_ctd_returned():
 
 
 def test_a_candidate_records_whether_novelty_could_be_assessed():
-    from promoter_tf_drugs import discovery as disc
+    from generoutes import discovery as disc
     c = disc.Candidate(name="x", route="direct", tf_symbol=None,
                        axes=disc.Axes(0.5, 0.5, 0.5))
     assert c.novelty_assessed is True, "assessed unless shown otherwise"
@@ -13980,7 +13980,7 @@ def test_an_incomplete_test_is_not_described_as_a_failure(capsys):
     the module and tells the reader nothing. They cannot tell whether
     something broke, whether the answer was no, or what they have lost -
     and those are three different things."""
-    from promoter_tf_drugs import provenance as prov
+    from generoutes import provenance as prov
     led = prov.Ledger()
     led.record("promoter_dna", requested=True, ok=False, yielded=0,
                detail="no sequence features scanned")
@@ -13994,7 +13994,7 @@ def test_an_incomplete_test_is_not_described_as_a_failure(capsys):
 def test_every_impact_explains_what_was_lost_in_plain_words():
     """The impacts were written for somebody who already knew what the
     module did. Each should now be a sentence a reader can act on."""
-    from promoter_tf_drugs import provenance as prov
+    from generoutes import provenance as prov
     for name, text in prov.IMPACT.items():
         assert len(text) > 60, f"{name}: too terse to be useful"
         assert text[0].isupper(), f"{name}: not a sentence"
@@ -14006,7 +14006,7 @@ def test_every_impact_explains_what_was_lost_in_plain_words():
 def test_the_promoter_dna_impact_says_what_a_null_result_means():
     """The specific thing a reader asked about: what it means when the
     promoter has no feature that beats its own shuffled composition."""
-    from promoter_tf_drugs import provenance as prov
+    from generoutes import provenance as prov
     text = prov.IMPACT["promoter_dna"]
     assert "no specific handle" in text
     assert "base composition" in text
@@ -14016,7 +14016,7 @@ def test_the_product_screen_impact_does_not_imply_the_gene_is_specific():
     """A low ligand count means few people assayed it, not that the
     protein is hard to bind - the same trap the regulon axis guards
     against with `understudied`."""
-    from promoter_tf_drugs import provenance as prov
+    from generoutes import provenance as prov
     text = prov.IMPACT["product_screen"].lower()
     assert "absent" in text and "ruled out" in text
 
@@ -14027,7 +14027,7 @@ def test_the_product_screen_impact_does_not_imply_the_gene_is_specific():
 def test_dosage_not_assessed_is_not_dosage_tolerated():
     """No constraint file on disk is a missing file, not a finding that
     the gene tolerates any dose."""
-    from promoter_tf_drugs import constraint as con
+    from generoutes import constraint as con
     con.reset_cache()
     c = con.assess("NOSUCHGENE12345")
     assert c.assessed is False
@@ -14040,7 +14040,7 @@ def test_raising_one_allele_warns_that_it_raises_both():
     package acts on one copy, so a drug at the promoter raises the
     broken one too - and whether that matters depends on what the broken
     one makes."""
-    from promoter_tf_drugs import constraint as con
+    from generoutes import constraint as con
     c = con.Constraint(symbol="X", assessed=False)
 
     truncated = con.headroom_note(c, "up", one_allele_lost=True,
@@ -14062,7 +14062,7 @@ def test_restoring_the_normal_level_is_not_overshooting_it():
     """Going from half to whole is a dose every healthy carrier
     demonstrates is tolerated. Going above whole is not, and
     triplosensitivity speaks to the second."""
-    from promoter_tf_drugs import constraint as con
+    from generoutes import constraint as con
     c = con.Constraint(symbol="X", assessed=True, dosage="sensitive",
                        triplosensitive=True)
     note = con.headroom_note(c, "up", one_allele_lost=True,
@@ -14076,7 +14076,7 @@ def test_lof_tolerant_does_not_mean_the_gene_is_unimportant():
     carriers are healthy, so selection never saw the phenotype. Reading
     "tolerant" as "unimportant" would be backwards for exactly the
     conditions this serves."""
-    from promoter_tf_drugs import constraint as con
+    from generoutes import constraint as con
     con.reset_cache()
     c = con.Constraint(symbol="X", assessed=True, loeuf=1.4)
     # Drive the interpretation the way assess() would.
@@ -14088,7 +14088,7 @@ def test_lof_tolerant_does_not_mean_the_gene_is_unimportant():
 def test_a_recessive_clingen_score_is_not_a_dosage_statement(tmp_path):
     """ClinGen uses 30 for autosomal recessive. Read as a number it
     would outrank every real score."""
-    from promoter_tf_drugs import constraint as con
+    from generoutes import constraint as con
     f = tmp_path / "clingen_dosage.tsv"
     f.write_text(
         "Gene Symbol\tHaploinsufficiency Score\tTriplosensitivity Score\n"
@@ -14110,7 +14110,7 @@ def test_clingen_header_is_itself_a_comment_line(tmp_path):
     separate "not assessed" from "tolerant" reported the first as the
     second.
     """
-    from promoter_tf_drugs import constraint as con
+    from generoutes import constraint as con
     f = tmp_path / "clingen_dosage.tsv"
     f.write_text(
         "#ClinGen Gene Curation Results\n"
@@ -14133,7 +14133,7 @@ def test_clingen_no_evidence_available_is_not_a_measured_negative(tmp_path):
     and reading it as False manufactures a finding out of an absence,
     which is the one thing this package exists not to do.
     """
-    from promoter_tf_drugs import constraint as con
+    from generoutes import constraint as con
     f = tmp_path / "clingen_dosage.tsv"
     f.write_text(
         "#Gene Symbol\tHaploinsufficiency Score\tTriplosensitivity Score\n"
@@ -14156,7 +14156,7 @@ def test_clingen_forty_means_unlikely_not_maximally_likely(tmp_path):
     is one of them, scored 40, and the package was printing the exact
     opposite of the curation.
     """
-    from promoter_tf_drugs import constraint as con
+    from generoutes import constraint as con
     f = tmp_path / "clingen_dosage.tsv"
     f.write_text(
         "#Gene Symbol\tHaploinsufficiency Score\tTriplosensitivity Score\n"
@@ -14179,7 +14179,7 @@ def test_gnomad_speaks_for_a_gene_through_its_mane_transcript(tmp_path):
     more than 0.2 - wider than the gap between LOEUF_SENSITIVE and
     LOEUF_TOLERANT, so it changes the verdict and not just the number.
     """
-    from promoter_tf_drugs import constraint as con
+    from generoutes import constraint as con
     f = tmp_path / "gnomad_constraint.tsv"
     f.write_text(
         "gene\ttranscript\tcanonical\tmane_select\tlof.pLI"
@@ -14197,7 +14197,7 @@ def test_gnomad_speaks_for_a_gene_through_its_mane_transcript(tmp_path):
 def test_gnomad_falls_back_to_canonical_then_to_most_constrained(tmp_path):
     """644 genes carry no MANE flag. Canonical is gnomAD's own fallback,
     and only with neither does the old minimum rule apply."""
-    from promoter_tf_drugs import constraint as con
+    from generoutes import constraint as con
     f = tmp_path / "gnomad_constraint.tsv"
     f.write_text(
         "gene\ttranscript\tcanonical\tmane_select\tlof.pLI"
@@ -14224,7 +14224,7 @@ def test_a_curated_phenotype_selection_never_saw_is_reported_as_a_conflict(
     and the reason it does is usually informative - late onset,
     incomplete penetrance, or a phenotype that is not harmful.
     """
-    from promoter_tf_drugs import constraint as con
+    from generoutes import constraint as con
     cg = tmp_path / "clingen_dosage.tsv"
     cg.write_text(
         "#Gene Symbol\tHaploinsufficiency Score\tTriplosensitivity Score\n"
@@ -14256,7 +14256,7 @@ def test_a_curated_negative_is_not_reported_as_nothing_known(tmp_path):
     40 is a conclusion about the gene, 1 is mostly a statement about
     how much anyone has published.
     """
-    from promoter_tf_drugs import constraint as con
+    from generoutes import constraint as con
 
     def assess_with(grade):
         cg = tmp_path / f"clingen_{grade}.tsv"
@@ -14298,7 +14298,7 @@ def test_a_constraint_number_carries_the_release_it_came_from(tmp_path):
     Neither file has to be configured: gnomAD puts its version in the
     filename and ClinGen dates itself on a comment line.
     """
-    from promoter_tf_drugs import constraint as con
+    from generoutes import constraint as con
     gn = tmp_path / "gnomad.v4.1.constraint_metrics.tsv"
     gn.write_text(
         "gene\tmane_select\tlof.pLI\tlof.oe_ci.upper\n"
@@ -14327,7 +14327,7 @@ def test_an_unstated_release_is_recorded_as_unstated_not_guessed(tmp_path):
     generations - v4 nests its fields, v2 flattens them - and that is
     reported as coming from the column names, not from the file.
     """
-    from promoter_tf_drugs import constraint as con
+    from generoutes import constraint as con
     gn = tmp_path / "constraint.tsv"
     gn.write_text("gene\tmane_select\tpLI\toe_lof_upper\n"
                   "G\ttrue\t0.9\t0.30\n", encoding="utf-8")
@@ -14353,7 +14353,7 @@ def test_a_requirement_without_a_dosage_answer_says_so():
     rendered it, because it only printed the paragraph when `assessed`
     was true.
     """
-    from promoter_tf_drugs import report as rep
+    from generoutes import report as rep
     result = {
         "query": {"gene": "G", "direction": "up", "demo": False},
         "requirement": {"summary": "**G has to do: about 2x.**",
@@ -14405,7 +14405,7 @@ def test_a_cache_hit_does_not_spend_budget(tmp_path):
     from a fresh one for no reason the caller could see, which is the
     opposite of what caching is for.
     """
-    from promoter_tf_drugs.http import Client
+    from generoutes.http import Client
     c = Client(cache_dir=tmp_path / "cache", offline=False, max_requests=1)
     calls = []
     out = _with_fake_urlopen(
@@ -14427,7 +14427,7 @@ def test_retries_of_one_request_spend_one(tmp_path):
     """The quantity a caller can reason about is how many distinct
     questions were asked, not how many packets an answer took."""
     import urllib.error
-    from promoter_tf_drugs.http import Client
+    from generoutes.http import Client
     c = Client(cache_dir=tmp_path / "cache", offline=False,
                min_interval=0, max_requests=2)
     calls = []
@@ -14459,7 +14459,7 @@ def test_an_exhausted_budget_fails_the_way_a_dead_host_does(tmp_path):
     that an outage would only have degraded.
     """
     import pytest
-    from promoter_tf_drugs.http import Client, HttpError
+    from generoutes.http import Client, HttpError
     c = Client(cache_dir=tmp_path / "cache", offline=False, max_requests=1)
     calls = []
     _with_fake_urlopen(_fake_ok(calls), lambda: c.get("https://example.org/a"))
@@ -14483,7 +14483,7 @@ def test_a_redirect_hop_costs_budget_but_a_retry_does_not(tmp_path):
     cost.
     """
     import urllib.error
-    from promoter_tf_drugs.http import Client
+    from generoutes.http import Client
     c = Client(cache_dir=tmp_path / "cache", offline=False,
                min_interval=0, max_requests=10)
     calls = []
@@ -14537,7 +14537,7 @@ def test_a_graphql_error_body_is_not_cached(tmp_path):
     data". The caller still receives it, since several inspect `errors`
     themselves; it just must not be remembered.
     """
-    from promoter_tf_drugs.http import Client
+    from generoutes.http import Client
     bad = b'{"errors": [{"message": "upstream timeout"}], "data": null}'
     good = b'{"data": {"ok": true}}'
     fake, calls = _json_server([(200, bad, None), (200, good, None)])
@@ -14564,8 +14564,8 @@ def test_a_transient_server_error_does_not_freeze_into_no_genetic_evidence(
     """
     import json
     import urllib.request
-    from promoter_tf_drugs import genetics
-    from promoter_tf_drugs.http import Client
+    from generoutes import genetics
+    from generoutes.http import Client
 
     state = {"mode": "error", "calls": 0}
     search = {"data": {"search": {"hits": [{"id": "ENSG00000160791"}]}}}
@@ -14605,7 +14605,7 @@ def test_a_transient_server_error_does_not_freeze_into_no_genetic_evidence(
 def test_ttl_zero_means_nothing_is_served_from_the_cache(tmp_path):
     """`if self.ttl` read 0 as "no limit", so asking for fresh data by
     setting the TTL to zero returned the oldest data instead."""
-    from promoter_tf_drugs.http import Client
+    from generoutes.http import Client
     fake, calls = _json_server([(200, b'{"v": 1}', None)])
     for ttl, expect_calls in ((None, 1), (30, 1), (0, 2)):
         calls.clear()
@@ -14619,7 +14619,7 @@ def test_ttl_zero_means_nothing_is_served_from_the_cache(tmp_path):
 def test_an_expired_entry_is_refetched_and_none_never_expires(tmp_path):
     import os
     import time
-    from promoter_tf_drugs.http import Client
+    from generoutes.http import Client
     fake, calls = _json_server([(200, b'{"v": 1}', None)])
     for ttl, expect in ((30, 2), (None, 1)):
         calls.clear()
@@ -14637,7 +14637,7 @@ def test_bypass_cache_reads_the_service_not_the_copy(tmp_path):
     """A contract check answered from a 30-day-old copy cannot see a
     change made last week. Bypass skips the READ; offline still serves
     the cache, because with no network it is all there is."""
-    from promoter_tf_drugs.http import Client
+    from generoutes.http import Client
     fake, calls = _json_server([(200, b'{"v": 1}', None)])
     c = Client(cache_dir=tmp_path / "c", min_interval=0)
     _with_fake_urlopen(fake, lambda: c.get("https://x.org/a"))
@@ -14660,7 +14660,7 @@ def test_a_body_that_is_not_json_is_neither_retried_nor_poisons_the_host(
     backoff and then mark the WHOLE host down for the run, so one bad
     endpoint took out every working one beside it."""
     import pytest
-    from promoter_tf_drugs.http import Client, HttpError
+    from generoutes.http import Client, HttpError
     fake, calls = _json_server([
         (200, b"<html>Maintenance window</html>", None),
         (200, b'{"fine": true}', None)])
@@ -14682,7 +14682,7 @@ def test_a_get_answered_with_308_is_followed_on_every_python(tmp_path):
     fake, calls = _json_server([
         (308, b"", {"Location": "https://x.org/moved"}),
         (200, b'{"v": 2}', None)])
-    from promoter_tf_drugs.http import Client
+    from generoutes.http import Client
     c = Client(cache_dir=tmp_path / "c", min_interval=0)
     assert _with_fake_urlopen(fake, lambda: c.get("https://x.org/old")) == {"v": 2}
     assert calls == ["https://x.org/old", "https://x.org/moved"]
@@ -14695,7 +14695,7 @@ def test_fetch_bytes_obeys_the_budget_the_breaker_and_offline(tmp_path,
     N requests could still send one more, uncounted."""
     import urllib.error
     import pytest
-    from promoter_tf_drugs import http
+    from generoutes import http
     monkeypatch.setattr(http.time, "sleep", lambda s: None)
     fake, calls = _json_server([(200, b"\x1f\x8bBYTES", None)])
 
@@ -14726,8 +14726,8 @@ def test_a_failed_genetics_query_is_reported_as_failed_not_as_no_association(
     import json
     import urllib.error
     import urllib.request
-    from promoter_tf_drugs import genetics
-    from promoter_tf_drugs.http import Client
+    from generoutes import genetics
+    from generoutes.http import Client
 
     def run(handler):
         c = Client(cache_dir=tmp_path / f"c{id(handler)}", min_interval=0,
@@ -14767,7 +14767,7 @@ def test_a_failed_genetics_query_is_reported_as_failed_not_as_no_association(
 def test_the_ledger_names_a_failed_genetics_query_as_one():
     """"no genetic association returned for this gene" is a statement
     about the gene. For a query that never completed it is false."""
-    from promoter_tf_drugs import pipeline as pl
+    from generoutes import pipeline as pl
     failed = pl._genetics_detail([], None, error="Open Targets could not "
                                                  "resolve CCR5: HTTP 500")
     assert "failed" in failed and "says nothing" in failed
@@ -14783,8 +14783,8 @@ def test_dgidb_with_an_errors_body_is_skipped_not_read_as_no_drugs(
     import json
     import logging
     import urllib.request
-    from promoter_tf_drugs import drugs
-    from promoter_tf_drugs.http import Client
+    from generoutes import drugs
+    from generoutes.http import Client
 
     class R:
         headers = {}
@@ -14812,8 +14812,8 @@ def test_the_contract_check_sees_a_change_made_after_the_cache_was_filled(
     """It used to be answered from the 30-day cache: healthy once, the
     service renames its fields, and the second check still reported ok
     having made no request at all."""
-    from promoter_tf_drugs import services
-    from promoter_tf_drugs.http import Client
+    from generoutes import services
+    from generoutes.http import Client
     state = {"body": b'{"hits": [{"symbol": "TP53"}], "total": 1}'}
     fake, calls = _json_server([(200, state["body"], None)])
 
@@ -14840,7 +14840,7 @@ def test_a_response_that_changes_type_is_reported_not_raised():
     """A service that starts returning a list, a string or null made the
     value checks raise AttributeError and the command end as a traceback -
     the event the command exists to report."""
-    from promoter_tf_drugs import services
+    from generoutes import services
     for body in ([{"a": 1}], "maintenance", None, 7):
         contract = services.Contract(
             key="ensembl_mane", name="Ensembl MANE", why="w", reads="r",
@@ -14854,8 +14854,8 @@ def test_the_eqtl_download_counts_against_the_request_budget(tmp_path):
     """It used urllib directly, so a run capped at N requests could still
     send one more, uncounted, with no retry and no host breaker."""
     import pytest
-    from promoter_tf_drugs import eqtl
-    from promoter_tf_drugs.http import Client, HttpError
+    from generoutes import eqtl
+    from generoutes.http import Client, HttpError
     big = b"x" * 150_000
     fake, calls = _json_server([(200, big, None)])
 
@@ -14874,7 +14874,7 @@ def test_every_scenario_and_direction_pair_is_judged_once_in_one_place():
     contradict, and the report then opened "about 2x from the working
     allele" above a ranking built to LOWER the gene, led by a transcription
     inhibitor, with no sentence saying the two disagreed."""
-    from promoter_tf_drugs import magnitude as mag
+    from generoutes import magnitude as mag
     needs_up = ("haploinsufficiency", "hypomorph", "silenced_allele")
     for scen in needs_up:
         assert mag.goal_conflict(scen, "up") is None, scen
@@ -14895,7 +14895,7 @@ def test_every_scenario_and_direction_pair_is_judged_once_in_one_place():
 
 def test_a_contradictory_scenario_stops_the_run_before_any_work():
     import pytest
-    from promoter_tf_drugs import pipeline as pl
+    from generoutes import pipeline as pl
     with pytest.raises(ValueError, match="needs direction 'up'"):
         pl.run("DEMOGENE", demo=True, goal="down",
                scenario="haploinsufficiency", broken_allele_makes="null")
@@ -14912,7 +14912,7 @@ def test_both_command_lines_refuse_a_contradictory_scenario(capsys):
     panel had its own word-for-word copy of the checker, so a rule added
     to one was missing from the other."""
     import pytest
-    from promoter_tf_drugs import cli, panel
+    from generoutes import cli, panel
     for entry in (cli.main, panel.main):
         with pytest.raises(SystemExit) as exc:
             entry(["--demo", "--gene", "DEMOGENE", "--direction", "down",
@@ -14927,7 +14927,7 @@ def test_both_command_lines_refuse_a_contradictory_scenario(capsys):
 
 def test_the_panel_does_not_keep_its_own_copy_of_the_flag_checker():
     import inspect
-    from promoter_tf_drugs import panel
+    from generoutes import panel
     src = inspect.getsource(panel._check_flag_combinations)
     assert "_shared" in src and "parser.error" not in src, \
         "the panel must delegate, not re-implement the CLI's rules"
@@ -14976,7 +14976,7 @@ def test_the_remap_launcher_does_not_overwrite_the_windows_temp_variable():
 
 
 def _gate(tmp_path, scorer, n_actives=60, n_decoys=600):
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     rec = tmp_path / "r.pdb"
     rec.write_text("ATOM\n", encoding="utf-8")
     return dk.validate_pocket(
@@ -15044,7 +15044,7 @@ def test_the_enrichment_factor_states_what_it_was_counted_over():
     """With 660 compounds the top 1% is seven, so the factor moves in steps
     of about 1.7 while being quoted to two decimals. Two runs of one pocket
     gave 11.31 and 9.62 - one active more or fewer among seven."""
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     labels = [1] * 60 + [0] * 600
     scores = [-12.0 - i * 0.01 for i in range(60)] + \
              [-5.0 + i * 0.001 for i in range(600)]
@@ -15065,7 +15065,7 @@ def test_every_text_read_and_write_in_the_package_names_its_encoding():
     matrix exists to cover, and only one of which a developer sits at."""
     import ast as _ast
     from pathlib import Path
-    pkg = Path(__file__).resolve().parents[1] / "promoter_tf_drugs"
+    pkg = Path(__file__).resolve().parents[1] / "generoutes"
     bad = []
     for py in sorted(pkg.glob("*.py")):
         tree = _ast.parse(py.read_text(encoding="utf-8"))
@@ -15109,7 +15109,7 @@ def test_a_peak_adjacent_to_the_window_is_not_counted_as_inside_it(tmp_path):
     inclusive, so [101, 200] is the BED interval [100, 200). The upper
     bound used to be `s > end`, which kept a peak whose FIRST base is the
     one just past the window."""
-    from promoter_tf_drugs import evidence as ev
+    from generoutes import evidence as ev
     bed = _bed(tmp_path, [
         # Names avoid underscores: the ReMap name parser accepts only
         # letters, digits and hyphens as a factor symbol.
@@ -15127,7 +15127,7 @@ def test_a_repeat_request_for_the_same_window_does_not_reread_the_file(
         tmp_path, monkeypatch):
     """The 1.5 GB ReMap file takes about 72 s per window and the launcher
     asks for the same window in three stages."""
-    from promoter_tf_drugs import evidence as ev
+    from generoutes import evidence as ev
     bed = _bed(tmp_path, [(150, 160, "CTCF"), (155, 170, "SP1")])
     memo = tmp_path / "memo"
     first = ev.peaks_in_region(bed, "1", 101, 200, memo_dir=memo)
@@ -15144,7 +15144,7 @@ def test_changing_the_bed_invalidates_the_memo_and_other_windows_do_not_share(
     """Keyed on the file's size and modification time and on the region, so
     a replaced ReMap release or a different window is never answered with
     someone else's counts."""
-    from promoter_tf_drugs import evidence as ev
+    from generoutes import evidence as ev
     bed = _bed(tmp_path, [(150, 160, "CTCF")])
     memo = tmp_path / "memo"
     assert ev.peaks_in_region(bed, "1", 101, 200, memo_dir=memo) == {"CTCF": 1}
@@ -15155,7 +15155,7 @@ def test_changing_the_bed_invalidates_the_memo_and_other_windows_do_not_share(
 
 
 def test_no_memo_directory_means_no_files_are_written(tmp_path):
-    from promoter_tf_drugs import evidence as ev
+    from generoutes import evidence as ev
     bed = _bed(tmp_path, [(150, 160, "CTCF")])
     before = {x.name for x in tmp_path.rglob("*")}
     ev.peaks_in_region(bed, "1", 101, 200)
@@ -15163,7 +15163,7 @@ def test_no_memo_directory_means_no_files_are_written(tmp_path):
 
 
 def test_the_chip_evidence_entry_point_memoises_in_the_clients_cache(tmp_path):
-    from promoter_tf_drugs import evidence as ev
+    from generoutes import evidence as ev
 
     class _P:
         chrom, start, end = "1", 101, 200
@@ -15183,8 +15183,8 @@ def test_an_unreadable_library_is_reported_and_approval_degrades_to_unknown(
     hundred curated names. The consequence is graceful - a drug outside
     them is 'unknown', not 'unapproved' - but nothing said why."""
     import logging
-    from promoter_tf_drugs import catalogue as cat
-    from promoter_tf_drugs import localdrugs as ld
+    from generoutes import catalogue as cat
+    from generoutes import localdrugs as ld
 
     def broken(*a, **k):
         raise OSError("the file is locked by another process")
@@ -15207,7 +15207,7 @@ def test_an_empty_table_file_is_named_in_the_log_and_still_means_not_measured(
     missing was any word that the file was empty, where a missing file does
     log."""
     import logging
-    from promoter_tf_drugs import depmap, sensitivity
+    from generoutes import depmap, sensitivity
     f = tmp_path / "table.csv"
     f.write_bytes(b"")
     with caplog.at_level(logging.WARNING):
@@ -15225,7 +15225,7 @@ def test_the_uniprot_lookup_failure_is_not_swallowed_silently():
     the progress line then read "none annotated" as a finding."""
     import ast as _ast
     from pathlib import Path
-    src = (Path(__file__).resolve().parents[1] / "promoter_tf_drugs"
+    src = (Path(__file__).resolve().parents[1] / "generoutes"
            / "pipeline.py").read_text(encoding="utf-8")
     tree = _ast.parse(src)
     found = 0
@@ -15323,7 +15323,7 @@ def test_a_pipe_inside_a_value_does_not_split_a_table_cell():
 
 def test_both_stages_use_the_one_benjamini_hochberg_and_it_is_correct():
     """`_bh` existed twice, with docstrings that disagreed about the floor."""
-    from promoter_tf_drugs import sensitivity, stats, tfactivity
+    from generoutes import sensitivity, stats, tfactivity
     assert sensitivity._bh is stats.benjamini_hochberg
     assert tfactivity._bh is stats.benjamini_hochberg
     # Hand-worked: sorted p = .01 .02 .03 .5 over m = 4 tests gives
@@ -15338,7 +15338,7 @@ def test_the_orange_book_zip_is_counted_by_its_products_table(tmp_path):
     """It counted zip members, so a good download and one without the
     products table both read "3"."""
     import zipfile
-    from promoter_tf_drugs import datasets
+    from generoutes import datasets
     good = tmp_path / "EOBZIP.zip"
     with zipfile.ZipFile(good, "w") as z:
         z.writestr("products.txt", "h" + chr(10) + "a" + chr(10) + "b" + chr(10))
@@ -15369,7 +15369,7 @@ def test_the_launcher_refuses_a_zero_fraction_and_a_contradictory_direction():
     for scen, need in (("haploinsufficiency", "up"), ("hypomorph", "up"),
                        ("silenced_allele", "up"), ("toxic_gain", "down")):
         assert f'if "!SCEN!"=="{scen}" set "NEEDDIR={need}"' in src
-    from promoter_tf_drugs import magnitude as mag
+    from generoutes import magnitude as mag
     for scen in ("haploinsufficiency", "hypomorph", "silenced_allele"):
         assert mag.SCENARIO_GOAL[scen][0] == "up"
     assert mag.SCENARIO_GOAL["toxic_gain"][0] == "down"
@@ -15378,7 +15378,7 @@ def test_the_launcher_refuses_a_zero_fraction_and_a_contradictory_direction():
 def test_summary_md_tables_survive_a_pipe_in_a_value():
     """summary.md is the page users open first, and its tables were not
     escaped when report.md's were."""
-    from promoter_tf_drugs import report
+    from generoutes import report
     clean = _demo_result()
     assert _table_problems(report.summary_report(clean)) == []
     res = _inject_pipes(clean)
@@ -15391,7 +15391,7 @@ def test_escaping_copies_only_what_it_changes():
     """A result with no pipe is returned as it is; with one, only the
     containers on the path to it are rebuilt and the caller's data is left
     alone."""
-    from promoter_tf_drugs.report import escape_pipes
+    from generoutes.report import escape_pipes
     clean = {"a": ["x", {"b": "y"}], "c": ("z",), "n": 3}
     assert escape_pipes(clean) is clean
     dirty = {"a": ["x", {"b": "y | z"}], "keep": [1, 2], "c": ("q",)}
@@ -15435,7 +15435,7 @@ def test_a_gate_with_enough_decoys_is_not_refused_for_them(tmp_path):
 def test_errors_beside_usable_data_are_used_not_discarded():
     """GraphQL can answer with data and a warning about one field. Only an
     errors list with nothing to read is a failed lookup."""
-    from promoter_tf_drugs import drugs, genetics
+    from generoutes import drugs, genetics
 
     warn = [{"message": "a deprecated field"}]
 
@@ -15471,8 +15471,8 @@ def test_an_open_targets_outage_is_logged_by_the_drug_lookup(caplog):
     """`_resolve_ensembl` now raises on an outage; the drug lookup caught it
     and returned [] without a word, which reads as 'no drugs known'."""
     import logging
-    from promoter_tf_drugs import drugs
-    from promoter_tf_drugs.http import HttpError
+    from generoutes import drugs
+    from generoutes.http import HttpError
 
     class C:
         def post(self, *a, **k):
@@ -15488,7 +15488,7 @@ def test_fetch_bytes_follows_308_and_honours_retry_after(tmp_path,
     """request() follows 307/308 by hand so 3.10 and 3.12 agree; the bulk
     download did not, and it ignored Retry-After."""
     import urllib.error
-    from promoter_tf_drugs import http
+    from generoutes import http
     slept = []
     monkeypatch.setattr(http.time, "sleep", lambda s: slept.append(s))
 
@@ -15523,7 +15523,7 @@ def test_fetch_bytes_follows_308_and_honours_retry_after(tmp_path,
 
 def test_a_gene_file_with_a_bom_or_in_utf16_is_read_as_what_it_is(tmp_path):
     import pytest
-    from promoter_tf_drugs import panel
+    from generoutes import panel
     plain = tmp_path / "a.txt"
     plain.write_bytes(b"# my genes" + bytes([10]) + b"ccr5" + bytes([10])
                       + b"PCSK9" + bytes([10]) + bytes([10]))
@@ -15546,7 +15546,7 @@ def test_a_gene_file_with_a_bom_or_in_utf16_is_read_as_what_it_is(tmp_path):
 def test_the_empty_table_warning_is_written_once():
     """The same six lines had been copied into three loaders."""
     import inspect
-    from promoter_tf_drugs import depmap, sensitivity
+    from generoutes import depmap, sensitivity
     for mod in (sensitivity, depmap):
         assert "is empty - most likely" not in inspect.getsource(
             mod).replace(inspect.getsource(sensitivity.warn_empty_table), "")
@@ -15559,7 +15559,7 @@ def test_no_broad_exception_handler_swallows_without_a_word():
     writer, which cannot report its own failure through the logger it feeds."""
     import ast
     from pathlib import Path
-    root = Path(__file__).resolve().parents[1] / "promoter_tf_drugs"
+    root = Path(__file__).resolve().parents[1] / "generoutes"
     allowed = {"progress.py"}
     bad = []
     for p in sorted(root.glob("*.py")):
@@ -15590,8 +15590,8 @@ def test_no_broad_exception_handler_swallows_without_a_word():
 
 
 def test_a_failed_paralog_lookup_is_said_in_the_result():
-    from promoter_tf_drugs import compensation
-    from promoter_tf_drugs.http import HttpError
+    from generoutes import compensation
+    from generoutes.http import HttpError
 
     class C:
         def get(self, *a, **k):
@@ -15604,7 +15604,7 @@ def test_a_failed_paralog_lookup_is_said_in_the_result():
 def test_an_unreadable_potency_table_is_not_reported_as_no_known_ligands(
         monkeypatch, caplog):
     import logging
-    from promoter_tf_drugs import localpotency, screening
+    from generoutes import localpotency, screening
     monkeypatch.setattr(localpotency, "available", lambda: {"x": True})
 
     def boom(uni):
@@ -15619,7 +15619,7 @@ def test_an_unreadable_potency_table_is_not_reported_as_no_known_ligands(
 def test_an_unreadable_gwas_table_is_logged_not_silently_none(monkeypatch,
                                                               caplog):
     import logging
-    from promoter_tf_drugs import genetics, localannot
+    from generoutes import genetics, localannot
 
     def boom():
         raise OSError("the table is locked")
@@ -15633,7 +15633,7 @@ def test_an_unreadable_gwas_table_is_logged_not_silently_none(monkeypatch,
 def test_an_unreadable_orange_book_is_reported_once_not_per_drug(
         monkeypatch, caplog):
     import logging
-    from promoter_tf_drugs import indications, orangebook
+    from generoutes import indications, orangebook
 
     def boom(name, path=None):
         raise OSError("the file is locked")
@@ -15647,7 +15647,7 @@ def test_an_unreadable_orange_book_is_reported_once_not_per_drug(
 
 
 def test_a_scorer_that_raises_is_counted_as_a_failure_of_its_kind(tmp_path):
-    from promoter_tf_drugs import docking as dk
+    from generoutes import docking as dk
     rec = tmp_path / "r.pdb"
     rec.write_text("ATOM" + chr(10), encoding="utf-8")
 
@@ -15664,8 +15664,8 @@ def test_a_failed_safety_lookup_is_not_a_clear_one(caplog):
     """`withdrawn` and `black_box` default to False, so a failed ChEMBL
     warning lookup read as 'checked, nothing on record'."""
     import logging
-    from promoter_tf_drugs import drug_scoring as dsc
-    from promoter_tf_drugs.http import HttpError
+    from generoutes import drug_scoring as dsc
+    from generoutes.http import HttpError
 
     class C:
         def get(self, url, *a, **k):
@@ -15696,7 +15696,7 @@ def test_a_drug_likeness_failure_is_noted_not_left_looking_clean(monkeypatch):
     import pytest
     pytest.importorskip("rdkit")
     from rdkit.Chem import QED
-    from promoter_tf_drugs import liabilities
+    from generoutes import liabilities
 
     def boom(mol):
         raise ValueError("bad molecule")
@@ -15708,7 +15708,7 @@ def test_a_drug_likeness_failure_is_noted_not_left_looking_clean(monkeypatch):
 
 def test_a_curated_table_the_audit_cannot_read_is_logged(monkeypatch, caplog):
     import logging
-    from promoter_tf_drugs import audit, ligands
+    from generoutes import audit, ligands
 
     class Broken:
         def values(self):
@@ -15722,7 +15722,7 @@ def test_a_curated_table_the_audit_cannot_read_is_logged(monkeypatch, caplog):
 
 def test_a_failed_wsl_search_is_logged(monkeypatch, caplog):
     import logging
-    from promoter_tf_drugs import wsldock
+    from generoutes import wsldock
 
     def boom(script, **k):
         raise OSError("wsl.exe not found")
@@ -15734,7 +15734,7 @@ def test_a_failed_wsl_search_is_logged(monkeypatch, caplog):
 
 def test_no_budget_means_no_ceiling(tmp_path):
     """The default must not change behaviour for anyone."""
-    from promoter_tf_drugs.http import Client
+    from generoutes.http import Client
     c = Client(cache_dir=tmp_path / "cache", offline=False)
     assert c.max_requests is None
     calls = []
@@ -15748,7 +15748,7 @@ def test_a_budget_below_one_is_refused(tmp_path):
     """Zero would mean "make no requests", which is what --offline says
     clearly and this would say by accident."""
     import pytest
-    from promoter_tf_drugs.http import Client
+    from generoutes.http import Client
     with pytest.raises(ValueError):
         Client(cache_dir=tmp_path / "cache", max_requests=0)
 
@@ -15757,7 +15757,7 @@ def test_the_report_says_when_the_budget_bound_the_run():
     """A ceiling that silently truncates evidence is worse than no
     ceiling: every table below looks the same whether a source had
     nothing to say or was never asked."""
-    from promoter_tf_drugs import report as rep
+    from generoutes import report as rep
     result = {
         "query": {"gene": "G", "direction": "up", "demo": False},
         "spend": {"requests": 50, "refused": 7, "budget": 50},
@@ -15785,7 +15785,7 @@ def test_the_budget_is_per_analysis_and_the_help_says_so():
     a shared client through `pipeline.run`. So it stays per analysis and
     the help is explicit about it.
     """
-    from promoter_tf_drugs import cli
+    from generoutes import cli
     p = cli.build_parser()
     help_text = next(a.help for a in p._actions
                      if "--max-requests" in a.option_strings)
@@ -15808,7 +15808,7 @@ def test_every_default_path_constant_is_claimed_by_the_registry():
     import ast as _ast
     import re
     from pathlib import Path
-    from promoter_tf_drugs import datasets
+    from generoutes import datasets
 
     claimed = {str(p) for d in datasets.registry() for p in d.paths}
     pkg = Path(datasets.__file__).parent
@@ -15856,7 +15856,7 @@ def test_the_registry_imports_paths_rather_than_restating_them():
     Checked by substance rather than by reading the source: the entry
     for a source must hold exactly what its loader searches for.
     """
-    from promoter_tf_drugs import datasets, sensitivity, constraint
+    from generoutes import datasets, sensitivity, constraint
     by_key = {d.key: d for d in datasets.registry()}
     assert by_key["prism"].paths == tuple(sensitivity.DEFAULT_PRISM_PATHS)
     assert by_key["gnomad"].paths == tuple(constraint.DEFAULT_GNOMAD_PATHS)
@@ -15866,7 +15866,7 @@ def test_a_dict_shaped_path_constant_is_flattened():
     """`signatures.DEFAULT_GMT_PATHS` is keyed by direction, with a list
     under each. Treating it as a flat sequence yields dicts, not paths,
     and the survey raised rather than reporting."""
-    from promoter_tf_drugs import datasets
+    from generoutes import datasets
     by_key = {d.key: d for d in datasets.registry()}
     paths = by_key["lincs_gmt"].paths
     assert paths, "the GMT entry resolved to nothing"
@@ -15878,7 +15878,7 @@ def test_a_present_but_unreadable_table_is_reported_not_passed(tmp_path,
                                                                monkeypatch):
     """Present and unparseable is worse news than absent, so it must not
     look the same as a clean row."""
-    from promoter_tf_drugs import datasets
+    from generoutes import datasets
 
     bad = tmp_path / "jaspar2024.txt"
     bad.write_text("this is not a position frequency matrix\n",
@@ -15901,7 +15901,7 @@ def test_counting_is_off_by_default():
     """Several of these tables are gigabytes. A bare inventory must not
     parse them."""
     from pathlib import Path
-    from promoter_tf_drugs import datasets
+    from generoutes import datasets
     called = []
 
     def one():
@@ -15943,7 +15943,7 @@ def test_the_data_guide_names_every_table():
     """The guide's job is completeness, so an entry silently dropped
     from the render is the one failure that matters."""
     from pathlib import Path
-    from promoter_tf_drugs import datasets
+    from generoutes import datasets
     guide = (Path(__file__).resolve().parents[1]
              / "docs" / "datasets.md").read_text(encoding="utf-8")
     for ds in datasets.registry():
@@ -15963,7 +15963,7 @@ def test_no_registry_table_is_committed_to_the_repository():
     """
     import subprocess
     from pathlib import Path
-    from promoter_tf_drugs import datasets
+    from generoutes import datasets
     root = Path(__file__).resolve().parents[1]
     pr = subprocess.run(["git", "ls-files", "data/"], cwd=root,
                         capture_output=True, text=True)
@@ -15982,7 +15982,7 @@ def test_no_registry_table_is_committed_to_the_repository():
 def test_every_table_can_be_counted():
     """The large downloads are the ones most likely to have truncated,
     so a check that skips them is absent where it is most wanted."""
-    from promoter_tf_drugs import datasets
+    from generoutes import datasets
     uncounted = [d.key for d in datasets.registry() if d.counter is None]
     assert not uncounted, (
         "these tables cannot be checked at all: " + ", ".join(uncounted))
@@ -15996,7 +15996,7 @@ def test_a_line_count_is_not_reported_as_a_parse(tmp_path, capsys):
     stronger one, which is the conflation this package spends its time
     avoiding everywhere else.
     """
-    from promoter_tf_drugs import datasets
+    from generoutes import datasets
 
     f = tmp_path / "thing.txt"
     f.write_text("a\nb\nc\n", encoding="utf-8")
@@ -16025,7 +16025,7 @@ def test_a_line_count_is_not_reported_as_a_parse(tmp_path, capsys):
 # Do the services still return the shape the parsers read?               #
 # ===================================================================== #
 def _service_contract(probe, requires=(), key="t", **kw):
-    from promoter_tf_drugs import services
+    from generoutes import services
     return services.Contract(
         key=key, name="Test", why="w", reads="m.py", probe=probe,
         requires=tuple(requires), symptom="s", **kw)
@@ -16039,7 +16039,7 @@ def test_a_renamed_field_is_reported_as_changed_not_as_empty():
     """The whole point. A parser reaching for a renamed field returns
     None and the caller writes "could not resolve", which reads as a
     gene with no evidence rather than an API that moved."""
-    from promoter_tf_drugs import services
+    from generoutes import services
     c = _service_contract(lambda cl: {"data": {"searchResults": {"hits": [1]}}},
                   requires=("data.search.hits[]",))
     row = services.check(c, _LiveProbeClient())
@@ -16050,7 +16050,7 @@ def test_a_renamed_field_is_reported_as_changed_not_as_empty():
 def test_present_but_empty_is_a_break_too():
     """The probes ask about TP53 and aspirin. An empty answer for those
     is not a gene with no data, it is a contract that moved."""
-    from promoter_tf_drugs import services
+    from generoutes import services
     c = _service_contract(lambda cl: {"molecules": []},
                   requires=("molecules[]",))
     row = services.check(c, _LiveProbeClient())
@@ -16061,8 +16061,8 @@ def test_an_outage_is_not_reported_as_a_schema_change():
     """An outage is a reason to try later; a schema change is a reason
     to edit a parser. A check that conflates them sends you to do the
     wrong one."""
-    from promoter_tf_drugs import services
-    from promoter_tf_drugs.http import HttpError
+    from generoutes import services
+    from generoutes.http import HttpError
 
     def dead(cl):
         raise HttpError("503 from the service")
@@ -16080,10 +16080,10 @@ def test_a_broken_probe_is_neither_an_outage_nor_a_change():
     the probe imported a constant from the wrong module. MyGene was
     answering perfectly.
     """
-    from promoter_tf_drugs import services
+    from generoutes import services
 
     def bad(cl):
-        from promoter_tf_drugs.genes import NO_SUCH_CONSTANT  # noqa: F401
+        from generoutes.genes import NO_SUCH_CONSTANT  # noqa: F401
 
     row = services.check(_service_contract(bad, requires=("a",)), _LiveProbeClient())
     assert row["state"] == services.BROKEN_PROBE
@@ -16095,7 +16095,7 @@ def test_offline_is_skipped_rather_than_passed():
     """A contract check has to reach the service. Reporting "ok" for a
     check that never ran would be the exact failure this module is
     about."""
-    from promoter_tf_drugs import services
+    from generoutes import services
 
     class Off:
         offline = True
@@ -16116,7 +16116,7 @@ def test_a_probe_must_use_the_packages_own_request():
     agreed about the wrong thing.
     """
     import inspect
-    from promoter_tf_drugs import services
+    from generoutes import services
     src = inspect.getsource(services._ensembl)
     assert "_lookup_symbol" in src, \
         "the Ensembl probe must call the package's own lookup"
@@ -16126,7 +16126,7 @@ def test_the_mane_check_catches_a_regression(monkeypatch):
     """Guard the fix. `_is_mane` is only reachable because the lookup
     asks for `mane=1`; drop either half and transcript selection falls
     back to canonical with nothing to say so."""
-    from promoter_tf_drugs import services, genes
+    from generoutes import services, genes
 
     tp53 = {"Transcript": [
         {"id": "ENST1", "is_canonical": True,
@@ -16151,7 +16151,7 @@ def test_the_genetic_association_datatype_is_checked_by_value():
     """Renaming that one string empties the genetics section while
     every structural path still resolves, so a shape check cannot see
     it."""
-    from promoter_tf_drugs import services
+    from generoutes import services
     good = {"data": {"target": {"associatedDiseases": {"rows": [
         {"datatypeScores": [{"id": "genetic_association", "score": 0.5}]}]}}}}
     assert services._check_genetic_association(good) is None
@@ -16165,7 +16165,7 @@ def test_the_genetic_association_datatype_is_checked_by_value():
 def test_dig_tells_absence_from_a_legitimate_none():
     """`None` is a value a service can send, so the walker returns a
     found/value pair rather than using None to mean missing."""
-    from promoter_tf_drugs.services import _dig
+    from generoutes.services import _dig
     assert _dig({"a": {"b": None}}, "a.b") == (True, None)
     assert _dig({"a": {}}, "a.b") == (False, None)
     assert _dig({"a": [{"b": 1}]}, "a[].b") == (True, 1)
@@ -16175,7 +16175,7 @@ def test_dig_tells_absence_from_a_legitimate_none():
 def test_every_contract_names_a_module_and_a_symptom():
     """"ChEMBL changed" is not actionable. "The screen would report no
     known ligands" is."""
-    from promoter_tf_drugs import services
+    from generoutes import services
     for c in services.registry():
         assert c.reads and c.reads.endswith((".py", "_is_mane",
                                              "target_consequences",
@@ -16199,7 +16199,7 @@ def test_no_call_passes_a_keyword_its_callee_does_not_accept():
     """
     import ast as _ast
     from pathlib import Path
-    pkg = Path(__file__).resolve().parents[1] / "promoter_tf_drugs"
+    pkg = Path(__file__).resolve().parents[1] / "generoutes"
 
     bad = []
     for py in sorted(pkg.glob("*.py")):
@@ -16242,7 +16242,7 @@ def test_preparing_a_bundle_records_what_it_was_asked_for():
     halves in one process.
     """
     import inspect
-    from promoter_tf_drugs import docking
+    from generoutes import docking
     assert "state_note" in inspect.signature(
         docking.write_bundle).parameters, \
         "the caller passes it; the signature has to take it"
@@ -16291,7 +16291,7 @@ def test_a_docking_result_records_the_conformation_it_was_asked_for():
     was asked for is what makes the difference visible in the file.
     """
     import inspect
-    from promoter_tf_drugs import docking
+    from generoutes import docking
     src = inspect.getsource(docking.dock_screen_for_target)
     assert 'out["asked_for"]' in src
     # The three fields a reader needs to audit a merged file: what was
@@ -16326,7 +16326,7 @@ def test_the_inventory_names_the_directory_it_searched(capsys):
     """Paths are relative, so from the wrong directory this reports
     almost nothing present - which reads as missing downloads and is
     not. Naming the directory is what separates the two."""
-    from promoter_tf_drugs import datasets
+    from generoutes import datasets
     datasets.main([])
     out = capsys.readouterr().out
     assert "searched " in out
@@ -16341,7 +16341,7 @@ def test_the_requirement_is_arithmetic_not_a_prediction():
     total, so it has to roughly double. That comes from the mechanism,
     not from a model, and stating it turns a ranked list into a
     specification."""
-    from promoter_tf_drugs import magnitude as mag
+    from generoutes import magnitude as mag
     a = mag.restore_one_allele("BUB1B", broken_allele_makes="null")
     assert a.target_fold == 2.0
     assert a.goal == "up"
@@ -16353,7 +16353,7 @@ def test_raising_both_copies_is_not_the_whole_specification():
     """Where the broken copy makes protein, doubling total transcript is
     not doubling functional protein - so the stated requirement does not
     describe what you actually need."""
-    from promoter_tf_drugs import magnitude as mag
+    from generoutes import magnitude as mag
     truncated = mag.restore_one_allele("X", broken_allele_makes="truncated")
     null = mag.restore_one_allele("X", broken_allele_makes="null")
     assert any("not the whole specification" in n for n in truncated.notes)
@@ -16364,7 +16364,7 @@ def test_lowering_a_protein_says_the_package_moves_transcripts():
     """The HTT case: the target is protein and everything ranked here
     acts on transcription. A measured transcript change is an upper
     bound on the blot at the same time point."""
-    from promoter_tf_drugs import magnitude as mag
+    from generoutes import magnitude as mag
     a = mag.lower_toxic_product("HTT", target_fraction=0.5,
                                 acts_on="protein",
                                 wild_type_essential=True)
@@ -16380,7 +16380,7 @@ def test_a_z_score_is_never_converted_to_a_fold_change():
     """L1000's z is computed against the plate population, whose spread
     is not in the data read here. Converting it would invent the number
     that matters most."""
-    from promoter_tf_drugs import magnitude as mag
+    from generoutes import magnitude as mag
     routes = [{"drug": "a", "source": "lincs", "score": -2.4,
                "cell_line": "BT20"}]
     ask = mag.lower_toxic_product("HTT", target_fraction=0.5)
@@ -16394,7 +16394,7 @@ def test_a_z_score_is_never_converted_to_a_fold_change():
 def test_routes_without_a_measured_effect_are_counted_as_such():
     """Most routes are annotation, and an annotation has no size. The
     split is the useful part."""
-    from promoter_tf_drugs import magnitude as mag
+    from generoutes import magnitude as mag
     routes = ([{"drug": f"m{i}", "source": "lincs", "score": -3.0 + i}
                for i in range(3)]
               + [{"drug": f"a{i}", "source": "drugs"} for i in range(7)])
@@ -16407,7 +16407,7 @@ def test_routes_without_a_measured_effect_are_counted_as_such():
 def test_measured_effects_in_the_wrong_direction_are_called_out():
     """A compound that measurably moves the gene the wrong way is worse
     than one with no measurement, and must not read as support."""
-    from promoter_tf_drugs import magnitude as mag
+    from generoutes import magnitude as mag
     routes = [{"drug": "up1", "source": "lincs", "score": 2.5}]
     ask = mag.restore_one_allele("G")          # goal is up
     text = mag.summarise(ask, mag.measured_effects(routes, "G"))
@@ -16418,7 +16418,7 @@ def test_measured_effects_in_the_wrong_direction_are_called_out():
 
 
 def test_no_measured_effect_says_so_without_caveating_absent_numbers():
-    from promoter_tf_drugs import magnitude as mag
+    from generoutes import magnitude as mag
     routes = [{"drug": "a", "source": "drugs"} for _ in range(5)]
     ask = mag.lower_toxic_product("HTT", target_fraction=0.5)
     text = mag.summarise(ask, mag.measured_effects(routes, "HTT"))
@@ -16430,7 +16430,7 @@ def test_one_entry_point_covers_the_shapes_a_dosage_problem_takes():
     """Haploinsufficiency, a hypomorph, a toxic gain, a null, a silenced
     allele, and a gene with no mutation at all. Different problems that
     share a structure: each fixes the direction and the requirement."""
-    from promoter_tf_drugs import magnitude as mag
+    from generoutes import magnitude as mag
     seen = {}
     for name in mag.SCENARIOS:
         a = mag.ask_for(name, "GENE")
@@ -16446,7 +16446,7 @@ def test_an_unknown_scenario_raises_rather_than_defaulting():
     """A silent default here would set the direction of a whole
     analysis."""
     import pytest
-    from promoter_tf_drugs import magnitude as mag
+    from generoutes import magnitude as mag
     with pytest.raises(ValueError, match="unknown scenario"):
         mag.ask_for("probably_fine", "GENE")
 
@@ -16455,7 +16455,7 @@ def test_a_null_allele_is_told_that_transcription_cannot_help():
     """Transcribing a null allele harder makes more non-functional
     transcript. Handing over two hundred routes for a problem none of
     them solves is worse than saying so."""
-    from promoter_tf_drugs import magnitude as mag
+    from generoutes import magnitude as mag
     a = mag.ask_for("null", "GENE")
     assert a.feasible is False
     text = mag.summarise(a)
@@ -16467,7 +16467,7 @@ def test_a_modifier_has_no_restoration_target_and_says_so():
     """The stroke case: the gene is already at its normal level, so
     there is no arithmetic to check a plan against - and the safety
     argument inverts, because you are moving a working copy."""
-    from promoter_tf_drugs import magnitude as mag
+    from generoutes import magnitude as mag
     a = mag.ask_for("modifier", "CCR5", goal="down",
                     condition="stroke recovery")
     assert a.target_fold is None, "there is no multiple to aim for"
@@ -16481,7 +16481,7 @@ def test_a_modifier_has_no_restoration_target_and_says_so():
 def test_a_hypomorph_has_no_bad_product_to_amplify():
     """The most favourable shape: both copies make a working if reduced
     product, so raising transcription raises only what you want."""
-    from promoter_tf_drugs import magnitude as mag
+    from generoutes import magnitude as mag
     a = mag.ask_for("hypomorph", "GENE")
     joined = " ".join(a.notes)
     assert "nothing you do not" in joined
@@ -16492,7 +16492,7 @@ def test_a_measured_effect_on_another_gene_is_not_counted():
     """A LINCS hit records which gene it measured. One for a different
     gene is not evidence about this one, and counting it would inflate
     the single number this function exists to report."""
-    from promoter_tf_drugs import magnitude as mag
+    from generoutes import magnitude as mag
     routes = [
         {"drug": "right", "source": "lincs", "score": -2.5, "gene": "HTT"},
         {"drug": "wrong", "source": "lincs", "score": -9.9, "gene": "CCR5"},
@@ -16511,7 +16511,7 @@ def test_the_requirement_appears_above_every_table():
     """A reader who sees only the ranking cannot tell a plan that needs
     a doubling from one that needs a halving, and the tables look
     identical in both cases."""
-    from promoter_tf_drugs import pipeline as pl, report as rep
+    from generoutes import pipeline as pl, report as rep
     res = pl.run("DEMOGENE", demo=True, scenario="haploinsufficiency",
                  broken_allele_makes="truncated")
     assert res["requirement"]["target_fold"] == 2.0
@@ -16525,7 +16525,7 @@ def test_the_requirement_appears_above_every_table():
 def test_an_unachievable_scenario_says_so_before_the_candidates():
     """Handing over routes for a problem none of them addresses is
     worse than saying nothing."""
-    from promoter_tf_drugs import pipeline as pl, report as rep
+    from generoutes import pipeline as pl, report as rep
     res = pl.run("DEMOGENE", demo=True, scenario="null")
     assert res["requirement"]["feasible"] is False
     text = rep.markdown_report(res)
@@ -16536,7 +16536,7 @@ def test_an_unachievable_scenario_says_so_before_the_candidates():
 def test_no_scenario_means_no_section_rather_than_an_empty_one():
     """Most runs do not declare a mechanism, and an empty heading is
     worse than none."""
-    from promoter_tf_drugs import pipeline as pl, report as rep
+    from generoutes import pipeline as pl, report as rep
     res = pl.run("DEMOGENE", demo=True)
     assert res["requirement"] is None
     text = rep.markdown_report(res)
@@ -16546,7 +16546,7 @@ def test_no_scenario_means_no_section_rather_than_an_empty_one():
 def test_the_scenario_is_recorded_in_the_query_block():
     """It sets the direction of the whole analysis, so a saved result
     has to say which one produced it."""
-    from promoter_tf_drugs import pipeline as pl
+    from generoutes import pipeline as pl
     # toxic_gain means lowering, so the direction has to say so: the pair
     # used to be allowed to contradict, and the default direction is up.
     res = pl.run("DEMOGENE", demo=True, goal="down", scenario="toxic_gain",
@@ -16558,13 +16558,13 @@ def test_the_scenario_is_recorded_in_the_query_block():
 
 def test_an_invalid_scenario_is_refused_before_the_run_starts():
     import pytest
-    from promoter_tf_drugs import pipeline as pl
+    from generoutes import pipeline as pl
     with pytest.raises(ValueError, match="scenario"):
         pl.run("DEMOGENE", demo=True, scenario="probably_fine")
 
 
 def test_both_clis_accept_the_scenario_flags():
-    from promoter_tf_drugs import cli, panel
+    from generoutes import cli, panel
     for mod, base in ((cli, ["--gene", "X"]), (panel, ["--genes", "X"])):
         args = mod.build_parser().parse_args(
             base + ["--scenario", "modifier", "--condition", "stroke"])
@@ -16578,7 +16578,7 @@ def test_a_source_that_found_nothing_is_not_shown_as_one_that_delivered():
     returned a hundred and fifty-three records and one that returned
     none. A reader scanning the table for `ok` counts the second as
     evidence that arrived."""
-    from promoter_tf_drugs import provenance as prov
+    from generoutes import provenance as prov
     led = prov.Ledger()
     led.record("found", requested=True, ok=True, yielded=153, detail="d")
     led.record("searched", requested=True, ok=True, yielded=0, detail="d")
@@ -16593,7 +16593,7 @@ def test_an_empty_answer_still_counts_as_the_source_having_worked():
     """A measured nothing outranks a lookup that broke, which is the
     distinction the ledger exists to keep. `empty` must not be treated
     as a failure by anything that decides whether a source is usable."""
-    from promoter_tf_drugs import provenance as prov
+    from generoutes import provenance as prov
     led = prov.Ledger()
     led.record("searched", requested=True, ok=True, yielded=0, detail="d")
     src = led.get("searched")
@@ -16604,8 +16604,8 @@ def test_an_empty_answer_still_counts_as_the_source_having_worked():
 
 
 def test_the_report_marks_an_empty_source_rather_than_hiding_it():
-    from promoter_tf_drugs import provenance as prov
+    from generoutes import provenance as prov
     import inspect
-    from promoter_tf_drugs import report as rep
+    from generoutes import report as rep
     src = inspect.getsource(rep.markdown_report)
     assert '"empty": "ok, nothing found"' in src
