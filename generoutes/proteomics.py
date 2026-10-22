@@ -27,16 +27,43 @@ routinely named for this question and two of them do not answer it.
   shift, which is target ENGAGEMENT rather than abundance. A drug can
   bind a protein without changing how much of it exists.
 
-The resources that do answer it are dose-resolved proteomics under drug:
-**decryptE** (around 144 drugs, dose-resolved, whole proteome) and
-**ProTargetMiner** (around 50 anticancer compounds). Both are smaller
-than LINCS by orders of magnitude, which is the honest limit: the protein
-side of this question has a small fraction of the transcript side's
-coverage, and a compound absent from the table is unexamined rather than
-negative.
+Everything that does answer it, and how small it is
+---------------------------------------------------
+Four kinds of source exist, in descending order of how directly they
+answer "does this drug raise this protein".
 
-So this reads a TABLE rather than one named source. Give it whichever you
-can obtain, or one from your own experiment.
+1. **Dose-resolved proteomics under drug.** decryptE (~144 drugs, full
+   proteome, Jurkat) and ProTargetMiner (~50 compounds, heavily
+   anticancer, A549). These answer the question exactly. Between them
+   they cover a low hundreds of compounds against an approved library of
+   several thousand, and both are single cell lines, so a compound
+   absent from them is unexamined and not negative.
+
+2. **Individual drug-treatment proteomics studies**, through
+   PRIDE/ProteomeXchange and MassIVE. There are thousands, and together
+   they cover far more compounds than the two harmonised sets - but each
+   has its own design, cell line, dose and normalisation, so pooling
+   them is a project rather than a download. This is the realistic way
+   to find data on one specific compound you already care about.
+
+3. **Target engagement, which is a different question.** Thermal
+   proteome profiling (Meltome Atlas) and chemoproteomics against
+   immobilised inhibitors (kinobeads, ~240 kinase inhibitors across the
+   kinome) say whether a drug BINDS a protein. Binding is not abundance:
+   a drug can engage a protein without changing how much of it exists.
+   These are worth consulting anyway when the gene is itself a kinase,
+   because the coverage is far better than the abundance datasets and a
+   measured interaction is a real starting point.
+
+4. **Baseline protein levels with no drug arm.** CPTAC and the DepMap
+   proteomics set quantify proteins across tumours or cell lines. They
+   establish that a protein is detectable by mass spectrometry at all,
+   which is worth checking before expecting any drug-treatment dataset
+   to contain it, and they answer nothing about drugs.
+
+So this reads a TABLE rather than one named source. Give it whichever
+you can obtain, or one from your own experiment, and `describe` will
+report how much of it actually touches your protein.
 """
 
 from __future__ import annotations
@@ -186,6 +213,84 @@ def load(protein: str, *, path=None, want: str = "up") -> list[ProteinHit]:
 def _key(name: str) -> str:
     from .signatures import breadth_key
     return breadth_key(name)
+
+
+def describe(protein: str, *, path=None) -> dict:
+    """What the table holds for this protein, before any threshold.
+
+    The counts a reader needs to tell a measured negative from an absent
+    measurement. `n_compounds` is how many distinct compounds have any
+    reading for this protein at all; a zero there means the protein was
+    never quantified, and nothing about it has been tested.
+    """
+    import csv
+    import gzip
+    import io
+    import statistics
+
+    found = _resolve(path)
+    if found is None:
+        return {}
+    target = (protein or "").strip().upper()
+    per_drug: dict = {}
+    fh = (io.TextIOWrapper(gzip.open(found, "rb"), encoding="utf-8",
+                           errors="replace") if found.suffix == ".gz"
+          else open(found, encoding="utf-8", errors="replace"))
+    try:
+        with fh:
+            sample = fh.read(8192)
+            fh.seek(0)
+            delim = "\t" if sample.count("\t") >= sample.count(",") else ","
+            for row in csv.DictReader(fh, delimiter=delim):
+                row = {(k or "").strip().lower(): v for k, v in row.items()}
+                if (row.get("protein") or row.get("gene") or
+                        "").strip().upper() != target:
+                    continue
+                try:
+                    fc = float(row.get("log2fc") or row.get("logfc")
+                               or row.get("score"))
+                except (TypeError, ValueError):
+                    continue
+                name = (row.get("drug") or "").strip()
+                if name:
+                    per_drug.setdefault(_key(name), []).append(fc)
+    except OSError:
+        return {}
+
+    meds = {k: statistics.median(v) for k, v in per_drug.items()}
+    up = sum(1 for m in meds.values() if m >= MIN_ABS_LOG2FC)
+    down = sum(1 for m in meds.values() if m <= -MIN_ABS_LOG2FC)
+    return {
+        "protein": target,
+        "path": str(found),
+        "n_compounds": len(meds),
+        "n_observations": sum(len(v) for v in per_drug.values()),
+        "n_up": up,
+        "n_down": down,
+        "n_unchanged": len(meds) - up - down,
+        "largest_increase": round(max(meds.values()), 3) if meds else None,
+        "largest_decrease": round(min(meds.values()), 3) if meds else None,
+    }
+
+
+def coverage_note(desc: dict, protein: str) -> str:
+    """One line telling a measured negative from an absent measurement."""
+    if not desc:
+        return ""
+    n = desc["n_compounds"]
+    if not n:
+        return (f"**{protein} does not appear in the protein table at "
+                f"all.** Nothing about it has been measured there, which "
+                f"is not the same as nothing having moved it.")
+    return (
+        f"**{protein} is quantified for {n} compound(s) in the table** "
+        f"({desc['n_observations']} observation(s)): {desc['n_up']} raise "
+        f"it, {desc['n_down']} lower it, {desc['n_unchanged']} move it less "
+        f"than {2 ** MIN_ABS_LOG2FC:.1f}x. Largest increase "
+        f"{2 ** (desc['largest_increase'] or 0):.1f}x, largest decrease "
+        f"{2 ** (desc['largest_decrease'] or 0):.1f}x. A zero in the first "
+        f"column would be a measured negative over those compounds, and "
+        f"says nothing about the rest of the approved library.")
 
 
 def summarise(hits: list, protein: str, *, path=None) -> str:

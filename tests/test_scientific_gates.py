@@ -905,3 +905,168 @@ def test_the_report_shows_the_ligase_and_the_enzyme_that_reverses_it():
     # DEMOGENE is not in either table, so the report must say so rather
     # than omit the question.
     assert "deubiquitinase" in out.lower() or "Raising the protein" in out
+
+
+# ===================================================================== #
+# C17. A brake exon is only worth an oligonucleotide if its isoforms     #
+#      carry message, and an unmeasured isoform is not a measured zero.  #
+# ===================================================================== #
+def test_an_unmeasured_isoform_is_never_counted_as_zero():
+    """The failure this prevents is the quiet one.
+
+    GTEx v8 is built on an older GENCODE than current Ensembl, so a
+    decay isoform annotated since then has no row. Folding those into
+    the shares would report "decay isoforms carry 0% of the message"
+    when the truth is that most of them were never measured.
+    """
+    from generoutes import isoforms
+
+    record = {"Transcript": [
+        {"id": "ENST00000000001", "biotype": "protein_coding"},
+        {"id": "ENST00000000002", "biotype": "nonsense_mediated_decay"},
+        {"id": "ENST00000000003", "biotype": "nonsense_mediated_decay"},
+    ]}
+    # Only the coding one and one decay isoform were quantified.
+    out = isoforms.weigh(record, {"tpm": {"ENST00000000001": 9.0,
+                                          "ENST00000000002": 1.0},
+                                  "tissue": "T", "dataset": "d"})
+    assert out["n_annotated"] == 3 and out["n_measured"] == 2
+    assert out["unmeasured_by_class"] == {"decay": 1}
+    # The share is of what was measured, and the unmeasured one is said
+    # out loud rather than folded in as a zero.
+    assert out["shares"]["decay"] == 0.1
+    assert "no measurement at all" in out["verdict"]
+
+
+def test_a_transcript_version_does_not_stop_a_match():
+    """Ensembl says ENST123.4 and GTEx says ENST123.2; one transcript."""
+    from generoutes import isoforms
+
+    out = isoforms.weigh(
+        {"Transcript": [{"id": "ENST00000287598.10",
+                         "biotype": "protein_coding"}]},
+        {"tpm": {"ENST00000287598": 5.0}, "tissue": "T", "dataset": "d"})
+    assert out["n_measured"] == 1 and out["shares"]["productive"] == 1.0
+
+
+def test_decay_isoforms_carrying_nothing_are_called_out_as_such():
+    from generoutes import isoforms
+
+    record = {"Transcript": [
+        {"id": "ENST1", "biotype": "protein_coding"},
+        {"id": "ENST2", "biotype": "nonsense_mediated_decay"}]}
+    out = isoforms.weigh(record, {"tpm": {"ENST1": 8.0, "ENST2": 0.0},
+                                  "tissue": "fibroblasts", "dataset": "d"})
+    assert "nothing for an oligonucleotide to redirect" in out["verdict"]
+    # And a real share reads the other way.
+    rich = isoforms.weigh(record, {"tpm": {"ENST1": 6.0, "ENST2": 4.0},
+                                   "tissue": "fibroblasts", "dataset": "d"})
+    assert "worth something" in rich["verdict"]
+
+
+def test_a_failed_lookup_is_not_a_finding_of_no_message():
+    from generoutes import isoforms
+
+    out = isoforms.weigh({"Transcript": [{"id": "E1",
+                                          "biotype": "protein_coding"}]},
+                         {"tpm": {}, "error": "the GTEx lookup failed"})
+    assert out["error"]
+    said = isoforms.summarise(out, "GENE")
+    assert "were not weighed" in said and "quantified opportunity" in said
+
+
+def test_candidate_exons_separate_weight_from_absence_of_weight():
+    from generoutes import isoforms
+
+    weighed = {"per_transcript": {"ENST1": {"share": 0.2},
+                                  "ENST2": {"share": 0.0}}}
+    cands = [{"transcripts": ["ENST1.3", "ENST9"]},
+             {"transcripts": ["ENST2"]}]
+    isoforms.weigh_candidates(cands, weighed)
+    assert cands[0]["share"] == 0.2 and cands[0]["n_unmeasured"] == 1
+    assert cands[1]["share"] == 0.0 and cands[1]["n_unmeasured"] == 0
+
+
+# ===================================================================== #
+# C18. Translation and mRNA stability have more than one control        #
+#      element each, and every one is tested against its own shuffle.    #
+# ===================================================================== #
+def test_the_new_utr_features_beat_a_shuffle_before_they_are_reported():
+    from generoutes import utr
+
+    five = "CTTTTCGGGAGGGTGGGACGGGTTACGATCGATCGGCATCGAATTCGCATCGATCG"
+    three = ("TGTAAATA" + "GCGC" + "TGTACATA" + "ATTTA" * 3
+             + "GGACT" * 4 + "ACGT" * 12)
+    s = utr.scan(five, three, shuffles=60, seed=1)
+    assert s["translation"]["g_quadruplex"]["enriched"] is True
+    assert s["stability"]["pumilio"]["enriched"] is True
+    # Plain sequence with none of them must not light up.
+    flat = utr.scan("ACGTACGTACGTACGTACGTACGTACGTACGTACGT",
+                    "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT",
+                    shuffles=60, seed=1)
+    assert flat["translation"]["g_quadruplex"]["enriched"] is False
+    assert flat["stability"]["pumilio"]["enriched"] is False
+
+
+def test_a_top_motif_needs_a_c_cap_and_a_real_pyrimidine_run():
+    from generoutes import utr
+
+    assert utr._top_motif("CTTTTCAGGG")["present"] is True
+    # A purine at the cap disqualifies it outright.
+    assert utr._top_motif("ATTTTCAGGG")["present"] is False
+    # So does too short a run.
+    short = utr._top_motif("CTTAGGGGGG")
+    assert short["present"] is False and "pyrimidine" in short["why"]
+
+
+def test_drach_is_reported_with_its_own_weakness_attached():
+    """DRACH matches constantly; reporting it as a finding would be the
+    strongest-sounding and least informative line in the report."""
+    from generoutes import utr
+
+    s = utr.scan("ACGT" * 10, "GGACT" * 8 + "ACGT" * 12, shuffles=60,
+                 seed=1)
+    said = utr.summarise(s, "GENE")
+    if (s["stability"]["m6a_drach"] or {}).get("enriched"):
+        assert "most occurrences are never methylated" in said
+
+
+def test_the_sources_that_name_a_regulator_are_listed_when_absent():
+    from generoutes import utr
+
+    said = utr.summarise_sites(utr.annotated_sites("NOSUCHGENE",
+                                                   path="nope.tsv"), "G")
+    for name in ("TargetScan", "miRTarBase", "eCLIP"):
+        assert name in said
+
+
+def test_named_regulators_separate_measured_from_predicted(tmp_path):
+    from generoutes import utr
+
+    t = tmp_path / "sites.tsv"
+    t.write_text("gene\tfactor\tkind\tevidence\n"
+                 "G\thsa-miR-1\tmicroRNA\tpredicted\n"
+                 "G\tPUM1\tRBP\teCLIP\n"
+                 "OTHER\tX\tRBP\teCLIP\n", encoding="utf-8")
+    sites = utr.annotated_sites("G", path=str(t))
+    assert sites["n"] == 2
+    said = utr.summarise_sites(sites, "G")
+    assert "0 of 1 measured" in said and "1 of 1 measured" in said
+
+
+# ===================================================================== #
+# C19. A protein table that never mentions the protein is not a         #
+#      measured negative about it.                                      #
+# ===================================================================== #
+def test_a_protein_absent_from_the_table_is_not_a_measured_zero(tmp_path):
+    from generoutes import proteomics
+
+    t = tmp_path / "prot.tsv"
+    t.write_text("drug\tprotein\tlog2fc\n"
+                 "A\tTP53\t0.9\nA\tTP53\t0.8\n", encoding="utf-8")
+    missing = proteomics.describe("BUB1B", path=str(t))
+    assert missing["n_compounds"] == 0
+    assert "does not appear in the protein table at all" in         proteomics.coverage_note(missing, "BUB1B")
+    present = proteomics.describe("TP53", path=str(t))
+    assert present["n_compounds"] == 1 and present["n_up"] == 1
+    assert "quantified for 1 compound" in         proteomics.coverage_note(present, "TP53")

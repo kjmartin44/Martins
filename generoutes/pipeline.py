@@ -40,6 +40,7 @@ from . import constraint as con_mod
 from .http import Client
 
 from . import fame as fame_mod
+from . import isoforms
 from . import poisonexon
 from . import proteomics as prot_mod
 from . import utr as utr_mod
@@ -1557,7 +1558,13 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                 for v in [utr_scan.get(k) or {}]
                 if (v.get("enriched")
                     or any((v.get(sub) or {}).get("enriched")
-                           for sub in ("pentamer", "nonamer"))))
+                           for sub in ("pentamer", "nonamer",
+                                       "g_quadruplex", "m6a_drach",
+                                       "pumilio"))
+                    # The TOP motif is positional, so it is present or
+                    # absent rather than enriched, and it is as real a
+                    # lever as any of the counted ones.
+                    or (v.get("top_motif") or {}).get("present")))
             ledger.record(
                 "utr", requested=True, ok=bool(utr_scan), yielded=_lever,
                 detail=(f"5'UTR {utr_scan.get('five_prime_length', 0)} bp, "
@@ -2277,7 +2284,14 @@ def _brake_exons(client, gene: str, species: str, goal: str) -> dict:
     if goal != "up":
         return {}
     try:
-        return poisonexon.find(genes._lookup_symbol(client, gene, species))
+        record = genes._lookup_symbol(client, gene, species)
+        found = poisonexon.find(record)
+        # A candidate exon is only worth an oligonucleotide if the isoforms
+        # carrying it carry message. Weighed here rather than inside
+        # poisonexon so that module stays a pure read of the annotation.
+        found["isoform_weight"] = isoforms.weigh(
+            record, isoforms.fetch(client, gene))
+        return found
     except Exception as exc:                                # noqa: BLE001
         log.warning("brake-exon search for %s failed: %s", gene,
                     str(exc)[:100])

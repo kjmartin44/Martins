@@ -337,6 +337,45 @@ def registry() -> tuple:
                    "time, source].",),
         ),
         Dataset(
+            key="transcript_expression",
+            title="Isoform-level expression",
+            buys="how much of the gene's message each isoform carries, "
+                 "which decides whether a brake exon is worth an "
+                 "oligonucleotide or sits on a transcript nobody makes",
+            supply=AUTO,
+            paths=_paths("isoforms", "DEFAULT_PATHS"),
+            url="https://gtexportal.org/api/v2",
+            size="varies",
+            flag="fetched from GTEx when absent; the file wins if present",
+            without="GTEx is queried live instead, which needs the network "
+                    "and gives one tissue of one dataset",
+            counter=_count_csv_rows, unit="row",
+            notes=("Columns: transcript, tpm [, tissue, gene, source].",
+                   "recount3 covers far more samples than GTEx but ships "
+                   "as R objects, so it belongs here as a table rather "
+                   "than as a live lookup.",),
+        ),
+        Dataset(
+            key="transcript_sites",
+            title="Named regulators of the transcript",
+            buys="which microRNA or RNA-binding protein acts on the "
+                 "transcript, where the UTR scans can only say an element "
+                 "is in excess",
+            supply=AUTO,
+            paths=_paths("utr", "DEFAULT_SITES_PATHS"),
+            url="https://www.targetscan.org/",
+            size="varies",
+            flag="on by default once the file exists",
+            without="the UTR scans report motifs with no factor attached, "
+                    "so there is nothing to knock down or antagonise",
+            counter=_count_csv_rows, unit="row",
+            notes=("Columns: gene, factor, kind [, region, evidence, "
+                   "source].",
+                   "TargetScan (predicted miRNA sites), miRTarBase "
+                   "(measured ones), ENCODE eCLIP (RBP footprints) and "
+                   "an m6A atlas all reshape into this one table.",),
+        ),
+        Dataset(
             key="ctd_fame",
             title="Drug fame, from your own saved runs",
             buys="how many other genes the literature records each "

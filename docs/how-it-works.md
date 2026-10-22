@@ -659,6 +659,16 @@ under `data/` that you download once.
 | CTD | live | curated chemical effects on the gene's expression, to mark what is already known |
 | RCSB PDB | live | experimental structures with ligands for docking |
 | AlphaFold DB | live | predicted structures, used only when the exploratory dock is asked for |
+| GTEx portal (v8 median transcript TPM) | live or local | how much of the gene's message each isoform carries, which decides whether a brake exon is worth targeting |
+| decryptE, ProTargetMiner, or your own proteomics | local | compounds measured to change the gene's own PROTEIN rather than its transcript |
+| TargetScan, miRTarBase, ENCODE eCLIP, an m6A atlas | local | which microRNA or RNA-binding protein acts on the transcript, where the UTR scans can only say an element is in excess |
+
+The last three are optional and none ships with the package. Each is read
+from a table under `data/` whose columns are given in
+[the data guide](datasets.md); a run without them says so in the coverage
+audit rather than reporting the question as answered. The GTEx lookup is
+the exception: with no local table it is fetched live, and a file at
+`data/transcript_expression.tsv` wins if one is there.
 
 Not every source is read in every run. The command `--check` lists which local
 files are present, and the evidence ledger in each report says which sources

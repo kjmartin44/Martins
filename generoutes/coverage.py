@@ -59,6 +59,8 @@ def audit(result: dict) -> list[dict]:
     block = next(iter(result.get("results") or []), {}) or {}
     beyond = block.get("beyond_transcription") or {}
     brake = result.get("brake_exons") or {}
+    weight = brake.get("isoform_weight") or {}
+    weighed = bool(weight.get("n_measured")) and not weight.get("error")
     ptx = (beyond.get("post_transcriptional") or {}).get("routes") or []
     stability = beyond.get("product_stability") or {}
     product = block.get("product_screen") or {}
@@ -90,15 +92,22 @@ def audit(result: dict) -> list[dict]:
             "found": len(brake.get("candidates") or []),
             "what_ran": "the decay-isoform scan: exons used only by "
                         "transcripts the cell destroys, which an "
-                        "oligonucleotide could redirect",
+                        "oligonucleotide could redirect"
+                        + (", each weighed by the share of the gene's "
+                           "message its isoforms carry in GTEx"
+                           if weighed else ""),
             "gap": "no drug was searched against them. Splice modulation "
                    "has an approved small molecule (risdiplam), but "
                    "nothing here looks for one against this gene's exons, "
                    "and no public corpus of compound-by-splicing effects "
-                   "is read.",
-            "enable": "a splice-modulator screen, or isoform-resolved "
-                      "expression to show how much message the decay "
-                      "isoforms actually carry",
+                   "is read."
+                   + ("" if weighed else " How much message the decay "
+                      "isoforms carry is also unknown, so the exons are "
+                      "unranked."),
+            "enable": "a splice-modulator screen"
+                      + ("" if weighed else ", or isoform-resolved "
+                         "expression to show how much message the decay "
+                         "isoforms actually carry"),
         },
         {
             "step": "mRNA stability",

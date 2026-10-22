@@ -780,6 +780,37 @@ def _standard_of_care_section(result: dict) -> list:
     return L
 
 
+def _utr_section(result: dict) -> list:
+    """Translation and mRNA stability: two of the six steps, from sequence.
+
+    Everything here is a sequence proxy tested against a shuffle of the
+    same sequence. It annotates a lever and never matches a drug to one,
+    so it is placed with the other annotated steps rather than near the
+    ranking.
+    """
+    from . import utr as _utr
+
+    block = next(iter(result.get("results") or []), {}) or {}
+    scan = block.get("utr") or {}
+    if not scan:
+        return []
+    gene = result["query"]["gene"]
+    L = [f"## What the {gene} transcript itself does to its own output", "",
+         "Two of the six steps between a gene and a working protein happen "
+         "after the message is made: how readily it is translated, and how "
+         "long it survives. Both are partly set by the untranslated regions, "
+         "which are read here against a shuffle of the same sequence, so a "
+         "feature counts only when there is more of it than that base "
+         "composition gives by chance.", ""]
+    L += [_utr.summarise(scan, gene), ""]
+    L += [_utr.summarise_sites(_utr.annotated_sites(gene), gene), ""]
+    L += ["**No compound was searched against any of this.** A uORF, a "
+          "quadruplex or a decay element is a place an intervention could "
+          "act, not an intervention; and a motif in the annotated UTR is not "
+          "proof the element is used in your cells.", ""]
+    return L
+
+
 def _brake_exon_section(result: dict) -> list:
     """Exons only decay-prone isoforms use, as targets to look at for an
     antisense oligonucleotide. Empty unless the goal is to raise the gene."""
@@ -797,24 +828,49 @@ def _brake_exon_section(result: dict) -> list:
           f"oligonucleotide that makes the cell skip that exon turns those "
           f"transcripts into working ones and raises the protein, from the "
           f"working copy only. {brake['note']}", ""]
+    from . import isoforms as _iso
+    _w = brake.get("isoform_weight") or {}
+    if _w:
+        L += [_iso.summarise(_w, gene), ""]
+        if _w.get("shares"):
+            L += ["| Kind of transcript | Share of this gene's message |",
+                  "|---|---|"]
+            for _k, _v in sorted(_w["shares"].items(), key=lambda kv: -kv[1]):
+                L.append(f"| {_k} | {_v:.1%} |")
+            L += ["",
+                  f"Measured in {_w.get('tissue')} ({_w.get('dataset')}). An "
+                  f"isoform Ensembl lists that this dataset never quantified "
+                  f"is counted as unmeasured and left out of the shares "
+                  f"above, rather than treated as zero.", ""]
     cands = brake.get("candidates") or []
+    _iso.weigh_candidates(cands, _w)
     novel = [c for c in cands if c["kind"] == "novel exon"]
     other = [c for c in cands if c["kind"] != "novel exon"][:5]
     if novel or other:
-        L += ["| Exon (genomic) | Length | Kind | Decay isoforms using it |",
-              "|---|---|---|---|"]
+        _has_w = bool(_w.get("per_transcript"))
+        L += ["| Exon (genomic) | Length | Kind | Decay isoforms using it |"
+              + (" Message they carry |" if _has_w else ""),
+              "|---|---|---|---|" + ("---|" if _has_w else "")]
         for c in novel + other:
+            _cell = ""
+            if _has_w:
+                _cell = f" {c.get('share', 0):.1%}"
+                if c.get("n_unmeasured"):
+                    _cell += f" ({c['n_unmeasured']} unmeasured)"
+                _cell += " |"
             L.append(f"| {c['start']}\u2013{c['end']} | {c['length']} bp | "
-                     f"{c['kind']} | {c['n_transcripts']} |")
+                     f"{c['kind']} | {c['n_transcripts']} |" + _cell)
         L.append("")
         if len(cands) - len(novel) > len(other):
             L += [f"{len(cands) - len(novel) - len(other)} more extended or "
                   f"shifted coding exons are not shown; most are first-exon "
                   f"start variants, which are not brakes.", ""]
     L += ["**This is a list of places to look, not a design.** An annotated "
-          "exon is one Ensembl has seen in some tissue. Whether it is "
-          "included in your cells, how often, and whether skipping it raises "
-          "protein is a question for RNA sequencing and a splicing assay. "
+          "exon is one Ensembl has seen in some tissue, and the share beside "
+          "it is a median across GTEx donors in one tissue rather than a "
+          "measurement in your cells. Whether the exon is included in them, "
+          "how often, and whether skipping it raises protein is a question "
+          "for RNA sequencing and a splicing assay. "
           "Nothing here picks an oligonucleotide sequence or checks it "
           "against the rest of the transcriptome.", ""]
     return L
@@ -924,6 +980,9 @@ def _protein_abundance_section(result: dict) -> list:
         gene = (blk.get("promoter") or {}).get("gene_symbol") or "the gene"
         L = ["### Measured on the protein", "",
              pr.summarise(hits, gene), ""]
+        _note = pr.coverage_note(pr.describe(gene), gene)
+        if _note:
+            L += [_note, ""]
         if hits:
             L.append("| Compound | Change | Observations | Cell lines |")
             L.append("|---|---|---|---|")
@@ -1270,6 +1329,7 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
     L.extend(_proliferation_section(result))
     L.extend(_fame_section(result))
     L.extend(_crosscheck_section(result))
+    L.extend(_utr_section(result))
     L.extend(_brake_exon_section(result))
 
     # ------------------------------------- the headline answer, up front
@@ -3896,12 +3956,15 @@ def summary_report(result: dict, top_n: int = SUMMARY_TOP) -> str:
         # one that must never be merged upward is `empty`: a source that
         # ran and measured nothing is a RESULT, and reporting it beside
         # one that broke throws away the distinction the ledger is for.
+        # Matched case-insensitively: the ledger writes FAILED in capitals
+        # to make it carry in a table, and a source whose state arrives in
+        # any other casing must not drop silently out of the report.
         _by = {}
         for k, v in sources.items():
-            _by.setdefault(v.get("state"), []).append(k)
+            _by.setdefault(str(v.get("state") or "").lower(), []).append(k)
         ok = sorted(_by.get("ok") or [])
         empty = sorted(_by.get("empty") or [])
-        failed = sorted(_by.get("FAILED") or [])
+        failed = sorted(_by.get("failed") or [])
         absent = sorted(_by.get("not requested") or [])
         if ok or empty or failed or absent:
             L.append("## What the answer rests on")

@@ -160,18 +160,82 @@ one as **searched**, **listed only** or **not covered**:
   search. Most of the post-transcriptional section is this.
 - *not covered* — neither.
 
-On a real BUB1B run the audit reports 365 transcriptional routes against
-20 from every other step combined, with mRNA stability and translation
-listed but never searched. That ratio is a property of the package rather
-than of the biology, and the audit says so, because a full table is not
-evidence that the other steps were considered. Each gap names what would
-close it — a half-life dataset, ribosome profiling, an isoform-resolved
-expression table — so the limitation is a concrete next step rather than
-a disclaimer.
+On a real BUB1B run the audit reports several hundred transcriptional
+routes against a couple of dozen from every other step combined. That
+ratio is a property of the package rather than of the biology, and the
+audit says so, because a full table is not evidence that the other steps
+were considered. Each gap names what would close it, so the limitation is
+a concrete next step rather than a disclaimer.
 
 This is the evidence ledger's idea applied to biology instead of to data
 sources: the thing most likely to mislead is not a wrong number, it is a
 question nobody asked.
+
+### What each of the other five steps actually looks at
+
+| Step | What runs | Source |
+|---|---|---|
+| Splicing and isoform choice | exons that only decay-prone isoforms use, each weighed by the share of the gene's message its isoforms carry | Ensembl isoforms; GTEx v8 median transcript TPM |
+| mRNA stability | the 3'UTR scanned for AU-rich elements, Pumilio response elements and DRACH, each against a shuffle of the same sequence | the transcript's own sequence |
+| Translation | the 5'UTR scanned for upstream ORFs with Kozak strength, G-quadruplexes, and a 5'TOP motif at the cap | the transcript's own sequence |
+| Folding | a ligand screen against the gene's own protein, which is what a pharmacological chaperone would have to be | ChEMBL, and docking where a pocket passes its control |
+| Degradation | the ligase that destroys the protein, the enzyme that reverses it, and compounds measured on the protein itself | curated degron and DUB tables; a drug-to-protein table |
+
+Every sequence feature above is tested against a dinucleotide shuffle of
+the same sequence, so a hit means more of the element than this base
+composition gives by chance. None of them is a measurement in your cells,
+and none has a compound matched to it.
+
+### Weighing a brake exon
+
+Listing exons that only decay-prone isoforms use is the easy half. The
+list is drawn from the annotation, and the annotation says an isoform has
+been *seen*, not that it carries any appreciable share of the message —
+so twenty candidate exons read as twenty opportunities whether or not any
+of them matters.
+
+`isoforms.py` supplies the missing number from GTEx v8 median transcript
+TPM, by default in cultured fibroblasts. Each candidate exon then carries
+the share of the gene's message its isoforms hold, and the step as a
+whole gets a verdict: decay isoforms carrying a real share make splice
+correction a lever, and decay isoforms carrying none mean there is
+nothing to redirect.
+
+Two cautions are built into the output rather than left to the reader.
+GTEx v8 is built on GENCODE v26, so isoforms annotated since then have
+**no measurement at all** — they are counted separately and never folded
+in as zeros. And a transcript's share is not its flux: a decay isoform is
+destroyed quickly, so a low steady-state share is partly a consequence of
+the decay it is named for. The share bounds what redirecting it could add
+to the pool, which is the question, and is not the rate through it.
+
+recount3 would answer the same question over far more samples. It is
+distributed as R objects, so it belongs in a table you supply at
+`data/transcript_expression.tsv` rather than in a live lookup; a file
+there is read in preference to the API.
+
+### Naming the factor, where a motif cannot
+
+The UTR scans say an element is in excess. They cannot say which
+microRNA or which RNA-binding protein uses it, and that name is what
+turns an annotation into something to act on. The datasets that carry the
+names are bulk downloads under their own licences, so none ships with the
+package; all of them reshape into one table at
+`data/transcript_sites.tsv` with columns `gene, factor, kind [, region,
+evidence, source]`.
+
+| Source | What it adds | Where |
+|---|---|---|
+| TargetScan | predicted microRNA sites, conserved families | targetscan.org, `Predicted_Targets_Info.txt` |
+| miRTarBase | microRNA targets with experimental support | mirtarbase.cuhk.edu.cn, `hsa_MTI.xlsx` |
+| ENCODE eCLIP | measured footprints for ~150 RNA-binding proteins | encodeproject.org, eCLIP IDR peaks (BED) |
+| m6A atlases (REPIC, m6A-Atlas) | measured methylation sites rather than DRACH motifs | the atlas's own download |
+
+Rows marked `predicted` are reported separately from rows with
+experimental evidence, because a TargetScan prediction and an eCLIP peak
+are not the same claim. Ribosome profiling (GWIPS-viz, Trips-Viz) would
+replace the 5'UTR sequence proxies with observed translation efficiency;
+nothing reads it yet, and the coverage audit names it as the gap.
 
 ## Measured on the protein, not the transcript
 
@@ -194,17 +258,36 @@ two that are routinely named do not:
 
 | Resource | What it measures | Answers this? |
 |---|---|---|
-| decryptE | dose-resolved proteome under ~144 drugs | yes |
-| ProTargetMiner | proteome under ~50 anticancer compounds | yes |
+| decryptE | dose-resolved proteome under ~144 drugs, Jurkat | yes |
+| ProTargetMiner | proteome under ~50 anticancer compounds, A549 | yes |
+| PRIDE / ProteomeXchange, MassIVE | thousands of individual drug-treatment studies | per study |
 | LINCS P100 | ~90 phosphopeptides, signalling state | no |
 | LINCS GCP | ~60 histone marks | no |
 | CPTAC | tumour proteogenomics, no drug arm | no |
-| Thermal proteome profiling | melting shift, target engagement | no |
+| DepMap proteomics | baseline protein levels, no drug arm | no |
+| Thermal proteome profiling (Meltome) | melting shift, target engagement | no |
+| Kinobeads chemoproteomics | binding of ~240 kinase inhibitors | no |
 
-Coverage is the honest limit: public drug-proteomics reaches a small
-fraction of the approved library, so a compound absent from the table is
-unexamined and not negative, and the report says that rather than
-reporting an empty result as a finding.
+Coverage is the honest limit. decryptE and ProTargetMiner together reach
+a low hundreds of compounds against an approved library of several
+thousand, and each is a single cell line, so a compound absent from them
+is unexamined and not negative. The repositories in the third row cover
+far more compounds between them, but each study has its own design, dose
+and normalisation, so they are the way to answer a question about one
+compound you already care about rather than a corpus to screen against.
+
+The last two rows answer a neighbouring question that is worth not
+confusing with this one. Binding is not abundance: a drug can engage a
+protein without changing how much of it exists. They are still worth
+consulting when the gene is itself a kinase, because their coverage is
+far better than the abundance datasets and a measured interaction is a
+real starting point.
+
+Whatever table you supply, the report states how much of it touches your
+protein — how many compounds have any reading for it, and how those
+split between raising it, lowering it and moving it too little to count.
+That is what separates a measured negative from a protein the table never
+mentions, and the two read identically without it.
 
 ## Which screen the run designs
 

@@ -8075,7 +8075,9 @@ def test_summary_does_not_state_the_same_number_twice():
     if fdp is None:
         return
     md = pipeline.summary_report(res)
-    head = md[:md.index("## Top")]
+    # Everything above the candidate list. The heading moved when the
+    # ranked top-ten became the stratified "what to test first".
+    head = md[:md.index("## What to test first")]
     assert head.count(f"{fdp:.0%}") <= 1
 
 
@@ -8096,8 +8098,8 @@ def test_summary_names_which_sources_ran():
         "chip": {"state": "ok", "requested": True},
         "lincs": {"state": "failed", "requested": True}}}
     md = pipeline.summary_report(res)
-    assert "**Ran:** chip" in md
-    assert "Did not run:** lincs" in md
+    assert "**Ran, and found something:** chip" in md
+    assert "**Could not run:** lincs" in md
     assert "not a negative result" in md
 
 
@@ -8119,9 +8121,15 @@ def test_summary_handles_a_run_with_no_routes():
     assert "per-stage accounting" in md
 
 
-def test_summary_orders_by_tier_before_score():
-    """A tier-1 route with a mediocre score beats a tier-5 with a great
-    one, and the summary is where that ordering matters most."""
+def test_summary_does_not_present_position_as_a_ranking():
+    """The ranked top-ten became groups, because the scoring was measured
+    to order drugs no better than chance once fame is held equal.
+
+    What replaced it has to carry its own warning: a reader who takes row
+    order for priority is worse off than with the old numbered list. The
+    tier still has to be visible per row, so a tier-5 route is legible as
+    one wherever it happens to sit.
+    """
     res = pipeline.run("DEMOGENE", demo=True, offline=True)
     res["results"][0]["all_routes"] = {"routes": [
         {"drug": "LowTierHighScore", "acts_on": "X", "tier": 5,
@@ -8130,7 +8138,13 @@ def test_summary_orders_by_tier_before_score():
          "score": 1.0, "category": "c", "mechanism": ""},
     ]}
     md = pipeline.summary_report(res)
-    assert md.index("TopTierLowScore") < md.index("LowTierHighScore")
+    assert "**Within a group nothing is ranked**" in md
+    assert "do not read position within a group as priority" in md
+    body = md[md.index("## What to test first"):md.index("## All ")]
+    assert "| Tier |" in body
+    for name, tier in (("LowTierHighScore", "5"), ("TopTierLowScore", "1")):
+        row = next(l for l in body.splitlines() if name in l)
+        assert f"| {tier} |" in row, row
 
 
 def test_summary_deduplicates_a_drug_reached_by_one_route_twice():
@@ -8144,7 +8158,7 @@ def test_summary_deduplicates_a_drug_reached_by_one_route_twice():
     md = pipeline.summary_report(res)
     # Scoped to the shortlist: the same drug also appears once in the
     # corroboration table below, which is a different table and correct.
-    shortlist = md[md.index("## Top"):md.index("## All ")]
+    shortlist = md[md.index("## What to test first"):md.index("## All ")]
     rows = [l for l in shortlist.splitlines() if "amedrug" in l]
     assert len(rows) == 1
 

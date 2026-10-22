@@ -241,6 +241,42 @@ decryptE and ProTargetMiner answer this. LINCS P100 (~90 phosphopeptides) and CP
 
 Columns: drug, protein, log2fc [, cell_line, dose, time, source].
 
+### Isoform-level expression
+
+How much of the gene's message each isoform carries, which decides whether a brake exon is worth an oligonucleotide or sits on a transcript nobody makes.
+
+| | |
+| --- | --- |
+| Supplied | found by name under data/ — `fetched from GTEx when absent; the file wins if present` |
+| Looks for | `data/transcript_expression.tsv` |
+| Size | varies |
+| Source | <https://gtexportal.org/api/v2> |
+| Inventory key | `transcript_expression` |
+
+**Without it:** GTEx is queried live instead, which needs the network and gives one tissue of one dataset.
+
+Columns: transcript, tpm [, tissue, gene, source].
+
+recount3 covers far more samples than GTEx but ships as R objects, so it belongs here as a table rather than as a live lookup.
+
+### Named regulators of the transcript
+
+Which microRNA or RNA-binding protein acts on the transcript, where the UTR scans can only say an element is in excess.
+
+| | |
+| --- | --- |
+| Supplied | found by name under data/ — `on by default once the file exists` |
+| Looks for | `data/transcript_sites.tsv` |
+| Size | varies |
+| Source | <https://www.targetscan.org/> |
+| Inventory key | `transcript_sites` |
+
+**Without it:** the UTR scans report motifs with no factor attached, so there is nothing to knock down or antagonise.
+
+Columns: gene, factor, kind [, region, evidence, source].
+
+TargetScan (predicted miRNA sites), miRTarBase (measured ones), ENCODE eCLIP (RBP footprints) and an m6A atlas all reshape into this one table.
+
 ### Drug fame, from your own saved runs
 
 How many other genes the literature records each candidate as moving.

@@ -234,6 +234,7 @@ Generated from each module's own first docstring line.
 | `genetics.py` | Human genetic evidence, via eQTLs — and what GWAS/PheWAS can and cannot tell you. |
 | `http.py` | Tiny cached HTTP client. Stdlib only, so the package needs only numpy. |
 | `indications.py` | What each drug actually is, and what it is approved to treat. |
+| `isoforms.py` | How much message each isoform actually carries. |
 | `knockout.py` | Does your gene change when a factor is lost? Read from perturbation data. |
 | `liabilities.py` | Structural liabilities: what makes a predicted hit not worth believing. |
 | `ligands.py` | Change the natural ligand, not the receptor. |
@@ -275,6 +276,7 @@ Generated from each module's own first docstring line.
 | `stabilizers.py` | Locking a transcription factor into an active state — without a ligand pocket. |
 | `standard_of_care.py` | Approved treatments for the condition a gene causes. |
 | `stats.py` | Statistics shared by more than one analysis stage. |
+| `strata.py` | What to test first, grouped by what was actually measured. |
 | `systemic.py` | Drugs and receptors whose action is systemic by design, not by accident. |
 | `tfactivity.py` | Which factors are demonstrably active, inferred from their targets. |
 | `utr.py` | Translation and mRNA stability, read off the transcript's own UTRs. |

@@ -21,7 +21,7 @@ flowchart LR
     A["<b>1 Ask</b><br/>a gene, a direction,<br/>and what is wrong<br/>with the alleles"]
     B["<b>2 Gather</b><br/>fourteen routes,<br/>in parallel, from the<br/>promoter to the protein"]
     C["<b>3 Weigh</b><br/>demote what the evidence<br/>cannot carry, drop what<br/>the patient cannot afford"]
-    D["<b>4 Report</b><br/>rank by evidence tier,<br/>and say which of the six<br/>steps were never asked"]
+    D["<b>4 Report</b><br/>group by what was measured,<br/>and say which of the six<br/>steps were never asked"]
     E["<b>5 Test</b><br/>the experiment<br/>that settles it"]
     A --> B --> C --> D --> E
     classDef step fill:#f6f8fa,stroke:#57606a,color:#1f2328
@@ -39,9 +39,9 @@ by auditing all six and marking each **searched**, **listed only** or
 | Step | What the run asks of it |
 |---|---|
 | Transcription | The promoter scan, the factor ligands, the recorded regulators, the upstream network, the literature record and the expression signatures. |
-| Splicing and isoform choice | Exons used only by transcripts the cell destroys, which an oligonucleotide could redirect. |
-| mRNA stability | AU-rich decay elements in the 3'UTR, each against a shuffle of the same sequence. |
-| Translation | Upstream ORFs in the 5'UTR, with the Kozak strength of each, against the same kind of null. |
+| Splicing and isoform choice | Exons used only by transcripts the cell destroys, each weighed by how much of the gene's message its isoforms carry in GTEx. |
+| mRNA stability | AU-rich elements, Pumilio sites and the m6A consensus in the 3'UTR, each against a shuffle of the same sequence. |
+| Translation | Upstream ORFs in the 5'UTR with the Kozak strength of each, G-quadruplexes, and a 5'TOP motif at the cap. |
 | Folding | A ligand screen against the gene's own protein, which is what a pharmacological chaperone would have to be. |
 | Degradation | The ligase that destroys the protein, the enzyme that reverses it, and compounds measured on the protein itself. |
 

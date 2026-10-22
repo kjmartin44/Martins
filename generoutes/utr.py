@@ -48,6 +48,28 @@ ARE_PENTAMER = re.compile(r"(?=ATTTA)")
 # The nonamer is the functional element; a lone pentamer is much weaker.
 ARE_NONAMER = re.compile(r"(?=TTATTTATT)")
 
+# Four G-runs close enough to fold back on each other. A G-quadruplex in
+# the 5'UTR stalls the scanning ribosome, so it represses translation and
+# resolving it raises output. The loop bound is the usual 1-7.
+G_QUADRUPLEX = re.compile(r"(?=G{3,}\w{1,7}G{3,}\w{1,7}G{3,}\w{1,7}G{3,})")
+
+# DRACH, the m6A consensus: D=A/G/T, R=A/G, H=A/C/T. Methylated adenosine
+# in the 3'UTR recruits YTHDF readers and shortens half-life. The motif is
+# common enough that only a clear excess over shuffle means anything, and
+# even then it says where to look rather than where the mark is.
+DRACH = re.compile(r"(?=[AGT][AG]AC[ACT])")
+
+# The Pumilio response element. Much more specific than DRACH, and PUM1/2
+# binding it shortens half-life, so an excess is a named decay factor
+# rather than an anonymous one.
+PUMILIO = re.compile(r"(?=TGTA\w ATA)".replace(" ", ""))
+
+# A 5'TOP motif: a C at the cap followed by a pyrimidine run. It is
+# positional rather than countable, so it is reported as present or not
+# and never tested against a shuffle.
+TOP_MIN_PYRIMIDINES = 4
+TOP_MAX_PYRIMIDINES = 15
+
 
 def _shuffle(seq: str, rng) -> str:
     from .promoterdna import _dinucleotide_shuffle
@@ -93,6 +115,35 @@ def _kozak(seq: str, atg: int) -> str:
     return "weak"
 
 
+def _top_motif(five: str) -> dict:
+    """A 5'TOP motif at the cap, which puts the transcript under mTOR.
+
+    Only meaningful at the real transcription start. The sequence here is
+    the annotated 5'UTR, so a hit is as good as that annotation and no
+    better; a transcript whose start site is wrong by a few bases loses
+    the motif entirely.
+    """
+    if not five or five[0] != "C":
+        return {"present": False,
+                "why": "the annotated 5' end is not a C, which a TOP motif "
+                       "requires"}
+    run = 0
+    for ch in five[1:TOP_MAX_PYRIMIDINES + 1]:
+        if ch not in "CT":
+            break
+        run += 1
+    if run < TOP_MIN_PYRIMIDINES:
+        return {"present": False,
+                "why": f"the 5' end is C followed by only {run} "
+                       f"pyrimidine(s); a TOP motif needs "
+                       f"{TOP_MIN_PYRIMIDINES}"}
+    return {"present": True, "n_pyrimidines": run,
+            "motif": five[:run + 1],
+            "why": "translation of a TOP transcript is set by mTORC1, so "
+                   "its output moves with mTOR signalling rather than with "
+                   "its own promoter"}
+
+
 def _count(pat, seq: str) -> int:
     return sum(1 for _ in pat.finditer(seq))
 
@@ -128,6 +179,11 @@ def scan(five_prime: str, three_prime: str, *, shuffles: int = SHUFFLES,
             "uorfs": discrete[:12],
             "n_overlapping": sum(1 for u in uorfs if u["overlaps_cds"]),
             "gc": round((five.count("G") + five.count("C")) / len(five), 3),
+            "g_quadruplex": _enrichment(
+                _count(G_QUADRUPLEX, five), five,
+                lambda s: _count(G_QUADRUPLEX, s),
+                shuffles=shuffles, seed=seed),
+            "top_motif": _top_motif(five),
         }
     else:
         out["translation"] = {"error": f"5'UTR is {len(five)} bp, too short "
@@ -143,11 +199,105 @@ def scan(five_prime: str, three_prime: str, *, shuffles: int = SHUFFLES,
                                    shuffles=shuffles, seed=seed),
             "au_content": round(
                 (three.count("A") + three.count("T")) / len(three), 3),
+            "m6a_drach": _enrichment(_count(DRACH, three), three,
+                                     lambda s: _count(DRACH, s),
+                                     shuffles=shuffles, seed=seed),
+            "pumilio": _enrichment(_count(PUMILIO, three), three,
+                                   lambda s: _count(PUMILIO, s),
+                                   shuffles=shuffles, seed=seed),
         }
     else:
         out["stability"] = {"error": f"3'UTR is {len(three)} bp, too short "
                                      f"to scan for AU-rich elements"}
     return out
+
+
+DEFAULT_SITES_PATHS = ("data/transcript_sites.tsv",)
+
+# How the public sources map onto the one table. Printed when the table
+# is missing, so the reader is told what to fetch rather than that
+# nothing is known.
+SITES_SOURCES = (
+    ("TargetScan", "predicted microRNA sites, conserved families",
+     "https://www.targetscan.org/ -> Predicted_Targets_Info.txt"),
+    ("miRTarBase", "microRNA targets with experimental support",
+     "https://mirtarbase.cuhk.edu.cn/ -> hsa_MTI.xlsx"),
+    ("ENCODE eCLIP", "measured RNA-binding-protein footprints, ~150 RBPs",
+     "https://www.encodeproject.org/ -> eCLIP IDR peaks, BED"),
+    ("m6A atlases", "measured methylation sites rather than DRACH motifs",
+     "REPIC or m6A-Atlas"),
+)
+
+
+def annotated_sites(gene: str, *, path=None) -> dict:
+    """Named microRNA, RBP or m6A sites on this transcript, from a table.
+
+    Columns, header required, order free, tab or comma:
+
+        gene, factor, kind [, region] [, evidence] [, source]
+
+    `kind` is free text - "microRNA", "RBP", "m6A" - and is used only to
+    group the output. `evidence` separates measured sites from predicted
+    ones; a row without it is reported as unspecified rather than
+    promoted to measured.
+    """
+    import csv
+    from pathlib import Path
+
+    found = next((Path(c) for c in ([path] if path else list(DEFAULT_SITES_PATHS))
+                  if c and Path(c).exists()), None)
+    if found is None:
+        return {}
+    want = (gene or "").strip().upper()
+    rows: list = []
+    try:
+        with open(found, encoding="utf-8", errors="replace") as fh:
+            sample = fh.read(8192)
+            fh.seek(0)
+            delim = "\t" if sample.count("\t") >= sample.count(",") else ","
+            for row in csv.DictReader(fh, delimiter=delim):
+                row = {(k or "").strip().lower(): (v or "").strip()
+                       for k, v in row.items()}
+                if (row.get("gene") or "").upper() != want:
+                    continue
+                if not row.get("factor"):
+                    continue
+                rows.append({"factor": row["factor"],
+                             "kind": row.get("kind") or "unspecified",
+                             "region": row.get("region") or "",
+                             "evidence": row.get("evidence") or "unspecified",
+                             "source": row.get("source") or found.name})
+    except OSError:
+        return {}
+    by_kind: dict = {}
+    for r in rows:
+        by_kind.setdefault(r["kind"], []).append(r)
+    return {"gene": want, "path": str(found), "n": len(rows),
+            "by_kind": by_kind}
+
+
+def summarise_sites(sites: dict, gene: str) -> str:
+    """Who acts on the transcript, or what to fetch so the run can say."""
+    if not sites:
+        lines = [f"**No named regulator of the {gene} transcript was read.** "
+                 f"The scans above say an element is in excess; they cannot "
+                 f"say which factor uses it. Any of these, reshaped into "
+                 f"`data/transcript_sites.tsv` with columns "
+                 f"gene, factor, kind [, region, evidence, source], would:"]
+        for name, what, where in SITES_SOURCES:
+            lines.append(f"- **{name}** - {what} ({where})")
+        return "\n".join(lines)
+    parts = [f"**{sites['n']} named regulator(s) of the {gene} transcript** "
+             f"from `{sites['path']}`."]
+    for kind, rows in sorted(sites["by_kind"].items()):
+        measured = [r for r in rows
+                    if r["evidence"].lower() not in ("predicted",
+                                                     "unspecified")]
+        names = ", ".join(sorted({r["factor"] for r in rows})[:10])
+        parts.append(f"{kind}: {names}"
+                     + (f" ({len(measured)} of {len(rows)} measured rather "
+                        f"than predicted)" if rows else ""))
+    return " ".join(parts)
 
 
 def summarise(s: dict, gene: str = "this gene") -> str:
@@ -181,6 +331,22 @@ def summarise(s: dict, gene: str = "this gene") -> str:
             parts.append(f"No upstream ORF in the {s['five_prime_length']} "
                          f"bp 5'UTR, so translational repression by that "
                          f"route is not available here.")
+        g4 = t.get("g_quadruplex") or {}
+        if g4.get("enriched"):
+            parts.append(
+                f"It does carry {g4['n_observed']} G-quadruplex motif(s) "
+                f"against {g4['expected']} expected (p {g4['p_value']}); a "
+                f"quadruplex stalls the scanning ribosome, so resolving it "
+                f"is a second translational lever.")
+        top = t.get("top_motif") or {}
+        if top.get("present"):
+            parts.append(
+                f"The 5' end is a TOP motif (C plus "
+                f"{top['n_pyrimidines']} pyrimidines), so this "
+                f"transcript's translation follows mTORC1 - which makes "
+                f"mTOR signalling a route to its output, and makes any "
+                f"mTOR inhibitor in the ranking below a likely way to "
+                f"LOWER it.")
     st = s.get("stability") or {}
     if st.get("error"):
         parts.append(st["error"] + ".")
@@ -202,4 +368,19 @@ def summarise(s: dict, gene: str = "this gene") -> str:
                 f"no more AU-rich elements than shuffled sequence of the "
                 f"same composition, so there is no specific decay element "
                 f"to aim at.")
+        pum = st.get("pumilio") or {}
+        if pum.get("enriched"):
+            parts.append(
+                f"It is enriched for the Pumilio response element "
+                f"({pum['n_observed']} against {pum['expected']}, p "
+                f"{pum['p_value']}), which names PUM1/PUM2 as a decay "
+                f"factor acting on it.")
+        m6a = st.get("m6a_drach") or {}
+        if m6a.get("enriched"):
+            parts.append(
+                f"DRACH, the m6A consensus, is also in excess "
+                f"({m6a['n_observed']} against {m6a['expected']}). DRACH "
+                f"is a weak signal on its own - most occurrences are never "
+                f"methylated - so this points at an m6A atlas rather than "
+                f"standing as a finding.")
     return " ".join(parts)

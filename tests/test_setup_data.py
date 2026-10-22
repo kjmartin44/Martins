@@ -373,8 +373,15 @@ def test_every_table_the_registry_names_is_fetched_or_explained():
     # some genes.
     # drug_protein_abundance: no public file to fetch - decryptE and
     # ProTargetMiner are downloads a person makes and places by hand.
+    # transcript_expression: fetched live from the GTEx API when no file
+    # is there, so there is nothing for the setup script to place.
+    # transcript_sites: TargetScan, miRTarBase, eCLIP and the m6A atlases
+    # are each a download under its own licence, reshaped by hand into
+    # one table.
     assert uncovered == {"chembl", "genome", "fda_label_cmax",
-                         "ctd_fame", "drug_protein_abundance"}, uncovered
+                         "ctd_fame", "drug_protein_abundance",
+                         "transcript_expression",
+                         "transcript_sites"}, uncovered
 
 
 def test_the_batch_wrapper_and_the_launcher_point_at_the_script():
