@@ -66,6 +66,46 @@ def _dep_label(tf: dict) -> str:
     }.get(v, v)
 
 
+def _protein_screen_block(pp: dict) -> list:
+    """The patient-cell protein screen, when that is the endpoint.
+
+    Rendered instead of the reporter construct. The ordering is the order
+    somebody would set the experiment up in, and the normalisation
+    section is deliberately before the library: for a cell-cycle gene it
+    is the part that decides whether the screen measures anything.
+    """
+    L = [f"### Primary screen: {pp['endpoint']}", ""]
+    L.append(f"The endpoint is the protein and not a reporter, because "
+             f"{pp['why']}. A promoter reporter measures transcription "
+             f"from a cloned fragment, so it cannot see a stabiliser, a "
+             f"splice modifier or a readthrough agent - and those are the "
+             f"mechanisms in play here. This screen is also "
+             f"mechanism-agnostic, which means it does not depend on any "
+             f"ranking in this report being right.")
+    L.append("")
+    for title, key in (("Cells", "cells"), ("Readout", "readout"),
+                       ("Normalisation, and the control that matters most",
+                        "normalisation"), ("Controls", "controls"),
+                       ("Thresholds", "thresholds"),
+                       ("Triage, in order", "triage")):
+        L.append(f"**{title}**")
+        L.append("")
+        for item in pp.get(key) or []:
+            L.append(f"- {item}")
+        L.append("")
+    lib = pp.get("library") or {}
+    L.append("**Library**")
+    L.append("")
+    L.append(f"- {lib.get('what', '')}")
+    for src in lib.get("sources") or []:
+        L.append(f"  - {src}")
+    L.append(f"- Format: {lib.get('format', '')}")
+    L.append("")
+    L.append(f"*{pp.get('caveat', '')}*")
+    L.append("")
+    return L
+
+
 def _undrugged_regulators(res: dict) -> list:
     """Factors RECORDED as regulating the gene that no approved drug reaches.
 
@@ -837,6 +877,66 @@ def _proliferation_section(result: dict) -> list:
     return []
 
 
+def _coverage_section(result: dict) -> list:
+    """Which of the six steps to a protein this run actually looked at.
+
+    Placed before the route tables because it says how much of the
+    problem they cover. A full table is not evidence that the other five
+    steps were considered, and nothing else in the report would say so.
+    """
+    from . import coverage as cov
+
+    rows = cov.audit(result)
+    if not rows:
+        return []
+    L = ["## How much of the problem this run examined", "",
+         cov.summarise(rows), ""]
+    L.append("| Step | This run | Candidates | What is missing |")
+    L.append("|---|---|---|---|")
+    for r in rows:
+        gap = r["gap"] or ("—" if r["state"] == cov.SEARCHED else "")
+        L.append(f"| {r['step']} | {r['state']} | "
+                 f"{r['found'] if r['state'] == cov.SEARCHED else '—'} | "
+                 f"{_clip(gap, 190)} |")
+    L.append("")
+    missing = [r for r in rows if r["state"] != cov.SEARCHED and r["enable"]]
+    if missing:
+        L.append("What would close each gap:")
+        L.append("")
+        for r in missing:
+            L.append(f"- **{r['step']}** — {r['enable']}.")
+        L.append("")
+    L.append("*\"Listed only\" means the mechanism and its drug classes "
+             "are named in this report and nothing was looked up for this "
+             "gene. It is a menu, not a search.*")
+    L.append("")
+    return L
+
+
+def _protein_abundance_section(result: dict) -> list:
+    """Compounds measured against the PROTEIN rather than the transcript."""
+    from . import proteomics as pr
+
+    for blk in result.get("results") or []:
+        hits = blk.get("protein_abundance")
+        if hits is None:
+            continue
+        gene = (blk.get("promoter") or {}).get("gene_symbol") or "the gene"
+        L = ["### Measured on the protein", "",
+             pr.summarise(hits, gene), ""]
+        if hits:
+            L.append("| Compound | Change | Observations | Cell lines |")
+            L.append("|---|---|---|---|")
+            for h in hits[:12]:
+                L.append(f"| {h['drug']} | "
+                         f"{2 ** h['median_log2fc']:.1f}x | "
+                         f"{h['n_observations']} | "
+                         f"{', '.join(h.get('cell_lines') or []) or '—'} |")
+            L.append("")
+        return L
+    return []
+
+
 def _protein_level_section(result: dict) -> list:
     """Routes that change the protein rather than how much of it there is.
 
@@ -1163,7 +1263,9 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
 
     L.extend(_standard_of_care_section(result))
     L.extend(_mitotic_gene_section(result))
+    L.extend(_coverage_section(result))
     L.extend(_protein_level_section(result))
+    L.extend(_protein_abundance_section(result))
     L.extend(_mover_profile_section(result))
     L.extend(_proliferation_section(result))
     L.extend(_fame_section(result))
@@ -2868,15 +2970,18 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                  "Everything above prioritises this experiment; it does not "
                  "replace it.")
         lab.append("")
-        lab.append("### Reporter construct")
-        lab.append("")
-        lab.append(f"- Insert: {sp['reporter']['insert']}")
-        lab.append(f"- Vector: {sp['reporter']['vector']}")
-        lab.append("- Controls:")
-        for c in sp["reporter"]["controls"]:
-            lab.append(f"  - {c}")
-        lab.append(f"- {sp['reporter']['caveat']}")
-        lab.append("")
+        if sp.get("protein"):
+            lab.extend(_protein_screen_block(sp["protein"]))
+        elif sp.get("reporter"):
+            lab.append("### Reporter construct")
+            lab.append("")
+            lab.append(f"- Insert: {sp['reporter']['insert']}")
+            lab.append(f"- Vector: {sp['reporter']['vector']}")
+            lab.append("- Controls:")
+            for c in sp["reporter"]["controls"]:
+                lab.append(f"  - {c}")
+            lab.append(f"- {sp['reporter']['caveat']}")
+            lab.append("")
         cr = sp["crispra"]
         lab.append("### CRISPRa screen")
         lab.append("")

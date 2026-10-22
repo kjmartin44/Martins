@@ -41,6 +41,7 @@ from .http import Client
 
 from . import fame as fame_mod
 from . import poisonexon
+from . import proteomics as prot_mod
 from . import proliferation as prolif_mod
 from . import standard_of_care as soc_mod
 
@@ -1536,6 +1537,27 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                         "--tf-activity found no testable factor; motif "
                         "scores are unchecked"))
 
+        # ---- which drugs change how much of the PROTEIN exists?
+        # Asked of the gene's own product, which is what every route
+        # above is a proxy for. Coverage is the limit, not the question:
+        # public drug-proteomics reaches a small fraction of the approved
+        # library, so an absent compound is unexamined and not negative.
+        protein_abundance: list = []
+        if not demo:
+            _prot = _optional(
+                "protein abundance table",
+                lambda: prot_mod.load(prom.gene_symbol,
+                                      want="up" if goal == "up" else "down"),
+                [])
+            protein_abundance = [h.to_dict() for h in (_prot or [])]
+            ledger.record(
+                "protein_abundance", requested=True,
+                ok=prot_mod.available(),
+                yielded=len(protein_abundance),
+                detail=(f"{len(protein_abundance)} compound(s) measured to "
+                        f"move {prom.gene_symbol} protein the needed way"
+                        if prot_mod.available() else prot_mod.SOURCE))
+
         # ---- which drugs change how much of the factor EXISTS?
         # Everything else here acts on a factor's activity, which needs it
         # to be druggable. The corpora already record what moves ~20,000
@@ -1809,10 +1831,27 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
         # ---------------- 8f. design the experiment that settles it
         screen_plan = {}
         if design_screen:
+            # Which endpoint, decided by what the caller DECLARED about
+            # the alleles and never guessed. A promoter reporter reads
+            # transcription from a cloned fragment; where the problem is
+            # the protein, it cannot see a stabiliser, a splice modifier
+            # or a readthrough agent, so it would screen for the wrong
+            # thing with full confidence.
+            _why = []
+            if scenario == "biallelic_hypomorph":
+                _why.append("the only working copy is itself impaired")
+            elif scenario == "hypomorph":
+                _why.append("both copies are impaired")
+            if has_ptc:
+                _why.append("the transcript carries a premature stop")
+            if broken_allele_makes == "truncated":
+                _why.append("the broken copy makes a truncated product")
             screen_plan = screens_mod.design(
                 prom, [r.symbol for r in ranked[:20]],
                 [g.to_dict() for g in grades],
-                [t.to_dict() for t in direct_hits]).to_dict()
+                [t.to_dict() for t in direct_hits],
+                protein_endpoint=bool(_why),
+                why=", and ".join(_why)).to_dict()
 
         # -------------------------- 9. what beats the current standard of care
         _progress.step(8, "library screen",
@@ -1899,6 +1938,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             # the tables even though their report sections rendered.
             "activity_drugs": activity_drugs,
             "factor_abundance": factor_abundance,
+            "protein_abundance": protein_abundance,
             "undirected_factors": undirected_factors,
             "docking": list(docking_runs.values()),
             # The factors at this promoter and their roles. The docking
@@ -2069,6 +2109,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             "product_screen": product_screen,
             "promoter_dna": promoter_dna_scan,
             "proliferation": _prolif,
+            "protein_abundance": protein_abundance,
             "fame": _fame,
             "modality_design": modality,
             "screen_plan": screen_plan,

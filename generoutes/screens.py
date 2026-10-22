@@ -66,10 +66,15 @@ class Guide:
 @dataclass
 class ScreenPlan:
     gene: str
-    reporter: dict
+    reporter: dict | None
     crispra: dict
     compounds: dict
     expectations: dict
+    # What the primary screen measures. A promoter reporter reads
+    # transcription from a cloned fragment; the protein endpoint reads the
+    # thing the patient needs. See `design`.
+    endpoint: str = "promoter reporter"
+    protein: dict | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -257,6 +262,159 @@ def compound_plan(graded_drugs: list[dict], direct_hits: list[dict]) -> dict:
     }
 
 
+# The approved-drug collections a core facility is likely to hold. Sizes
+# are approximate and drift as approvals change.
+APPROVED_LIBRARIES = (
+    "Broad Drug Repurposing Hub, approved subset (~2,400 compounds)",
+    "Prestwick Chemical Library (~1,520, all off-patent and approved)",
+    "Selleck FDA-approved Drug Library (~2,900)",
+    "NCATS Pharmaceutical Collection (NPC, ~2,800)",
+)
+
+
+def protein_abundance_plan(gene: str, *, why: str = "") -> dict:
+    """A screen for compounds that raise `gene`'s PROTEIN in patient cells.
+
+    Written against the failure mode this package spent its effort
+    characterising: for a cell-cycle gene, anything that changes the share
+    of dividing cells changes the measured protein without touching the
+    gene. Every control below exists to separate those two, because
+    without them the screen's top hits will be antiproliferatives.
+    """
+    g = (gene or "the gene").strip().upper()
+    return {
+        "endpoint": f"{g} protein per cell, in the patient's own cells",
+        "why": why or (f"the declared problem is the {g} protein rather "
+                       f"than the amount of transcript"),
+        "cells": [
+            "Patient-derived primary fibroblasts (skin biopsy) or EBV "
+            "transformed lymphoblastoid lines. Primary fibroblasts are "
+            "closer to the biology; LCLs scale better to 384-well.",
+            "On the same plate: a carrier parent if available, and at "
+            "least two unrelated healthy donors. The carrier is the "
+            "informative control, because the target level is what a "
+            "healthy heterozygote already demonstrates is tolerated.",
+            "Keep every well sub-confluent and proliferating. This gene's "
+            "protein tracks the cell cycle, so a density difference "
+            "between plates is indistinguishable from a drug effect.",
+        ],
+        "readout": [
+            "Primary: high-content immunofluorescence, per-cell protein "
+            "intensity. Imaging is worth the extra effort here because it "
+            "gives per-cell data, and per-cell data is what lets you gate "
+            "on cell-cycle phase.",
+            "Alternatives at 384-well: in-cell western (two-colour, "
+            "normalised to a total-protein stain) or HTRF/AlphaLISA. Both "
+            "give a well average, so neither can separate 'more protein "
+            "per cell' from 'more cells in G2/M'.",
+            "Confirmation: capillary or conventional western on the "
+            "confirmed hits, which is the only readout that shows you the "
+            "band is the right size - relevant when one allele may make a "
+            "truncated product.",
+            "Validate the antibody against a knockdown before screening. "
+            "An antibody that does not drop with siRNA is measuring "
+            "something else, and the whole screen then measures it too.",
+        ],
+        "normalisation": [
+            "Total protein stain, or a housekeeping protein that is NOT "
+            "cell-cycle regulated. Not PCNA, not a cyclin, not Ki-67.",
+            "Co-stain DNA content or phospho-histone H3 in the same well. "
+            "This is the control that matters most: it turns 'the signal "
+            "went up' into 'the signal went up at matched cell-cycle "
+            "phase', and without it the screen's strongest hits will be "
+            "compounds that arrest cells in mitosis.",
+        ],
+        "library": {
+            "what": "an FDA-approved collection, so anything that hits is "
+                    "already through safety",
+            "sources": list(APPROVED_LIBRARIES),
+            "format": "single concentration primary, typically 10 uM, in "
+                      "duplicate; two exposures (24 h and 48 h), because a "
+                      "stabiliser and a transcriptional effect separate in "
+                      "time",
+        },
+        "controls": [
+            "Positive: a proteasome inhibitor (MG132, or bortezomib). It "
+            "raises almost any protein, which makes it a poor therapy and "
+            "an excellent control - it proves the assay can detect an "
+            "increase at all, and it sets the ceiling.",
+            "Negative: vehicle (DMSO) at the screening concentration, many "
+            "wells, spread across the plate rather than in one column.",
+            "Cytotoxicity in parallel (CellTiter-Glo or equivalent) on a "
+            "sister plate. A dying well reads as whatever the "
+            "normalisation does under stress, and most primary hits in "
+            "screens like this are simply toxic.",
+            "Cell-cycle counter-screen on the primary hits: anything that "
+            "arrests cells in G2/M raises this protein for a reason that "
+            "is not a treatment.",
+        ],
+        "thresholds": [
+            "Z' >= 0.5 between the proteasome inhibitor and vehicle before "
+            "screening anything. Below that the plate cannot tell a hit "
+            "from noise.",
+            "Primary hit: >= 1.5x vehicle, after excluding wells with more "
+            "than 30% viability loss or a mitotic index more than twice "
+            "vehicle.",
+            "Confirm on an 8-point dose response in triplicate. A real "
+            "stabiliser gives a dose-response; a plate artefact does not.",
+        ],
+        "triage": [
+            "1. Dose-response confirms, cytotoxicity excluded.",
+            "2. Western confirms the increase and the band size.",
+            "3. The increase survives cell-cycle matching.",
+            "4. RT-qPCR says whether the transcript moved too. Protein up "
+            "with transcript flat points at stability or translation; both "
+            "up points at transcription, and that route is testable "
+            "against the rest of this report.",
+            "5. Only then is it a candidate, and it is a candidate for a "
+            "cell assay of function, not for a patient.",
+        ],
+        "caveat": "A screen in fibroblasts or LCLs is not the affected "
+                  "tissue. A compound that raises the protein there may "
+                  "not reach or work in the tissue that matters, and the "
+                  "exposure check in `exposure.py` is the next question "
+                  "for anything that survives.",
+    }
+
+
+def protein_expectations() -> dict:
+    """What an approved-library protein screen realistically returns."""
+    return {
+        "compound_screen_hit_rate": "0.5-2% primary at a sensible "
+                                    "threshold, and most of those are "
+                                    "cytotoxic or cell-cycle effects. "
+                                    "Expect to lose 60-80% at "
+                                    "counter-screen and to finish with "
+                                    "single digits of confirmed compounds, "
+                                    "possibly none.",
+        "replicates": "duplicate primary, triplicate for confirmation. A "
+                      "single primary well cannot be distinguished from a "
+                      "pipetting error.",
+        "quality_metric": "Z' >= 0.5 against the proteasome-inhibitor "
+                          "control, per plate, recorded for every plate.",
+        "what_a_negative_result_means": "No approved compound raises this "
+                                        "protein in this cell type at this "
+                                        "exposure. That is an informative "
+                                        "result and a cheap one: it says "
+                                        "repurposing is unlikely to solve "
+                                        "it, and redirects effort to "
+                                        "chemistry aimed at the specific "
+                                        "mechanism - the degradation route "
+                                        "or the splice defect - rather "
+                                        "than to more screening.",
+        "why_this_screen_and_not_the_reporter": "A promoter reporter "
+                                                "measures transcription "
+                                                "from a cloned fragment. "
+                                                "It cannot see a "
+                                                "stabiliser, a splice "
+                                                "modifier or a readthrough "
+                                                "agent, which are the "
+                                                "mechanisms in play when "
+                                                "the protein is the "
+                                                "problem.",
+    }
+
+
 def expectations() -> dict:
     return {
         "compound_screen_hit_rate": "0.5-2% at a sensible threshold. Most "
@@ -283,8 +441,32 @@ def expectations() -> dict:
 
 
 def design(promoter, tf_symbols: list[str], graded_drugs: list[dict],
-           direct_hits: list[dict]) -> ScreenPlan:
+           direct_hits: list[dict], *, protein_endpoint: bool = False,
+           why: str = "") -> ScreenPlan:
+    """The experiment this analysis prioritises.
+
+    `protein_endpoint` swaps the promoter reporter for a screen that
+    measures the gene's PROTEIN in patient cells. Set it when the
+    declared problem is the protein rather than the transcript - a
+    hypomorphic allele, a premature stop, a truncating second allele -
+    because a reporter cannot see a stabiliser, a splice modifier or a
+    readthrough agent, and those are the mechanisms in play.
+
+    The CRISPRa arm is kept either way: it raises the endogenous gene, so
+    it is a positive control for "would more of this protein help at all"
+    whichever endpoint is read.
+    """
     guides = find_guides(promoter.sequence, promoter.offset_to_tss)
+    if protein_endpoint:
+        return ScreenPlan(
+            gene=promoter.gene_symbol,
+            reporter=None,
+            crispra=crispra_plan(promoter, tf_symbols, guides),
+            compounds=compound_plan(graded_drugs, direct_hits),
+            expectations=protein_expectations(),
+            endpoint=f"{promoter.gene_symbol} protein in patient cells",
+            protein=protein_abundance_plan(promoter.gene_symbol, why=why),
+        )
     return ScreenPlan(
         gene=promoter.gene_symbol,
         reporter=reporter_plan(promoter),

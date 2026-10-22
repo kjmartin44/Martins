@@ -223,6 +223,24 @@ How many genes each factor controls, from curation.
 
 CollecTRI signs every edge and covers about three times as many factors; --tf-activity wants it.
 
+### Drug to protein abundance
+
+Compounds measured to change the gene's own PROTEIN, where every other abundance route reads the transcript.
+
+| | |
+| --- | --- |
+| Supplied | found by name under data/ — `on by default once the file exists` |
+| Looks for | `data/drug_protein_abundance.tsv` |
+| Size | varies |
+| Source | <https://decryptE.kusterlab.org> |
+| Inventory key | `drug_protein_abundance` |
+
+**Without it:** every abundance claim in the run is about mRNA, so a stabiliser or a degradation blocker is invisible.
+
+decryptE and ProTargetMiner answer this. LINCS P100 (~90 phosphopeptides) and CPTAC (no drug arm) do not.
+
+Columns: drug, protein, log2fc [, cell_line, dose, time, source].
+
 ### Drug fame, from your own saved runs
 
 How many other genes the literature records each candidate as moving.

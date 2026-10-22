@@ -371,8 +371,10 @@ def test_every_table_the_registry_names_is_fetched_or_explained():
     # ctd_fame: counted from your own saved runs by build_fame_table.py,
     # so there is nothing to fetch - it does not exist until you have run
     # some genes.
+    # drug_protein_abundance: no public file to fetch - decryptE and
+    # ProTargetMiner are downloads a person makes and places by hand.
     assert uncovered == {"chembl", "genome", "fda_label_cmax",
-                         "ctd_fame"}, uncovered
+                         "ctd_fame", "drug_protein_abundance"}, uncovered
 
 
 def test_the_batch_wrapper_and_the_launcher_point_at_the_script():

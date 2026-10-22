@@ -105,8 +105,15 @@ options:
                         deliverability verdict for the tissue you named in
                         --tissue (default: False)
   --design-screen       design the wet-lab screen this analysis prioritises:
-                        reporter construct with controls, CRISPRa sgRNAs, and
-                        a cherry-pick compound list with realistic hit rates
+                        CRISPRa sgRNAs, a cherry-pick compound list and
+                        realistic hit rates, plus the primary assay. That
+                        assay is a promoter reporter by default, and a screen
+                        of the APPROVED DRUG LIBRARY against the gene's
+                        PROTEIN in patient cells when --scenario says the
+                        protein is the problem (hypomorph,
+                        biallelic_hypomorph), or with --has-ptc or --broken-
+                        allele-makes truncated. A reporter cannot see a
+                        stabiliser, a splice modifier or a readthrough agent
                         (default: False)
   --no-stabilizers      skip the stabilisation section (conformational
                         stabilisers, molecular glues, degradation blockers) —
@@ -538,8 +545,15 @@ options:
                         deliverability verdict for the tissue you named in
                         --tissue
   --design-screen       design the wet-lab screen this analysis prioritises:
-                        reporter construct with controls, CRISPRa sgRNAs, and
-                        a cherry-pick compound list with realistic hit rates
+                        CRISPRa sgRNAs, a cherry-pick compound list and
+                        realistic hit rates, plus the primary assay. That
+                        assay is a promoter reporter by default, and a screen
+                        of the APPROVED DRUG LIBRARY against the gene's
+                        PROTEIN in patient cells when --scenario says the
+                        protein is the problem (hypomorph,
+                        biallelic_hypomorph), or with --has-ptc or --broken-
+                        allele-makes truncated. A reporter cannot see a
+                        stabiliser, a splice modifier or a readthrough agent
   --no-stabilizers      skip the stabilisation section (conformational
                         stabilisers, molecular glues, degradation blockers) —
                         the routes that work on TFs with no ligand pocket

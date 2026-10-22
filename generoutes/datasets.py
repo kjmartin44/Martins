@@ -319,6 +319,24 @@ def registry() -> tuple:
                    "as many factors; --tf-activity wants it.",),
         ),
         Dataset(
+            key="drug_protein_abundance",
+            title="Drug to protein abundance",
+            buys="compounds measured to change the gene's own PROTEIN, "
+                 "where every other abundance route reads the transcript",
+            supply=AUTO,
+            paths=_paths("proteomics", "DEFAULT_PATHS"),
+            url="https://decryptE.kusterlab.org",
+            size="varies",
+            flag="on by default once the file exists",
+            without="every abundance claim in the run is about mRNA, so a "
+                    "stabiliser or a degradation blocker is invisible",
+            counter=_count_csv_rows, unit="row",
+            notes=("decryptE and ProTargetMiner answer this. LINCS P100 "
+                   "(~90 phosphopeptides) and CPTAC (no drug arm) do not.",
+                   "Columns: drug, protein, log2fc [, cell_line, dose, "
+                   "time, source].",),
+        ),
+        Dataset(
             key="ctd_fame",
             title="Drug fame, from your own saved runs",
             buys="how many other genes the literature records each "

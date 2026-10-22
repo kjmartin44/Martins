@@ -551,3 +551,211 @@ def test_a_regulators_role_reaches_the_catalogue():
     src = inspect.getsource(pl.run)
     assert '"tf_roles": {' in src
     assert 'for r in regulators_undrugged if not r.get("via")' in src
+# ===================================================================== #
+# C12. Screen the endpoint the patient needs, not a reporter.          #
+# ===================================================================== #
+class _Prom:
+    gene_symbol = "BUB1B"
+    sequence = "ACGT" * 200
+    chrom, start, end = "15", 1000, 2000
+    upstream, downstream = 1000, 200
+    transcript_id = "ENST1"
+
+    @staticmethod
+    def offset_to_tss(i):
+        return i - 1000
+
+
+def test_a_declared_protein_problem_screens_the_protein():
+    """A promoter reporter cannot see a stabiliser, a splice modifier or
+    a readthrough agent, and those are the mechanisms in play when the
+    protein is the problem."""
+    from generoutes import screens as sc
+
+    plan = sc.design(_Prom(), ["FOXM1"], [], [],
+                     protein_endpoint=True,
+                     why="the only working copy is impaired").to_dict()
+    assert plan["reporter"] is None, "no reporter when it is the wrong assay"
+    assert plan["protein"], "the protein plan is there instead"
+    assert "protein" in plan["endpoint"]
+    assert "impaired" in plan["protein"]["why"]
+    # The CRISPRa arm stays: it raises the endogenous gene either way.
+    assert plan["crispra"]
+
+
+def test_the_default_is_still_the_reporter():
+    from generoutes import screens as sc
+
+    plan = sc.design(_Prom(), ["FOXM1"], [], []).to_dict()
+    assert plan["reporter"] and plan["protein"] is None
+    assert plan["endpoint"] == "promoter reporter"
+
+
+def test_the_screen_controls_for_the_cell_cycle_confound():
+    """For a gene whose protein tracks the cycle, a compound that arrests
+    cells raises the signal without touching the gene. Every other
+    finding in this package says that is the error to design against."""
+    from generoutes import screens as sc
+
+    pp = sc.protein_abundance_plan("BUB1B")
+    text = " ".join(pp["normalisation"] + pp["controls"] + pp["cells"]).lower()
+    assert "phospho-histone h3" in text or "dna content" in text
+    assert "cell-cycle" in text or "cell cycle" in text
+    assert "not pcna" in text, "the housekeeping trap is named"
+    assert "cytotoxicity" in text, "most primary hits are simply toxic"
+    assert any("sub-confluent" in c for c in pp["cells"])
+
+
+def test_the_screen_is_against_approved_drugs_only():
+    from generoutes import screens as sc
+
+    lib = sc.protein_abundance_plan("BUB1B")["library"]
+    assert "approved" in lib["what"]
+    assert any("Prestwick" in s or "Repurposing" in s for s in lib["sources"])
+
+
+def test_a_negative_screen_is_reported_as_informative():
+    from generoutes import screens as sc
+
+    said = sc.protein_expectations()["what_a_negative_result_means"]
+    assert "informative" in said
+    assert "repurposing is unlikely" in said
+
+
+def test_the_endpoint_follows_what_was_declared(tmp_path):
+    from generoutes import pipeline as pl
+
+    protein = pl.run("DEMOGENE", demo=True, design_screen=True,
+                     scenario="biallelic_hypomorph",
+                     broken_allele_makes="truncated")
+    reporter = pl.run("DEMOGENE", demo=True, design_screen=True)
+    assert protein["results"][0]["screen_plan"]["protein"]
+    assert protein["results"][0]["screen_plan"]["reporter"] is None
+    assert reporter["results"][0]["screen_plan"]["reporter"]
+    assert reporter["results"][0]["screen_plan"]["protein"] is None
+    out = pl.markdown_report(protein)
+    assert "Primary screen:" in out and "Reporter construct" not in out
+# ===================================================================== #
+# C13. Drug to PROTEIN abundance, where the rest reads transcripts.     #
+# ===================================================================== #
+def _prot_table(tmp_path, rows):
+    p = tmp_path / "prot.tsv"
+    p.write_text("drug\tprotein\tlog2fc\tcell_line\n" + "".join(
+        f"{d}\t{g}\t{fc}\t{c}\n" for d, g, fc, c in rows),
+        encoding="utf-8")
+    return p
+
+
+def test_one_observation_is_not_a_measurement(tmp_path):
+    """Proteomics is noisier per run than RNA-seq, and a single 1.5x
+    shift in one cell line is a lead to repeat, not a finding."""
+    from generoutes import proteomics as pm
+
+    path = _prot_table(tmp_path, [
+        ("MG132", "BUB1B", 1.3, "HEK293"),
+        ("MG132", "BUB1B", 1.1, "Jurkat"),
+        ("onceonly", "BUB1B", 2.0, "Jurkat"),
+        ("tiny", "BUB1B", 0.1, "Jurkat"),
+        ("tiny", "BUB1B", 0.2, "A549"),
+    ])
+    got = {h.drug for h in pm.load("BUB1B", path=path, want="up")}
+    assert got == {"MG132"}, "one observation and a small shift both go"
+
+
+def test_the_direction_asked_for_is_the_direction_returned(tmp_path):
+    from generoutes import proteomics as pm
+
+    path = _prot_table(tmp_path, [
+        ("raiser", "BUB1B", 1.2, "A"), ("raiser", "BUB1B", 1.4, "B"),
+        ("lowerer", "BUB1B", -1.2, "A"), ("lowerer", "BUB1B", -1.4, "B"),
+    ])
+    assert [h.drug for h in pm.load("BUB1B", path=path, want="up")] == ["raiser"]
+    assert [h.drug for h in pm.load("BUB1B", path=path, want="down")] == ["lowerer"]
+
+
+def test_no_table_is_reported_and_names_the_right_datasets(tmp_path):
+    """LINCS P100 is ~90 phosphopeptides and CPTAC has no drug arm, so
+    naming them here would send somebody after the wrong file."""
+    from generoutes import proteomics as pm
+
+    assert pm.load("BUB1B", path=tmp_path / "nope.tsv") == []
+    said = pm.summarise([], "BUB1B", path=tmp_path / "nope.tsv")
+    assert "decryptE" in pm.SOURCE and "ProTargetMiner" in pm.SOURCE
+    assert "do not" in pm.SOURCE and "P100" in pm.SOURCE
+    assert "transcript" in said
+
+
+def test_a_protein_measurement_outranks_a_transcript_one(tmp_path):
+    """It is measured on the thing the patient needs, with nothing
+    inferred between compound and product."""
+    hits = [{"drug": "MG132", "protein": "BUB1B", "direction": "up",
+             "median_log2fc": 1.2, "n_observations": 3,
+             "cell_lines": ["Jurkat"], "sources": [], "notes": []}]
+    out = cat.build({"protein_abundance": hits, "gene_symbol": "BUB1B"},
+                    goal="up")
+    r = next(x for x in out["routes"] if x["source"] == "proteomics")
+    assert r["tier"] == 2 and r["directness"] == 0
+    assert r["category"] == "protein abundance change"
+    assert any("says nothing about HOW" in n for n in r["notes"])
+
+
+# ===================================================================== #
+# C14. Six steps to a protein, and which were examined.                 #
+# ===================================================================== #
+def test_a_step_that_is_only_named_is_not_counted_as_covered():
+    """A full table of transcriptional routes is not evidence that the
+    other five steps were considered, and nothing else would say so."""
+    from generoutes import coverage as cov
+
+    res = {"results": [{"all_routes": {"routes": [
+        {"category": "TF: orthosteric ligand"},
+        {"category": "chromatin-level"}]},
+        "beyond_transcription": {
+            "post_transcriptional": {"routes": [{"mechanism": "x"}]},
+            "product_stability": {"routes": [{"mechanism": "y"}]}}}],
+        "brake_exons": {"candidates": []}}
+    rows = {r["step"]: r for r in cov.audit(res)}
+    assert rows["transcription"]["state"] == cov.SEARCHED
+    assert rows["transcription"]["found"] == 2
+    assert rows["mRNA stability"]["state"] == cov.LISTED
+    assert rows["translation"]["state"] == cov.LISTED
+    for step in ("mRNA stability", "translation"):
+        assert rows[step]["enable"], "a gap has to say what would close it"
+
+
+def test_a_gene_specific_lookup_counts_as_searched():
+    from generoutes import coverage as cov
+
+    res = {"results": [{"all_routes": {"routes": []},
+                        "product_screen": {"hits": [{"drug": "a"}]},
+                        "protein_abundance": [{"drug": "MG132"}],
+                        "beyond_transcription": {}}],
+           "brake_exons": {"candidates": [1, 2, 3]}}
+    rows = {r["step"]: r for r in cov.audit(res)}
+    assert rows["splicing and isoform choice"]["state"] == cov.SEARCHED
+    assert rows["splicing and isoform choice"]["found"] == 3
+    assert rows["folding"]["state"] == cov.SEARCHED
+    assert rows["degradation"]["state"] == cov.SEARCHED
+    assert rows["degradation"]["found"] == 1
+
+
+def test_the_summary_states_the_ratio_plainly():
+    from generoutes import coverage as cov
+
+    res = {"results": [{"all_routes": {"routes": [
+        {"category": "TF: orthosteric ligand"}] * 300},
+        "beyond_transcription": {}}],
+        "brake_exons": {"candidates": [1]}}
+    said = cov.summarise(cov.audit(res))
+    assert "300 transcriptional route(s)" in said
+    assert "property of this package, not of the biology" in said
+
+
+def test_the_audit_reaches_the_report():
+    from generoutes import pipeline as pl
+
+    res = pl.run("DEMOGENE", demo=True)
+    out = pl.markdown_report(res)
+    assert "How much of the problem this run examined" in out
+    assert "listed only" in out
+    assert "mRNA stability" in out and "translation" in out

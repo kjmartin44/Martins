@@ -213,6 +213,7 @@ Generated from each module's own first docstring line.
 | `congeners.py` | Collapse salt forms so the tables show distinct chemistry. |
 | `constraint.py` | How much dosage this gene tolerates, in either direction. |
 | `corpora.py` | Other perturbation corpora, and what agreement between them is worth. |
+| `coverage.py` | Which of the six steps to a protein this run actually looked at. |
 | `crosscheck.py` | Where CTD and LINCS speak about the same drug, and where either contradicts a route. |
 | `datasets.py` | Every table the analysis can read: where it comes from, and whether you have it. |
 | `delivery.py` | Does the drug reach the cells that express your gene? |
@@ -258,6 +259,7 @@ Generated from each module's own first docstring line.
 | `progress.py` | Telling the user what the run is doing while it does it. |
 | `proliferation.py` | Did the compound move the gene, or just move the cell cycle? |
 | `promoterdna.py` | Small molecules aimed at the promoter DNA rather than at a protein. |
+| `proteomics.py` | Drug to PROTEIN abundance, where the transcript side has LINCS. |
 | `provenance.py` | Did each evidence source actually produce evidence? |
 | `pwm.py` | Position-weight-matrix mathematics. |
 | `rationale.py` | A plain sentence on how a candidate would act on the condition. |

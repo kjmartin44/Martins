@@ -97,9 +97,17 @@ def add_analysis_args(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
                         "the transcript, CRISPRi guides, and a deliverability "
                         "verdict for the tissue you named in --tissue")
     p.add_argument("--design-screen", action="store_true",
-                   help="design the wet-lab screen this analysis prioritises: "
-                        "reporter construct with controls, CRISPRa sgRNAs, and a "
-                        "cherry-pick compound list with realistic hit rates")
+                   help="design the wet-lab screen this analysis "
+                        "prioritises: CRISPRa sgRNAs, a cherry-pick "
+                        "compound list and realistic hit rates, plus the "
+                        "primary assay. That assay is a promoter reporter "
+                        "by default, and a screen of the APPROVED DRUG "
+                        "LIBRARY against the gene's PROTEIN in patient "
+                        "cells when --scenario says the protein is the "
+                        "problem (hypomorph, biallelic_hypomorph), or "
+                        "with --has-ptc or --broken-allele-makes "
+                        "truncated. A reporter cannot see a stabiliser, a "
+                        "splice modifier or a readthrough agent")
     p.add_argument("--no-stabilizers", action="store_true",
                    help="skip the stabilisation section (conformational "
                         "stabilisers, molecular glues, degradation blockers) — "

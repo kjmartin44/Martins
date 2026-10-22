@@ -48,6 +48,9 @@ FLAGS = {
     "regulators": "--regulator-route (needs CollecTRI in data/)",
     "fame": "on by default; needs data/ctd_fame.tsv, built by "
             "scripts/build_fame_table.py from your saved runs",
+    "protein_abundance": "on by default; needs "
+                         "data/drug_protein_abundance.tsv (decryptE or "
+                         "ProTargetMiner, not LINCS P100)",
 }
 
 # What you lose when a source is unavailable. Stated per source because
@@ -127,6 +130,11 @@ IMPACT = {
               "a costly target and can rank beside a dispensable one. "
               "Cancer cell lines say little about a post-mitotic tissue "
               "even when this does run.",
+    "protein_abundance": "Nothing was checked against the gene's own "
+                         "PROTEIN, so every abundance claim in this run "
+                         "is about the transcript. A stabiliser or a "
+                         "degradation blocker raises protein with the "
+                         "transcript flat, and no route here can see one.",
     "fame": "No candidate was checked for being a compound the "
             "literature records for every gene. That is the control the "
             "retrospective found mattered most: a baseline of drug "

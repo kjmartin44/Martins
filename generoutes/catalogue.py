@@ -69,6 +69,7 @@ CATEGORIES = [
     "TF: orthosteric ligand",
     "TF: inferred activity change",
     "TF: abundance change",
+    "protein abundance change",
     "TF: predicted pocket binder",
     "TF: allosteric modulator",
     "TF: stabiliser or glue",
@@ -1301,6 +1302,48 @@ def from_promoter_dna(dna: dict) -> list[Route]:
     return out
 
 
+def from_protein_abundance(hits: list, gene: str) -> list[Route]:
+    """Compounds measured to change the GENE'S OWN PROTEIN.
+
+    Tier 2, and the strongest non-clinical evidence this package can
+    carry: the measurement is on the thing the patient needs, not on a
+    transcript and not on a factor two steps away. Every other abundance
+    route in here is about mRNA.
+
+    Directness 0, like `from_direct`, because nothing is inferred between
+    the compound and the product. What is NOT established is mechanism -
+    the table says the protein moved, not why - so a hit here is a lead
+    for a western and a dose response, not an explanation.
+    """
+    out = []
+    for h in (hits or []):
+        n = h.get("n_observations", 0)
+        fold = 2 ** (h.get("median_log2fc") or 0)
+        notes = list(h.get("notes") or [])
+        notes.append(
+            "measured on the protein, which is what every transcriptional "
+            "route in this report is a proxy for. It says nothing about "
+            "HOW: a stabiliser, a translation effect and a transcriptional "
+            "one are indistinguishable here and separate on an RT-qPCR")
+        out.append(Route(
+            drug=h.get("drug") or "?",
+            category="protein abundance change",
+            mechanism=f"{'raises' if h.get('direction') == 'up' else 'lowers'} "
+                      f"{gene} protein {fold:.1f}x over "
+                      f"{n} observation(s)",
+            acts_on=gene,
+            tier=2,
+            directness=0,
+            axes=Axes(strength=min(0.9, 0.45 + 0.1 * n),
+                      specificity=0.5,
+                      efficiency=0.6,
+                      evidence="measured protein abundance"),
+            approved=bool(verify_approval(h.get("drug") or "")),
+            source="proteomics",
+            notes=notes))
+    return out
+
+
 def from_abundance(hits: list) -> list[Route]:
     """Compounds that change how much of the factor exists.
 
@@ -1712,6 +1755,9 @@ def build(result_block: dict, *, goal: str = "up",
                            gene=result_block.get("gene_symbol"))
     routes += from_abundance(
         result_block.get("factor_abundance") or [])
+    routes += from_protein_abundance(
+        result_block.get("protein_abundance") or [],
+        result_block.get("gene_symbol") or "the gene")
     routes += from_promoter_dna(result_block.get("promoter_dna") or {})
     routes += from_product_screen(
         result_block.get("product_screen") or {},

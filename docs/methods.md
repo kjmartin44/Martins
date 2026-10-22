@@ -131,6 +131,103 @@ The check is reported rather than refused, because the constraint tables are
 read during the analysis and a gene can be haploinsufficient in one tissue and
 tolerated in the population.
 
+## The six steps between a gene and a protein
+
+How much working protein a gene yields is set by six steps in series:
+transcription, splicing and isoform choice, mRNA stability, translation,
+folding, and degradation. This package was built around the first one, so
+a report can fill two hundred rows about transcription and say nothing
+about the other five without anything looking wrong.
+
+Every report therefore opens with an audit of all six, which marks each
+one as **searched**, **listed only** or **not covered**:
+
+- *searched* — a gene-specific lookup ran and returned a count. The
+  count may be zero, and zero is then a result.
+- *listed only* — the mechanism and the drug classes that work that way
+  are named, and nothing was looked up for this gene. A menu, not a
+  search. Most of the post-transcriptional section is this.
+- *not covered* — neither.
+
+On a real BUB1B run the audit reports 365 transcriptional routes against
+20 from every other step combined, with mRNA stability and translation
+listed but never searched. That ratio is a property of the package rather
+than of the biology, and the audit says so, because a full table is not
+evidence that the other steps were considered. Each gap names what would
+close it — a half-life dataset, ribosome profiling, an isoform-resolved
+expression table — so the limitation is a concrete next step rather than
+a disclaimer.
+
+This is the evidence ledger's idea applied to biology instead of to data
+sources: the thing most likely to mislead is not a wrong number, it is a
+question nobody asked.
+
+## Measured on the protein, not the transcript
+
+Every other abundance claim here is about mRNA. `abundance.py` asks
+whether a compound moved a factor's own transcript; `signatures.py` asks
+the same of the target gene. Where the pathogenic allele makes an
+impaired or unstable protein, that gap is the whole question, because a
+stabiliser or a degradation blocker raises protein with the transcript
+flat and no other route in this package can see one.
+
+`proteomics.py` reads a drug-to-protein-abundance table and builds tier-2
+routes from it — the strongest non-clinical evidence here, because the
+measurement is on the thing the patient needs with nothing inferred in
+between. It says nothing about mechanism: a stabiliser, a translation
+effect and a transcriptional one are indistinguishable in the table and
+separate on an RT-qPCR.
+
+Which datasets answer this question matters more than the reader, because
+two that are routinely named do not:
+
+| Resource | What it measures | Answers this? |
+|---|---|---|
+| decryptE | dose-resolved proteome under ~144 drugs | yes |
+| ProTargetMiner | proteome under ~50 anticancer compounds | yes |
+| LINCS P100 | ~90 phosphopeptides, signalling state | no |
+| LINCS GCP | ~60 histone marks | no |
+| CPTAC | tumour proteogenomics, no drug arm | no |
+| Thermal proteome profiling | melting shift, target engagement | no |
+
+Coverage is the honest limit: public drug-proteomics reaches a small
+fraction of the approved library, so a compound absent from the table is
+unexamined and not negative, and the report says that rather than
+reporting an empty result as a finding.
+
+## Which screen the run designs
+
+`--design-screen` writes the experiment the analysis prioritises. The
+primary assay depends on what was declared about the alleles, because the
+two possible assays measure different things.
+
+By default it designs a **promoter reporter**: the scanned window cloned
+upstream of luciferase or GFP, with a scrambled-motif variant of the top
+element as the control that decides whether a drug effect runs through
+that element at all.
+
+When the caller declares that the PROTEIN is the problem — `--scenario
+hypomorph` or `biallelic_hypomorph`, `--has-ptc`, or
+`--broken-allele-makes truncated` — it designs a different screen: the
+**FDA-approved drug library against the gene's protein in the patient's
+own cells**. A reporter measures transcription from a cloned fragment, so
+it cannot see a stabiliser, a splice modifier or a readthrough agent, and
+those are the mechanisms in play when an allele makes an impaired
+product. The protein screen is also mechanism-agnostic, so unlike every
+ranked table in the report it does not depend on this package's
+inferences being right.
+
+The controls in that design are not boilerplate. For a gene whose protein
+tracks the cell cycle, a compound that arrests cells raises the signal
+without touching the gene, so the plan insists on a cell-cycle co-stain
+in the same well, a housekeeping normaliser that is not itself
+cycle-regulated, and a cytotoxicity counter-screen in parallel. Those are
+the same confounds the proliferation gate measures in the LINCS data, met
+at the bench instead.
+
+The endpoint is chosen from a declaration and never inferred, the same
+rule the dosage scenarios follow: nothing here can read a variant.
+
 ## What the literature says moves the gene
 
 CTD records which chemicals have been published as changing a gene's
