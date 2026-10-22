@@ -424,6 +424,11 @@ DEGRON = {
         "components": ("CDC20", "ANAPC2", "ANAPC11", "FZR1"),
         "degron": "a KEN box and a D-box",
         "when": "at mitotic exit, once the checkpoint is satisfied",
+        "protected_by": "acetylation of the protein is reported to block "
+                        "its recognition by Cdc20, so the balance - not "
+                        "the ligase alone - sets the level. Verify in the "
+                        "primary literature before building on it; this "
+                        "is a pointer, not a result of this run.",
         "note": "BUBR1 is a checkpoint protein that the checkpoint's own "
                 "target complex destroys, so its level is tied to the "
                 "cycle it controls. Blocking that destruction also blocks "
@@ -480,6 +485,96 @@ DEGRON = {
         "note": "",
     },
 }
+
+
+# Which deubiquitinase rescues a given protein from its ligase, where
+# the pair is settled rather than one report.
+#
+# Deliberately short. An invented DUB-substrate pair would send somebody
+# after the wrong protein, and "not established here" is a useful answer:
+# it says the counter-regulation is a research question for this gene
+# rather than a lever already on the shelf.
+DUBS = {
+    "TP53": {
+        "dubs": ("USP7", "USP10"),
+        "note": "USP7 (HAUSP) is the textbook case, and it cuts both "
+                "ways: it also stabilises MDM2, so inhibiting it can "
+                "raise p53 indirectly. The net direction depends on the "
+                "cell, which is exactly why a DUB is not a simple lever.",
+    },
+    "MYC": {
+        "dubs": ("USP28", "USP36", "USP37"),
+        "note": "USP28 acts through FBXW7, the ligase arm recorded "
+                "above, so the two entries describe one axis.",
+    },
+    "CTNNB1": {
+        "dubs": ("USP7", "USP47"),
+        "note": "",
+    },
+}
+
+# There is no approved drug that ENHANCES a deubiquitinase. The field's
+# chemistry is inhibitors, and an inhibitor moves the substrate down.
+NO_DUB_ACTIVATORS = (
+    "No approved drug activates a deubiquitinase. Essentially all DUB "
+    "chemistry is inhibitors, and inhibiting the DUB that rescues a "
+    "protein LOWERS that protein - the opposite of what raising it "
+    "needs. Treat any DUB compound found below as the wrong direction "
+    "unless its label says otherwise.")
+
+
+def rescue_of(gene: str) -> dict | None:
+    """Which DUB rescues this protein, or None when it is not recorded."""
+    return DUBS.get((gene or "").strip().upper())
+
+
+def rescue_route(gene: str, drug_index: dict | None = None) -> dict:
+    """The deubiquitinase arm: what rescues the protein, and what acts on it.
+
+    Returns a record even when no DUB is recorded, because "nobody has
+    established which DUB rescues this protein" is the answer that tells
+    you the counter-regulation is unexplored rather than unavailable.
+    """
+    g = (gene or "").strip().upper()
+    rec = rescue_of(g)
+    out = {"gene": g, "established": bool(rec),
+           "dubs": list(rec["dubs"]) if rec else [],
+           "note": (rec or {}).get("note", ""),
+           "drugs": [], "checked": drug_index is not None}
+    for d_sym in out["dubs"]:
+        for d in (drug_index or {}).get(d_sym, []):
+            out["drugs"].append({"drug": getattr(d, "name", str(d)),
+                                 "acts_on": d_sym,
+                                 "direction": getattr(d, "direction",
+                                                      "unclear")})
+    return out
+
+
+def summarise_rescue(rec: dict) -> str:
+    """One paragraph, direction first."""
+    if not rec:
+        return ""
+    if not rec["established"]:
+        return (
+            f"**No deubiquitinase is recorded here as rescuing "
+            f"{rec['gene']}.** Degradation is a balance, and only one side "
+            f"of it is known for this protein: the ligase that destroys it "
+            f"is named above, and the enzyme that would reverse that is "
+            f"not. That is a gap in the biology rather than in this "
+            f"package, and it is worth knowing, because the counter"
+            f"-regulation is where a selective lever would sit if one "
+            f"existed. {NO_DUB_ACTIVATORS}")
+    head = (f"**{rec['gene']} is rescued from its ligase by "
+            f"{', '.join(rec['dubs'])}.** Raising the protein by this axis "
+            f"means ENHANCING that enzyme, not blocking it. "
+            f"{NO_DUB_ACTIVATORS}")
+    if rec["drugs"]:
+        names = ", ".join(sorted({d["drug"] for d in rec["drugs"]})[:6])
+        head += (f" Compounds the index records at these enzymes, almost "
+                 f"certainly inhibitors: {names}.")
+    elif rec["checked"]:
+        head += " The index records no approved drug at these enzymes."
+    return head + (f" {rec['note']}" if rec.get("note") else "")
 
 
 def degradation_of(gene: str) -> dict | None:
@@ -542,6 +637,11 @@ def summarise_degradation(rec: dict) -> str:
                 f"chemistry that does not yet exist here. The index is "
                 f"built from annotated mechanisms, so a covalent agent "
                 f"could be missing from it.")
+    if rec.get("protected_by"):
+        # Degradation is a balance. Naming only the ligase implies the
+        # only lever is blocking it, and the counter-regulation is often
+        # the more tractable one.
+        tail += (f" It is not only the ligase: {rec['protected_by']}")
     return head + tail + (f" {rec['note']}" if rec.get("note") else "")
 
 
@@ -558,6 +658,10 @@ def product_stabilisation(gene: str, *, goal: str = "up",
     return {
         "gene": (gene or "").strip().upper(),
         "degradation": degradation_route(gene, drug_index),
+        # The other half of the balance. Reported even when empty: not
+        # knowing which DUB rescues a protein is a finding about the
+        # biology, and it is the half a selective lever would sit in.
+        "rescue": rescue_route(gene, drug_index),
         "routes": [dict(r) for r in PRODUCT_ROUTES],
         "notes": [
             "These leave transcription alone. If your protein is made "

@@ -42,6 +42,7 @@ from .http import Client
 from . import fame as fame_mod
 from . import poisonexon
 from . import proteomics as prot_mod
+from . import utr as utr_mod
 from . import proliferation as prolif_mod
 from . import standard_of_care as soc_mod
 
@@ -1537,6 +1538,35 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                         "--tf-activity found no testable factor; motif "
                         "scores are unchecked"))
 
+        # ---- the transcript's own UTRs: translation and decay
+        # The coverage audit marked these two steps "listed only", and
+        # both can be asked of sequence this package already fetches. It
+        # annotates a lever; it does not search for a drug that pulls it.
+        utr_scan: dict = {}
+        if not demo:
+            _five, _three = _optional(
+                "transcript UTRs",
+                lambda: genes.fetch_utrs(client, prom.transcript_id),
+                (None, None))
+            if _five or _three:
+                utr_scan = _optional(
+                    "UTR feature scan",
+                    lambda: utr_mod.scan(_five or "", _three or ""), {}) or {}
+            _lever = sum(
+                1 for k in ("translation", "stability")
+                for v in [utr_scan.get(k) or {}]
+                if (v.get("enriched")
+                    or any((v.get(sub) or {}).get("enriched")
+                           for sub in ("pentamer", "nonamer"))))
+            ledger.record(
+                "utr", requested=True, ok=bool(utr_scan), yielded=_lever,
+                detail=(f"5'UTR {utr_scan.get('five_prime_length', 0)} bp, "
+                        f"3'UTR {utr_scan.get('three_prime_length', 0)} bp; "
+                        f"{_lever} feature(s) beat a shuffle of the same "
+                        f"sequence" if utr_scan else
+                        "the transcript's UTRs could not be derived, so "
+                        "translation and mRNA stability were not examined"))
+
         # ---- which drugs change how much of the PROTEIN exists?
         # Asked of the gene's own product, which is what every route
         # above is a proxy for. Coverage is the limit, not the question:
@@ -2110,6 +2140,7 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             "promoter_dna": promoter_dna_scan,
             "proliferation": _prolif,
             "protein_abundance": protein_abundance,
+            "utr": utr_scan,
             "fame": _fame,
             "modality_design": modality,
             "screen_plan": screen_plan,

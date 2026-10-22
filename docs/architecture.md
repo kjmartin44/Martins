@@ -279,6 +279,7 @@ Generated from each module's own first docstring line.
 | `stats.py` | Statistics shared by more than one analysis stage. |
 | `systemic.py` | Drugs and receptors whose action is systemic by design, not by accident. |
 | `tfactivity.py` | Which factors are demonstrably active, inferred from their targets. |
+| `utr.py` | Translation and mRNA stability, read off the transcript's own UTRs. |
 | `validation.py` | Declarative argument checking for the entry points. |
 | `wsldock.py` | Run a Linux docking binary from Windows, through WSL. |
 

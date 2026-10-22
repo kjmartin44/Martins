@@ -373,6 +373,35 @@ def fetch_cdna(client: Client, transcript_id: str) -> str | None:
         return None
     return (data.get("seq") or "").upper() or None
 
+def fetch_utrs(client: Client, transcript_id: str) -> tuple:
+    """`(5'UTR, 3'UTR)` for a transcript, or `(None, None)`.
+
+    Ensembl serves the spliced transcript and the coding sequence
+    separately; the UTRs are what is left when the CDS is located inside
+    the cDNA. Done by string search rather than by coordinates because
+    the two sequences come from the same endpoint and are guaranteed
+    consistent, where exon arithmetic across strands is not.
+    """
+    cdna = fetch_cdna(client, transcript_id)
+    if not cdna:
+        return None, None
+    try:
+        data = client.get(f"{ENSEMBL}/sequence/id/{transcript_id}",
+                          {"type": "cds", "content-type": "application/json"})
+    except HttpError as exc:
+        log.warning("CDS fetch failed for %s: %s", transcript_id, exc)
+        return None, None
+    cds = (data.get("seq") or "").upper()
+    if not cds:
+        return None, None
+    i = cdna.find(cds)
+    if i < 0:
+        log.info("the CDS of %s is not a substring of its cDNA; UTRs not "
+                 "derived", transcript_id)
+        return None, None
+    return cdna[:i], cdna[i + len(cds):]
+
+
 # ====================================================================== #
 # Fully offline: gene models from a GTF, sequence from a genome FASTA.    #
 #                                                                         #

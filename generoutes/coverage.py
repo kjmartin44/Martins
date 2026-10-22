@@ -64,6 +64,13 @@ def audit(result: dict) -> list[dict]:
     product = block.get("product_screen") or {}
     protein = block.get("protein_abundance") or []
     degron = stability.get("degradation") or {}
+    u = block.get("utr") or {}
+    u_tr = u.get("translation") or {}
+    u_st = u.get("stability") or {}
+    # A UTR scan that RAN is a search, whatever it found: "no uORF in a
+    # 200 bp 5'UTR" is a result about this transcript.
+    tr_searched = bool(u_tr) and not u_tr.get("error")
+    st_searched = bool(u_st) and not u_st.get("error")
 
     rows = [
         {
@@ -95,26 +102,31 @@ def audit(result: dict) -> list[dict]:
         },
         {
             "step": "mRNA stability",
-            "state": LISTED if ptx else ABSENT,
-            "found": 0,
-            "what_ran": "",
-            "gap": "the mechanism and its drug classes are named and "
-                   "nothing was looked up for this gene. No corpus of "
-                   "transcript half-life under drug is read, and the "
-                   "microRNA that represses it is not identified.",
+            "state": SEARCHED if st_searched else (LISTED if ptx else ABSENT),
+            "found": sum(1 for k in ("pentamer", "nonamer")
+                         if (u_st.get(k) or {}).get("enriched")),
+            "what_ran": "the 3'UTR scanned for AU-rich decay elements, "
+                        "each against a shuffle of the same sequence",
+            "gap": "the element is annotated and no drug was matched to "
+                   "it. No corpus of transcript half-life under drug is "
+                   "read, and the microRNA that represses it is not "
+                   "identified.",
             "enable": "a half-life dataset (SLAM-seq or actinomycin-D "
                       "chase under compound), or a curated miRNA-target "
                       "table for this transcript",
         },
         {
             "step": "translation",
-            "state": LISTED if ptx else ABSENT,
-            "found": 0,
-            "what_ran": "",
-            "gap": "named only. Nothing reads ribosome profiling or a "
-                   "uORF annotation for this transcript, so whether "
-                   "protein is low while message is normal - the "
-                   "signature that would point here - is never asked.",
+            "state": SEARCHED if tr_searched else (LISTED if ptx else ABSENT),
+            "found": u_tr.get("n_observed", 0) if tr_searched else 0,
+            "what_ran": "the 5'UTR scanned for upstream ORFs against a "
+                        "shuffle of the same sequence, with the Kozak "
+                        "strength of each",
+            "gap": "a uORF is a lever and no drug was matched to it. "
+                   "Nothing reads ribosome profiling, so whether protein "
+                   "is low while message is normal - the signature that "
+                   "would point here - still needs the two assays in "
+                   "patient cells.",
             "enable": "ribosome profiling under compound, or simply the "
                       "transcript-versus-protein comparison in patient "
                       "cells, which costs two assays",

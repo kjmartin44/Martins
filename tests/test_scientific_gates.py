@@ -759,3 +759,149 @@ def test_the_audit_reaches_the_report():
     assert "How much of the problem this run examined" in out
     assert "listed only" in out
     assert "mRNA stability" in out and "translation" in out
+# ===================================================================== #
+# C15. Translation and decay, read off the transcript's own UTRs.       #
+# ===================================================================== #
+_UORF = "ATGGCGTTGCCGTAA"          # ATG, three codons, stop
+_FILLER = "GCCACCGCGAGCGCGGCACCG"
+
+
+def test_an_upstream_orf_is_found_with_its_kozak():
+    from generoutes import utr
+
+    five = "GGCACGCG" + _UORF + _FILLER
+    got = utr.find_uorfs(five)
+    assert len(got) == 1
+    assert got[0]["codons"] == 4 and got[0]["overlaps_cds"] is False
+    assert got[0]["kozak"] in ("strong", "adequate", "weak")
+
+
+def test_an_orf_with_no_stop_is_marked_as_overlapping_the_cds():
+    """It is out-of-frame overlap with the main ORF, which represses
+    differently from a discrete uORF, so it is not counted as one."""
+    from generoutes import utr
+
+    got = utr.find_uorfs("GGCACG" + "ATG" + "GCGGCGGCGGCGGCG")
+    assert got and got[0]["overlaps_cds"] is True
+
+
+def test_a_feature_is_judged_against_a_shuffle_of_its_own_sequence():
+    """AUUUA occurs constantly in an AU-rich 3'UTR by composition alone.
+    Reporting that as a finding would be reporting the base content."""
+    from generoutes import utr
+
+    # AU-rich but with no clustered element beyond what composition gives.
+    plain = "ATATATATTAATATTAATATATTAAT" * 8
+    s = utr.scan("G" * 60, plain, shuffles=30)
+    pent = s["stability"]["pentamer"]
+    assert pent["n_observed"] >= 0
+    assert not pent["enriched"], "composition alone must not count"
+    assert "expected" in pent and "p_value" in pent
+
+
+def test_a_real_cluster_does_beat_the_shuffle():
+    from generoutes import utr
+
+    three = ("TTATTTATT" + "GCGCGCGCGCGC") * 10
+    s = utr.scan("G" * 60, three, shuffles=50)
+    assert s["stability"]["nonamer"]["enriched"] is True
+
+
+def test_a_utr_too_short_to_scan_says_so_rather_than_returning_zero():
+    from generoutes import utr
+
+    s = utr.scan("ACGT", "ACGT", shuffles=5)
+    assert "error" in s["translation"] and "error" in s["stability"]
+    said = utr.summarise(s, "G")
+    assert "too short" in said
+
+
+def test_the_scan_makes_the_two_listed_steps_searched():
+    """These were the rows the coverage audit marked 'listed only'."""
+    from generoutes import coverage as cov
+
+    base = {"results": [{"all_routes": {"routes": []},
+                         "beyond_transcription": {
+                             "post_transcriptional": {"routes": [{"m": 1}]}}}],
+            "brake_exons": {}}
+    before = {r["step"]: r["state"] for r in cov.audit(base)}
+    assert before["translation"] == cov.LISTED
+    assert before["mRNA stability"] == cov.LISTED
+
+    scanned = dict(base)
+    scanned["results"] = [dict(base["results"][0], utr={
+        "five_prime_length": 70, "three_prime_length": 206,
+        "translation": {"n_observed": 2, "enriched": True},
+        "stability": {"pentamer": {"enriched": False},
+                      "nonamer": {"enriched": True}}})]
+    after = {r["step"]: r for r in cov.audit(scanned)}
+    assert after["translation"]["state"] == cov.SEARCHED
+    assert after["mRNA stability"]["state"] == cov.SEARCHED
+    assert after["mRNA stability"]["found"] == 1
+    # And it still says no drug was matched, because none was.
+    assert "no drug was matched" in after["mRNA stability"]["gap"]
+
+
+def test_a_scan_that_found_nothing_is_still_a_search():
+    """'No uORF in a 200 bp 5\'UTR' is a result about this transcript."""
+    from generoutes import coverage as cov
+
+    res = {"results": [{"all_routes": {"routes": []},
+                        "beyond_transcription": {},
+                        "utr": {"five_prime_length": 200,
+                                "three_prime_length": 300,
+                                "translation": {"n_observed": 0,
+                                                "enriched": False},
+                                "stability": {"pentamer": {"enriched": False},
+                                              "nonamer": {"enriched": False}}}}],
+           "brake_exons": {}}
+    rows = {r["step"]: r for r in cov.audit(res)}
+    assert rows["translation"]["state"] == cov.SEARCHED
+    assert rows["translation"]["found"] == 0
+# ===================================================================== #
+# C16. The other half of the degradation balance.                       #
+# ===================================================================== #
+def test_the_dub_axis_states_the_direction_before_the_drug():
+    """To RAISE a protein you need MORE deubiquitination, so you have to
+    enhance the DUB. Essentially all DUB chemistry is inhibitors, which
+    lower the substrate - a reader who sees "a USP7 inhibitor exists" and
+    reaches for it would be moving the protein the wrong way."""
+    from generoutes import stabilizers as st
+
+    said = st.summarise_rescue(st.rescue_route("TP53", drug_index={}))
+    assert "USP7" in said
+    assert said.index("ENHANCING") < said.index("inhibitors"), (
+        "the direction has to come before the chemistry")
+    assert "LOWERS that protein" in said
+
+
+def test_an_unrecorded_dub_is_reported_as_a_gap_not_an_absence():
+    """Not knowing which DUB rescues a protein says the counter-
+    regulation is unexplored, which is where a selective lever would be."""
+    from generoutes import stabilizers as st
+
+    rec = st.rescue_route("BUB1B", drug_index={})
+    assert rec["established"] is False and rec["dubs"] == []
+    said = st.summarise_rescue(rec)
+    assert "No deubiquitinase is recorded" in said
+    assert "gap in the biology" in said
+
+
+def test_both_halves_of_the_balance_reach_the_product_block():
+    from generoutes import stabilizers as st
+
+    out = st.product_stabilisation("TP53", goal="up", drug_index={})
+    assert out["degradation"]["ligase"] == "MDM2"
+    assert out["rescue"]["dubs"] == ["USP7", "USP10"]
+    # Still only meaningful for raising a protein.
+    assert st.product_stabilisation("TP53", goal="down") == {}
+
+
+def test_the_report_shows_the_ligase_and_the_enzyme_that_reverses_it():
+    from generoutes import pipeline as pl
+
+    res = pl.run("DEMOGENE", demo=True)
+    out = pl.markdown_report(res)
+    # DEMOGENE is not in either table, so the report must say so rather
+    # than omit the question.
+    assert "deubiquitinase" in out.lower() or "Raising the protein" in out

@@ -2427,6 +2427,15 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                          "exception — and it needs a chaperone to exist for "
                          "your protein.*")
                 L.append("")
+                # Which ligase, and which enzyme reverses it. Generic
+                # "E3 ligase inhibition" is not actionable until both
+                # halves of the balance are named.
+                from . import stabilizers as _st
+                for _txt in (_st.summarise_degradation(ps.get("degradation")),
+                             _st.summarise_rescue(ps.get("rescue"))):
+                    if _txt:
+                        L.append(_txt)
+                        L.append("")
 
         imp = res.get("improvements") or {}
         if imp:
