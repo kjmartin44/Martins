@@ -3751,28 +3751,31 @@ def summary_report(result: dict, top_n: int = SUMMARY_TOP) -> str:
         _gene = q["gene"]
         _roles = {t["symbol"]: t.get("role")
                   for res in result["results"] for t in res.get("tfs", [])}
-        L.append(f"## Top {len(rows)} to look at first")
+        from . import strata as st_mod
+        _all_routes = [rt for res in result["results"]
+                       for rt in ((res.get("all_routes") or {}).get("routes")
+                                  or [])]
+        _groups = st_mod.partition(rows, _all_routes)
+        L.append("## What to test first")
         L.append("")
-        L.append("Ordered by evidence tier, then score. A tier-1 route with "
-                 "a mediocre score beats a tier-5 route with a great one. "
-                 "Drugs that reach the gene through the same factor by the "
+        L.append(st_mod.preamble(len(_groups)))
+        L.append("")
+        L.append("Drugs that reach the gene through the same factor by the "
                  "same kind of route, and close analogues acting through a "
-                 "shared target, are folded into the best-ranked one, so "
-                 "each family takes one row.")
+                 "shared target, are folded into one row, so a family is "
+                 "one idea to test rather than several.")
         L.append("")
         L.append(rat_mod.aim(_gene, goal, result.get("requirement"),
                              q.get("condition"), q.get("scenario")))
         L.append("")
-        L.append("| # | Drug | Approved to treat | Acts on | Tier | How it "
-                 "would work |")
-        L.append("|---|---|---|---|---|---|")
+        _line: dict = {}
         _any_broad = False
         _any_mitotic = False
         from . import crosscheck as xc_mod
         _xc = next((b.get("crosscheck") for b in result["results"]
                     if b.get("crosscheck")), None)
         _ctd_opposite: list = []
-        for i, r in enumerate(rows, 1):
+        for r in rows:
             d = ind_mod.describe(
                 r.get("drug", ""),
                 mechanism=(r.get("mechanism") or "").strip() or None)
@@ -3794,11 +3797,41 @@ def summary_report(result: dict, top_n: int = SUMMARY_TOP) -> str:
             if xc_mod.cautions_for(r, _xc):
                 _broad += " ⚠CTD opposite"
             _targets = ", ".join(sorted(r["targets"])) or EMDASH
-            L.append(f"| {i} | **{r.get('drug')}**{_broad}{_more} | "
-                     f"{_clip(treats)} | {_targets} | "
-                     f"{r.get('tier')} | "
-                     f"{rat_mod.route_sentence(r, _gene, goal, _roles)} |")
-        L.append("")
+            _line[id(r)] = (
+                f"| **{r.get('drug')}**{_broad}{_more} | "
+                f"{_clip(treats)} | {_targets} | "
+                f"{r.get('tier')} | "
+                f"{rat_mod.route_sentence(r, _gene, goal, _roles)} |")
+
+        for _key, _title, _blurb, _grp in _groups:
+            L.append(f"### {_title} ({len(_grp)})")
+            L.append("")
+            L.append(_blurb)
+            L.append("")
+            L.append("| Drug | Approved to treat | Acts on | Tier | How it "
+                     "would work |")
+            L.append("|---|---|---|---|---|")
+            for r in _grp:
+                L.append(_line[id(r)])
+            L.append("")
+
+        _excluded = st_mod.exclusions(_all_routes)
+        if _excluded:
+            L.append(f"### Found and excluded ({len(_excluded)})")
+            L.append("")
+            L.append("These were reached by the search and then rejected. "
+                     "They are shown because a reader who expected one of "
+                     "them should learn it was considered, not be left "
+                     "wondering whether the search missed it.")
+            L.append("")
+            L.append("| Compound | Why it is not a candidate |")
+            L.append("|---|---|")
+            for _e in _excluded[:20]:
+                L.append(f"| {_e['drug']} | {_clip(_e['why'], 150)} |")
+            if len(_excluded) > 20:
+                L.append(f"| … | {len(_excluded) - 20} more, in "
+                         f"`report.md` |")
+            L.append("")
         if folded:
             L.append("**Folded into the rows above** (the same factor "
                      "reached the same way, or structure within Tanimoto "
@@ -3807,10 +3840,10 @@ def summary_report(result: dict, top_n: int = SUMMARY_TOP) -> str:
                      "potency, selectivity, tissue reach and safety, and "
                      "each has its own row in `report.md`.")
             L.append("")
-            for i, r in enumerate(rows, 1):
+            for r in rows:
                 c = folded.get(r.get("drug"))
                 if c:
-                    L.append(f"- {i}. {r.get('drug')}: "
+                    L.append(f"- {r.get('drug')}: "
                              f"{cl_mod.names(c, limit=8)}")
             L.append("")
         if _ctd_opposite:
@@ -3859,20 +3892,37 @@ def summary_report(result: dict, top_n: int = SUMMARY_TOP) -> str:
     # ---- what ran and what did not: the thing that decides how to read it
     sources = ((result.get("evidence_sources") or {}).get("sources") or {})
     if sources:
-        ok = [k for k, v in sources.items() if v.get("state") == "ok"]
-        failed = [k for k, v in sources.items()
-                  if v.get("state") not in ("ok", None)
-                  and v.get("requested")]
-        if ok or failed:
+        # Four states, and they are four different pieces of news. The
+        # one that must never be merged upward is `empty`: a source that
+        # ran and measured nothing is a RESULT, and reporting it beside
+        # one that broke throws away the distinction the ledger is for.
+        _by = {}
+        for k, v in sources.items():
+            _by.setdefault(v.get("state"), []).append(k)
+        ok = sorted(_by.get("ok") or [])
+        empty = sorted(_by.get("empty") or [])
+        failed = sorted(_by.get("FAILED") or [])
+        absent = sorted(_by.get("not requested") or [])
+        if ok or empty or failed or absent:
             L.append("## What the answer rests on")
             L.append("")
             if ok:
-                L.append(f"- **Ran:** {', '.join(sorted(ok))}")
+                L.append(f"- **Ran, and found something:** "
+                         f"{', '.join(ok)}")
+            if empty:
+                L.append(f"- **Ran, and found nothing:** "
+                         f"{', '.join(empty)}. That is a measurement, not "
+                         f"a gap: these were asked and answered no.")
             if failed:
-                L.append(f"- **Did not run:** {', '.join(sorted(failed))}. "
-                         f"A source that failed is not a negative result; "
-                         f"`report.md` names the flag that would enable "
-                         f"each.")
+                L.append(f"- **Could not run:** {', '.join(failed)}. A "
+                         f"source that broke is not a negative result, so "
+                         f"nothing below should be read as evidence that "
+                         f"it would have found nothing.")
+            if absent:
+                L.append(f"- **Not available here:** {', '.join(absent)}. "
+                         f"No input for these on this machine, so they "
+                         f"were never asked. `report.md` names the file or "
+                         f"flag each one needs.")
             L.append("")
         elif not q.get("demo"):
             L.append("## What the answer rests on")

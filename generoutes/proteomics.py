@@ -191,9 +191,15 @@ def _key(name: str) -> str:
 def summarise(hits: list, protein: str, *, path=None) -> str:
     """One paragraph for the report."""
     if _resolve(path) is None:
-        return (f"**No compound was checked against {protein} PROTEIN.** "
-                f"Every abundance claim in this report is about the "
-                f"transcript. {SOURCE}")
+        # One line. The dataset comparison - which resources answer this
+        # question and which only look as though they do - belongs in
+        # docs/methods.md, not in the middle of a result.
+        return (f"**No compound was checked against {protein} PROTEIN**, so "
+                f"every abundance claim in this report is about the "
+                f"transcript. A drug-to-protein table at "
+                f"`data/drug_protein_abundance.tsv` would change that; see "
+                f"[methods](methods.md) for which public datasets actually "
+                f"answer this and which do not.")
     if not hits:
         return (f"**A drug-to-protein table was read and holds no compound "
                 f"that raises {protein}.** That is a measured negative over "

@@ -155,7 +155,7 @@ def test_the_summary_folds_a_family_and_names_the_folded_drug():
     assert "| How it would work |" in text
     assert "(+1 similar)" in text
     assert f"{top['drug']}: {twin['drug']}" in text, "the folded drug is named"
-    shortlist = text.split("## Top")[1].split("**Every row is off-label")[0]
+    shortlist = text.split("## What to test first")[1].split("**Every row is off-label")[0]
     rows = [ln for ln in shortlist.splitlines()
             if ln.startswith("| ") and f"**{twin['drug']}**" in ln]
     assert not rows, "the folded drug has no row of its own in the shortlist"
@@ -165,7 +165,7 @@ def test_the_summary_states_the_aim_and_a_sentence_per_row():
     from generoutes import report
     res, *_ = _demo_with_a_family()
     text = report.summary_report(res)
-    assert "SMN2" in text.split("## Top")[1].split("| # |")[0]
+    assert "SMN2" in text.split("## What to test first")[1].split("### ")[0]
     assert "Nothing here shows that moving the gene treats the condition" \
         in text
 
@@ -176,7 +176,7 @@ def test_a_drug_reached_through_two_factors_is_one_row_with_both_targets():
     other = dict(top, acts_on="OTHERTF", score=top["score"] - 5)
     res["results"][0]["all_routes"]["routes"].append(other)
     text = report.summary_report(res)
-    shortlist = text.split("## Top")[1].split("**Every row is off-label")[0]
+    shortlist = text.split("## What to test first")[1].split("**Every row is off-label")[0]
     rows = [ln for ln in shortlist.splitlines()
             if ln.startswith("| ") and f"**{top['drug']}**" in ln]
     assert len(rows) == 1
@@ -253,7 +253,7 @@ def test_close_analogues_acting_through_different_targets_stay_two_rows():
     res, top, twin = _demo_with_a_family()
     twin["acts_on"] = "SOMEOTHERTF"
     text = report.summary_report(res)
-    shortlist = text.split("## Top")[1].split("**Every row is off-label")[0]
+    shortlist = text.split("## What to test first")[1].split("**Every row is off-label")[0]
     rows = {ln for ln in shortlist.splitlines() if ln.startswith("| ")}
     mine = [ln for ln in rows if f"**{twin['drug']}**" in ln
             or f"**{top['drug']}**" in ln]
@@ -266,7 +266,7 @@ def test_the_summary_uses_the_declared_scenario_when_no_requirement_was_made():
     res, *_ = _demo_with_a_family()
     res["requirement"] = None
     res["query"]["scenario"] = "toxic_gain"
-    shortlist = report.summary_report(res).split("## Top")[1]
+    shortlist = report.summary_report(res).split("## What to test first")[1]
     assert "the harmful product comes from the gene" in shortlist
 
 
@@ -288,7 +288,7 @@ def _fam_route(drug, tier, score, acts_on="VDR", category="TF: orthosteric "
 
 
 def _shortlist_rows(text):
-    part = text.split("## Top")[1].split("**Every row is off-label")[0]
+    part = text.split("## What to test first")[1].split("**Every row is off-label")[0]
     return [ln for ln in part.splitlines()
             if ln.startswith("| ") and "**" in ln]
 
@@ -300,7 +300,10 @@ def test_unrelated_drugs_through_one_factor_take_one_row(structures):
         _fam_route("OTHER", 3, 40, acts_on="RXRA")))
     rows = _shortlist_rows(text)
     assert len(rows) == 2
-    assert "**PENTYL**" in rows[0] and "(+1 similar)" in rows[0]
+    # Position carries nothing now: rows inside a group are ordered by
+    # independent method count, then alphabetically, never by score.
+    pentyl = next(r for r in rows if "**PENTYL**" in r)
+    assert "(+1 similar)" in pentyl
     assert "PENTYL: ASPIRIN" in text
 
 

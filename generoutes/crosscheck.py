@@ -92,7 +92,7 @@ def build(gene: str, goal: str, improvements: dict | None, *,
            "wanted_profile": mover_profile(sorted(wanted.values()), goal),
            "lincs": {"checked": False, "reason": None,
                      "n_wanted": 0, "n_opposite": 0},
-           "n_compared": 0, "n_agree": 0, "conflicts": []}
+           "n_compared": 0, "n_agree": 0, "conflicts": [], "agree": []}
     if not use_lincs:
         out["lincs"]["reason"] = "LINCS was not requested for this run"
         return out
@@ -118,6 +118,12 @@ def build(gene: str, goal: str, improvements: dict | None, *,
         out["n_compared"] += 1
         if ctd_says == lincs_says:
             out["n_agree"] += 1
+            # Named, not just counted. Two sources sharing no methodology
+            # agreeing on a direction is the strongest empirical claim
+            # here, and it is worthless as a bare number.
+            out["agree"].append({"drug": name,
+                                 "direction": _label(ctd_says, goal),
+                                 "wanted": bool(ctd_says)})
         else:
             out["conflicts"].append({"drug": name,
                                      "ctd": _label(ctd_says, goal),
@@ -208,9 +214,36 @@ def markdown(xc: dict | None, ranked: list | None = None,
     if lincs["checked"]:
         n, a = xc["n_compared"], xc["n_agree"]
         if n:
+            _ag = xc.get("agree") or []
+            _names = ", ".join(d["drug"] for d in _ag[:8])
+            _more = f" and {len(_ag) - 8} more" if len(_ag) > 8 else ""
             L.append(f"**CTD and LINCS** both give a direction for {n} "
                      f"drug{'s' if n != 1 else ''} and agree on {a} "
-                     f"({a / n:.0%}).")
+                     f"({a / n:.0%})"
+                     + (f": {_names}{_more}." if _ag else "."))
+            # Agreement is not good news by itself. Where both sources
+            # agree the drug moves the gene the WRONG way, a bare
+            # "agree on 1 (100%)" reads as corroboration of a candidate
+            # when it is the refutation of one.
+            _against = [d["drug"] for d in _ag if not d.get("wanted")]
+            if _against:
+                L.append("")
+                L.append(f"Both sources agree that "
+                         f"{', '.join(_against[:8])} moves the gene the "
+                         f"OPPOSITE way to the one this run wants. Two "
+                         f"independent sources agreeing against a "
+                         f"candidate is the strongest negative here, and "
+                         f"it is worth more than the agreement rate above.")
+            _want = [d["drug"] for d in _ag if d.get("wanted")]
+            if _want:
+                L.append("")
+                L.append(f"The two share no methodology - a curated "
+                         f"literature record and a measured expression "
+                         f"signature - so agreement between them is worth "
+                         f"more than either alone. "
+                         f"{', '.join(_want[:8])} "
+                         f"{'are' if len(_want) != 1 else 'is'} recorded by "
+                         f"both as moving the gene the way this run wants.")
             L.append("")
         if xc["conflicts"]:
             L.append("| Drug | CTD records | LINCS records |")

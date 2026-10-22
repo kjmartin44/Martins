@@ -28,6 +28,29 @@ flowchart LR
     class A,B,C,D,E step
 ```
 
+## The six steps between a gene and a protein
+
+How much working protein a gene yields is set by six steps in series. A
+report can fill two hundred rows about the first one and say nothing
+about the other five without anything looking wrong, so every run opens
+by auditing all six and marking each **searched**, **listed only** or
+**not covered**.
+
+| Step | What the run asks of it |
+|---|---|
+| Transcription | The promoter scan, the factor ligands, the recorded regulators, the upstream network, the literature record and the expression signatures. |
+| Splicing and isoform choice | Exons used only by transcripts the cell destroys, which an oligonucleotide could redirect. |
+| mRNA stability | AU-rich decay elements in the 3'UTR, each against a shuffle of the same sequence. |
+| Translation | Upstream ORFs in the 5'UTR, with the Kozak strength of each, against the same kind of null. |
+| Folding | A ligand screen against the gene's own protein, which is what a pharmacological chaperone would have to be. |
+| Degradation | The ligase that destroys the protein, the enzyme that reverses it, and compounds measured on the protein itself. |
+
+*Searched* means a gene-specific lookup ran and returned a count, and the
+count may be zero — zero is then a result. *Listed only* means the
+mechanism is named and nothing was looked up for this gene: a menu, not a
+search. A full ranking is not evidence that the other steps were
+considered, which is why the audit comes before the drug tables.
+
 ## Quick start
 
 Requires Python 3.10 or later. From this checkout:

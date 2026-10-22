@@ -34,11 +34,11 @@ flowchart TD
         R5["5 drugs at its recorded<br/>regulators (CollecTRI)"]
     end
 
-    subgraph AFTER["After transcription, annotated not searched for drugs"]
-        A1["decay exons an oligo could skip"]
-        A2["upstream ORFs in the 5'UTR"]
-        A3["decay elements in the 3'UTR"]
-        A4["the ligase that destroys the protein,<br/>and the enzyme that reverses it"]
+    subgraph AFTER["Annotated, with no drug matched to them"]
+        A1["splicing and isoform choice:<br/>decay exons an oligo could skip"]
+        A2["translation:<br/>upstream ORFs in the 5'UTR"]
+        A3["mRNA stability:<br/>decay elements in the 3'UTR"]
+        A4["degradation:<br/>the ligase that destroys the protein,<br/>and the enzyme that reverses it"]
     end
 
     START --> ON_GENE
@@ -60,3 +60,5 @@ flowchart TD
 
     RANK --> REPORT["Write up<br/>show approved drugs<br/>say what ran and what failed<br/>and which of the six steps<br/>were never asked at all"]
     REPORT --> TEST["Test it<br/>the screen this analysis prioritises,<br/>and a check against what is already known"]
+
+    AUDIT["Audit all six steps to a protein<br/>transcription (routes 2-11), splicing,<br/>mRNA stability, translation,<br/>folding (route 13), degradation (route 14)<br/>each marked searched, listed only, or not covered"] -.-> REPORT

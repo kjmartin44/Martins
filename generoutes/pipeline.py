@@ -1581,7 +1581,8 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                 [])
             protein_abundance = [h.to_dict() for h in (_prot or [])]
             ledger.record(
-                "protein_abundance", requested=True,
+                # Not on disk means not asked, not failed.
+                "protein_abundance", requested=prot_mod.available(),
                 ok=prot_mod.available(),
                 yielded=len(protein_abundance),
                 detail=(f"{len(protein_abundance)} compound(s) measured to "
@@ -2023,7 +2024,9 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             _n_tracks = sum(1 for v in _prolif.values()
                             if v.get("tracks_proliferation"))
             ledger.record(
-                "proliferation", requested=True, ok=bool(_prolif),
+                "proliferation",
+                requested=sig_mod.autoload_gmt_available(goal),
+                ok=bool(_prolif),
                 yielded=_n_tracks,
                 detail=(f"{len(_prolif)} candidate(s) checked against the "
                         f"mitotic programme; {_n_tracks} move it along with "
@@ -2044,7 +2047,8 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             _fame = fame_mod.assess(_names, _ftable)
             _n_fame = sum(1 for v in _fame.values() if v.get("promiscuous"))
             ledger.record(
-                "fame", requested=True, ok=bool(_fame), yielded=_n_fame,
+                "fame", requested=_ftable is not None,
+                ok=bool(_fame), yielded=_n_fame,
                 detail=(f"{len(_fame)} candidate(s) found in the fame "
                         f"table over {_ftable['n_genes']} gene(s); "
                         f"{_n_fame} are recorded for most of them"
