@@ -3,14 +3,9 @@
 A Python research tool that collects ways an approved drug might raise or
 lower one gene, from several independent kinds of evidence, and ranks them by
 how strong that evidence is. It searches the gene's own product, the factors
-recorded as regulating it, the compounds measured to move it, the promoter's
-predicted binding sites, and nine other routes. Results are hypotheses for
-further study, not validated treatment advice.
-
-It was called `promoter-tf-drugs` until October 2026, after the promoter
-motif route, which was written first. That route is one of thirteen and is
-not the strongest, so neither the name nor the documentation presents it as
-the method any more; see [the routes](docs/how-it-works.md#the-routes-in-detail).
+recorded as regulating it, the compounds measured to move its protein, the
+promoter's predicted binding sites, and ten other routes. Results are
+hypotheses for further study, not validated treatment advice.
 
 It was made for the Rare Disease, Real Kid: The MVA Hackathon 2026. The hackathon
 asks the research community to help understand Mosaic Variegated Aneuploidy (MVA),
@@ -19,20 +14,18 @@ clinical story of one child. Nothing here has been shown to help with MVA.
 
 ## The pipeline
 
-One run, from a gene and a direction to ranked drug hypotheses. The [flowchart](docs/pipeline_detail.mmd) shows the same steps as a diagram, and [how it works](docs/how-it-works.md) covers the data each step reads.
+One run, from a gene and a direction to ranked drug hypotheses. The [detailed flowchart](docs/pipeline_detail.mmd) shows the branches, and [how it works](docs/how-it-works.md) covers the data each step reads.
 
 ```mermaid
-flowchart TB
-    A["1 Choose<br/>a gene, a direction,<br/>and the shape of<br/>the dosage problem"]
-    B["2 Scan<br/>find the promoter and its<br/>binding spots, widen if<br/>none stand out, and measure<br/>how many are chance"]
-    C["3 Check<br/>what each protein does,<br/>whether it is really<br/>bound there, and whether<br/>it is active"]
-    D["4 Match<br/>drugs that push those<br/>proteins the right way,<br/>plus other routes"]
-    E["5 Narrow<br/>weigh each route's<br/>collateral against the<br/>gain, on four axes"]
-    F["6 Report<br/>rank by evidence tier,<br/>show approved drugs, say<br/>what ran and what failed"]
-    G["7 Test<br/>compare with what<br/>is already known"]
-    A --> B --> C --> D --> E --> F --> G
+flowchart LR
+    A["<b>1 Ask</b><br/>a gene, a direction,<br/>and what is wrong<br/>with the alleles"]
+    B["<b>2 Gather</b><br/>fourteen routes,<br/>in parallel, from the<br/>promoter to the protein"]
+    C["<b>3 Weigh</b><br/>demote what the evidence<br/>cannot carry, drop what<br/>the patient cannot afford"]
+    D["<b>4 Report</b><br/>rank by evidence tier,<br/>and say which of the six<br/>steps were never asked"]
+    E["<b>5 Test</b><br/>the experiment<br/>that settles it"]
+    A --> B --> C --> D --> E
     classDef step fill:#f6f8fa,stroke:#57606a,color:#1f2328
-    class A,B,C,D,E,F,G step
+    class A,B,C,D,E step
 ```
 
 ## Quick start

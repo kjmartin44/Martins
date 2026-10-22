@@ -151,9 +151,7 @@ efficiency), and a distance from the gene. This table says where each search
 lands.
 
 The promoter motif route is in the table with the rest, and not above it.
-The package was called `promoter-tf-drugs` after that route because it was
-written first, which is a fact about the history and not a ranking. It is
-the only route whose
+It is the only route whose
 factor-to-gene step is a sequence resemblance rather than a record of
 anything, so it is the one most weakened by a noisy scan, and above a false
 discovery proportion of 25% its tiers are capped (see
@@ -177,6 +175,7 @@ mechanism.
 | Docking | predicted product or pocket binder | 4 | the pocket's validated AUC, not the drug's score | 0, 1 or 2 |
 | PRISM phenocopy | measured phenocopy | 4 | partial correlation | 1 |
 | Product ligand screen, new hypothesis | direct: predicted product binder | 5 | the model's probability | 0 |
+| Measured protein abundance | protein abundance change | 2 | how many observations agree | 0 |
 
 Genetics, CTD, DepMap's knockout effects and the dosage constraint add no
 route. They are described last.

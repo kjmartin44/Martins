@@ -9,9 +9,10 @@ inspect the evidence behind each route.
 
 - [How the pipeline works](how-it-works.md): one run from the question to the
   output files, and every database it reads and why.
-- [Pipeline overview](pipeline.mmd): the seven steps of a run, as a short
-  Mermaid flowchart. [The detailed flowchart](pipeline_detail.mmd) shows the
-  branches, the shuffled-sequence null and the four collateral axes.
+- [Pipeline overview](pipeline.mmd): one run as a short Mermaid
+  flowchart, with the routes in parallel rather than one chain.
+  [The detailed flowchart](pipeline_detail.mmd) shows the branches, the
+  shuffled-sequence null and the four collateral axes.
 - [A full workup](workflow.md): the five steps, end to end, with the
   commands and what would make you stop at each one.
 - [Installation](installation.md): environments, extras, and Windows launchers.

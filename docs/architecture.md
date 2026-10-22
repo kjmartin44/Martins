@@ -2,7 +2,7 @@
 
 [Documentation index](index.md)
 
-Eighty modules, about forty-two thousand lines. This is the map: what the
+Eighty-seven modules, about forty-five thousand lines. This is the map: what the
 run does in order, which module owns each step, and which parts you can
 read on their own.
 
@@ -59,9 +59,7 @@ exist, and the report says so with a number: for CCR5, 241 hits against
 why so much of the package is evidence that a site is real rather than
 predicted, and why a noisy scan now caps that branch's tiers.
 
-That weakness belongs to the motif route and not to the others. The
-package was named after it, as `promoter-tf-drugs`, because it was written
-first. The routes that rest on a measurement of the gene — the literature
+That weakness belongs to the motif route and not to the others. The routes that rest on a measurement of the gene — the literature
 record, the LINCS signature, the sensitivity phenocopy — carry better
 evidence that the gene moves, and worse evidence about why.
 

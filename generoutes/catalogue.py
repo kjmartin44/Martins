@@ -182,6 +182,30 @@ CATEGORY_GUIDE = {
                    "about your gene or about transcription at all - the "
                    "readout is whether cells live.",
     },
+    "protein abundance change": {
+        "changes": "abundance",
+        "assay": "a western or targeted MS for your gene's protein, then "
+                 "RT-qPCR to say whether the transcript moved with it",
+        "what": "A compound measured to change how much of your gene's own "
+                "PROTEIN exists, in a proteomics experiment under drug",
+        "why": "The only evidence here measured on the endpoint itself. "
+               "Every other route in this report treats transcript as a "
+               "proxy for protein, and for a gene whose pathogenic allele "
+               "makes an unstable product that proxy is the thing in "
+               "question",
+        "cost": "It says the protein moved and not how. A stabiliser, a "
+                "translation effect and a transcriptional one are "
+                "indistinguishable in this measurement, so mechanism needs "
+                "the RT-qPCR beside it. Coverage is the harder limit: "
+                "public drug-proteomics reaches a small fraction of the "
+                "approved library, so an absent compound is unexamined "
+                "rather than negative",
+        "differs": "Unlike 'empirical signature', which is a compound "
+                   "measured against your gene's TRANSCRIPT, and unlike "
+                   "'TF: abundance change', which is measured against a "
+                   "FACTOR, this is measured against your gene's protein "
+                   "with nothing inferred in between",
+    },
     "TF: abundance change": {
         "changes": "abundance",
         "assay": "RT-qPCR and a western for the FACTOR first, then "

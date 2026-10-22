@@ -70,8 +70,9 @@ manual lookup guidance; do not read that as a completed trans-eQTL analysis.
 
 ## Gates that demote a route
 
-Five checks can lower a route after it is built. None deletes anything, and
-each says on the row what it did and why. They were added after a review of a
+Six checks can lower a route after it is built, and a seventh warns
+without touching one. None deletes anything, and each says on the row what
+it did and why. They were added after a review of a
 BUB1B run that produced confident tier-2 candidates on evidence that did not
 support them.
 
@@ -120,7 +121,17 @@ here, which is what the confound looks like. The table's resolution is
 however many genes you have run, every message states the denominator, and
 a compound the table does not hold gets no verdict.
 
-**A declared scenario is checked against the population data.**
+**An agent that raises an oncogene sinks too.** The same
+`--avoid-genotoxic` flag reaches a second way: not a drug that damages
+DNA, but a TARGET whose dose the route moves in the direction that causes
+cancer - raising a proto-oncogene, or lowering a tumour suppressor. The
+abundance scan offered to raise MYC, FOXM1 and ETS2 for a
+cancer-predisposed patient and nothing said so. Raising a tumour
+suppressor is left alone, because more of it is not the hazard, and a
+route whose direction is unrecorded is left alone rather than guessed at.
+
+**A declared scenario is checked against the population data.** This one
+warns rather than demoting, because the declaration is the clinician's.
 `--scenario haploinsufficiency` asserts one allele is lost and the other is
 intact. When the gene's pLI says losing one copy is not selected against, that
 assertion disagrees with the frequency data: healthy people carry a broken
