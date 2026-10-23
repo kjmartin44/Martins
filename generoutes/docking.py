@@ -949,6 +949,14 @@ def enrichment_basis(scores: list, labels: list, *, fraction: float = 0.01,
 # The receptor PDBQT is the same file for every compound in a
 # screen, so it is converted once and reused.
 _REC_CACHE: dict = {}
+# ...and the conversion is guarded, because `_dock_smiles` runs compounds
+# through a ThreadPoolExecutor. The first `--jobs` threads miss the cache
+# together and all launch a converter onto ONE fixed path,
+# `<receptor>.pdbqt`. The only guard was `out.exists()`, which is true the
+# moment any writer creates the file, so a thread could hand Vina a
+# receptor another process was still writing - and Vina exits 0 on a short
+# receptor, so that arrives as a wrong score rather than as an error.
+_REC_LOCK = threading.Lock()
 
 
 def _dock_smiles(smiles_list: list, receptor: Path, autobox: Path | None,
@@ -1888,14 +1896,20 @@ def dock_one_vina(receptor_pdb: Path, smiles: str, box: tuple, *,
     key = str(receptor_pdb)
     rec_pdbqt = cache.get(key)
     if rec_pdbqt is None or not Path(rec_pdbqt).exists():
-        out = Path(receptor_pdb).with_suffix(".pdbqt")
-        got = _receptor_pdbqt(Path(receptor_pdb), out)
-        if got is None:
-            raise RuntimeError(
-                "could not convert the receptor to PDBQT. "
-                + VINA_SETUP_WINDOWS)
-        cache[key] = str(got)
-        rec_pdbqt = str(got)
+        with _REC_LOCK:
+            # Re-checked inside the lock: whichever thread was converting
+            # while this one waited has filled the cache by now, and the
+            # file it names is complete.
+            rec_pdbqt = cache.get(key)
+            if rec_pdbqt is None or not Path(rec_pdbqt).exists():
+                out = Path(receptor_pdb).with_suffix(".pdbqt")
+                got = _receptor_pdbqt(Path(receptor_pdb), out)
+                if got is None:
+                    raise RuntimeError(
+                        "could not convert the receptor to PDBQT. "
+                        + VINA_SETUP_WINDOWS)
+                cache[key] = str(got)
+                rec_pdbqt = str(got)
 
     lig = _meeko_ligand_pdbqt(smiles, seed=seed)
     if lig is None:

@@ -4224,6 +4224,68 @@ def test_every_prediction_carries_its_reasoning_chain():
     assert "Evidence tier" in joined                     # how far it reaches
 
 
+def _chip_state_block(state):
+    """One route through one factor, with that factor's ChIP state set."""
+    return {
+        "all_routes": {"routes": [
+            {"drug": "Alpha", "acts_on": "VDR", "category": "ligand",
+             "tier": 3, "score": 50.0, "directness": 1,
+             "mechanism": "agonist"}]},
+        "drug_grades": [{"drug_name": "Alpha", "grade": "A"}],
+        "tfs": [{"symbol": "VDR", "n_sites": 2, "best_rel_score": 0.9,
+                 "best_site_tss_offset": -120, "chip_peaks": 0,
+                 "chip_state": state, "drugs": []}],
+        "outcome_estimates": [],
+    }
+
+
+def test_a_factor_the_chip_table_never_covers_is_not_called_unconfirmed():
+    """`not bound` and `not assayed` are identical in a peak count of zero
+    and mean opposite things.
+
+    Reading the count alone turned a factor the table never covers into a
+    motif the table looked for and failed to confirm - which is the one
+    claim this package exists not to make. Scoring already keeps the two
+    apart (pipeline.chip_state); the headline section did not.
+    """
+    silent = " ".join(prd.build(_chip_state_block("not assayed"), goal="up",
+                                has_chip=True)[0].why)
+    assert "unconfirmed" not in silent, (
+        "the table said nothing about this factor, which is not the same "
+        "as looking and finding nothing")
+    assert "never covers this factor" in silent
+
+    # And the real negative still reads as one, or the fix would have
+    # bought its honesty by discarding a measurement.
+    covered = " ".join(prd.build(_chip_state_block("not bound"), goal="up",
+                                 has_chip=True)[0].why)
+    assert "the motif is unconfirmed" in covered
+    assert "does cover this factor" in covered
+
+
+def test_a_chip_lookup_that_failed_is_not_reported_as_a_missing_peak():
+    """The query block records what was ASKED FOR, not what answered.
+
+    Reading it as the answer made a ReMap outage print, for every factor
+    in the headline section, as a motif the table looked for and did not
+    confirm. The ledger is what scoring reads, so the report reads it too.
+    """
+    res, _ = _demo_report()
+    res["query"]["chip_bed"] = "data/remap2022.bed.gz"
+    sources = res["evidence_sources"]["sources"]
+    sources["chip"] = dict(sources.get("chip") or {}, name="chip",
+                           requested=True, ok=False,
+                           detail="ReMap returned an unreadable response")
+
+    md = pipeline.markdown_report(res)
+    assert "Binding:" in md, "the predictions section still renders"
+    assert "no ChIP data in this run" in md
+    for claim in ("does cover this factor", "never covers this factor",
+                  "ChIP data was available"):
+        assert claim not in md, (
+            "a lookup that failed must not read as a measured absence")
+
+
 def test_direction_clause_inverts_with_the_goal():
     """Agonise an activator to raise a gene; block it to lower one."""
     up = prd._direction_clause("activator", "up", False)
@@ -8339,6 +8401,63 @@ def _two_method_result():
     return res
 
 
+def _activity_result(q_value, magnitude_q):
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    res["results"][0]["tf_activity"] = {
+        "n_testable": 3,
+        "scanned": [{"tf": "VDR", "q_value": q_value,
+                     "magnitude_q": magnitude_q}],
+    }
+    return res
+
+
+_NOTHING_MOVED = "No factor with a site in this promoter has a detectably"
+
+
+def test_a_regulon_that_moved_without_a_direction_still_counts_as_moved():
+    """`q_value` is directional and is None for every unsigned regulon -
+    which is every ChIP-derived one.
+
+    Testing it alone made the summary say nothing moved while the same
+    run's activity section reported factors moving at q<0.05 on the
+    magnitude statistic, which exists for exactly this case.
+    """
+    md = pipeline.summary_report(_activity_result(None, 0.001))
+    assert _NOTHING_MOVED not in md, (
+        "an unsigned regulon that moved is not a regulon that did nothing")
+
+
+def test_a_regulon_that_moved_neither_way_still_gets_the_caution():
+    """Or the fix would have bought its honesty by never warning again."""
+    md = pipeline.summary_report(_activity_result(None, 0.9))
+    assert _NOTHING_MOVED in md
+
+
+def test_a_measured_effect_survives_a_salt_in_the_drug_name():
+    """A LINCS hit is stored under the salt-free stem, and `corroboration`
+    groups routes on that stem - but the lookup used the raw route name.
+
+    So for every salt form the one hard measurement the row had went
+    missing: the Measured effect column printed an em-dash and the row fell
+    back to "PREDICTED ... no measurement of your gene supports it", which
+    is the opposite of what the run found.
+    """
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    block = res["results"][0]
+    block["all_routes"] = _as_all_routes([
+        _route("Doxorubicin Hydrochloride", "VDR", 3, 70.0,
+               "TF: orthosteric ligand", "drug_scoring", "VDR agonist")])
+    # As the corpus spells it: the stem, with no salt.
+    block["lincs"] = {"hits": [{"drug": "doxorubicin", "score": -3.1}]}
+
+    rows = {r["drug"]: r for r in pipeline.corroboration(res, top_n=20)}
+    row = rows["Doxorubicin Hydrochloride"]
+    assert row["effect_size"] == -3.1, (
+        "the measurement is kept under the salt-free stem, so it has to be "
+        "found from the salted name the route carries")
+    assert row["expected_basis"].startswith("MEASURED")
+
+
 def test_one_row_per_drug_with_the_methods_counted():
     """The route tables are one row per route, so a drug reached three ways
     appeared three times and the reader could not see it was reached three
@@ -8537,6 +8656,63 @@ def test_a_local_table_carries_no_potency_and_says_so(tmp_path):
     assert all(a["pchembl"] is None for a in acts)
     assert "no potency" in ld.summarise(rows, "VDR")
     assert "unranked rather than scored zero" in ld.summarise(rows, "VDR")
+
+
+def test_a_blank_phase_cell_does_not_pass_the_approval_filter(tmp_path):
+    """The filter was gated on the CELL, so a blank passed while "Phase 1"
+    was dropped.
+
+    DrugCentral and TTD exports routinely have gaps in that column, and a
+    row that slips through enters the screening library, the approved-name
+    set behind `verify_approval`, and the ChEMBL id index as an approved
+    drug.
+    """
+    from generoutes import localdrugs as ld
+    TAB, NL = chr(9), chr(10)
+    p = tmp_path / "gappy.tsv"
+    p.write_text(
+        TAB.join(["name", "clinical_phase", "smiles"]) + NL
+        + TAB.join(["blankphase", "", "CCO"]) + NL
+        + TAB.join(["trialdrug", "Phase 1", "CCN"]) + NL
+        + TAB.join(["realdrug", "Launched", "CCC"]) + NL,
+        encoding="utf-8")
+
+    names = {r["name"] for r in ld.read_table(p, approved_only=True)}
+    assert names == {"realdrug"}, (
+        "a blank phase is not evidence of approval, and was passing while "
+        "an explicit Phase 1 was dropped")
+    # And a table with no phase column at all is still taken whole.
+    q = tmp_path / "nophase.tsv"
+    q.write_text(TAB.join(["name", "smiles"]) + NL
+                 + TAB.join(["unknown", "CCO"]) + NL, encoding="utf-8")
+    assert {r["name"] for r in ld.read_table(q, approved_only=True)} == {
+        "unknown"}
+
+
+def test_a_merged_library_keeps_the_identifier_the_screens_exclude_by(
+        tmp_path):
+    """`merge` hardcoded `chembl_id: None` and `write_table` had no column.
+
+    Every screen keys its known ligands, its potency lookups and - worst -
+    its decoy EXCLUSION on that id, so a library built the documented way
+    let the screen sample its own training actives as decoys. The module
+    comment at the top of _ID_COLS describes this exact harm.
+    """
+    from generoutes import localdrugs as ld
+    TAB, NL = chr(9), chr(10)
+    src = tmp_path / "src.tsv"
+    src.write_text(
+        TAB.join(["name", "clinical_phase", "chembl_id", "smiles"]) + NL
+        + TAB.join(["calcitriol", "Launched", "CHEMBL846", "CCO"]) + NL,
+        encoding="utf-8")
+
+    lib = ld.merge([src])["library"]
+    assert [r["chembl_id"] for r in lib] == ["CHEMBL846"]
+
+    # And it survives the round trip, which is where it was lost before.
+    out = tmp_path / "library.tsv"
+    ld.write_table(lib, out)
+    assert [r["chembl_id"] for r in ld.read_table(out)] == ["CHEMBL846"]
 
 
 def test_the_delimiter_is_sniffed_not_taken_from_the_extension(tmp_path):
@@ -11318,6 +11494,32 @@ def test_the_dinucleotide_shuffle_preserves_composition():
     assert len(sh) == len(seq)
     for base in "ACGT":
         assert abs(sh.count(base) - seq.count(base)) <= 2, base
+
+
+def test_the_dna_feature_scan_honours_the_repeat_mask():
+    """The motif scan treats lowercase as N, because Alu and simple repeats
+    are a major source of spurious hits for GC-rich and homopolymer-like
+    patterns. Those are exactly the patterns here, and this scan uppercased
+    the window and put them all back.
+
+    The shuffled null cannot catch it, because the null is built from the
+    same string. So a quadruplex lying entirely inside a soft-masked repeat
+    was reported as enriched against 200 shuffles, and `candidates`
+    proposed DNA-binding agents on the strength of it - four of the five
+    are cytotoxics.
+    """
+    from generoutes import promoterdna as pd
+    quad = "GGGTGGGTGGGTGGG"
+    flank = "AT" * 15
+    masked = pd.scan_features(flank + quad.lower() + flank)
+    plain = pd.scan_features(flank + quad + flank)
+
+    assert masked["features"]["g4"]["n_observed"] == 0, (
+        "a quadruplex inside a repeat says nothing about this promoter")
+    assert plain["features"]["g4"]["n_observed"] >= 1, (
+        "and an unmasked one is still found")
+    assert masked["length"] == 2 * len(flank), (
+        "the masked bases are not part of what was scanned")
 
 
 def test_a_short_sequence_is_refused_not_scanned():
@@ -15203,6 +15405,65 @@ def test_the_chip_evidence_entry_point_memoises_in_the_clients_cache(tmp_path):
     counts, status = ev.chip_evidence_status(_P(), chip_bed=bed, client=_C())
     assert counts == {"CTCF": 1} and status["ok"]
     assert list((tmp_path / "cache" / "chip_regions").glob("*.json"))
+
+
+def test_the_memo_temp_name_is_never_longer_than_the_name_it_replaces(
+        tmp_path, monkeypatch):
+    """Windows MAX_PATH: a memo path that fits can still fail to write.
+
+    The temp file was `<32 hex>.<pid>.tmp` against a final `<32 hex>.json`,
+    five characters more. Under a deep cache directory the final path
+    measured 256 characters and the temp one 261, so the write raised
+    FileNotFoundError and the memo silently never happened - which reads
+    downstream as a cache that simply never helps.
+    """
+    from pathlib import Path
+    from generoutes import evidence as ev
+
+    # Watched at the rename, so this holds for whatever writes the file
+    # rather than for one way of writing it.
+    swaps = []
+    real_replace = Path.replace
+
+    def recording(self, target):
+        swaps.append((self.name, Path(target).name))
+        return real_replace(self, target)
+
+    monkeypatch.setattr(Path, "replace", recording)
+    bed = _bed(tmp_path, [(150, 160, "CTCF")])
+    memo = tmp_path / "memo"
+    assert ev.peaks_in_region(bed, "1", 101, 200, memo_dir=memo) == {"CTCF": 1}
+
+    assert list((memo / "chip_regions").glob("*.json")), "the memo was written"
+    assert swaps, "and it was put in place by a rename"
+    tmp_name, final_name = swaps[0]
+    assert len(tmp_name) <= len(final_name), (
+        f"temp name {tmp_name!r} is longer than the memo it replaces, "
+        f"{final_name!r}, so the temp path can break a length limit the "
+        f"final path clears")
+
+
+def test_a_memo_that_cannot_be_written_says_so(tmp_path, caplog):
+    """At debug level nobody ever saw this.
+
+    The cost of a failed memo is that every later request for the window
+    re-reads the whole BED - about 72 seconds on ReMap - so a cache that
+    is quietly never written looks like a tool that is simply slow.
+    """
+    import logging
+    from generoutes import evidence as ev
+
+    # A file where the memo directory would go: the mkdir cannot succeed.
+    blocked = tmp_path / "cache"
+    blocked.write_text("not a directory", encoding="utf-8")
+    bed = _bed(tmp_path, [(150, 160, "CTCF")])
+
+    with caplog.at_level(logging.WARNING, logger="generoutes.evidence"):
+        counts = ev.peaks_in_region(bed, "1", 101, 200, memo_dir=blocked)
+
+    assert counts == {"CTCF": 1}, "the counts are correct either way"
+    assert any("could not memoise" in r.getMessage()
+               for r in caplog.records), "and the failure is not silent"
 
 
 def test_an_unreadable_library_is_reported_and_approval_degrades_to_unknown(

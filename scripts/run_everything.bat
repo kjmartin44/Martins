@@ -57,13 +57,31 @@ if defined NEEDSETUP (
 REM --- motif file (required) -------------------------------------------
 if not exist data\jaspar2024.txt (
     echo === Downloading JASPAR motifs ^(~284 KB^) ===
-    curl.exe -fL -o data\jaspar2024.txt "https://jaspar.elixir.no/download/data/2024/CORE/JASPAR2024_CORE_vertebrates_non-redundant_pfms_jaspar.txt"
+    REM To a .part, and curl's exit code is read. A dropped connection
+    REM leaves a partial file at whatever name curl was given, and the
+    REM content check below cannot see that: findstr matches the FIRST
+    REM matrix header and a truncated PFM still has one. So a short
+    REM motif set was kept for ever under the real name, and every
+    REM later run scanned with it and reported fewer sites.
+    curl.exe -fL --retry 3 -o data\jaspar2024.txt.part "https://jaspar.elixir.no/download/data/2024/CORE/JASPAR2024_CORE_vertebrates_non-redundant_pfms_jaspar.txt"
+    set "JOK="
+    if not errorlevel 1 (
+        findstr /m /c:">MA" data\jaspar2024.txt.part >nul 2>&1
+        if not errorlevel 1 set "JOK=1"
+    )
+    if defined JOK (
+        move /y data\jaspar2024.txt.part data\jaspar2024.txt >nul
+    ) else (
+        echo   The JASPAR download was incomplete or is not a PFM file.
+        del data\jaspar2024.txt.part >nul 2>&1
+    )
 )
 REM Checked by CONTENT, not by size. A captive portal or an error page can
 REM be any length, and a 2 MB HTML apology passes a size test.
 findstr /m /c:">MA" data\jaspar2024.txt >nul 2>&1
 if errorlevel 1 (
-    echo JASPAR file is not a PFM file - delete data\jaspar2024.txt and retry.
+    echo The motif file is missing or is not a PFM file. It is required.
+    echo Delete data\jaspar2024.txt if it is there, then run this again.
     pause
     exit /b 1
 )
@@ -71,21 +89,42 @@ if errorlevel 1 (
 REM --- regulon: ChIP-derived if built, else curated ---------------------
 if not exist data\trrust.tsv (
     echo === Downloading TRRUST regulons ^(optional^) ===
-    curl.exe -fL -o data\trrust.tsv "https://www.grnpedia.org/trrust/data/trrust_rawdata.human.tsv"
+    REM The same .part treatment. This one had no check at all, and it
+    REM is wired in below as --regulon-file: an error page there reads
+    REM as a regulon table with nothing in it.
+    curl.exe -fL --retry 3 -o data\trrust.tsv.part "https://www.grnpedia.org/trrust/data/trrust_rawdata.human.tsv"
+    set "TROK="
+    if not errorlevel 1 (
+        findstr /m /c:"Activation" /c:"Repression" data\trrust.tsv.part >nul 2>&1
+        if not errorlevel 1 set "TROK=1"
+    )
+    if defined TROK (
+        move /y data\trrust.tsv.part data\trrust.tsv >nul
+    ) else (
+        echo   TRRUST could not be fetched. Skipped - it is optional.
+        del data\trrust.tsv.part >nul 2>&1
+    )
 )
 REM --- dosage tolerance: is there room to move this gene, and is
 REM --- moving it safe? Neither file is required and neither is large
 REM --- enough to think about, except gnomAD, which is asked for.
 if not exist data\ClinGen_gene_curation_list_GRCh38.tsv (
     echo === Downloading ClinGen dosage curation ^(~250 KB^) ===
-    curl.exe -fL -o data\ClinGen_gene_curation_list_GRCh38.tsv "https://ftp.clinicalgenome.org/ClinGen_gene_curation_list_GRCh38.tsv"
-)
-REM Content, not size: the header is a comment line, so a gene column
-REM in it is the thing that proves this is the curation list.
-findstr /m /c:"Haploinsufficiency Score" data\ClinGen_gene_curation_list_GRCh38.tsv >nul 2>&1
-if errorlevel 1 (
-    echo   ClinGen file is not the curation list - deleting it.
-    del data\ClinGen_gene_curation_list_GRCh38.tsv >nul 2>&1
+    REM Content, not size: the header is a comment line, so a gene
+    REM column in it is what proves this is the curation list. Checked
+    REM on the .part, so a bad download never reaches the real name.
+    curl.exe -fL --retry 3 -o data\ClinGen_gene_curation_list_GRCh38.tsv.part "https://ftp.clinicalgenome.org/ClinGen_gene_curation_list_GRCh38.tsv"
+    set "CGOK="
+    if not errorlevel 1 (
+        findstr /m /c:"Haploinsufficiency Score" data\ClinGen_gene_curation_list_GRCh38.tsv.part >nul 2>&1
+        if not errorlevel 1 set "CGOK=1"
+    )
+    if defined CGOK (
+        move /y data\ClinGen_gene_curation_list_GRCh38.tsv.part data\ClinGen_gene_curation_list_GRCh38.tsv >nul
+    ) else (
+        echo   The ClinGen download is not the curation list. Skipped.
+        del data\ClinGen_gene_curation_list_GRCh38.tsv.part >nul 2>&1
+    )
 )
 
 if not exist data\gnomad.v4.1.constraint_metrics.tsv (
@@ -98,11 +137,20 @@ if not exist data\gnomad.v4.1.constraint_metrics.tsv (
     set /p GETGNOMAD="Download it? Y/n: "
     if /i not "!GETGNOMAD!"=="n" (
         echo === Downloading gnomAD v4.1 constraint ^(91 MB^) ===
-        curl.exe -fL -o data\gnomad.v4.1.constraint_metrics.tsv "https://storage.googleapis.com/gcp-public-data--gnomad/release/4.1/constraint/gnomad.v4.1.constraint_metrics.tsv"
-        findstr /m /c:"lof.oe_ci.upper" data\gnomad.v4.1.constraint_metrics.tsv >nul 2>&1
-        if errorlevel 1 (
-            echo   That is not the constraint table - deleting it.
-            del data\gnomad.v4.1.constraint_metrics.tsv >nul 2>&1
+        REM .part, and curl's exit code is read. The content check is
+        REM on the HEADER, which a truncated 91 MB download still has,
+        REM so on its own it cannot tell a short file from a whole one.
+        curl.exe -fL --retry 3 -o data\gnomad.v4.1.constraint_metrics.tsv.part "https://storage.googleapis.com/gcp-public-data--gnomad/release/4.1/constraint/gnomad.v4.1.constraint_metrics.tsv"
+        set "GNOK="
+        if not errorlevel 1 (
+            findstr /m /c:"lof.oe_ci.upper" data\gnomad.v4.1.constraint_metrics.tsv.part >nul 2>&1
+            if not errorlevel 1 set "GNOK=1"
+        )
+        if defined GNOK (
+            move /y data\gnomad.v4.1.constraint_metrics.tsv.part data\gnomad.v4.1.constraint_metrics.tsv >nul
+        ) else (
+            echo   The constraint table could not be fetched. Skipped.
+            del data\gnomad.v4.1.constraint_metrics.tsv.part >nul 2>&1
         )
     )
 )

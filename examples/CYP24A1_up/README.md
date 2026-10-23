@@ -31,8 +31,8 @@ What the run shows:
   looking at 36 genes, and CYP24A1 is one of them, so this run is not a test of it. In an
   earlier snapshot of this same gene, before the rule, the same drugs were tier 4 and ranked
   10 to 15 of 65, behind nine tier 3 routes built from LINCS signatures and degradation
-  blockers. The retrospective check in `docs/checks.md` found that the routes rank drugs no
-  better than chance once a drug's fame is held equal, and held-out genes are still needed.
+  blockers. The retrospective check found that the routes rank drugs no better than
+  chance once a drug's fame is held equal, and held-out genes are still needed.
 - **The CTD route adds rows.** 13 of the approved drugs shown are reported effects from
   CTD, marked as such, with no mechanism.
 - **Nothing here shows that any listed drug raises CYP24A1.** The routes are

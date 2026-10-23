@@ -329,7 +329,12 @@ def read_table(path, *, approved_only: bool = True) -> list:
                 n_no_smiles += 1
                 continue
             phase = (row.get(ph_c) or "").strip() if ph_c else ""
-            if approved_only and phase:
+            # Gated on the COLUMN, not on the cell. Gating on the cell let
+            # a blank pass while "Phase 1" was dropped, so a row with a gap
+            # in its phase column entered the library as an approved drug.
+            # The "no phase column at all, so nothing to filter on" case is
+            # the `if ph_c else ""` above, and the log line below says so.
+            if approved_only and ph_c:
                 if phase.strip().lower() not in _APPROVED:
                     n_filtered += 1
                     continue
@@ -699,9 +704,15 @@ def merge(paths, *, min_phase: int = 4, include_withdrawn: bool = False,
                 rec = merged[key] = {
                     "key": key, "smiles": r["smiles"],
                     "structure_unparsed": unparsed,
-                    "sources": [], "n_forms": 0,
+                    "sources": [], "n_forms": 0, "chembl_id": None,
                     "_names": [], "_phases": [], "_targets": {},
                 }
+            # The first identifier any form of this molecule carries. The
+            # screens key their known ligands, their potency lookups and -
+            # worst - their decoy EXCLUSION on it, so a merged library with
+            # None everywhere let training actives be sampled as decoys.
+            if rec["chembl_id"] is None and r.get("chembl_id"):
+                rec["chembl_id"] = r["chembl_id"]
             if src not in rec["sources"]:
                 rec["sources"].append(src)
             rec["n_forms"] += 1
@@ -773,7 +784,7 @@ def merge(paths, *, min_phase: int = 4, include_withdrawn: bool = False,
             "phase": ("withdrawn" if is_withdrawn else best_phase[0] or None),
             "withdrawn": is_withdrawn,
             "withdrawn_by": withdrawn_by,
-            "chembl_id": None, "sources": rec["sources"],
+            "chembl_id": rec["chembl_id"], "sources": rec["sources"],
             "n_forms": rec["n_forms"], "key": rec["key"],
             "structure_unparsed": rec["structure_unparsed"],
         })
@@ -861,10 +872,14 @@ def write_table(library: list, path) -> Path:
     path = Path(path)
     with open(path, "w", newline="", encoding="utf-8") as fh:
         w = _csv.writer(fh, delimiter="\t")
-        w.writerow(["name", "clinical_phase", "target", "smiles",
-                    "sources", "n_forms"])
+        # `chembl_id` is a column here because `read_table` reads one
+        # (_ID_COLS), so a library written out and read back keeps the
+        # identifier the screens exclude their own actives by.
+        w.writerow(["name", "clinical_phase", "chembl_id", "target",
+                    "smiles", "sources", "n_forms"])
         for r in library:
             w.writerow([r.get("name") or "", r.get("phase") or "",
+                        r.get("chembl_id") or "",
                         "|".join(r.get("targets") or []), r["smiles"],
                         "|".join(r.get("sources") or []), r.get("n_forms", 1)])
     return path

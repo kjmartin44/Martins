@@ -35,6 +35,58 @@ def _load(name):
 sd = _load("setup_data")
 
 
+
+_HPA_BODY = (chr(9).join(["Gene", "Gene name", "Tissue", "nTPM"]) + chr(10)
+             + chr(9).join(["ENSG1", "CCR5", "spleen", "42.0"]) + chr(10))
+
+
+def _hpa_zip(url, dest, check=None):
+    """Stand in for `download`: a real zip holding the HPA table."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("rna_tissue_consensus.tsv", _HPA_BODY)
+    Path(dest).write_bytes(buf.getvalue())
+
+
+def test_a_half_expanded_hpa_table_is_not_left_where_a_good_one_goes(
+        tmp_path, monkeypatch):
+    """The module promises that "a dropped connection never leaves
+    something that looks like data", and this path broke it.
+
+    The zip download is safe, but the 160 MB expansion wrote straight to
+    the final name. A Ctrl-C or a full disk partway through left a
+    truncated TSV, and `_exists` accepts any non-empty file - so every
+    later run reports "have hpa" and never refetches, and the tissue
+    lookup silently stops at whatever row the cut landed on.
+    """
+    import shutil as _sh
+
+    def dies_partway(src, dst, *a, **kw):
+        dst.write(b"Gene")
+        raise KeyboardInterrupt("someone gave up on a 160 MB expansion")
+
+    monkeypatch.setattr(sd, "download", _hpa_zip)
+    monkeypatch.setattr(_sh, "copyfileobj", dies_partway)
+
+    with pytest.raises(KeyboardInterrupt):
+        sd._fetch_hpa(tmp_path)
+
+    assert not (tmp_path / "rna_tissue_consensus.tsv").exists(), (
+        "a truncated table must not sit at the name the loaders read, "
+        "because _exists would then call it present for ever")
+    assert not sd._exists(tmp_path, "rna_tissue_consensus.tsv")
+
+
+def test_the_hpa_table_is_expanded_when_nothing_goes_wrong(tmp_path,
+                                                           monkeypatch):
+    """Or the guard above could pass by never writing the file at all."""
+    monkeypatch.setattr(sd, "download", _hpa_zip)
+    sd._fetch_hpa(tmp_path)
+    assert (tmp_path / "rna_tissue_consensus.tsv").read_text(
+        encoding="utf-8") == _HPA_BODY
+    assert not list(tmp_path.glob("*.part")), "and no temp file is left"
+
+
 class _Resp:
     def __init__(self, body: bytes, length=True):
         self._b = io.BytesIO(body)
@@ -459,7 +511,7 @@ def test_the_launcher_passes_every_analysis_switch_the_cli_offers():
         "--knockout-gmt", "--lincs-file", "--signature-file", "--prism-file",
         # limits whose defaults are what the launcher wants
         "--upstream-drugs-per-node", "--null-shuffles",
-        # off on purpose: leads with no direction, see docs/checks.md
+        # off on purpose: leads with no direction
         "--regulator-measured",
         # the opposite of a default the launcher wants
         "--no-widen",

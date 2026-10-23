@@ -250,7 +250,11 @@ def get_promoters(client: Client, symbol: str, *, species: str = "homo_sapiens",
             # to the endpoint being down.
             seq = local_sequence(chrom, start, end)
             if seq is None:
-                seq = local_sequence_from_genome(chrom, start, end)
+                # The strand is not optional here. Every consumer reads this
+                # window oriented along the gene - offset_to_tss puts the TSS
+                # at index `upstream` - and the default of 1 would hand back
+                # the plus strand for a minus-strand gene with no error.
+                seq = local_sequence_from_genome(chrom, start, end, strand)
                 if seq is not None:
                     log.info("using the local genome for %s:%d-%d (no "
                              "Ensembl request)", chrom, start, end)

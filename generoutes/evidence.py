@@ -35,8 +35,8 @@ import hashlib
 import io
 import json
 import logging
-import os
 import re
+import tempfile
 from collections import defaultdict
 from pathlib import Path
 
@@ -147,14 +147,45 @@ def peaks_in_region(bed_path: str | Path, chrom: str, start: int, end: int,
                 counts[tf] += 1
     result = dict(counts)
     if memo is not None:
-        try:
-            memo.parent.mkdir(parents=True, exist_ok=True)
-            tmp = memo.with_suffix(f".{os.getpid()}.tmp")
-            tmp.write_text(json.dumps(result), encoding="utf-8")
-            tmp.replace(memo)
-        except OSError as exc:
-            log.debug("could not memoise %s: %s", memo, exc)
+        _write_memo(memo, result)
     return result
+
+
+def _write_memo(memo: Path, result: dict) -> None:
+    """Save one region's counts, through a temp file in the same directory.
+
+    The temp name must not be LONGER than the name it replaces. It used to
+    be `<32 hex>.<pid>.tmp` against a final `<32 hex>.json`, five characters
+    more, so on Windows a memo path that fit under MAX_PATH could still fail
+    to write: at 256 characters the final name was fine and the temp one was
+    261. `tempfile` gives a short name, in the shape `http._write_cache`
+    already uses.
+    """
+    tmp = None
+    try:
+        memo.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile("w", dir=memo.parent, suffix=".tmp",
+                                         delete=False,
+                                         encoding="utf-8") as fh:
+            tmp = Path(fh.name)
+            json.dump(result, fh)
+        tmp.replace(memo)
+        tmp = None
+    except OSError as exc:
+        # Not fatal: the counts this returns are correct either way. Not
+        # silent either, which it was at debug level - the cost is that
+        # every later request for this window re-reads the whole BED, about
+        # 72 seconds on ReMap, and nobody could see why.
+        log.warning("could not memoise the ChIP counts at %s (%s). The "
+                    "counts are correct; the next request for this window "
+                    "reads the BED again instead of reusing them.",
+                    memo, exc)
+    finally:
+        if tmp is not None:
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                log.debug("could not remove the memo temporary file %s", tmp)
 
 
 def region_is_open(bed_path: str | Path, chrom: str, start: int, end: int) -> bool:

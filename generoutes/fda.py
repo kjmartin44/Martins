@@ -141,6 +141,24 @@ def _index() -> frozenset:
     return _INDEX["ob"]
 
 
+def _by_base() -> dict:
+    """Orange Book ingredients grouped by their base name.
+
+    `is_approved` matches through `_index()`, which is keyed on base names,
+    so "clobetasol" is approved on the strength of "CLOBETASOL PROPIONATE".
+    The reach has to be asked the same way or the two disagree - and the
+    Book is keyed on the full spelling, so retrying a miss with the SHORTER
+    base name never hits anything.
+    """
+    if "by_base" not in _INDEX:
+        from . import orangebook
+        out: dict = {}
+        for ing in orangebook.ingredients():
+            out.setdefault(base_name(ing), []).append(ing)
+        _INDEX["by_base"] = out
+    return _INDEX["by_base"]
+
+
 def available() -> bool:
     """True when an Orange Book is loaded, so approval can be told."""
     from . import orangebook
@@ -184,11 +202,19 @@ def is_local_only(name: str) -> bool:
         return _CACHE[ck]
     from . import orangebook
     rec = orangebook.lookup(key)
-    if rec is None:
-        # Matched by base name only: ask again under the salt form's spelling.
-        base = base_name(key)
-        rec = orangebook.lookup(base) if base != key else None
-    ok = bool(rec) and rec.get("reach") == "local only"
+    if rec is not None:
+        ok = rec.get("reach") == "local only"
+    else:
+        # Matched by base name only, which is how `is_approved` found it.
+        # Ask every ingredient sharing that base and call the drug local
+        # only when none of them has a systemic route. The old code retried
+        # with the base name itself, which is shorter than any Book key and
+        # so never matched - a bare "clobetasol" came back approved and not
+        # local, and a topical-only steroid passed the systemic filter.
+        recs = [r for r in (orangebook.lookup(f)
+                            for f in _by_base().get(base_name(key), []))
+                if r]
+        ok = bool(recs) and all(r.get("reach") == "local only" for r in recs)
     _CACHE[ck] = ok
     return ok
 

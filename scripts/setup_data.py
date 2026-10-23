@@ -346,9 +346,17 @@ def _fetch_hpa(data: Path):
         with zipfile.ZipFile(z) as zf:
             member = next(n for n in zf.namelist()
                           if n.lower().endswith("rna_tissue_consensus.tsv"))
-            with zf.open(member) as src, open(
-                    data / "rna_tissue_consensus.tsv", "wb") as out:
+            # Through a .part file, as `download` and unpack_gwas already
+            # do. A Ctrl-C or a full disk partway through the 160 MB
+            # expansion otherwise leaves a truncated TSV at the final name,
+            # and `_exists` accepts any non-empty file - so it is reported
+            # as "have" for ever and the tissue lookup silently stops at
+            # whatever row the cut landed on.
+            dest = data / "rna_tissue_consensus.tsv"
+            tmp = dest.with_suffix(dest.suffix + ".part")
+            with zf.open(member) as src, open(tmp, "wb") as out:
                 shutil.copyfileobj(src, out)
+            tmp.replace(dest)
     finally:
         z.unlink(missing_ok=True)
 
@@ -476,11 +484,11 @@ def _fetch_transcript_sites(data: Path):
             download("https://www.encodeproject.org" + f["href"], dest,
                      check=gzip_opens)
 
-    _run([sys.executable, ROOT / "scripts" / "build_transcript_sites.py",
-          "--targetscan", ts_txt, "--mirtarbase", mtb,
-          "--eclip", peaks,
-          "--annotation", data / "gencode.basic.gtf.gz",
-          "--out", data / "transcript_sites.tsv"])
+    _run_to([sys.executable, ROOT / "scripts" / "build_transcript_sites.py",
+             "--targetscan", ts_txt, "--mirtarbase", mtb,
+             "--eclip", peaks,
+             "--annotation", data / "gencode.basic.gtf.gz"],
+            data / "transcript_sites.tsv")
 
 
 def _run(cmd: list):
@@ -490,11 +498,23 @@ def _run(cmd: list):
         raise SetupError(f"{cmd[2] if len(cmd) > 2 else cmd[0]} failed")
 
 
+def _run_to(cmd: list, out: Path):
+    """Run a builder, writing through `<out>.part` and renaming on success.
+
+    A killed child leaves a truncated table at the final name otherwise,
+    and `_exists` tests only that a file is non-empty - so a half-built
+    table counts as "have" and is never rebuilt.
+    """
+    tmp = Path(out).with_suffix(Path(out).suffix + ".part")
+    _run(list(cmd) + ["--out", tmp])
+    tmp.replace(out)
+
+
 def _build_chip_regulon(data: Path):
-    _run([sys.executable, "-m", "generoutes.chipregulon",
-          "--bed", data / "remap2022.bed.gz",
-          "--gtf", data / "gencode.basic.gtf.gz",
-          "--out", data / "chip_regulon.tsv"])
+    _run_to([sys.executable, "-m", "generoutes.chipregulon",
+             "--bed", data / "remap2022.bed.gz",
+             "--gtf", data / "gencode.basic.gtf.gz"],
+            data / "chip_regulon.tsv")
 
 
 def build_library(data: Path, client=None):

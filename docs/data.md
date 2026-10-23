@@ -780,9 +780,8 @@ The search covers the first eight ranked factors that have no drug of their own 
 lists five drugs per node. `--upstream-factors` and `--upstream-drugs-per-node` change
 those two numbers, and both are recorded in `query`. Replaying the search on 36 saved
 runs found that asking every ranked factor would add at most 41 drugs, and that 157
-drugs passed every filter and were cut by limits of this kind (see
-[checks](checks.md)). The defaults are unchanged, so saved results and runs without
-the options read as before.
+drugs passed every filter and were cut by limits of this kind. The defaults
+are unchanged, so saved results and runs without the options read as before.
 
 **Compatibility:** the upstream search used to ask about drugs for only the 25
 best-scoring nodes of each factor. Those are mostly chromatin and repair
@@ -851,8 +850,7 @@ claim and not a measurement.
 **Compatibility:** scores, tiers and ranks of factor routes change. More routes
 are tier 2, within tier 2 the order now follows potency, and many drugs that
 scored as average now have a measured potency. None of this was tuned against
-an answer key; see [Checks on candidate drugs](checks.md) for what the answer
-keys can and cannot show.
+an answer key.
 
 In each `drug_grades` entry, `evidence.safety_lookup_failed` is true when the
 ChEMBL drug-warning lookup did not complete. `withdrawn` and `black_box` are
@@ -941,8 +939,7 @@ records `null_shuffles`. The evidence verdict has `scan_sites` and
 
 **Compatibility:** the scan no longer calls sites for matrices that cannot reach the
 requested p-value in the window, and each strand has its own threshold, so a rerun of
-a gene lists fewer sites than before and its factor ranking can change. See
-[checks](checks.md#the-motif-scans-chance-estimate).
+a gene lists fewer sites than before and its factor ranking can change.
 
 `improvements.ctd_papers` is `{chemical: number of papers}` for the chemicals CTD records
 as changing the gene's mRNA, and the new category `literature: reported effect` lists one
@@ -980,8 +977,7 @@ run did.
 
 `improvements.reported_links` is built from CTD sentences and not from the action
 list, so a new run has fewer chemicals and some different directions. A chemical that
-modulates another's effect is a known link with no direction. See
-[checks](checks.md#what-ctds-expression-record-contains).
+modulates another's effect is a known link with no direction.
 
 ## Known regulator route
 

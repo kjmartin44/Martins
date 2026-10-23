@@ -112,7 +112,14 @@ def _direction_clause(role: str | None, goal: str, is_direct: bool) -> str:
 
 
 def _promoter_clause(tf: dict | None, has_chip: bool) -> str:
-    """Why this factor is believed to act on your promoter at all."""
+    """Why this factor is believed to act on your promoter at all.
+
+    `has_chip` says a ChIP source ANSWERED, not that one was asked for.
+    `chip_state` says what it answered about THIS factor: a table that
+    does not cover the factor is silent about it, and silence is not
+    absence - the distinction pipeline.chip_state exists to keep, and the
+    one this clause used to throw away by reading only the peak count.
+    """
     if not tf:
         return ("No binding-site evidence for this factor in the scanned "
                 "window — this route came from elsewhere in the analysis.")
@@ -120,6 +127,11 @@ def _promoter_clause(tf: dict | None, has_chip: bool) -> str:
     rel = tf.get("best_rel_score")
     off = tf.get("best_site_tss_offset")
     peaks = tf.get("chip_peaks") or 0
+    # A result saved before the state was recorded carries no `chip_state`.
+    # Fall back to what the old code assumed, so an old result reads as it
+    # always did rather than silently changing meaning.
+    state = tf.get("chip_state") or (
+        "bound" if peaks else "not bound" if has_chip else "not assayed")
     bits = []
     if n:
         where = f"{off:+d} bp from the TSS" if isinstance(off, int) else "in the window"
@@ -128,9 +140,12 @@ def _promoter_clause(tf: dict | None, has_chip: bool) -> str:
     if peaks:
         bits.append(f"**{peaks} ChIP peak(s) confirm it actually binds here** "
                     f"— the strongest link in this chain")
+    elif state == "not bound":
+        bits.append("**no ChIP peak over this promoter**, although the ChIP "
+                    "table does cover this factor — the motif is unconfirmed")
     elif has_chip:
-        bits.append("**no ChIP peak over this promoter**, although ChIP data "
-                    "was available — the motif is unconfirmed")
+        bits.append("no ChIP peak here, but the ChIP table never covers this "
+                    "factor, so its binding was not measured either way")
     else:
         bits.append("no ChIP data in this run, so the site is a sequence "
                     "prediction only")

@@ -183,6 +183,57 @@ def test_load_genome_makes_windows_readable_on_both_strands(clean_genes,
         genes.load_genome(tmp_path / "missing.fa")
 
 
+_MINUS_GTF = NL.join([
+    "#!genome-build GRCh38",
+    TAB.join(["chr1", "H", "transcript", "11", "32", ".", "-", ".",
+              'gene_id "G9"; gene_name "MINUSG"; transcript_id "ENSTM.1"; '
+              'transcript_type "protein_coding"; tag "MANE_Select"; '
+              'tag "Ensembl_canonical";']),
+    ""])
+
+# Runs of five, so the plus strand and its reverse complement cannot be
+# mistaken for each other the way a palindrome like ACGT can.
+_ASYMMETRIC_FASTA = NL.join([">chr1", "AAAAACCCCC", "GGGGGTTTTT",
+                             "AAAAACCCCC", "GGGGGTTTTT", ""])
+
+
+def test_a_minus_strand_promoter_from_the_local_genome_is_gene_oriented(
+        clean_genes, tmp_path):
+    """The window has to come back 5'->3' along the gene, as Ensembl's does.
+
+    `local_sequence_from_genome` defaults to the plus strand, so a caller
+    that leaves the argument off gets a silently wrong window for every
+    minus-strand gene - half the genome - with the TSS no longer at index
+    `upstream` and no error anywhere.
+    """
+    gtf = tmp_path / "m.gtf"
+    gtf.write_text(_MINUS_GTF, encoding="utf-8")
+    fa = tmp_path / "m.fa"
+    fa.write_bytes(_ASYMMETRIC_FASTA.encode("ascii"))
+    genes.load_transcripts_gtf(gtf)
+    genes.load_genome(fa)
+
+    up, down = 5, 3
+    # `None` for the client: with the GTF and the FASTA loaded nothing may
+    # reach Ensembl, and an attempt would raise rather than pass quietly.
+    prom, = genes.get_promoters(None, "MINUSG", upstream=up, downstream=down,
+                                mask="soft")
+    assert prom.strand == -1 and prom.tss == 32
+    assert (prom.start, prom.end) == (30, 37)
+
+    plus = genes.local_sequence_from_genome("1", prom.start, prom.end)
+    assert plus == "CGGGGGTT", "the window as the FASTA stores it"
+    assert prom.sequence == "AACCCCCG", "the same window, along the gene"
+
+    # What every offset in the run depends on: the TSS sits at index
+    # `upstream`, and the base there is the gene's, not the genome's.
+    assert prom.offset_to_tss(up) == 1
+    tss_base = genes.local_sequence_from_genome("1", prom.tss, prom.tss)
+    assert tss_base == "G"
+    assert prom.sequence[up] == tss_base.translate(
+        str.maketrans("ACGT", "TGCA"))
+
+
 def test_autoload_offline_uses_the_files_it_is_given(clean_genes, tmp_path):
     gtf = tmp_path / "g.gtf"
     gtf.write_text(_GTF, encoding="utf-8")
@@ -254,6 +305,65 @@ def test_load_trans_reads_a_table_saved_with_windows_line_endings(
     rows = eqtl.load_trans(path=str(p))
     assert [r.snp for r in rows] == ["rs1", "rs2", "rs3"]
     assert rows[0].n == 30000
+
+
+def test_a_renamed_column_is_refused_rather_than_read_as_an_empty_table(
+        clean_eqtl, tmp_path):
+    """Every row reads its columns by name inside a `continue` handler, so
+    one renamed column drops all 59,800 of them.
+
+    The empty table that leaves is what `trans_support` reports as "this
+    gene has NO significant trans-eQTL (n=31,684 whole blood)" - a parse
+    failure quoting a cohort size, which reads as a measurement.
+    """
+    renamed = _EQTL_HEADER.replace("GeneSymbol", "Gene Symbol")
+    body = TAB.join(["rs1", "3", "46000000", "CCR5", "5.2", "1e-9",
+                     "1e-5", "30000"])
+    p = tmp_path / "renamed.txt"
+    p.write_text(NL.join([renamed, body]) + NL, encoding="utf-8")
+
+    with pytest.raises(ValueError) as exc:
+        eqtl.load_trans(path=str(p))
+    assert "GeneSymbol" in str(exc.value), "it names the column that is gone"
+    assert eqtl._CACHE["rows"] is None, "and nothing empty is cached"
+
+
+def test_a_refused_table_reports_the_question_as_unanswered(clean_eqtl,
+                                                            tmp_path):
+    """The whole point: `checked` stays False, so the ledger and the report
+    say the question was not answered instead of answering it wrongly."""
+    renamed = _EQTL_HEADER.replace("Zscore", "Z-score")
+    body = TAB.join(["rs1", "3", "46000000", "CCR5", "5.2", "1e-9",
+                     "1e-5", "30000"])
+    p = tmp_path / "renamed.txt"
+    p.write_text(NL.join([renamed, body]) + NL, encoding="utf-8")
+
+    got = eqtl.trans_support("CCR2", "CCR5", path=str(p))
+    assert got.checked is False and got.supported is False
+    assert "NOT answered" in got.note
+    assert "NO significant trans-eQTL" not in got.note
+
+
+def test_rows_that_do_not_match_a_good_header_are_refused(clean_eqtl,
+                                                          tmp_path):
+    """The header can name every column and the rows still be unreadable -
+    a truncated copy, or one a spreadsheet re-delimited. An empty table
+    must not reach a caller that will read it as a result."""
+    rows = [",".join(["rs1", "3", "46000000", "CCR5", "5.2", "1e-9",
+                      "1e-5", "30000"])] * 3
+    p = tmp_path / "commas.txt"
+    p.write_text(NL.join([_EQTL_HEADER] + rows) + NL, encoding="utf-8")
+
+    with pytest.raises(ValueError) as exc:
+        eqtl.load_trans(path=str(p))
+    assert "none of them parsed" in str(exc.value)
+
+
+def test_a_header_only_table_is_an_answer_not_a_failure(clean_eqtl, tmp_path):
+    """No data lines is not the same as data lines that would not parse."""
+    p = tmp_path / "empty.txt"
+    p.write_text(_EQTL_HEADER + NL, encoding="utf-8")
+    assert eqtl.load_trans(path=str(p)) == []
 
 
 def test_load_trans_needs_a_source(clean_eqtl):

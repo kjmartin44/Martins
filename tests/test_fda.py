@@ -239,6 +239,54 @@ def test_a_drug_with_only_local_routes_is_local_only(table_with_local):
     assert fda.is_approved("Alitretinoin")
 
 
+@pytest.fixture
+def table_with_esters(monkeypatch):
+    """The Orange Book spells esters out; a candidate list says the moiety.
+
+    `clobetasol` is listed only as CLOBETASOL PROPIONATE and only for
+    topical use. `betamethasone` is listed in two ester forms, one of them
+    systemic. Neither bare name is a key in the Book.
+    """
+    fda.reset()
+    local = {"clobetasol propionate", "betamethasone dipropionate"}
+    systemic = {"betamethasone acetate"}
+    monkeypatch.setattr(fda, "available", lambda: True)
+    monkeypatch.setattr(orangebook, "ingredients",
+                        lambda: sorted(local | systemic))
+    monkeypatch.setattr(
+        orangebook, "lookup",
+        lambda name, path=None: (_LOCAL if name.lower() in local else
+                                 _RECORD if name.lower() in systemic
+                                 else None))
+    yield
+    fda.reset()
+
+
+def test_a_bare_moiety_is_judged_on_the_forms_the_book_actually_lists(
+        table_with_esters):
+    """`is_approved` matches through base names and `is_local_only` did not.
+
+    A miss was retried with the SHORTER base name, which is never a Book
+    key, so a topical-only steroid named by its moiety came back approved
+    and not local - and passed the filter that exists to keep a cream out
+    of a report about a systemic target.
+    """
+    assert fda.is_approved("clobetasol"), "approved through the ester"
+    assert fda.is_local_only("clobetasol"), "and every form is topical"
+    assert not fda.shown("clobetasol", True)
+    assert fda.shown("clobetasol", False), "only hidden when asked"
+
+    # The full spelling is a direct hit and must be unchanged.
+    assert fda.is_local_only("clobetasol propionate")
+
+
+def test_a_moiety_with_one_systemic_form_is_not_local_only(table_with_esters):
+    """Or the fix would hide every drug that has any topical form."""
+    assert fda.is_approved("betamethasone")
+    assert not fda.is_local_only("betamethasone")
+    assert fda.shown("betamethasone", True)
+
+
 def test_shown_hides_a_local_drug_only_when_asked(table_with_local):
     assert fda.shown("Tretinoin", True) and fda.shown("Tretinoin", False)
     assert not fda.shown("Tazarotene", True)

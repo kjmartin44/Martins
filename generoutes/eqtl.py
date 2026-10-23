@@ -56,6 +56,11 @@ CIS_WINDOW = 1_000_000
 
 _CACHE: dict = {"rows": None, "targets": None}
 
+# Every column `load_trans` reads by name. Checked against the header
+# before any row is parsed; see the comment there for why.
+REQUIRED_COLUMNS = ("SNP", "SNPChr", "SNPPos", "GeneSymbol", "Zscore",
+                    "Pvalue", "FDR", "NrSamples")
+
 
 @dataclass
 class TransHit:
@@ -159,11 +164,30 @@ def load_trans(client=None, path: str | None = None) -> list:
     # Strip CR as well as LF. A copy saved on Windows ends its lines with CRLF,
     # and a stray CR on the last header name made every row fail the column
     # lookup, which read as 'no significant trans-eQTLs' for every gene.
+    src = path or "the eQTLGen table"
     rows, targets = [], set()
+    n_data = 0
     with text as fh:
         hdr = fh.readline().rstrip("\r\n").split("\t")
         idx = {c: i for i, c in enumerate(hdr)}
+        # Checked before any row, because every row below reads these
+        # by name inside a `continue` handler. A renamed column drops
+        # all 59,800 of them, and an empty table is what trans_support
+        # reports as "this gene has NO significant trans-eQTL (n=31,684
+        # whole blood)" - a parse failure wearing the clothes of a
+        # measurement, which is the one thing this package must not do.
+        missing = [c for c in REQUIRED_COLUMNS if c not in idx]
+        if missing:
+            raise ValueError(
+                f"{src} is missing the column(s) "
+                f"{', '.join(missing)}, so no row can be read. Either "
+                f"this is not the eQTLGen significant trans-eQTL table "
+                f"or its format changed. The columns found were: "
+                f"{', '.join(hdr[:10])}")
         for line in fh:
+            if not line.strip():
+                continue
+            n_data += 1
             f = line.rstrip("\r\n").split("\t")
             if len(f) < len(hdr):
                 continue
@@ -177,6 +201,18 @@ def load_trans(client=None, path: str | None = None) -> list:
             except (ValueError, KeyError, IndexError):
                 continue
             targets.add(rows[-1].gene)
+
+    # The header named every column and still nothing parsed: a
+    # truncated copy, or one a spreadsheet re-delimited. Same reasoning
+    # as above - an empty table must not reach a caller that will read
+    # it as a result.
+    if n_data and not rows:
+        raise ValueError(
+            f"{src} has {n_data} data line(s) and none of them parsed, "
+            f"although the header names every expected column. The rows "
+            f"do not match it - a truncated or re-delimited copy. "
+            f"Refusing to report an empty table as 'no trans-eQTL for "
+            f"this gene'.")
 
     _CACHE["rows"], _CACHE["targets"] = rows, targets
     log.info("eQTLGen: %d significant trans-eQTLs over %d target genes",

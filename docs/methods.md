@@ -109,8 +109,8 @@ score.** This is the control the retrospective found mattered most. Across
 the saved runs, a baseline that counts only how many OTHER genes record a
 drug predicts CTD with an AUC of 0.93, while the routes score 0.53, and
 among drugs of equal fame the routes fall to chance (0.53 on
-reported-or-not, 0.50 on the right direction). That finding lived in
-[checks](checks.md) and a reader of one gene's report never saw it.
+reported-or-not, 0.50 on the right direction). A reader of one gene's
+report never saw that finding.
 `scripts/build_fame_table.py` counts, over your saved results, how many
 distinct genes name each chemical; a candidate in the top decile loses 15%
 of its score and keeps its tier. Slight on purpose: being well studied is

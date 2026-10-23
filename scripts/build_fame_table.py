@@ -5,8 +5,8 @@ Why this table exists
 The retrospective check found that the ranking's apparent skill is mostly
 drug popularity: a baseline that only counts how many OTHER genes record a
 drug scores AUC 0.93 against CTD, while the routes score 0.53, and among
-drugs of equal fame the routes fall to chance. That finding lived in
-`docs/checks.md` and a reader of one gene's report never saw it.
+drugs of equal fame the routes fall to chance. A reader of one gene's
+report never saw that finding.
 
 This writes `data/ctd_fame.tsv`, which `generoutes.fame` reads so a single
 run can say, per candidate, how many other genes the literature records it

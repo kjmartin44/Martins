@@ -255,6 +255,53 @@ def test_to_dict_returns_a_copy_that_does_not_alias_the_record():
 
 
 # ------------------------------------------------------ launcher: Orange Book
+def test_every_launcher_download_lands_on_a_part_file_first():
+    """curl leaves a partial file at whatever name it is given.
+
+    The big tables already did this - .part, check, move - but the small
+    ones went straight to the final name, and their content checks could
+    not see a truncation: findstr matches the FIRST ">MA", so a short
+    JASPAR file passed. With `if not exist` guarding the download, that
+    short file was then kept for ever and every later run scanned with it.
+    TRRUST had no check at all and is wired in as --regulon-file.
+    """
+    src = (Path(__file__).resolve().parents[1] / "scripts"
+           / "run_everything.bat").read_text(encoding="utf-8")
+    bad = []
+    for line in src.splitlines():
+        t = line.strip()
+        if not t.startswith("curl.exe") or " -o " not in t:
+            continue
+        dest = t.split(" -o ", 1)[1].split()[0]
+        # A .zip validates itself: a truncated one will not open, and both
+        # of the two here are opened, checked and then deleted. A TSV has
+        # no such property - a short one parses fine and is simply wrong.
+        if not dest.endswith(".part") and not dest.endswith(".zip"):
+            bad.append(t[:90])
+    assert not bad, (
+        "these downloads write straight to the name the analysis reads, so "
+        "a dropped connection is kept as data: " + "; ".join(bad))
+
+
+def test_the_small_downloads_are_checked_before_they_are_moved_into_place():
+    """A .part only helps if nothing moves it without looking first."""
+    bs = chr(92)
+    src = (Path(__file__).resolve().parents[1] / "scripts"
+           / "run_everything.bat").read_text(encoding="utf-8")
+    for name, flag in ((f"data{bs}jaspar2024.txt", "JOK"),
+                       (f"data{bs}trrust.tsv", "TROK"),
+                       (f"data{bs}ClinGen_gene_curation_list_GRCh38.tsv",
+                        "CGOK"),
+                       (f"data{bs}gnomad.v4.1.constraint_metrics.tsv",
+                        "GNOK")):
+        assert f"-o {name}.part " in src, name
+        assert f"if defined {flag} (" in src, flag
+        assert f"move /y {name}.part {name}" in src, name
+        assert f"del {name}.part" in src, "and a bad one is removed"
+    # curl's own exit code is read, which is what a dropped connection sets
+    assert src.count("if not errorlevel 1 (") >= 3
+
+
 def test_the_launcher_offers_the_orange_book_only_when_it_is_missing():
     """The prompt follows the gnomAD one: skipped when either file exists,
     default yes, and a download that is not the Orange Book is deleted."""

@@ -78,9 +78,7 @@ evidence that the gene moves, and worse evidence about why.
 | `validation.py` | what `run()` accepts, as a table rather than conditions |
 
 `pipeline.run` is the one function to read first. It is also the largest
-file in the package by a wide margin, which is a known problem and the
-first item under maintainability in the [improvement
-review](improvements.md).
+file in the package by a wide margin, which is a known problem.
 
 ### Finding the factors
 
@@ -284,5 +282,6 @@ Generated from each module's own first docstring line.
 | `validation.py` | Declarative argument checking for the entry points. |
 | `wsldock.py` | Run a Linux docking binary from Windows, through WSL. |
 
-The descriptions come from the modules themselves. `docs/development.md`
-explains how to regenerate this table, and a test fails when it is stale.
+The descriptions come from the modules themselves.
+`scripts/generate_module_table.py` regenerates this table, and a test
+fails when it is stale.

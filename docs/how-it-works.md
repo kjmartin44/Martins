@@ -253,7 +253,7 @@ lists them at every member, marked as acting on the group. And the search covers
 their own and lists five drugs per node, which `--upstream-factors` and
 `--upstream-drugs-per-node` change. Replaying it on 36 saved runs showed that asking
 every ranked factor adds at most 41 drugs, while the limits hide more at busy nodes
-such as NR3C1; see [checks](checks.md#why-the-upstream-group-is-missed).
+such as NR3C1.
 
 ### Known regulators
 
@@ -292,8 +292,7 @@ literature, so agreement between them is not independent. On CYP24A1 the promote
 did not rank VDR, and this route found the vitamin D analogues at VDR itself (the
 upstream search listed some of them only as acting on VDR upstream of other factors).
 It cannot reach a drug that
-ChEMBL does not record at the factor, which is why rifampicin at PXR is missed. See
-[checks](checks.md#what-starting-from-regulators-adds).
+ChEMBL does not record at the factor, which is why rifampicin at PXR is missed.
 
 ### LINCS signatures
 
@@ -457,7 +456,7 @@ expression action describe the chemical changing this gene's mRNA. The rest are 
 expression (26%), a chemical that blocks or promotes another chemical's effect (24%),
 another gene's expression (8%) and effects through another gene (3%). Only the first
 counts as a direction. A chemical that modulates another's effect is kept as a known
-link with no direction. See [checks](checks.md#what-ctds-expression-record-contains).
+link with no direction.
 
 CTD also supplies a route of its own, **literature: reported effect**: one row for
 each chemical CTD records as moving this gene the wanted way (exposures and MeSH headings
@@ -469,12 +468,11 @@ answer key there, and `--no-ctd-route` turns it off. CTD's reports on the gene's
 protein level ("increased expression of the protein") are read too, as a separate
 stream. A chemical reported at both levels is one row, a chemical reported only for
 the protein is a row that says so, and it is not read as a sign that the promoter is
-involved, since protein level can change through stability or translation. See
-[checks](checks.md#using-ctd-directly). The run then compares CTD with LINCS and with the
-routes: a ranked drug that CTD records moving the gene the other way is marked, and drugs on
-which the two sources give opposite directions are listed. A route with no recorded
-direction at its factor for such a drug is lowered to tier 4, and any other is only flagged.
-See [checks](checks.md#when-ctd-records-the-opposite-direction).
+involved, since protein level can change through stability or translation. The run then
+compares CTD with LINCS and with the routes: a ranked drug that CTD records moving the
+gene the other way is marked, and drugs on which the two sources give opposite directions
+are listed. A route with no recorded direction at its factor for such a drug is lowered
+to tier 4, and any other is only flagged.
 
 CTD does not change another route's score. It does set the label of receptor-screen
 hits: an established ligand that CTD already links to the gene is labelled as
@@ -684,5 +682,4 @@ found that the routes recover 9 percent of the approved drugs CTD records as
 raising a gene, rank them no better than chance once a drug's fame is held equal,
 and place the known drug among the candidates for 2 of 6 textbook cases. One
 cause is the scan window, which misses factors that bind far from the start.
-Read a candidate list as a reading order. [Checks on candidate
-drugs](checks.md) has the numbers and their limits.
+Read a candidate list as a reading order.

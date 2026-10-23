@@ -194,4 +194,4 @@ one-page version, `results.json` keeps everything, and `tf_summary.tsv` is the f
 The order within a tier carries less than it looks. Tested against CTD, the ranking orders
 drugs no better than chance once drug fame is held equal, so read the list as a stratified
 pool rather than a priority order, and use the tiers, the method count and the exclusions
-rather than the score. [Checks](checks.md) has the measurement.
+rather than the score.

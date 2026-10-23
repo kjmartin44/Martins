@@ -38,15 +38,8 @@ inspect the evidence behind each route.
 - [Python API](api.md): calling the package from Python.
 - [How the package is laid out](architecture.md): the chain from gene to
   ranked table, and which module owns each step.
-- [Development](development.md): tests, builds, and repository structure.
-- [Validation record](validation.md): what was run and checked, and what that
-  does not show.
 - [Example outputs](../examples/README.md): saved reports, one synthetic and one
   real run.
-- [Checks on candidate drugs](checks.md): whether a person reaches the
-  effective concentration, and whether the routes recover drugs known to move
-  a gene.
-- [Improvement review](improvements.md): remaining work and its priority.
 
 The command and API documentation describes the current implementation. Scores
 and route labels are research heuristics; they do not establish efficacy.

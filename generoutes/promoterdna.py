@@ -227,17 +227,48 @@ def _count(pattern, seq: str) -> tuple:
     return len(kept), kept
 
 
+def _scannable_runs(sequence: str) -> list:
+    """`(offset, run)` for each stretch of unmasked, unambiguous sequence.
+
+    Soft-masked (lowercase) bases are repeats, and the motif scan already
+    drops them - `pwm.encode` treats lowercase as N under `skip_repeats`,
+    because Alu and simple repeats are a major source of spurious hits for
+    GC-rich and homopolymer-like patterns. Those are exactly the patterns
+    here, so uppercasing the window put them all back, and the shuffled
+    null cannot catch it: the null is built from the same string.
+
+    Split rather than deleted, so no feature is called across a junction
+    that does not exist in the genome. `[ACGT]` excludes lowercase and N
+    at once, which is why nothing is uppercased on the way in.
+    """
+    return [(m.start(), m.group(0))
+            for m in re.finditer("[ACGT]+", sequence or "")]
+
+
+def _count_runs(pattern, runs) -> tuple:
+    """`_count` over several runs, with positions in the original frame."""
+    n, pos = 0, []
+    for off, run in runs:
+        c, p = _count(pattern, run)
+        n += c
+        pos.extend(off + i for i in p)
+    return n, pos
+
+
 def scan_features(sequence: str, *, shuffles: int = SHUFFLES,
                   seed: int = 0) -> dict:
     """Sequence features of one promoter, each against a shuffled null."""
-    seq = (sequence or "").upper().replace("N", "")
+    runs = _scannable_runs(sequence)
+    total = sum(len(r) for _, r in runs)
     out: dict = {}
-    if len(seq) < 50:
-        return {"error": f"promoter sequence is {len(seq)} bp, too short "
-                         f"to scan for DNA-binding features"}
+    if total < 50:
+        return {"error": f"promoter sequence has {total} bp of unmasked, "
+                         f"unambiguous sequence, too short to scan for "
+                         f"DNA-binding features"}
 
-    rc = _revcomp(seq)
-    gc = (seq.count("G") + seq.count("C")) / float(len(seq))
+    rc_runs = [(0, _revcomp(r)) for _, r in runs]
+    gc = sum(r.count("G") + r.count("C")
+             for _, r in runs) / float(total)
 
     specs = [
         ("g4", "G-quadruplex", G4, True),
@@ -246,19 +277,22 @@ def scan_features(sequence: str, *, shuffles: int = SHUFFLES,
         ("at_tract", "AT tract (>=6)", AT_TRACT, False),
     ]
     rng = random.Random(seed)
-    shuffled = [_dinucleotide_shuffle(seq, rng) for _ in range(shuffles)]
+    # Each run shuffled on its own, so the null has the same run structure
+    # as the observation and the two are comparable.
+    shuffled = [[(0, _dinucleotide_shuffle(r, rng)) for _, r in runs]
+                for _ in range(shuffles)]
 
     feats: dict = {}
     for key, label, pat, both_strands in specs:
-        n, pos = _count(pat, seq)
+        n, pos = _count_runs(pat, runs)
         if both_strands:
-            n_rc, _ = _count(pat, rc)
+            n_rc, _ = _count_runs(pat, rc_runs)
             n += n_rc
         null = []
-        for s in shuffled:
-            m, _ = _count(pat, s)
+        for sh in shuffled:
+            m, _ = _count_runs(pat, sh)
             if both_strands:
-                m2, _ = _count(pat, _revcomp(s))
+                m2, _ = _count_runs(pat, [(0, _revcomp(r)) for _, r in sh])
                 m += m2
             null.append(m)
         exp = sum(null) / float(len(null)) if null else 0.0
@@ -270,7 +304,7 @@ def scan_features(sequence: str, *, shuffles: int = SHUFFLES,
                              enriched=bool(n > exp and p <= MIN_ENRICHMENT_P))
 
     out["gc_content"] = round(gc, 3)
-    out["length"] = len(seq)
+    out["length"] = total
     out["features"] = {k: f.to_dict() for k, f in feats.items()}
     out["shuffles"] = shuffles
     return out

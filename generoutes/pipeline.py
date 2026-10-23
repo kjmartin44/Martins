@@ -1816,8 +1816,15 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             # check it by hand, once per factor, in identical wording, was
             # advice rather than an answer.
             def _trans_eqtl():
-                any_hit = eqtl_mod.gene_has_any_trans_eqtl(
-                    prom.gene_symbol, client=client)
+                # A table that cannot be read must not take the whole
+                # section with it. `trans_support` reports an unreadable
+                # table per factor as NOT answered, and the ledger reads
+                # `checked`; letting this raise would skip both and leave
+                # the report silent about a source it was asked for.
+                any_hit = _optional(
+                    "eQTLGen index",
+                    lambda: eqtl_mod.gene_has_any_trans_eqtl(
+                        prom.gene_symbol, client=client), False)
                 out = []
                 for r in ranked[:6]:
                     locus = None

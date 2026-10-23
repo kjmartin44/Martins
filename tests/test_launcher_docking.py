@@ -242,6 +242,56 @@ def test_dock_one_vina_converts_the_receptor_once_per_screen(vina_world):
     assert vina_world["receptor_calls"] == 1
 
 
+def test_parallel_compounds_never_convert_the_receptor_at_the_same_time(
+        vina_world, monkeypatch):
+    """`_dock_smiles` runs compounds through a ThreadPoolExecutor.
+
+    The first --jobs threads miss the cache together and used to all
+    launch a converter onto one fixed path. The only guard was that the
+    output file existed, which is true the moment any writer creates it,
+    so a thread could hand Vina a receptor another process was still
+    writing - and Vina exits 0 on a short receptor, so that reaches the
+    gate and the ranking as a wrong number rather than as an error.
+    """
+    import threading as _th
+    import time as _time
+    from concurrent.futures import ThreadPoolExecutor
+
+    jobs = 4
+    gate = _th.Barrier(jobs, timeout=10)
+    tally = _th.Lock()
+    state = {"inside": 0, "most": 0, "calls": 0}
+
+    def slow_receptor(pdb, out):
+        with tally:
+            state["inside"] += 1
+            state["calls"] += 1
+            state["most"] = max(state["most"], state["inside"])
+        _time.sleep(0.05)          # the window a real converter leaves open
+        Path(out).write_text("REC", encoding="utf-8")
+        with tally:
+            state["inside"] -= 1
+        return Path(out)
+
+    monkeypatch.setattr(dk, "_receptor_pdbqt", slow_receptor)
+    cache = {}
+    box = (0, 0, 0, 10, 10, 10)
+
+    def one(smi):
+        gate.wait()                # all of them miss the cache together
+        return dk.dock_one_vina(vina_world["pdb"], smi, box,
+                                receptor_pdbqt_cache=cache)
+
+    with ThreadPoolExecutor(max_workers=jobs) as pool:
+        got = list(pool.map(one, ["CCO", "CCN", "CCC", "CCF"]))
+
+    assert got == [-8.2] * jobs, "every compound still gets its score"
+    assert state["most"] == 1, (
+        "two converters wrote the same receptor file at once, so a thread "
+        "could dock against a half-written one")
+    assert state["calls"] == 1, "and the cache still saves the other three"
+
+
 def test_dock_one_vina_fails_loudly_when_the_receptor_cannot_be_converted(
         vina_world, monkeypatch):
     monkeypatch.setattr(dk, "_receptor_pdbqt", lambda pdb, out: None)

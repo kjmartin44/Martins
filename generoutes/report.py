@@ -1428,9 +1428,16 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
             burdens[g["drug_name"].lower()] = sys_mod.clinical_burden(
                 g["drug_name"], notes=" ".join(g.get("notes") or []),
                 target=g.get("tf_symbol")).to_dict()
+        # Whether a ChIP source was ASKED FOR is a different question from
+        # whether it answered, and only the second one licenses "no peak
+        # here". Scoring reads the ledger for this (pipeline.chip_state);
+        # re-deriving it from the query block made a failed lookup print as
+        # a measured absence.
+        _chip = ((result.get("evidence_sources") or {}).get("sources")
+                 or {}).get("chip") or {}
         preds = pred_mod.build(
             first, goal=goal,
-            has_chip=bool(q.get("chip_bed") or q.get("chip_api")),
+            has_chip=bool(_chip.get("requested") and _chip.get("ok")),
             burdens=burdens)
         L.extend(pred_mod.render(preds, q["gene"], goal,
                                  verdict=result.get("evidence_verdict")))
@@ -3416,6 +3423,8 @@ def _expected_change(routes: list, goal: str, outcomes: dict,
     reached in your tissue. None of the three is available, so a number
     would be fabricated.
     """
+    from .congeners import salt_free_name
+
     want = "increase" if goal == "up" else "decrease"
     drug = (routes[0].get("drug") or "").strip().lower()
 
@@ -3439,7 +3448,12 @@ def _expected_change(routes: list, goal: str, outcomes: dict,
             "gene is responsive": o.get("p_responsive"),
         }
 
-    m = measured.get(drug)
+    # `measured` is keyed on the salt-free stem, because that is how
+    # _measured_effects stores it and how `corroboration` groups routes.
+    # Looked up by the raw name, every salt form missed - so the one hard
+    # measurement a row had printed as an em-dash and the row fell back to
+    # "PREDICTED ... no measurement of your gene supports it".
+    m = measured.get(salt_free_name(drug))
     if m is not None:
         out["effect"] = m["score"]
         out["effect_basis"] = m["basis"]
@@ -4121,9 +4135,16 @@ def summary_report(result: dict, top_n: int = SUMMARY_TOP) -> str:
                 f"have no approved ligand ({names}) and appear in no drug "
                 f"table. The gene-specific signal is partly in them.")
         act = res.get("tf_activity") or {}
+        # Both corrected values count. `q_value` is directional and is
+        # None for every unsigned regulon - which is every ChIP-derived
+        # one - so testing it alone said "nothing moved" about a scan
+        # whose only available statistic is `magnitude_q`. tfactivity
+        # itself counts those as moved (see its summarise), so the two
+        # halves of one report contradicted each other.
         if act.get("n_testable") and not [
                 a for a in (act.get("scanned") or [])
-                if _sig_q(a.get("q_value")) < 0.05]:
+                if _sig_q(a.get("q_value")) < 0.05
+                or _sig_q(a.get("magnitude_q")) < 0.05]:
             cautions.append(
                 "No factor with a site in this promoter has a detectably "
                 "perturbed regulon in the tissue checked, so these routes "

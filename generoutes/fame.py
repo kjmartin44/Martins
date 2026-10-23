@@ -2,17 +2,17 @@
 
 The finding this exists to surface
 ----------------------------------
-`docs/checks.md` records the hardest result in this package: the ranking's
-apparent skill is mostly drug popularity. A baseline that counts only how
-many OTHER genes record a drug scores an AUC of 0.93 against CTD; the
-routes score 0.53. Among drugs recorded for three or more other genes,
-where fame no longer separates the groups, the routes average 0.53 on the
-reported-or-not test and 0.50 on the right-direction test. Both are chance.
+The hardest result in this package is that the ranking's apparent skill is
+mostly drug popularity. A baseline that counts only how many OTHER genes
+record a drug scores an AUC of 0.93 against CTD; the routes score 0.53.
+Among drugs recorded for three or more other genes, where fame no longer
+separates the groups, the routes average 0.53 on the reported-or-not test
+and 0.50 on the right-direction test. Both are chance.
 
-That was measured across many runs and written in a document. A reader of
-one gene's report never saw it, and could not tell whether the compound at
-the top was there because of their gene or because it is famous. This puts
-the number on the row.
+That was measured across many runs. A reader of one gene's report never
+saw it, and could not tell whether the compound at the top was there
+because of their gene or because it is famous. This puts the number on
+the row.
 
 What a count means, and what it does not
 ----------------------------------------
