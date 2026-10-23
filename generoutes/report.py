@@ -3026,8 +3026,13 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
             rows.sort(key=lambda r: -(r[1].get("interaction_score") or 0))
             for sym, d in rows[:top_n]:
                 score = d.get("interaction_score")
+                # `is not None`, not truth: a recorded score of exactly
+                # 0.0 is falsy and printed as the same em-dash used for a
+                # score nobody recorded. The sort key above reads the
+                # real number, so the row was ordered on a value the
+                # table then declined to show.
                 L.append(f"| {sym} | {d['name']} | {d.get('sources') or '—'} | "
-                         f"{round(score, 2) if score else '—'} |")
+                         f"{round(score, 2) if score is not None else '—'} |")
             if len(rows) > top_n:
                 L.append(f"| … {len(rows) - top_n} more | | | |")
             L.append("")
@@ -3547,6 +3552,13 @@ def corroboration(result: dict, top_n: int = 20) -> list:
 
     grouped: dict = {}
     order: list = []
+    # Every distinct compound the run found, before the cap. The table
+    # heading used `len(rows)`, which is the capped number, so a run with
+    # 60 compounds printed "All 20 candidates" and nothing said that 40
+    # were left out.
+    n_candidates = len({salt_free_name((r.get("drug") or "").lower())
+                        for r in routes
+                        if salt_free_name((r.get("drug") or "").lower())})
     for r in routes:
         stem = salt_free_name((r.get("drug") or "").lower())
         if not stem:
@@ -3622,6 +3634,8 @@ def corroboration(result: dict, top_n: int = 20) -> list:
                           if exp.get("direction_measured") else None),
             "limiting_step": exp.get("limiting_step"),
             "n_routes": len(rs),
+            # How many the run found in all, so a capped table can say so.
+            "n_candidates": n_candidates,
             "breadth": _breadth,
             "mitotic_disruptor": sys_mod.is_mitotic_disruptor(g["drug"]),
         })
@@ -3648,7 +3662,12 @@ def corroboration_table(result: dict, top_n: int = 20) -> list:
     goal = result["query"].get("goal", "up")
     gene = result["query"]["gene"]
 
-    L = [f"## All {len(rows)} candidates, and which methods found each", ""]
+    total = rows[0].get("n_candidates", len(rows)) if rows else 0
+    head = (f"## All {total} candidates, and which methods found each"
+            if total <= len(rows) else
+            f"## The strongest {len(rows)} of {total} candidates, and which "
+            f"methods found each")
+    L = [head, ""]
     L.append("One row per compound rather than per route, so a drug reached "
              "several ways is visible as one candidate with several "
              "supports.")
@@ -3750,8 +3769,10 @@ def corroboration_table(result: dict, top_n: int = 20) -> list:
 
     multi = [r for r in rows if r["n_methods"] > 1]
     if multi:
-        L.append(f"**{len(multi)} of {len(rows)} were found by more than one "
-                 f"method.** These methods share little - a curated ligand "
+        # "of the N listed here", because the table may be capped and the
+        # fraction is over what is shown, not over what the run found.
+        L.append(f"**{len(multi)} of the {len(rows)} listed here were found "
+                 f"by more than one method.** These methods share little - a curated ligand "
                  f"annotation, a measured expression signature, a regulon "
                  f"statistic, a pocket shape - so they fail for unrelated "
                  f"reasons, and agreement between them is worth more than a "
@@ -4095,7 +4116,16 @@ def summary_report(result: dict, top_n: int = SUMMARY_TOP) -> str:
                 if len(absent) <= 4 and any(n for _, n in _needs):
                     _them = ("these sources" if len(absent) > 1
                              else "this source")
-                    L.append(f"- **Not asked, and what each would need** "
+                    # "Did not run", not "not asked": this bucket holds
+                    # two kinds, and `protein_abundance` is the second.
+                    # One was never switched on, the other is on by
+                    # default and found no table to read - and the line
+                    # said "not asked" while the text beside it said "on
+                    # by default", which is a contradiction the reader
+                    # has to resolve. What they share is that the source
+                    # did not run, so that is what the heading says; the
+                    # per-source note below gives the reason.
+                    L.append(f"- **Did not run, and what each would need** "
                              f"(nothing below is evidence that {_them} "
                              f"would have found nothing):")
                     for _k, _n in _needs:
@@ -4104,7 +4134,7 @@ def summary_report(result: dict, top_n: int = SUMMARY_TOP) -> str:
                 else:
                     L.append(f"- **Not available here:** "
                              f"{', '.join(absent)}. No input for these on "
-                             f"this machine, so they were never asked. "
+                             f"this machine, so none of them ran. "
                              f"`report.md` names the file or flag each one "
                              f"needs.")
             L.append("")

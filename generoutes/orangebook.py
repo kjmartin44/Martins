@@ -57,6 +57,7 @@ from __future__ import annotations
 import csv
 import io
 import logging
+import re
 import zipfile
 from pathlib import Path
 
@@ -90,11 +91,32 @@ LOCAL_ONLY_ROUTES = frozenset({
 SYSTEMIC_ROUTES = frozenset({
     "ORAL", "INTRAVENOUS", "INTRAMUSCULAR", "SUBCUTANEOUS",
     "TRANSDERMAL", "INTRAPERITONEAL", "INTRATHECAL", "PARENTERAL",
-    "INJECTION", "INTRA-ARTERIAL", "EPIDURAL", "IMPLANTATION",
+    "INJECTION", "INTRA-ARTERIAL", "EPIDURAL", "IMPLANTATION", "IM-IV",
 })
 
 _PRODUCTS: dict = {}
 _LOADED: str | None = None
+
+
+def split_routes(text: str) -> list:
+    """The routes in one Orange Book route field, upper case.
+
+    ORAL-28, ORAL-21 and ORAL-20 are oral contraceptive packs (the number is
+    the days in the pack), so they are read as ORAL. Left alone they were
+    unclassified, and a drug sold only as such a pack had no known reach.
+    """
+    return [re.sub(r"^(ORAL)-\d+$", r"\1", r.strip().upper())
+            for r in text.split(",") if r.strip()]
+
+
+def route_vocabulary(path=None) -> set:
+    """Every route the Book on disk uses, or an empty set when there is none."""
+    p = resolve(path)
+    if not p:
+        return set()
+    return {r for row in _rows(Path(p))
+            for r in split_routes((row.get("DF;Route") or "")
+                                  .partition(";")[2])}
 
 # Whether the absence of the file has already been reported. `load` is
 # called once per drug through `lookup`, and without this the same
@@ -183,7 +205,7 @@ def load(path=None) -> int:
         parts = [i.strip() for i in ingredient.split(";") if i.strip()]
         df_route = (row.get("DF;Route") or "").strip()
         form, _, route = df_route.partition(";")
-        routes = [r.strip().upper() for r in route.split(",") if r.strip()]
+        routes = split_routes(route)
 
         for part in parts:
             key = salt_free_name(part.lower())

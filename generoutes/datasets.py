@@ -334,7 +334,11 @@ def registry() -> tuple:
             notes=("decryptE and ProTargetMiner answer this. LINCS P100 "
                    "(~90 phosphopeptides) and CPTAC (no drug arm) do not.",
                    "Columns: drug, protein, log2fc [, cell_line, dose, "
-                   "time, source].",),
+                   "time, source].",
+                   "`python scripts/build_protein_abundance.py EXPORT` "
+                   "converts either export into that layout. It keeps "
+                   "every replicate, because a compound with one "
+                   "observation is not reported.",),
         ),
         Dataset(
             key="transcript_expression",

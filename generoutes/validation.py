@@ -62,6 +62,7 @@ class Spec:
     exclusive_max: bool = False
     choices: tuple = ()
     must_exist: bool = False                   # for kind="path"
+    length: int | None = None                  # exact, for list/tuple
     why: str = ""
 
 
@@ -130,6 +131,12 @@ def check(name: str, value, spec: Spec) -> None:
                 rel = "less than" if spec.exclusive_max else "at most"
                 raise ValueError(f"{name} must be {rel} {spec.maximum}, "
                                  f"got {value!r}.{tail}")
+
+    if spec.length is not None and spec.kind in ("list", "tuple"):
+        if len(value) != spec.length:
+            raise ValueError(
+                f"{name} must have exactly {spec.length} item(s), got "
+                f"{len(value)}.{tail}")
 
     if spec.kind == "path" and spec.must_exist:
         # FileNotFoundError rather than ValueError: a missing file is a

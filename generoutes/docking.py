@@ -2562,7 +2562,7 @@ def load_bundle(bundle_dir) -> dict:
 
 def dock_from_bundle(bundle_dir, *, top_n: int = 25,
                      exhaustiveness: int = 8, seed: int = 0,
-                     score_fn=None, cpu: int = 1,
+                     score_fn=None, cpu: int = 1, jobs: int = 1,
                      strip_counter_ions: bool = False) -> dict:
     """Run the validated screen from a bundle, with no network at all."""
     import random
@@ -2580,7 +2580,8 @@ def dock_from_bundle(bundle_dir, *, top_n: int = 25,
         Path(m["_receptor"]), library, target=m.get("symbol", "?"),
         actives=actives, decoys=decoys, top_n=top_n,
         exhaustiveness=exhaustiveness, seed=seed, score_fn=score_fn,
-        box=m["_box"], cpu=cpu, strip_counter_ions=strip_counter_ions)
+        box=m["_box"], cpu=cpu, jobs=jobs,
+        strip_counter_ions=strip_counter_ions)
     out = run.to_dict()
     out["pocket"] = {k: m.get(k) for k in
                      ("pdb_id", "ligand_resname", "state", "note")}
@@ -2932,9 +2933,12 @@ def main(argv=None) -> int:
             print()
             print(SETUP)
             return 1
+        # --jobs reaches this path too. It did not, so the documented
+        # "prepare here, dock there" route ran one compound at a time
+        # against a flag whose own help promises about 2.5x.
         res = dock_from_bundle(args.bundle, top_n=args.top,
                                exhaustiveness=args.exhaustiveness,
-                               cpu=args.cpu,
+                               cpu=args.cpu, jobs=args.jobs,
                                strip_counter_ions=args.strip_counter_ions)
         _report(res, args.top)
         if args.out:

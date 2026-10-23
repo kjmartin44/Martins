@@ -472,8 +472,16 @@ PHASE_ORDER = {"launched": 4, "approved": 4, "4": 4, "4.0": 4,
 WITHDRAWN = {"withdrawn", "withdrawn from market", "suspended"}
 
 
-def parent_key(smiles: str) -> str | None:
-    """A deduplication key that survives salt and charge differences.
+def parent_and_key(smiles: str) -> tuple:
+    """`(parent SMILES, dedup key)`, or `(None, None)`.
+
+    Both come out of one standardisation because both need it and it is
+    the expensive part. `merge` kept the key and threw the structure
+    away, storing whichever row created the group - so a molecule
+    collapsed "on the parent structure", as `explain_counts` tells the
+    reader, could carry a salt form's SMILES. 98 of 2,119 in the shipped
+    library did, alendronic acid with its sodium among them, and that
+    SMILES is what docking and the fingerprint screens then use.
 
     An InChIKey alone does NOT merge salts: the counterion is part of the
     molecule, so metformin and metformin hydrochloride get entirely
@@ -492,22 +500,22 @@ def parent_key(smiles: str) -> str | None:
         from rdkit import Chem, RDLogger
         from rdkit.Chem.MolStandardize import rdMolStandardize
     except ImportError:
-        return None
+        return None, None
     RDLogger.DisableLog("rdApp.*")
     try:
         mol = Chem.MolFromSmiles(smiles)
         if mol is None:
-            return None
+            return None, None
         mol = rdMolStandardize.ChargeParent(mol)
         mol = rdMolStandardize.TautomerEnumerator().Canonicalize(mol)
         key = Chem.MolToInchiKey(mol)
-        return key[:14] if key else None
+        return (Chem.MolToSmiles(mol), key[:14]) if key else (None, None)
     except Exception as exc:                                # noqa: BLE001
         # One structure RDKit cannot standardise gets no key, so it is
         # matched by name only. Per molecule, so debug rather than warning.
         log.debug("no structure key for %s: %s", smiles[:40],
                   type(exc).__name__)
-        return None
+        return None, None
 
 
 # ===================================================================== #
@@ -646,6 +654,11 @@ def _target_conflict(by_source: dict) -> dict | None:
     }
 
 
+def parent_key(smiles: str) -> str | None:
+    """The dedup key alone, for callers that do not need the structure."""
+    return parent_and_key(smiles)[1]
+
+
 def merge(paths, *, min_phase: int = 4, include_withdrawn: bool = False,
           fallback_name_key: bool = True) -> dict:
     """Combine several drug tables into one deduplicated library.
@@ -683,7 +696,7 @@ def merge(paths, *, min_phase: int = 4, include_withdrawn: bool = False,
             n_rows += 1
             raw_phase = (r.get("phase") or "").strip().lower()
             phase = PHASE_ORDER.get(raw_phase, 0)
-            key = parent_key(r["smiles"])
+            parent, key = parent_and_key(r["smiles"])
             unparsed = False
             if key is None:
                 if not fallback_name_key:
@@ -702,7 +715,13 @@ def merge(paths, *, min_phase: int = 4, include_withdrawn: bool = False,
             else:
                 added += 1
                 rec = merged[key] = {
-                    "key": key, "smiles": r["smiles"],
+                    # The standardised parent, not whichever salt form
+                    # happened to create the group. `explain_counts` tells
+                    # the reader the forms were "collapsed on the parent
+                    # structure", and this is what makes that true - it is
+                    # also the structure docking and the fingerprint
+                    # screens use for the molecule.
+                    "key": key, "smiles": parent or r["smiles"],
                     "structure_unparsed": unparsed,
                     "sources": [], "n_forms": 0, "chembl_id": None,
                     "_names": [], "_phases": [], "_targets": {},

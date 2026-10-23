@@ -335,7 +335,13 @@ RUN_SPECS: dict = {
                                 why="null draws for the activity score. "
                                     "0 means no empirical p-value is "
                                     "computed, not that it is 1."),
-    "lincs_gmt": _V("tuple", optional=True),
+    "lincs_gmt": _V("tuple", optional=True, length=2,
+                    why="the up file and the down file, in that order. "
+                        "The CLI's nargs=2 enforces this; a caller "
+                        "coming through the Python API used to reach "
+                        "the unpacking below and get an IndexError "
+                        "from a line that does not mention the "
+                        "argument."),
     "knockout_gmt": _V("tuple", optional=True),
     "expression_file": _V("path", optional=True, must_exist=True),
     "promoter_fasta": _V("path", optional=True),

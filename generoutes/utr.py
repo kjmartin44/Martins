@@ -72,8 +72,10 @@ TOP_MAX_PYRIMIDINES = 15
 
 
 def _shuffle(seq: str, rng) -> str:
-    from .promoterdna import _dinucleotide_shuffle
-    return _dinucleotide_shuffle(seq, rng)
+    # The Altschul and Erikson construction in motifs, which is the one
+    # the motif null uses and the one with a test on its last-exit rule.
+    from .motifs import dinucleotide_shuffle
+    return dinucleotide_shuffle(seq, rng)
 
 
 def find_uorfs(five_prime: str) -> list[dict]:

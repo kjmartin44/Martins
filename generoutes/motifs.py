@@ -143,28 +143,22 @@ def load_motifs(client: Client, pfm_file: str | Path | None = None,
     return motifs
 
 
-# --------------------------------------------------------------------- scan
-def scan_promoter(sequence: str, motifs: list[Motif], *, pvalue: float = 1e-4,
-                  min_ic: float = 6.0, offset_fn=None,
-                  background: np.ndarray | None = None,
-                  skip_repeats: bool = False,
-                  info: dict | None = None) -> list[Hit]:
-    """Scan `sequence` with every motif at a fixed per-position p-value.
+def prepare_motifs(motifs: list, bg, pvalue: float, min_ic: float) -> tuple:
+    """`(rows, counts)`: everything about a motif that the sequence cannot change.
 
-    `min_ic` drops very low-information matrices (< ~6 bits). Those produce
-    hits every few dozen bases in any sequence and only add noise.
+    The information content, the PSSM, its score range and the two score
+    distributions with their thresholds depend only on the matrix, the
+    background and the p-value - never on the bases being scanned. Pulling
+    them out lets `empirical_null` do this once instead of once per
+    shuffle: measured on data/jaspar2024.txt over a 1200 bp window, it is
+    0.36s of each 0.62s scan, so about 11s of the 19s a 30-shuffle null
+    used to spend.
 
-    Each strand has its own threshold, and a strand that cannot reach
-    `pvalue` in this window (its best possible match is more common than
-    that) is not scanned. `info`, when given, is filled with how many
-    matrices were scanned, how many were below `min_ic`, and how many could
-    not reach the p-value on either strand.
+    The background is safe to share across shuffles because shuffling
+    permutes within runs and preserves the base composition exactly.
     """
     counts = {"n_scanned": 0, "n_low_information": 0, "n_unreachable": 0}
-    enc = pwm.encode(sequence, skip_repeats=skip_repeats)
-    bg = pwm.background_from_encoding(enc) if background is None else background
-    hits: list[Hit] = []
-
+    rows = []
     for motif in motifs:
         ic = pwm.information_content(motif.counts, bg)
         if ic < min_ic:
@@ -182,6 +176,39 @@ def scan_promoter(sequence: str, motifs: list[Motif], *, pvalue: float = 1e-4,
             counts["n_unreachable"] += 1
             continue
         counts["n_scanned"] += 1
+        rows.append((motif, pssm, lo, hi, base, tail, base_r, tail_r,
+                     thr, thr_r))
+    return rows, counts
+
+
+# --------------------------------------------------------------------- scan
+def scan_promoter(sequence: str, motifs: list[Motif], *, pvalue: float = 1e-4,
+                  min_ic: float = 6.0, offset_fn=None,
+                  background: np.ndarray | None = None,
+                  skip_repeats: bool = False,
+                  prepared: tuple | None = None,
+                  info: dict | None = None) -> list[Hit]:
+    """Scan `sequence` with every motif at a fixed per-position p-value.
+
+    `min_ic` drops very low-information matrices (< ~6 bits). Those produce
+    hits every few dozen bases in any sequence and only add noise.
+
+    Each strand has its own threshold, and a strand that cannot reach
+    `pvalue` in this window (its best possible match is more common than
+    that) is not scanned. `info`, when given, is filled with how many
+    matrices were scanned, how many were below `min_ic`, and how many could
+    not reach the p-value on either strand.
+    """
+    enc = pwm.encode(sequence, skip_repeats=skip_repeats)
+    bg = pwm.background_from_encoding(enc) if background is None else background
+    if prepared is None:
+        prepared, counts = prepare_motifs(motifs, bg, pvalue, min_ic)
+    else:
+        prepared, counts = prepared
+    hits: list[Hit] = []
+
+    for (motif, pssm, lo, hi, base, tail, base_r, tail_r,
+         thr, thr_r) in prepared:
 
         for start, end, strand, score in pwm.scan_strands(enc, pssm, thr, thr_r):
             sub = sequence[start:end]
@@ -350,12 +377,18 @@ def empirical_null(sequence: str, motifs: list, *, pvalue: float,
     """
     import random
     rng = random.Random(seed)
+    # Prepared once. Shuffling permutes within runs, so every copy has the
+    # same base composition and therefore the same background - and the
+    # whole per-motif precompute depends on nothing else.
+    bg = pwm.background_from_encoding(
+        pwm.encode(sequence, skip_repeats=skip_repeats))
+    prepared = prepare_motifs(motifs, bg, pvalue, min_ic)
     counts, scores = [], []
     for _ in range(max(0, n_shuffles)):
         shuffled = shuffle_scannable(sequence, rng, skip_repeats=skip_repeats)
         hits = collapse_overlapping(scan_promoter(
             shuffled, motifs, pvalue=pvalue, min_ic=min_ic,
-            skip_repeats=skip_repeats))
+            background=bg, prepared=prepared, skip_repeats=skip_repeats))
         counts.append(len(hits))
         scores.append(sorted(h.pvalue for h in hits))
     return {"counts": counts, "scores": scores, "n_shuffles": len(counts),
@@ -397,6 +430,25 @@ def occupancy_partition(factors, quality: dict) -> dict:
     expected = quality.get("expected_by_chance")
     if expected is None or not n:
         return {}
+    # `expected_by_chance` counts chance SITES over the window; every
+    # count below counts FACTORS. A factor can hold several sites and one
+    # site can name several factors, so the two are not interchangeable -
+    # the shipped demo has 14 sites for 10 factors, a 40% gap, and the
+    # proportions below were off by that ratio.
+    #
+    # Converted through the chance SHARE of the scan, the one quantity
+    # both scales agree on. That also survives `rows` being a filtered
+    # list - --proliferation drops cell-cycle factors after `observed`
+    # was measured on the whole scan, which otherwise shrank the
+    # denominator without shrinking the numerator and could flip
+    # `saturated` on a scan that is fine.
+    # With no `observed` there is nothing to convert through, so the
+    # value is taken as already being on the factor scale - which is what
+    # a caller handing over a bare expectation means, and what this did
+    # before the conversion existed.
+    observed = quality.get("observed") or 0
+    expected_factors = (min(1.0, expected / float(observed)) * n
+                        if observed else expected)
     out = {
         "n_factors": n,
         "n_supported": len(supported),
@@ -404,23 +456,26 @@ def occupancy_partition(factors, quality: dict) -> dict:
         "supported": sorted(f.get("symbol") or "?" for f in supported),
         "unsupported": sorted(f.get("symbol") or "?" for f in bare),
         "expected_by_chance": expected,
+        # The same expectation on the scale the counts above use.
+        "expected_factors": round(expected_factors, 2),
     }
     # Every chance hit is assumed to land among the unsupported sites.
     # That is the pessimistic reading for them and the generous one for
     # the measured sites, and it is the right way round: the cost of
     # over-trusting an unmeasured site is a wasted experiment.
-    out["fdp_unsupported"] = (round(min(1.0, expected / len(bare)), 3)
-                              if bare else 0.0)
+    out["fdp_unsupported"] = (
+        round(min(1.0, expected_factors / len(bare)), 3) if bare else 0.0)
     # Capped, because this is a proportion. The surplus spilling past
     # the unmeasured sites is real, but once it fills the measured ones
     # too the scan has no clean subset left and the number stops
     # carrying information; `saturated` below is what to read instead.
     out["fdp_supported"] = round(
-        min(1.0, max(0.0, (expected - min(expected, len(bare)))
+        min(1.0, max(0.0, (expected_factors
+                           - min(expected_factors, len(bare)))
                      / len(supported))), 3
     ) if supported else None
     # True when chance alone accounts for every site, measured or not.
-    out["saturated"] = bool(expected >= n)
+    out["saturated"] = bool(expected_factors >= n)
     out["drugged_unsupported"] = sorted(
         f.get("symbol") or "?" for f in bare if f.get("drugs"))
     out["drugged_supported"] = sorted(
@@ -443,16 +498,17 @@ def _occupancy_note(o: dict) -> str:
     if o.get("saturated"):
         return (
             f"This scan is too loose for the split to help. Chance alone "
-            f"accounts for {o['expected_by_chance']} sites against {n} "
-            f"found, so there is no subset of it - measured or not - that "
+            f"accounts for about {o['expected_factors']:.0f} of the {n} "
+            f"factors here, so there is no subset - measured or not - that "
             f"chance does not already explain, and {s} measured peaks "
             f"cannot rescue it. A stricter p-value is the fix; nothing "
             f"that can be done to this hit list is.")
     parts = [
         f"{s} of {n} factors have a measured peak over this window and {b} "
         f"do not. A shuffled copy of the window cannot produce a peak, so "
-        f"the {o['expected_by_chance']} sites the null expects by chance "
-        f"are attributed to those {b}: about "
+        f"the share of this scan the null expects by chance - about "
+        f"{o['expected_factors']:.0f} of its {n} factors - is attributed "
+        f"to those {b}: about "
         f"{o['fdp_unsupported']:.0%} of them are consistent with chance, "
         f"against roughly {o['fdp_supported']:.0%} of the measured ones."]
     if o["drugged_unsupported"]:

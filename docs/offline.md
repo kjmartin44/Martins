@@ -304,7 +304,7 @@ Individual checks, when you want one:
 python -m generoutes.localpotency              # potency tables
 python -m generoutes.docking --check           # binary and rdkit
 python -m generoutes.wsldock                   # docking through WSL
-python -m generoutes.audit                     # curated tables
+python -m generoutes.audit                     # curated tables, see curated-tables.md
 ```
 
 ## What offline cannot give you

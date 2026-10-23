@@ -398,8 +398,14 @@ def render(preds: list, gene: str, goal: str, *, verdict: dict | None = None
                     if "dual-role" in roles else ".") )
         L.append("")
 
+    # "all of them" has to mean all of them. The set is built from the
+    # rows that HAVE a falsifier, and one is only set where an outcome
+    # estimate exists for that pair - so a list mixing a factor route with
+    # direct ones routinely had exactly one, and the single experiment was
+    # claimed to settle rows it says nothing about.
     falsifiers = {p.falsifier for p in preds if p.falsifier}
-    if len(falsifiers) == 1:
+    one_for_all = len(falsifiers) == 1 and all(p.falsifier for p in preds)
+    if one_for_all:
         L.append(f"**One experiment falsifies all of them:** "
                  f"{falsifiers.pop()}")
         L.append("")
@@ -468,7 +474,7 @@ def render(preds: list, gene: str, goal: str, *, verdict: dict | None = None
             # factor, and Collateral has already said it above.
             if p.caveats and p.caveats[0] not in group_caveats:
                 L.append(f"   - ⚠ {p.caveats[0]}")
-            if p.falsifier and len(falsifiers) > 1:
+            if p.falsifier and not one_for_all:
                 L.append(f"   - *Would falsify it:* {p.falsifier}")
         L.append("")
 

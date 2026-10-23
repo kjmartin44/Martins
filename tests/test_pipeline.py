@@ -4239,6 +4239,61 @@ def _chip_state_block(state):
     }
 
 
+def test_one_experiment_falsifies_all_of_them_only_when_it_does():
+    """A falsifier is set only where an outcome estimate exists for that
+    (drug, target) pair.
+
+    The set was built from the rows that HAVE one, so one row with a
+    falsifier among nine without satisfied "exactly one distinct
+    falsifier" - and the per-row lines were then suppressed, so a single
+    experiment was offered as settling rows it says nothing about.
+    """
+    from generoutes import predictions as pr
+
+    def _p(drug, falsifier):
+        """The real dataclass, so the fixture cannot drift from it."""
+        return pr.Prediction(drug=drug, target="VDR", tier=3, grade="A",
+                             falsifier=falsifier)
+
+    shared = "knock the factor down and the drug effect should vanish"
+    # render returns lines; the report joins them.
+    mixed = chr(10).join(pr.render([_p("Alpha", shared), _p("Beta", None)],
+                                   "DEMOGENE", "up"))
+    assert "One experiment falsifies all of them" not in mixed, (
+        "Beta has no falsifier, so one experiment does not settle both")
+    assert shared in mixed, "and Alpha's own falsifier is still shown"
+
+    both = chr(10).join(pr.render([_p("Alpha", shared), _p("Beta", shared)],
+                                  "DEMOGENE", "up"))
+    assert "One experiment falsifies all of them" in both
+
+
+def test_a_dgidb_score_of_zero_is_shown_as_zero_not_as_missing():
+    """`round(score, 2) if score else '-'` reads 0.0 as falsy, so a
+    recorded zero printed the same em-dash as a score nobody recorded.
+
+    The sort key one line above reads the real number, so the row was
+    ordered on a value the table then declined to show. This is the
+    `value or default` shape that `report._sig_q` and `tfactivity._q`
+    were both written to stamp out.
+    """
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    res["results"][0]["direction_unknown"] = {
+        "VDR": [{"name": "Zeroscore", "sources": "DrugBank",
+                 "interaction_score": 0.0},
+                {"name": "Noscore", "sources": "DrugBank"},
+                {"name": "Realscore", "sources": "DrugBank",
+                 "interaction_score": 1.25}],
+    }
+    md = pipeline.markdown_report(res)
+    rows = {line.split("|")[2].strip(): line.split("|")[4].strip()
+            for line in md.splitlines()
+            if line.startswith("| VDR |")}
+    assert rows["Zeroscore"] == "0.0", "a measured zero is a number"
+    assert rows["Noscore"] == "—", "and an absent one is still an em-dash"
+    assert rows["Realscore"] == "1.25"
+
+
 def test_a_factor_the_chip_table_never_covers_is_not_called_unconfirmed():
     """`not bound` and `not assayed` are identical in a peak count of zero
     and mean opposite things.
@@ -8458,6 +8513,111 @@ def test_a_measured_effect_survives_a_salt_in_the_drug_name():
     assert row["expected_basis"].startswith("MEASURED")
 
 
+def test_the_shortlist_command_reports_how_many_passed(tmp_path, capsys):
+    """End to end, because the bug was in how `main` wired the counts:
+    it truncated the rows and then let the header count what was left."""
+    import json as _json
+    from generoutes import shortlist as sl
+
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    res["results"][0]["all_routes"] = _as_all_routes([
+        _route(f"Drug{i}", "VDR", 3, 90.0 - i, "TF: orthosteric ligand",
+               "drug_scoring", "VDR agonist") for i in range(9)])
+    saved = tmp_path / "results.json"
+    saved.write_text(_json.dumps(res, default=str), encoding="utf-8")
+
+    assert sl.main([str(saved), "--top", "3"]) == 0
+    out = capsys.readouterr().out
+    assert "9 of 9 routes kept" in out, (
+        "nine passed and three are shown; the header must say nine")
+    assert "3 of 9 routes kept" not in out
+    assert "Showing the top 3" in out
+
+
+def test_the_shortlist_header_counts_what_passed_not_what_is_shown():
+    """`rows = kept[:args.top]` happens before the header is written, and
+    the header counted the rows it was handed.
+
+    So a preset that kept 87 of 500 routes and showed the top 40
+    announced "40 of 500 routes kept" - understating its own output by
+    more than half, in the one number that says how selective it was.
+    """
+    from generoutes import shortlist as sl
+    # Enriched the way the command does it, so the fixture cannot drift
+    # from what render reads.
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    res["results"][0]["all_routes"] = _as_all_routes([
+        _route(f"Drug{i}", "VDR", 3, 90.0 - i, "TF: orthosteric ligand",
+               "drug_scoring", "VDR agonist") for i in range(9)])
+    kept = sl.enrich_rows(res)
+    assert len(kept) == 9
+
+    md = sl.render(kept[:3], {"preset": "strict"}, 40,
+                   n_kept=len(kept), n_aside=0)
+    assert "9 of 40 routes kept" in md, "nine passed, three are shown"
+    assert "3 of 40 routes kept" not in md
+    assert "Showing the top 3" in md, "and it says the table is cut"
+
+    # Nothing cut: no extra line, and the count is unchanged.
+    whole = sl.render(kept, {"preset": "strict"}, 40,
+                      n_kept=len(kept), n_aside=0)
+    assert "9 of 40 routes kept" in whole
+    assert "Showing the top" not in whole
+
+
+def test_a_source_that_is_on_by_default_is_not_called_unasked():
+    """The bucket holds two kinds of source and the heading named one.
+
+    `protein_abundance` is on by default and simply finds no table to
+    read, so the summary printed "Not asked ... protein_abundance - on by
+    default; needs data/drug_protein_abundance.tsv" - a line that
+    contradicts itself and leaves the reader to work out which half is
+    true. Both kinds share the operative fact: the source did not run.
+    """
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    res["query"]["demo"] = False
+    res["evidence_sources"] = {"sources": {
+        "protein_abundance": {
+            "name": "protein_abundance", "requested": False, "ok": False,
+            "state": "not requested", "yielded": 0,
+            "enable_with": ("on by default; needs "
+                            "data/drug_protein_abundance.tsv"),
+        },
+        "chip": {"name": "chip", "requested": True, "ok": True,
+                 "state": "ok", "yielded": 3, "enable_with": "--chip-bed"},
+    }}
+
+    md = pipeline.summary_report(res)
+    assert "Did not run, and what each would need" in md
+    assert "Not asked" not in md, (
+        "a source that is on by default was not left unasked")
+    # The reason is still there, one line down.
+    assert "data/drug_protein_abundance.tsv" in md
+
+
+def test_a_capped_corroboration_table_does_not_call_itself_complete():
+    """`corroboration` stops adding drugs at top_n, and the heading used
+    the capped count: a run with more compounds printed "All 20
+    candidates" with nothing saying the rest were dropped.
+    """
+    res = pipeline.run("DEMOGENE", demo=True, offline=True)
+    res["results"][0]["all_routes"] = _as_all_routes([
+        _route(f"Drug{i}", "VDR", 3, 90.0 - i, "TF: orthosteric ligand",
+               "drug_scoring", "VDR agonist") for i in range(6)])
+
+    rows = pipeline.corroboration(res, top_n=2)
+    assert len(rows) == 2
+    assert rows[0]["n_candidates"] == 6, "the run found six"
+
+    md = chr(10).join(pipeline.corroboration_table(res, top_n=2))
+    assert "The strongest 2 of 6 candidates" in md
+    assert "All 6 candidates" not in md
+
+    # Uncapped, it is still "All N".
+    whole = chr(10).join(pipeline.corroboration_table(res, top_n=20))
+    assert "All 6 candidates" in whole
+
+
 def test_one_row_per_drug_with_the_methods_counted():
     """The route tables are one row per route, so a drug reached three ways
     appeared three times and the reader could not see it was reached three
@@ -9024,6 +9184,39 @@ def test_an_inchikey_alone_does_not_merge_salts():
     a = Chem.MolToInchiKey(Chem.MolFromSmiles(_METFORMIN))[:14]
     b = Chem.MolToInchiKey(Chem.MolFromSmiles(_METFORMIN_HCL))[:14]
     assert a != b
+
+
+def test_a_merged_molecule_carries_the_parent_structure_not_a_salt(tmp_path):
+    """`explain_counts` tells the reader the forms were "collapsed on the
+    parent structure". `merge` computed the parent, used it for the key
+    and then stored whichever row created the group.
+
+    So a molecule reached through its salt kept the salt's SMILES - 98 of
+    2,119 in the shipped library did, alendronic acid with its sodium
+    among them - and that SMILES is what docking and the Morgan
+    fingerprint screens use for the molecule.
+    """
+    import pytest
+    pytest.importorskip("rdkit")
+    from generoutes import localdrugs as ld
+    TAB, NL = chr(9), chr(10)
+
+    src = tmp_path / "src.tsv"
+    src.write_text(
+        TAB.join(["name", "clinical_phase", "smiles"]) + NL
+        # The salt form first, so it is the row that creates the group.
+        + TAB.join(["metformin hydrochloride", "Launched",
+                    _METFORMIN_HCL]) + NL
+        + TAB.join(["metformin", "Launched", _METFORMIN]) + NL,
+        encoding="utf-8")
+
+    lib = ld.merge([src])["library"]
+    assert len(lib) == 1, "both forms are one molecule"
+    assert lib[0]["n_forms"] == 2
+    assert "." not in lib[0]["smiles"], (
+        "the stored structure must be the parent, not the salt the first "
+        "row happened to carry")
+    assert ld.parent_key(lib[0]["smiles"]) == ld.parent_key(_METFORMIN)
 
 
 def test_the_parent_key_merges_salts_and_separates_real_drugs():
@@ -11486,14 +11679,34 @@ def test_nothing_enriched_proposes_nothing():
 
 def test_the_dinucleotide_shuffle_preserves_composition():
     """A mononucleotide shuffle would destroy GG pairs and call every
-    GC-rich promoter enriched for quadruplexes."""
+    GC-rich promoter enriched for quadruplexes.
+
+    There is one implementation of this, in `motifs`. `promoterdna` kept
+    a second that promised the same Eulerian walk and omitted the
+    last-exit rule, so its walk stranded and fell back to a random
+    choice - measured at a mean absolute change of 1.83 per dinucleotide
+    over 200 shuffles, against 0 for the real one.
+    """
     import random
-    from generoutes import promoterdna as pd
+    from collections import Counter
+    from generoutes import motifs, promoterdna as pd
+
+    assert pd.dinucleotide_shuffle is motifs.dinucleotide_shuffle, (
+        "the promoter DNA null uses the one implementation")
     seq = _gc_rich(500)
-    sh = pd._dinucleotide_shuffle(seq, random.Random(0))
+    sh = motifs.dinucleotide_shuffle(seq, random.Random(0))
     assert len(sh) == len(seq)
     for base in "ACGT":
         assert abs(sh.count(base) - seq.count(base)) <= 2, base
+
+    # The property the name promises, which the copy did not keep.
+    def pairs(t):
+        return Counter(t[i:i + 2] for i in range(len(t) - 1))
+    assert pairs(sh) == pairs(seq)
+
+    from generoutes import utr
+    assert utr._shuffle(seq, random.Random(0)) == sh, (
+        "and the UTR tests shuffle the same way")
 
 
 def test_the_dna_feature_scan_honours_the_repeat_mask():
@@ -11776,6 +11989,49 @@ def _bed_peaks(path, rows):
     out = [tab.join([
         "chr1", str(s), str(e), name, "1", "."]) for s, e, name in rows]
     path.write_text(nl.join(out) + nl, encoding="utf-8")
+
+
+def test_a_peak_starting_one_base_past_the_window_is_not_an_overlap(tmp_path):
+    """The windows come from a GTF and are 1-based inclusive; the peaks
+    come from a BED and are 0-based half-open.
+
+    So a BED interval [p_start, p_end) covers 1-based bases p_start+1 to
+    p_end, and a window whose last base is p_start stops one base before
+    the peak begins. Testing `ends[m] < p_start` counted that as binding,
+    and this table is read back as evidence.
+    """
+    from generoutes import chipregulon as cr
+
+    gtf = tmp_path / "g.gtf"
+    _gtf_genes(gtf, 1)                     # G0 at 5000, + strand
+    last = 5000 + cr.DOWNSTREAM            # the window's last 1-based base
+
+    bed = tmp_path / "p.bed"
+    # Starts at `last`, so its first base is last + 1: one past the end.
+    _bed_peaks(bed, [(last, last + 200, "PASTEND:HeLa")])
+    cr.build(bed, gtf, out_path=tmp_path / "a.tsv")
+    assert "PASTEND" not in (tmp_path / "a.tsv").read_text(encoding="utf-8")
+
+    # One base earlier, so its first base IS the window's last base.
+    _bed_peaks(bed, [(last - 1, last + 200, "TOUCHES:HeLa")])
+    cr.build(bed, gtf, out_path=tmp_path / "b.tsv")
+    assert "TOUCHES" in (tmp_path / "b.tsv").read_text(encoding="utf-8")
+
+
+def test_a_window_at_a_contig_start_is_clamped_to_base_one(tmp_path):
+    """There is no position 0 in a 1-based system, and clamping to it
+    would let a peak one base before the contig count as inside."""
+    from generoutes import chipregulon as cr
+    tab, nl = chr(9), chr(10)
+
+    gtf = tmp_path / "g.gtf"
+    gtf.write_text(tab.join([
+        "chr1", "x", "gene", "10", "900", ".", "+", ".",
+        'gene_name "EDGE"; gene_type "protein_coding";']) + nl,
+        encoding="utf-8")
+    idx = cr.promoter_index(gtf)
+    starts = idx["chr1"][0]
+    assert min(starts) == 1, "the window starts at base 1, not base 0"
 
 
 def test_a_promiscuous_factor_is_dropped_during_the_scan(tmp_path):
@@ -12626,6 +12882,23 @@ def test_a_flag_given_a_string_is_refused():
         pl.run("CCR5", all_tss="yes", demo=True)
     with pytest.raises(ValueError, match="activity_permutations"):
         pl.run("CCR5", activity_permutations="10", demo=True)
+
+
+def test_a_half_given_lincs_pair_is_refused_by_name():
+    """`--lincs-gmt` is nargs=2, so the CLI cannot get this wrong. A
+    caller through the Python API could, and reached the unpacking in
+    run() - an IndexError from a line that never mentions the argument.
+
+    The table is where argument rules live, so the shape is stated
+    there rather than guarded at the use site.
+    """
+    import pytest
+    from generoutes import pipeline as pl
+
+    with pytest.raises(ValueError, match="lincs_gmt"):
+        pl.run("CCR5", lincs_gmt=("only-up.gmt",), demo=True, offline=True)
+    with pytest.raises(ValueError, match="exactly 2"):
+        pl.run("CCR5", lincs_gmt=("a", "b", "c"), demo=True, offline=True)
 
 
 def test_a_true_flag_is_not_accepted_as_a_window_size():
@@ -17054,3 +17327,61 @@ def test_clearing_never_raises_on_a_root_that_is_not_there(tmp_path):
     import conftest as ct
 
     ct._clear_abandoned_runs(tmp_path / "nope")
+
+def test_a_tab_in_a_name_cannot_split_a_row_in_the_files_people_order_from():
+    """`report.write_outputs` moved tf_summary.tsv to csv.writer because a
+    name carrying a tab shifted every column after it, and the improvement
+    notes recorded that as done. It was done in one writer of three.
+
+    The plate list is the file someone orders compounds from, and the
+    panel table is what a reader compares genes with. Both still joined on
+    raw tabs, and both carry names and indication text straight from
+    external tables.
+    """
+    from generoutes import screenlist as sl
+
+    tab, nl = chr(9), chr(10)
+    plan = {"rows": [{
+        "compound": "Drug" + tab + "A",
+        "step": "transcription",
+        "site_evidence": "measured",
+        "n_routes": 2,
+        "targets": ["VDR"],
+        "sources": ["drug_scoring"],
+        "approved_for": ["rickets" + nl + "and osteoporosis"],
+    }]}
+    text = sl.to_tsv(plan)
+    body = text.splitlines()
+    assert body[0].split(tab) == ["compound", "step", "site_evidence",
+                                  "n_routes", "targets", "sources",
+                                  "approved_for"]
+
+    import csv
+    import io
+    rows = list(csv.reader(io.StringIO(text), delimiter=tab))
+    assert len(rows) == 2, "the row stayed one row"
+    assert len(rows[1]) == 7, "and kept its seven columns"
+    assert rows[1][0] == "Drug" + tab + "A"
+    assert rows[1][1] == "transcription", (
+        "the step column is still the step, not a fragment of the name")
+
+
+def test_the_panel_table_quotes_the_same_way(tmp_path):
+    from generoutes import panel as pn
+
+    tab = chr(9)
+    cols_row = {"gene": "G1", "tier": 3, "grade": "A",
+                "drug": "Drug" + tab + "A", "acts_on": "VDR",
+                "category": "ligand", "_regulon_size": 10,
+                "_regulon_understudied": False, "_tissue_breadth": 2,
+                "_tissue_basis": "HPA", "_burden": 0.1,
+                "_burden_assessed": True, "n_genes": 1, "score": 50.0}
+    panel = pn.Panel()
+    pn.write_outputs(panel, {"results": [], "query": {}}, [cols_row], [],
+                     {}, tmp_path)
+
+    import csv
+    text = (tmp_path / "panel.tsv").read_text(encoding="utf-8")
+    rows = list(csv.reader(text.splitlines(), delimiter=tab))
+    assert len(rows) == 2 and len(rows[1]) == len(rows[0])
+    assert rows[1][3] == "Drug" + tab + "A"

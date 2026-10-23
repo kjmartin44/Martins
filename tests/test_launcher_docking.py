@@ -242,6 +242,27 @@ def test_dock_one_vina_converts_the_receptor_once_per_screen(vina_world):
     assert vina_world["receptor_calls"] == 1
 
 
+def test_the_bundle_path_passes_jobs_through():
+    """`--jobs` is the documented speed lever - its own help says
+    "--jobs 8 --cpu 4 beats --cpu 32 by about 2.5x".
+
+    `dock_from_bundle` had no `jobs` parameter at all, so the whole
+    "prepare here, dock there" route - the one that needs WSL and takes
+    longest - silently ran one compound at a time against a flag the CLI
+    accepted without a word.
+    """
+    import inspect
+
+    assert "jobs" in inspect.signature(dk.dock_from_bundle).parameters, (
+        "the bundle path has to accept it before it can honour it")
+    body = inspect.getsource(dk.dock_from_bundle)
+    assert "jobs=jobs" in body, "and hand it to the screen"
+
+    cli = inspect.getsource(dk.main)
+    i = cli.index("dock_from_bundle(")
+    assert "jobs=args.jobs" in cli[i:i + 400], "and the CLI has to pass it"
+
+
 def test_parallel_compounds_never_convert_the_receptor_at_the_same_time(
         vina_world, monkeypatch):
     """`_dock_smiles` runs compounds through a ThreadPoolExecutor.

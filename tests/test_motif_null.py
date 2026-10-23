@@ -309,3 +309,50 @@ def test_a_scan_with_no_sites_is_never_called_enriched():
     assert m.scan_quality(0, 500, 800, 1e-5, null=null)["verdict"] == "no signal"
     assert m.scan_quality(0, 0, 800, 1e-5)["verdict"] == "no signal"
     assert m.scan_quality(3, 500, 800, 1e-5, null=null)["verdict"] == "enriched"
+def test_a_prepared_scan_is_exactly_the_scan_it_replaces():
+    """The per-motif precompute depends only on the matrix, the background
+    and the p-value - never on the bases being scanned.
+
+    So hoisting it out of the shuffle loop must not move a single hit. If
+    it ever does, the null has quietly changed and every verdict built on
+    it with it.
+    """
+    from generoutes import demo_data, motifs as m, pwm
+
+    ms = demo_data.demo_motifs()
+    seq = demo_data.demo_promoter_sequence(400, 100)
+    bg = pwm.background_from_encoding(pwm.encode(seq))
+    prep = m.prepare_motifs(ms, bg, 1e-3, 6.0)
+
+    def shape(hits):
+        return [(h.matrix_id, h.start, h.end, h.strand, round(h.score, 9))
+                for h in hits]
+
+    info_a, info_b = {}, {}
+    plain = m.scan_promoter(seq, ms, pvalue=1e-3, info=info_a)
+    fast = m.scan_promoter(seq, ms, pvalue=1e-3, background=bg,
+                           prepared=prep, info=info_b)
+    assert shape(plain) == shape(fast)
+    assert info_a == info_b, "and the matrices-scanned counts agree"
+
+
+def test_the_null_prepares_its_motifs_once_not_once_per_shuffle():
+    """Measured on data/jaspar2024.txt, the precompute was 0.36s of each
+    0.62s scan - about 11s of the 19s a 30-shuffle null spent, thrown away
+    and recomputed every time."""
+    from generoutes import demo_data, motifs as m
+
+    calls = []
+    real = m.prepare_motifs
+
+    def counting(*a, **kw):
+        calls.append(1)
+        return real(*a, **kw)
+
+    ms = demo_data.demo_motifs()
+    seq = demo_data.demo_promoter_sequence(400, 100)
+    import unittest.mock as _mock
+    with _mock.patch.object(m, "prepare_motifs", counting):
+        m.empirical_null(seq, ms, pvalue=1e-3, n_shuffles=4, seed=0)
+    assert len(calls) == 1, (
+        f"prepared once per null, not once per shuffle (got {len(calls)})")

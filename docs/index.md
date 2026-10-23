@@ -25,6 +25,8 @@ inspect the evidence behind each route.
 - [Getting the analysis tables](datasets.md): every table the analysis can
   read, where to obtain it, and the command that says what you are missing.
 - [Inputs and outputs](data.md): file formats, coordinates, and cache behavior.
+- [Curated tables](curated-tables.md): the tables typed into the source, what a
+  complete one would be, how to rebuild or check each, and the audit.
 - [Running with no network](offline.md): every data file, where it comes
   from, where to put it, and the three that need building first.
 - [Methods and limitations](methods.md): how routes are constructed and ranked.

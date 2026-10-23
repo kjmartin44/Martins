@@ -71,31 +71,54 @@ def main() -> int:
         url, size, version = newest_linux_wheel(pkg)
         print(f"  {pkg:28s} {version:12s} {size / 1e6:6.0f} MB", flush=True)
         tmp = DEST / "wheel.tmp"
-        with urllib.request.urlopen(
-                urllib.request.Request(url, headers=UA), timeout=600) as r, \
-                open(tmp, "wb") as fh:
-            while True:
-                chunk = r.read(1 << 22)
-                if not chunk:
-                    break
-                fh.write(chunk)
-        with zipfile.ZipFile(tmp) as z:
-            for info in z.infolist():
-                base = Path(info.filename).name
-                # Keep every .so, not only the exact names asked for: a
-                # versioned library usually needs its own soname links,
-                # and the extras cost disk rather than correctness.
-                if ".so" not in base:
-                    continue
-                out = DEST / base
-                with z.open(info) as src, open(out, "wb") as dst:
+        try:
+            got = 0
+            req = urllib.request.Request(url, headers=UA)
+            with urllib.request.urlopen(req, timeout=600) as r:
+                with open(tmp, "wb") as fh:
                     while True:
-                        chunk = src.read(1 << 22)
+                        chunk = r.read(1 << 22)
                         if not chunk:
                             break
-                        dst.write(chunk)
-                total += 1
-        tmp.unlink()
+                        got += len(chunk)
+                        fh.write(chunk)
+            # The size PyPI declares, printed above and never checked. A
+            # short wheel usually raises BadZipFile, because the central
+            # directory sits at the end - but saying so here names the
+            # problem rather than ending in a traceback.
+            if size and got < size:
+                print(f"  {pkg}: got {got} bytes of {size}; skipped",
+                      file=sys.stderr)
+                continue
+            with zipfile.ZipFile(tmp) as z:
+                for info in z.infolist():
+                    base = Path(info.filename).name
+                    # Keep every .so, not only the exact names asked for:
+                    # a versioned library usually needs its own soname
+                    # links, and the extras cost disk rather than
+                    # correctness.
+                    if ".so" not in base:
+                        continue
+                    out = DEST / base
+                    # Appended, not `with_suffix`: these names end in
+                    # their soversion, so with_suffix would turn
+                    # libcudnn.so.9 into libcudnn.so.part and collide.
+                    part = out.parent / (out.name + ".part")
+                    with z.open(info) as src, open(part, "wb") as dst:
+                        while True:
+                            chunk = src.read(1 << 22)
+                            if not chunk:
+                                break
+                            dst.write(chunk)
+                    # Only now does it take the name the "already
+                    # present" check looks for. A library truncated at
+                    # its final name is reported as installed for ever,
+                    # and gnina then dies in the dynamic loader - which
+                    # arrives as every compound failing to dock.
+                    part.replace(out)
+                    total += 1
+        finally:
+            tmp.unlink(missing_ok=True)
 
     print(f"\n{total} library file(s) in {DEST}")
     missing = [lib for libs in WHEELS.values() for lib in libs

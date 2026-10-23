@@ -751,3 +751,238 @@ def test_the_readme_embeds_the_current_pipeline_diagram():
                       if ln.strip() and not ln.lstrip().startswith("%%")]
     assert keep(m.group(1)) == keep(source), (
         "update the README block from docs/pipeline.mmd")
+
+
+# ------------------------------------------- build_protein_abundance
+TAB = chr(9)
+
+
+def _decrypte_export(tmp_path, name="decryptE.tsv"):
+    """A decryptE-shaped export: tab separated, log2 already, replicated."""
+    rows = [TAB.join(["Drug Name", "Gene Symbol", "Log2 Fold Change",
+                      "Cell Line", "Dose", "Time"])]
+    for cell in ("HeLa", "A549"):
+        rows.append(TAB.join(["nocodazole", "BUB1B", "1.42", cell,
+                              "1uM", "24h"]))
+        rows.append(TAB.join(["vorinostat", "BUB1B", "-1.81", cell,
+                              "1uM", "24h"]))
+    p = tmp_path / name
+    p.write_text(NL.join(rows) + NL, encoding="utf-8")
+    return p
+
+
+def test_build_protein_abundance_writes_the_table_the_route_reads(tmp_path):
+    """The route is on by default and does nothing without this file, and
+    nothing fetches it - decryptE and ProTargetMiner are manual downloads
+    with a column layout of their own."""
+    from generoutes import proteomics
+    mod = _lf_script("build_protein_abundance")
+
+    out = tmp_path / "drug_protein_abundance.tsv"
+    assert mod.main([str(_decrypte_export(tmp_path)), "--out", str(out)]) == 0
+    assert not list(tmp_path.glob("*.part")), "nothing half-written is left"
+
+    header = out.read_text(encoding="utf-8").splitlines()[0].split(TAB)
+    assert header == list(mod.OUT_COLUMNS)
+
+    assert proteomics.available(str(out))
+    up = proteomics.load("BUB1B", want="up", path=str(out))
+    down = proteomics.load("BUB1B", want="down", path=str(out))
+    assert [(h.drug, h.median_log2fc, h.n_observations) for h in up] == [
+        ("nocodazole", 1.42, 2)]
+    assert [h.drug for h in down] == ["vorinostat"]
+    assert up[0].cell_lines == ["A549", "HeLa"]
+    assert up[0].sources == ["decryptE"], "the file it came from is recorded"
+
+
+def test_build_protein_abundance_keeps_every_replicate(tmp_path):
+    """The route pools rows per compound and refuses one with fewer than
+    MIN_OBSERVATIONS of them.
+
+    Averaging replicates here would turn two observations into one and
+    silently drop the compound - the output would look tidier and report
+    nothing.
+    """
+    from generoutes import proteomics
+    mod = _lf_script("build_protein_abundance")
+
+    out = tmp_path / "pa.tsv"
+    assert mod.main([str(_decrypte_export(tmp_path)), "--out", str(out)]) == 0
+    body = out.read_text(encoding="utf-8").splitlines()[1:]
+    assert len(body) == 4, "two compounds in two cell lines, not folded"
+    assert proteomics.load("BUB1B", want="up", path=str(out))[0] \
+        .n_observations >= proteomics.MIN_OBSERVATIONS
+
+
+def test_build_protein_abundance_converts_a_linear_fold_change(tmp_path):
+    """ProTargetMiner-shaped: comma separated, a ratio rather than a log.
+
+    A ratio of zero means the protein was not detected after treatment,
+    which is not a measured fall, and log2 of it does not exist - so it
+    is counted and dropped rather than turned into a large negative.
+    """
+    mod = _lf_script("build_protein_abundance")
+    src = tmp_path / "ptm.csv"
+    src.write_text(NL.join([
+        "compound,protein,fold_change,cell",
+        "thapsigargin,BUB1B,4,A375",
+        "thapsigargin,BUB1B,4,A375",
+        "bortezomib,BUB1B,0,A375"]) + NL, encoding="utf-8")
+
+    out = tmp_path / "pa.tsv"
+    assert mod.main([str(src), "--out", str(out)]) == 0
+    rows = [r.split(TAB) for r in
+            out.read_text(encoding="utf-8").splitlines()[1:]]
+    assert [r[0] for r in rows] == ["thapsigargin", "thapsigargin"]
+    assert [r[2] for r in rows] == ["2.0", "2.0"], "4x is log2 2.0"
+    assert "bortezomib" not in out.read_text(encoding="utf-8")
+
+
+def test_build_protein_abundance_refuses_an_export_with_no_gene_symbol(
+        tmp_path, capsys):
+    """`proteomics.load` matches on the gene symbol, so an accession-only
+    export would write a table that matches nothing. It is refused by
+    name instead, and this script has no table to turn one into the
+    other."""
+    mod = _lf_script("build_protein_abundance")
+    src = tmp_path / "accessions.csv"
+    src.write_text(NL.join([
+        "compound,uniprot,log2fc",
+        "nocodazole,O60566,1.4"]) + NL, encoding="utf-8")
+
+    out = tmp_path / "pa.tsv"
+    assert mod.main([str(src), "--out", str(out)]) == 1
+    err = capsys.readouterr().err
+    assert "no gene symbol column" in err
+    assert "uniprot" in err, "it names the accession column it did find"
+    assert not out.exists(), "and writes no table at all"
+def test_gnina_libraries_are_not_left_truncated_at_their_final_name(
+        tmp_path, monkeypatch, capsys):
+    """`all((DEST / lib).exists())` is the "already present" check, so a
+    library truncated at its final name is reported as installed for
+    ever.
+
+    gnina then dies in the dynamic loader, which `_dock_smiles` counts as
+    docking_failed for every compound - a whole screen comes back empty
+    rather than broken.
+    """
+    import io
+    import zipfile
+    mod = _lf_script("install_gnina_libs")
+
+    dest = tmp_path / "cuda-libs"
+    monkeypatch.setattr(mod, "DEST", dest)
+    monkeypatch.setattr(mod, "WHEELS", {"nvidia-cudnn": ["libcudnn.so.9"]})
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("nvidia/cudnn/lib/libcudnn.so.9", b"ELF" + b"x" * 4096)
+    wheel = buf.getvalue()
+
+    monkeypatch.setattr(mod, "newest_linux_wheel",
+                        lambda pkg: ("https://example/w.whl", len(wheel),
+                                     "9.0.0"))
+
+    class _Resp:
+        def __init__(self, body):
+            self._b = io.BytesIO(body)
+
+        def read(self, n=-1):
+            return self._b.read(n)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr(mod.urllib.request, "urlopen",
+                        lambda req, timeout=None: _Resp(wheel))
+
+    # Watched at the rename, so this holds however the file is written.
+    swaps = []
+    real_replace = Path.replace
+
+    def recording(self, target):
+        swaps.append((self.name, Path(target).name))
+        return real_replace(self, target)
+
+    monkeypatch.setattr(Path, "replace", recording)
+    assert mod.main() == 0
+
+    assert (dest / "libcudnn.so.9").read_bytes().startswith(b"ELF")
+    assert ("libcudnn.so.9.part", "libcudnn.so.9") in swaps, (
+        "the library takes its final name only once it is whole; the "
+        '"already present" check looks for exactly that name')
+    assert not list(dest.glob("*.part")), "no half-written library is left"
+    assert not (dest / "wheel.tmp").exists(), "and the wheel is cleaned up"
+
+
+def test_a_short_gnina_wheel_is_refused_by_its_declared_size(
+        tmp_path, monkeypatch, capsys):
+    """PyPI declares the size and the script printed it without ever
+    comparing it with what arrived."""
+    import io
+    mod = _lf_script("install_gnina_libs")
+
+    dest = tmp_path / "cuda-libs"
+    monkeypatch.setattr(mod, "DEST", dest)
+    monkeypatch.setattr(mod, "WHEELS", {"nvidia-cudnn": ["libcudnn.so.9"]})
+    monkeypatch.setattr(mod, "newest_linux_wheel",
+                        lambda pkg: ("https://example/w.whl", 10_000_000,
+                                     "9.0.0"))
+
+    class _Resp:
+        def __init__(self):
+            self._b = io.BytesIO(b"only a few bytes")
+
+        def read(self, n=-1):
+            return self._b.read(n)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr(mod.urllib.request, "urlopen",
+                        lambda req, timeout=None: _Resp())
+    mod.main()
+    assert "of 10000000" in capsys.readouterr().err
+    assert not (dest / "libcudnn.so.9").exists()
+def test_build_fda_cmax_keeps_the_lookups_it_has_already_paid_for(
+        tmp_path, monkeypatch, capsys):
+    """It read the existing table, looked every drug up over the network,
+    and wrote only at the bottom of the loop.
+
+    The launcher calls it on a finished run with a hundred-plus
+    candidates, against openFDA's rate limit, printing [i/N] for several
+    minutes - so an interruption is the likely end, and it threw away
+    every lookup it had already made.
+    """
+    import pytest
+    mod = _lf_script("build_fda_cmax")
+    out = tmp_path / "cmax.tsv"
+    review = tmp_path / "review.tsv"
+
+    seen = []
+
+    def one(client, name, mw):
+        seen.append(name)
+        if len(seen) > 3:
+            raise KeyboardInterrupt("someone stopped waiting")
+        return {"status": "row", "reason": "",
+                "row": {"name": name, "cmax_nM": 100.0 * len(seen)},
+                "rejected": [], "accepted": []}
+
+    monkeypatch.setattr(mod.fdalabel, "read_drug", one)
+    monkeypatch.setattr(mod.exposure, "molecular_weight", lambda s: 300.0)
+    monkeypatch.setattr(mod.localdrugs, "library", lambda *a, **k: [])
+
+    with pytest.raises(KeyboardInterrupt):
+        mod.main(["--drugs", "a", "b", "c", "d", "e", "--out", str(out),
+                  "--review", str(review)])
+
+    kept = mod.read_rows(out)
+    assert len(kept) == 3, (
+        "the three lookups that completed are on disk, not discarded")

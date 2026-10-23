@@ -176,17 +176,30 @@ def build(result: dict) -> dict:
 
 
 def to_tsv(plan: dict) -> str:
-    """The plate list as a table, one compound per line."""
-    head = ("compound\tstep\tsite_evidence\tn_routes\ttargets\tsources\t"
-            "approved_for")
-    lines = [head]
+    """The plate list as a table, one compound per line.
+
+    Through `csv.writer`, as `report.write_outputs` does for
+    tf_summary.tsv and for the same reason: compound names and indication
+    text come from external tables and APIs, and one carrying a tab or a
+    newline split the row and shifted every column after it. This is the
+    file someone orders compounds from, so it is the worst place for a
+    row to say something other than what it means.
+    """
+    import csv
+    import io
+
+    buf = io.StringIO()
+    w = csv.writer(buf, delimiter="\t", lineterminator="\n",
+                   quoting=csv.QUOTE_MINIMAL)
+    w.writerow(["compound", "step", "site_evidence", "n_routes", "targets",
+                "sources", "approved_for"])
     for r in plan.get("rows") or []:
-        lines.append("\t".join([
+        w.writerow([
             r["compound"], r["step"], r["site_evidence"] or "-",
             str(r["n_routes"]), ";".join(r["targets"]) or "-",
             ";".join(r["sources"]) or "-",
-            ";".join(r["approved_for"]) or "-"]))
-    return "\n".join(lines) + "\n"
+            ";".join(r["approved_for"]) or "-"])
+    return buf.getvalue()
 
 
 def summarise(plan: dict, gene: str) -> str:

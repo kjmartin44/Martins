@@ -125,16 +125,29 @@ def docking_source(doc: dict, name: str, keep=None) -> dict:
     if not doc.get("usable"):
         return {"name": name, "unused": doc.get("error") or
                 "the docking validation gate did not pass"}
-    ranks, hits = {}, {}
+    hits = {}
     # `keep` drops compounds before ranking, so a hit the reports do not show
     # does not take a rank. Ranks are then counted among the kept ones.
     listed = [h for h in doc.get("hits") or []
               if keep is None or keep(h.get("drug") or "")]
-    for i, h in enumerate(listed, start=1):
+    order, scores = [], []
+    for h in listed:
         key = breadth_key(h.get("drug") or "")
-        if key and key not in ranks:
-            ranks[key] = i
+        if key and key not in hits:
             hits[key] = h
+            order.append(key)
+            # A hit with no score is tied with nothing. Giving every
+            # unscored hit the same key would put the whole list on rank
+            # 1, which is a different wrong answer from the one this
+            # fixes, so each gets a key of its own and keeps its place.
+            sc = h.get("score")
+            scores.append(sc if sc is not None
+                          else ("unscored", len(order)))
+    # Through the same tie rule the route side uses. Position alone decided
+    # this, and docking scores are reported to one decimal, so ties are
+    # common - two compounds at -9.2 were separated by file order while the
+    # module docstring and the report both told the reader they were not.
+    ranks = _competition_ranks(order, scores)
     if not ranks:
         return {"name": name, "unused": "the docking run listed no hits"}
     return {"name": name, "ranks": ranks, "hits": hits,

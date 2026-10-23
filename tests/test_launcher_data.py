@@ -854,6 +854,36 @@ def _lf_chembl_db(path):
     con.close()
 
 
+
+
+def test_the_distiller_reads_the_file_the_fetcher_writes(tmp_path):
+    """`distil_bindingdb` kept a second, hand-written column list.
+
+    It named only the "... Target Chain 1" spelling, while
+    `fetch_bindingdb` writes the header without the " 1" - so the
+    distiller refused its own fetcher's output, and the 9 GB original
+    stayed the only file `resolve` could find. Reading it is then minutes
+    per target instead of seconds.
+    """
+    tab, nl = chr(9), chr(10)
+    header = ["UniProt (SwissProt) Primary ID of Target Chain",
+              "Ligand SMILES", "BindingDB MonomerID",
+              "Ki (nM)", "Kd (nM)", "IC50 (nM)", "EC50 (nM)"]
+    rows = [["P51681", "CCO", "1", "12", "", "", ""],
+            ["P37231", "CCN", "2", "", "", "340", ""]]
+    src = tmp_path / "bindingdb.tsv"
+    src.write_text(nl.join([tab.join(header)] + [tab.join(r) for r in rows])
+                   + nl, encoding="utf-8")
+
+    out = tmp_path / "distilled.tsv"
+    got = localpotency.distil_bindingdb(src, out)
+    assert "error" not in got, got
+    assert got["rows_out"] == 2
+
+    # And what comes out is readable by the loader that reads the original.
+    back = localpotency.load_bindingdb(["P51681", "P37231"], path=str(out))
+    assert sorted(back) == ["P37231", "P51681"]
+
 def test_load_chembl_sqlite_takes_the_median_and_ranks_by_potency(tmp_path):
     db = tmp_path / "chembl.db"
     _lf_chembl_db(db)
@@ -1054,3 +1084,41 @@ def test_a_whole_offline_run_performs_the_trans_eqtl_lookup(tmp_path,
               } if isinstance(res["evidence_sources"]["sources"], list) \
         else res["evidence_sources"]["sources"]
     assert "trans_eqtl" in ledger
+
+def test_an_unreadable_gwas_catalogue_is_not_reported_as_a_missing_one(
+        tmp_path, monkeypatch):
+    """`load_gwas` returns 0 when it cannot find a gene column, and the
+    note said "no GWAS Catalog on disk" for a file that is on disk.
+
+    The note is careful to say an absent catalogue "is different from
+    there being none", and then gave the wrong one of the two - sending
+    the reader to download a file they already have, when the real
+    problem is that their export spells the gene column another way.
+    """
+    from generoutes import localannot as la
+    tab, nl = chr(9), chr(10)
+    monkeypatch.setattr(la, "_GWAS", {})
+
+    # A real GWAS export, but the ontology-annotated one, whose gene
+    # column is not among the three spellings load_gwas knows.
+    odd = tmp_path / "gwas.tsv"
+    odd.write_text(nl.join([
+        tab.join(["GENE_NAME", "DISEASE/TRAIT", "P-VALUE"]),
+        tab.join(["CCR5", "HIV acquisition", "1e-12"])]) + nl,
+        encoding="utf-8")
+
+    assert la.load_gwas(str(odd)) == 0
+    got = la.genetic_support("CCR5", path=str(odd))
+    assert got["assessed"] is False
+    assert "could not be read" in got["note"]
+    assert "no GWAS Catalog on disk" not in got["note"]
+    assert str(odd) in got["note"], "and it names the file it could not read"
+
+
+def test_a_genuinely_absent_catalogue_still_says_so(tmp_path, monkeypatch):
+    from generoutes import localannot as la
+    monkeypatch.setattr(la, "_GWAS", {})
+    monkeypatch.chdir(tmp_path)
+    got = la.genetic_support("CCR5")
+    assert got["assessed"] is False
+    assert "no GWAS Catalog on disk" in got["note"]

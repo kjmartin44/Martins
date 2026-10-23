@@ -241,6 +241,8 @@ decryptE and ProTargetMiner answer this. LINCS P100 (~90 phosphopeptides) and CP
 
 Columns: drug, protein, log2fc [, cell_line, dose, time, source].
 
+`python scripts/build_protein_abundance.py EXPORT` converts either export into that layout. It keeps every replicate, because a compound with one observation is not reported.
+
 ### Isoform-level expression
 
 How much of the gene's message each isoform carries, which decides whether a brake exon is worth an oligonucleotide or sits on a transcript nobody makes.

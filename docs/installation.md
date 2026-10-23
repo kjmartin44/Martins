@@ -48,6 +48,8 @@ They use `python` from `PATH`, so run them from a terminal with the intended
 environment activated. `run_demo.bat` uses synthetic fixtures.
 `run_analysis.bat` and `run_everything.bat` use live services. The latter may
 install missing chemistry dependencies and download reference files.
+`shortlist.bat` needs neither: it asks for a `results.json` from a finished
+run and a preset, and narrows that saved result to a shortlist in seconds.
 `setup_data.bat` fetches all of the git-ignored reference files in one step and
 skips any that are already in `data/`; see [data setup](data-setup.md). Two of
 those tables are built rather than downloaded: the ChIP-derived regulon from

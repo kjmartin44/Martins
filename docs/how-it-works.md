@@ -122,7 +122,11 @@ is part of it.
 **11. Write the outputs.** `report.md` is the full account, `summary.md` the one
 page (a top list with one row per mechanism family and a sentence on how
 each would act), `results.json` everything, `tf_summary.tsv` the factor table,
-`sites.bed` the sites for a genome browser.
+`sites.bed` the sites for a genome browser, `promoter.fa` the scanned
+sequence, and `screen_list.tsv` every distinct compound worth a well, in no
+order. The last one is written only when something reached it, and it
+applies the same approval filter the report does — it is the file someone
+orders from, so it must not list a compound the report left out.
 
 The reports list only FDA approved drugs. A drug counts as approved when its
 name matches an active ingredient in the FDA Orange Book, with salt forms
@@ -133,10 +137,13 @@ pemafibrate, and biologics are left out of `report.md`, `summary.md`,
 Orange Book does not list biologics (they are in the Purple Book, which the
 package does not read), so an approved antibody is hidden too. Drugs the Orange
 Book lists only for local routes (topical, eye, inhaled, nasal, rectal and the
-like) are hidden as well, unless the target tissue is skin: `--tissue skin`, or
-an `--activity-tissue` that names skin, keeps them, and `--include-local-only`
-keeps them for any tissue. A drug with any systemic route, such as tretinoin by
-mouth, stays. This hides an eye drop for a retinal gene too; use
+like) are hidden as well. A compound named by its bare moiety is judged on
+every form the Book lists under that name, so `clobetasol` is hidden on the
+strength of CLOBETASOL PROPIONATE being topical only, while a moiety with
+any systemic form stays, such as tretinoin by mouth. They are all kept when
+the target tissue is skin: `--tissue skin`, or an `--activity-tissue` that
+names skin, and `--include-local-only` keeps them for any tissue. This
+hides an eye drop for a retinal gene too; use
 `--include-local-only` for that case. `results.json`
 keeps every route, and each report says how many entries were left out. With no
 Orange Book on disk the filter is not applied and the report says so. Run with

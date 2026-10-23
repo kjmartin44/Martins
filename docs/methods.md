@@ -178,6 +178,14 @@ question nobody asked.
 | Splicing and isoform choice | exons that only decay-prone isoforms use, each weighed by the share of the gene's message its isoforms carry | Ensembl isoforms; GTEx v8 median transcript TPM |
 | mRNA stability | the 3'UTR scanned for AU-rich elements, Pumilio response elements and DRACH, each against a shuffle of the same sequence | the transcript's own sequence |
 | Translation | the 5'UTR scanned for upstream ORFs with Kozak strength, G-quadruplexes, and a 5'TOP motif at the cap | the transcript's own sequence |
+
+`--promoter-dna` scans the promoter for the features a DNA-binding agent
+prefers. It reads the same sequence as the motif scan and honours the same
+repeat mask: soft-masked (lowercase) bases are skipped, and each unmasked
+stretch is scanned on its own so no feature is called across a join. That
+matters because Alu and simple repeats are exactly what a GC-rich or
+homopolymer pattern matches best, and the shuffled null cannot catch it —
+the null is built from the same sequence, so a repeat is in both.
 | Folding | a ligand screen against the gene's own protein, which is what a pharmacological chaperone would have to be | ChEMBL, and docking where a pocket passes its control |
 | Degradation | the ligase that destroys the protein, the enzyme that reverses it, and compounds measured on the protein itself | curated degron and DUB tables; a drug-to-protein table |
 

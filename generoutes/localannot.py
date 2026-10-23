@@ -329,8 +329,18 @@ def genetic_support(symbol: str, path=None) -> dict:
     load_gwas(path)
     s = (symbol or "").strip().upper()
     if not _GWAS:
+        # Two different pieces of news, and the note used to give the
+        # first for both. A catalogue that is present but unreadable -
+        # an export whose gene column is spelled another way - sent the
+        # reader looking for a file that is already there.
+        found = _resolve(path, DEFAULT_GWAS_PATHS)
         return {"assessed": False, "n": 0, "source": None,
-                "note": ("no GWAS Catalog on disk, so human genetic support "
+                "note": (f"the GWAS Catalog at {found} could not be read, "
+                         f"so human genetic support was not checked. See "
+                         f"the warning in the log for which column is "
+                         f"missing."
+                         if found else
+                         "no GWAS Catalog on disk, so human genetic support "
                          "was not checked. That is different from there "
                          "being none.")}
 

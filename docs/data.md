@@ -668,16 +668,28 @@ because that approval is not evidence about the single agent.
 
 ## Output files
 
-Every completed analysis writes six files:
+Every completed analysis writes these files:
 
 | File | Contents |
 | --- | --- |
 | `summary.md` | One page: the shortlist, what the evidence is worth, and what would change the answer. Start here. |
 | `report.md` | The full analysis. Every number qualified, every stage accounted for. |
 | `results.json` | Query metadata, scoring weights, direct therapies, and per-promoter analysis blocks. |
+| `screen_list.tsv` | Every distinct compound worth putting on a plate, grouped by step, in no order. Written only when something reached it. |
 | `tf_summary.tsv` | TF rows with motif, role, ChIP, score, and drug fields. |
 | `sites.bed` | Predicted motif sites in genomic coordinates with a UCSC track header. |
 | `promoter.fa` | Promoter sequences oriented 5′ to 3′ along the gene. |
+
+Every TSV here is written through `csv.writer`, so a drug name or an
+indication carrying a tab or a newline is quoted rather than splitting the
+row. Read them with a CSV reader set to a tab delimiter, not by splitting
+on tabs. `sites.bed` cannot be quoted at all, so its name field is
+sanitised instead, which is lossy by necessity.
+
+**Compatibility:** `screen_list.tsv` and the panel's `panel.tsv` used to
+join their fields on raw tabs. A file written by an older version and
+holding such a name has a row with the wrong number of columns in it; the
+fields after the break are shifted, so re-run rather than repair it.
 
 `summary.md` carries nothing that `report.md` does not also say. It exists
 because `report.md` is long on purpose: every number in it is qualified,
@@ -767,8 +779,8 @@ approved for it. Each treatment records the gene its target is, and the
 entry says whether any of them acts on the gene itself. For HTT none does:
 tetrabenazine, deutetrabenazine and valbenazine inhibit VMAT2 (SLC18A2) and
 treat chorea. The field is context beside the ranking, not part of it. The
-approval dates are as supplied by the project owner; confirm them against
-Drugs@FDA.
+approval dates were supplied by the project owner and match Drugs@FDA as of
+2026-10-23; [Curated tables](curated-tables.md) says how they were checked.
 
 Each promoter block's `upstream_search` records what the `--upstream-network`
 search covered: `factors_searched`, `nodes_reachable`, `nodes_checked`,
@@ -940,6 +952,22 @@ records `null_shuffles`. The evidence verdict has `scan_sites` and
 **Compatibility:** the scan no longer calls sites for matrices that cannot reach the
 requested p-value in the window, and each strand has its own threshold, so a rerun of
 a gene lists fewer sites than before and its factor ranking can change.
+
+`scan_quality.occupancy` splits the scan's chance expectation over the
+factors with and without a measured ChIP peak. It records `n_factors`,
+`n_supported`, `n_unsupported`, the two name lists, `expected_by_chance`,
+`expected_factors`, `fdp_unsupported`, `fdp_supported`, `saturated` and a
+note. `expected_by_chance` counts chance **sites**; every other count is
+**factors**. `expected_factors` is the same expectation converted to the
+factor scale, through the chance share of the scan, and it is what the two
+proportions and `saturated` are computed from.
+
+**Compatibility:** `fdp_unsupported` and `fdp_supported` used to divide a
+site count by a factor count. They are now on one scale, so a rerun moves
+both — in the bundled demo, 14 sites over 10 factors made the unsupported
+proportion 0.2 where the hit scale gives 0.14. The conversion also means a
+factor list trimmed after the scan, by `--proliferation` for instance, no
+longer inflates the proportion or trips `saturated` on a scan that is fine.
 
 `improvements.ctd_papers` is `{chemical: number of papers}` for the chemicals CTD records
 as changing the gene's mRNA, and the new category `literature: reported effect` lists one

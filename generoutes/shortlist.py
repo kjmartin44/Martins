@@ -419,14 +419,27 @@ def filter_routes(result: dict, **f) -> list[dict]:
 
 
 def render(rows: list[dict], criteria: dict, total: int,
-           set_aside: list | None = None) -> str:
+           set_aside: list | None = None, n_kept: int | None = None,
+           n_aside: int | None = None) -> str:
+    """`n_kept` and `n_aside` are how many PASSED, before --top cut them.
+
+    Without them the header counted the rows it was handed, so a preset
+    that kept 87 of 500 routes and showed the top 40 announced "40 of 500
+    routes kept" - understating the filter's output by more than half,
+    and that header is the one number telling you how selective it was.
+    """
     from .report import escape_pipes
     rows = escape_pipes(rows)
     set_aside = escape_pipes(set_aside or [])
+    n_kept = len(rows) if n_kept is None else n_kept
+    n_aside = len(set_aside) if n_aside is None else n_aside
     L = ["# Shortlist", ""]
-    L.append(f"{len(rows)} of {total} routes kept"
-             + (f", {len(set_aside)} set aside for clinical burden"
-                if set_aside else "") + ".")
+    L.append(f"{n_kept} of {total} routes kept"
+             + (f", {n_aside} set aside for clinical burden"
+                if n_aside else "") + ".")
+    if len(rows) < n_kept:
+        L.append("")
+        L.append(f"Showing the top {len(rows)}; raise `--top` for the rest.")
     L.append("")
     L.append("Criteria: " + ", ".join(f"{k}={v}" for k, v in criteria.items()))
     L.append("")
@@ -442,7 +455,7 @@ def render(rows: list[dict], criteria: dict, total: int,
         # what was held back and why.
         if set_aside:
             L.append("")
-            L.extend(_burden_table(set_aside))
+            L.extend(_burden_table(set_aside, n_aside))
         return "\n".join(L)
 
     L.append("| Tier | Grade | Drug | Category | Acts on | Steps | Spec | Score | New? |")
@@ -461,12 +474,16 @@ def render(rows: list[dict], criteria: dict, total: int,
             L.append(f"- **{r['drug']}** — {r['notes'][0][:110]}")
     if set_aside:
         L.append("")
-        L.extend(_burden_table(set_aside))
+        L.extend(_burden_table(set_aside, n_aside))
     return "\n".join(L)
 
 
-def _burden_table(rows: list[dict]) -> list:
-    """The rows a burden criterion set aside, with the class that did it."""
+def _burden_table(rows: list[dict], n_total: int | None = None) -> list:
+    """The rows a burden criterion set aside, with the class that did it.
+
+    `n_total` is how many were set aside, before --top cut the listing.
+    """
+    n_total = len(rows) if n_total is None else n_total
     L = ["## Set aside for clinical burden", ""]
     L.append("> **These are cytotoxic or otherwise high-burden drugs. "
              "Use one only if nothing in the table above will do, and "
@@ -477,7 +494,7 @@ def _burden_table(rows: list[dict]) -> list:
              "For a chronic target this table is usually the wrong half "
              "of the report.")
     L.append("")
-    L.append(f"{len(rows)} route(s) passed every evidence criterion and "
+    L.append(f"{n_total} route(s) passed every evidence criterion and "
              f"were held back for what the drug does beyond your gene. "
              f"They are listed because that is a judgement you may make "
              f"differently: a cytotoxic is the wrong answer for a chronic "
@@ -574,7 +591,8 @@ def main(argv=None) -> int:
     # burden is reported in its own table instead of vanishing.
     kept, aside = split_by_burden(data, **criteria)
     rows = kept[:args.top]
-    text = render(rows, criteria, total, set_aside=aside[:args.top])
+    text = render(rows, criteria, total, set_aside=aside[:args.top],
+                  n_kept=len(kept), n_aside=len(aside))
 
     if args.out:
         Path(args.out).write_text(text, encoding="utf-8")

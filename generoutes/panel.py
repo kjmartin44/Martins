@@ -1029,12 +1029,22 @@ def write_outputs(panel: Panel, merged: dict, rows: list, stages: list,
     cols = ["gene", "tier", "grade", "drug", "acts_on", "category",
             "_regulon_size", "_regulon_understudied", "_tissue_breadth",
             "_tissue_basis", "_burden", "_burden_assessed", "n_genes", "score"]
-    lines = ["\t".join(c.lstrip("_") for c in cols)]
+    # csv.writer, not a join on tabs: drug names, targets and categories
+    # come from external tables, and one carrying a tab or a newline used
+    # to split the row and shift every column after it. The same rule and
+    # the same reason as report.write_outputs applies to tf_summary.tsv.
+    import csv
+    import io
+
+    buf = io.StringIO()
+    w = csv.writer(buf, delimiter="\t", lineterminator="\n",
+                   quoting=csv.QUOTE_MINIMAL)
+    w.writerow([c.lstrip("_") for c in cols])
     for r in rows:
-        lines.append("\t".join("" if r.get(c) is None else str(r.get(c))
-                               for c in cols))
+        w.writerow(["" if r.get(c) is None else str(r.get(c))
+                    for c in cols])
     p = outdir / "panel.tsv"
-    p.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    p.write_text(buf.getvalue(), encoding="utf-8")
     written.append(p)
     return written
 

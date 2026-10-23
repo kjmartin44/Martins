@@ -194,6 +194,12 @@ so the two halves are separable: `--prepare` does every networked step and
 leaves a folder, `--bundle` docks it with no network at all, and
 `--docking-results` brings the JSON back into an analysis.
 
+`--jobs` and `--cpu` apply to `--bundle` exactly as they do to a screen run
+in one piece, so the table above holds for this route too. They did not
+before: `--bundle` was accepted with `--jobs` and docked one compound at a
+time, which on the full approved library is roughly an eightfold overrun
+with nothing said about it.
+
 ```sh
 python -m generoutes --gene CCR5 --direction down \
     --docking-results results/ccr5/dock.json --out results/ccr5

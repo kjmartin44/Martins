@@ -177,7 +177,7 @@ ROUTES: tuple = (
 # Short and incomplete; the point is to prompt the check, not to be a registry.
 IMPRINTED = frozenset({
     "UBE3A", "SNRPN", "MKRN3", "MAGEL2", "NDN", "SNORD116",
-    "IGF2", "H19", "CDKN1C", "KCNQ1OT1", "PHLDA2", "SLC22A18",
+    "IGF2", "H19", "CDKN1C", "KCNQ1OT1", "PHLDA2", "SLC67A1",
     "GNAS", "NESP", "PLAGL1", "GRB10", "MEST", "PEG3", "PEG10",
     "DLK1", "MEG3", "RTL1", "ZIM2", "NNAT", "BLCAP", "INPP5F",
 })

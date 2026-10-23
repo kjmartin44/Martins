@@ -46,9 +46,12 @@ class Condition:
     source: str
 
 
-# Approval dates are the ones given by the project owner. Confirm each against
-# Drugs@FDA before quoting it: valbenazine was first approved in 2017 for
-# tardive dyskinesia, and the date below is for Huntington's chorea.
+# Approval dates were given by the project owner and checked against Drugs@FDA
+# through openFDA on 2026-10-23. Xenazine (NDA 021894) was approved 2008-08-15
+# and Austedo (NDA 208082) 2017-04-03. Ingrezza (NDA 209241) was first approved
+# 2017-04-11 for tardive dyskinesia; its efficacy supplement of 2023-08-18 is
+# the date below for Huntington's chorea. The openFDA record does not name the
+# indication, so that match rests on the date.
 CONDITIONS: tuple = (
     Condition(
         name="Huntington disease",

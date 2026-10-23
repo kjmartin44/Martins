@@ -453,10 +453,24 @@ distilled), and the named transcript regulators built from TargetScan,
 miRTarBase and the ENCODE eCLIP peaks (about 1.4 GB downloaded). The whole set
 is roughly 4.5 GB. Each download goes to a `.part` file and
 is kept only if it passes a check on its content or its published checksum.
+The same holds for the tables that are expanded from a zip or built by a
+second pass, such as the HPA expression table, the ChIP regulon and the
+transcript sites: they are written beside their final name and moved into
+place only once the step finishes. That matters because a file is counted
+as present when it merely exists and is not empty, so a half-written one
+would be accepted for ever. `scripts/run_everything.bat` fetches its own
+small reference files the same way, reading curl's exit code as well as
+checking the content — a truncated JASPAR file still contains its first
+matrix header, so the content check alone cannot see a dropped connection.
 
-Three files are not fetched. The ChEMBL SQLite release and the hg38 genome are
+Four files are not fetched. The ChEMBL SQLite release and the hg38 genome are
 optional and very large. `fda_label_cmax.tsv` is built from a finished run by
-`scripts/build_fda_cmax.py`, which `run_everything.bat` does at the end.
+`scripts/build_fda_cmax.py`, which `run_everything.bat` does at the end. And
+`drug_protein_abundance.tsv` has no public download in the shape this package
+reads: decryptE and ProTargetMiner are manual downloads, and
+`scripts/build_protein_abundance.py` converts either one. Without it the
+protein abundance route does not run, and the report says so rather than
+reporting that nothing moves the protein.
 
 CollecTRI comes from `decoupler` when it is installed, and otherwise from OmniPath's
 CollecTRI dataset. The OmniPath table has more signed edges (about 58,000 against

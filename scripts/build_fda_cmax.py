@@ -41,6 +41,11 @@ from generoutes.signatures import breadth_key  # noqa: E402
 
 TABLE = ROOT / "data" / "fda_label_cmax.tsv"
 REVIEW = ROOT / "data" / "fda_label_cmax_review.tsv"
+# How often the partial table is written. Small enough that an
+# interruption costs seconds of lookups, large enough that the
+# rewrite is not most of the work.
+SAVE_EVERY = 10
+
 COLUMNS = ["name", "cmax_nM", "fu", "dose", "source", "note"]
 
 
@@ -142,27 +147,41 @@ def main(argv=None) -> int:
 
     table, review = read_rows(Path(args.out)), read_rows(Path(args.review))
     counts = {"row": 0, "review": 0, "none": 0}
-    for i, name in enumerate(names, 1):
-        row = lib.get(breadth_key(name))
-        mw = exposure.molecular_weight(row["smiles"]) if row else None
-        res = fdalabel.read_drug(client, name, mw)
-        counts[res["status"]] += 1
-        k = breadth_key(name)
-        if res["status"] == "row":
-            table[k] = res["row"]
-            review.pop(k, None)
-            note = f"{res['row']['cmax_nM']} nM"
-        else:
-            table.pop(k, None)
-            ex = (res["rejected"] or res["accepted"] or [{}])[0]
-            review[k] = {"name": name, "status": res["status"],
-                         "reason": res["reason"],
-                         "example": ex.get("sentence", "")}
-            note = res["reason"]
-        print(f"[{i}/{len(names)}] {name}: {res['status']} - {note}")
-    write_rows(Path(args.out), table, COLUMNS)
-    write_rows(Path(args.review), review,
-               ["name", "status", "reason", "example"])
+
+    def save():
+        write_rows(Path(args.out), table, COLUMNS)
+        write_rows(Path(args.review), review,
+                   ["name", "status", "reason", "example"])
+
+    # Saved as it goes, and in a finally. This prints [i/N] for several
+    # minutes against openFDA's rate limit, and the launcher calls it on
+    # a finished run with a hundred-plus candidates, so a Ctrl-C part way
+    # through is the likely end - and writing only at the bottom threw
+    # away every lookup the run had already paid for. The table is
+    # accumulate-and-rewrite, so a mid-loop write is always complete.
+    try:
+        for i, name in enumerate(names, 1):
+            row = lib.get(breadth_key(name))
+            mw = exposure.molecular_weight(row["smiles"]) if row else None
+            res = fdalabel.read_drug(client, name, mw)
+            counts[res["status"]] += 1
+            k = breadth_key(name)
+            if res["status"] == "row":
+                table[k] = res["row"]
+                review.pop(k, None)
+                note = f"{res['row']['cmax_nM']} nM"
+            else:
+                table.pop(k, None)
+                ex = (res["rejected"] or res["accepted"] or [{}])[0]
+                review[k] = {"name": name, "status": res["status"],
+                             "reason": res["reason"],
+                             "example": ex.get("sentence", "")}
+                note = res["reason"]
+            print(f"[{i}/{len(names)}] {name}: {res['status']} - {note}")
+            if i % SAVE_EVERY == 0:
+                save()
+    finally:
+        save()
     print(f"\n{counts['row']} with a value, {counts['review']} set aside for "
           f"review, {counts['none']} with nothing to read, of {len(names)}.")
     print(f"Wrote {args.out} ({len(table)} drugs) and {args.review}")

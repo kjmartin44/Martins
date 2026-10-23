@@ -1309,6 +1309,53 @@ def test_the_occupancy_partition_reaches_a_real_run():
         "scan_quality"]["occupancy"]["n_factors"] == occ["n_factors"]
 
 
+def test_the_occupancy_split_counts_factors_not_sites():
+    """`expected_by_chance` counts chance SITES; every count in the split
+    counts FACTORS.
+
+    A factor can hold several sites and one site can name several
+    factors, so the two are not interchangeable - the shipped demo has 14
+    sites for 10 factors - and the proportions came out scaled by that
+    ratio.
+    """
+    from generoutes import motifs
+
+    factors = ([{"symbol": f"H{i}", "chip_peaks": 1} for i in range(5)]
+               + [{"symbol": f"B{i}", "chip_peaks": 0} for i in range(5)])
+    # Half the scan's sites are chance, over 10 factors: 5 factors' worth,
+    # and all of them are charged to the 5 with no peak.
+    out = motifs.occupancy_partition(
+        factors, {"expected_by_chance": 10.0, "observed": 20})
+    assert out["expected_factors"] == 5.0
+    assert out["fdp_unsupported"] == 1.0
+    assert out["fdp_supported"] == 0.0
+    assert out["saturated"] is False, "half the scan is not all of it"
+
+
+def test_filtering_the_factor_list_does_not_inflate_the_chance_share():
+    """`ranked` is filtered - by --proliferation, say - after `observed`
+    was measured on the whole scan.
+
+    Dividing the unfiltered site count by the filtered factor count
+    shrank the denominator without shrinking the numerator, which
+    inflated the proportion and could flip `saturated` on a scan that is
+    fine.
+    """
+    from generoutes import motifs
+
+    quality = {"expected_by_chance": 6.0, "observed": 30}
+    whole = ([{"symbol": f"H{i}", "chip_peaks": 1} for i in range(5)]
+             + [{"symbol": f"B{i}", "chip_peaks": 0} for i in range(5)])
+    # The same scan, with four cell-cycle factors removed from the list.
+    trimmed = whole[:3] + whole[5:8]
+
+    a = motifs.occupancy_partition(whole, quality)
+    b = motifs.occupancy_partition(trimmed, quality)
+    assert a["fdp_unsupported"] == b["fdp_unsupported"], (
+        "one fifth of the scan is chance whichever factors are listed")
+    assert b["saturated"] is False
+
+
 def test_a_proportion_is_never_more_than_all_of_it():
     """A scan loose enough to be mostly noise used to report that 210% of
     its measured sites were consistent with chance."""

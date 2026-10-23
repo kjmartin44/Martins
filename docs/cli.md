@@ -872,12 +872,14 @@ options:
 ```text
 usage: generoutes.audit [-h] [--online] [--limit LIMIT]
 
-Check the hand-curated tables for internal consistency, and optionally resolve
-every curated drug name against ChEMBL to detect drift.
+Check the hand-curated tables for internal consistency and, where a download
+is on disk, against it. With --online, also check them against ChEMBL, HGNC
+and the PDB, to detect drift.
 
 options:
   -h, --help     show this help message and exit
-  --online       also resolve curated names against ChEMBL (one cached request
-                 per name)
+  --online       also check curated drug names against ChEMBL (one cached
+                 request per name), gene symbols and the nuclear receptor list
+                 against HGNC, and residue codes against the PDB
   --limit LIMIT  only check this many names online, for a quick look
 ```

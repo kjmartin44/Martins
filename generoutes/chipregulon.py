@@ -128,7 +128,10 @@ def promoter_index(gtf_path, *, upstream: int = UPSTREAM,
             else:
                 tss = start
                 lo, hi = tss - upstream, tss + downstream
-            spans[chrom].append((max(0, lo), hi, name))
+            # 1-based, like the GTF these came from: there is no
+            # position 0, and clamping to it would make a gene at a
+            # contig start overlap a peak one base before it.
+            spans[chrom].append((max(1, lo), hi, name))
 
     out: dict = {}
     for chrom, rows in spans.items():
@@ -235,7 +238,12 @@ def build(bed_path, gtf_path, *, out_path=DEFAULT_OUT,
             if d is None:
                 d = edges[tf] = {}
             for m in range(k - 1, max(-1, k - 60), -1):
-                if ends[m] < p_start:
+                # The windows are 1-based inclusive and the BED interval
+                # is 0-based half-open, so a peak [p_start, p_end) covers
+                # 1-based bases p_start+1 to p_end. A window ending at
+                # p_start therefore stops one base before the peak
+                # begins, and `<` counted it as an overlap.
+                if ends[m] <= p_start:
                     continue
                 gene = genes[m]
                 cur = d.get(gene)

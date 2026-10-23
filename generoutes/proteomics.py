@@ -89,7 +89,9 @@ SOURCE = (
     "compounds) answer this question; LINCS P100 (~90 phosphopeptides) "
     "and CPTAC (tumour proteogenomics, no drug arm) do not. Put a table "
     "at data/drug_protein_abundance.tsv with columns "
-    "drug, protein, log2fc [, cell_line, dose, time, source].")
+    "drug, protein, log2fc [, cell_line, dose, time, source]; "
+    "`python scripts/build_protein_abundance.py EXPORT` converts either "
+    "export into that layout.")
 
 
 @dataclass

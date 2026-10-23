@@ -287,9 +287,13 @@ def distil_bindingdb(src=None, out=DISTILLED, *,
     if Path(src).resolve() == out_path.resolve():
         return {"error": f"{out} is the source; nothing to do"}
 
-    keep = ["UniProt (SwissProt) Primary ID of Target Chain 1",
-            "Ligand SMILES", "ChEMBL ID of Ligand",
-            "Ki (nM)", "Kd (nM)", "IC50 (nM)", "EC50 (nM)"]
+    # Built from the same tuples `load_bindingdb` matches against, not
+    # restated. The hand-written list named only the "... Target Chain 1"
+    # spelling, and `fetch_bindingdb` writes the header without the " 1" -
+    # so the distiller refused the very file the fetcher produces, and the
+    # 9 GB original stayed the only thing `resolve` could find.
+    keep = (list(_UNIPROT_COLS) + list(_SMILES_COLS)
+            + [c for c, _ in _AFFINITY_COLS] + list(_ID_COLS))
     n_in = n_out = 0
     out_path.parent.mkdir(parents=True, exist_ok=True)
 

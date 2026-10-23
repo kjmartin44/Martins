@@ -66,6 +66,32 @@ def test_a_docking_run_that_passed_its_gate_ranks_in_its_own_order():
     assert s["auc"] == 0.9 and s["pocket"] == "4ABC"
 
 
+def test_docking_ties_share_a_rank_like_every_other_list():
+    """The module docstring says "Tied drugs share the best rank of their
+    tie group, so a tie is not rewarded with a lucky position", and the
+    report prints that line to the reader.
+
+    The route side did it; the docking side ranked by position alone.
+    Docking scores are reported to one decimal, so ties are common, and
+    file order silently decided which of two equal compounds outranked
+    the other - which is exactly what the printed line denies.
+    """
+    doc = _doc(["X", "Y", "Z"])
+    for h in doc["hits"][:2]:
+        h["score"] = -9.2                 # X and Y tie, Z is weaker
+    s = cb.docking_source(doc, "G1")
+    assert s["ranks"] == {"x": 1, "y": 1, "z": 3}, (
+        "equal scores must take the same rank, and the next one skips")
+
+    # A hit with no score is tied with nothing. Treating absent as equal
+    # would put the whole list on rank 1 - a different wrong answer.
+    unscored = _doc(["X", "Y", "Z"])
+    for h in unscored["hits"]:
+        h.pop("score")
+    assert cb.docking_source(unscored, "G1")["ranks"] == {
+        "x": 1, "y": 2, "z": 3}
+
+
 def test_a_docking_run_that_failed_its_gate_is_not_used_and_says_why():
     s = cb.docking_source(_doc(["X"], usable=False, error="no pocket"), "G1")
     assert "ranks" not in s and s["unused"] == "no pocket"

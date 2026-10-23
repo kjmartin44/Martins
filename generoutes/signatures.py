@@ -76,12 +76,15 @@ PROMISCUITY_FLAG = 0.25
 
 # A small, well-known subset of the 978 landmarks, for offline checks. The full
 # list comes from the API; this is a fallback so the landmark distinction is
-# never silently skipped.
+# never silently skipped. Every name here must be a landmark in the CLUE gene
+# table, and `python -m generoutes.audit` checks that when the table is on
+# disk. DDIT3, ATF3, SOD1, NQO1, CEBPB, SREBF1, VDR, ESR1, AR, E2F1 and MKI67
+# were here once and are "best inferred" there, so they are not listed.
 KNOWN_LANDMARKS = {
-    "HSPA8", "HMOX1", "DDIT3", "ATF3", "EGR1", "JUN", "FOS", "MYC", "CDKN1A",
-    "GADD45A", "TP53", "RELB", "NFKBIA", "SOD1", "CAT", "TXNRD1", "NQO1",
-    "HSPA1A", "DNAJB1", "PPARG", "NR3C1", "VDR", "ESR1", "AR", "STAT3",
-    "CEBPB", "SREBF1", "HIF1A", "FOXO3", "E2F1", "CCND1", "MKI67",
+    "HSPA8", "HMOX1", "EGR1", "JUN", "FOS", "MYC", "CDKN1A",
+    "GADD45A", "TP53", "RELB", "NFKBIA", "CAT", "TXNRD1",
+    "HSPA1A", "DNAJB1", "PPARG", "NR3C1", "STAT3",
+    "HIF1A", "FOXO3", "CCND1",
 }
 
 

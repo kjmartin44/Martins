@@ -55,6 +55,8 @@ from __future__ import annotations
 import logging
 import random
 import re
+
+from .motifs import dinucleotide_shuffle
 from dataclasses import dataclass, field
 
 log = logging.getLogger(__name__)
@@ -182,39 +184,6 @@ def _revcomp(seq: str) -> str:
     return seq.translate(str.maketrans("ACGTacgt", "TGCAtgca"))[::-1]
 
 
-def _dinucleotide_shuffle(seq: str, rng: random.Random) -> str:
-    """Shuffle preserving dinucleotide composition, by an Eulerian walk.
-
-    A plain shuffle preserves only base composition, and G-runs are a
-    dinucleotide property - GG is what makes a quadruplex possible. A
-    mononucleotide null would therefore call almost every GC-rich
-    promoter enriched.
-    """
-    if len(seq) < 4:
-        return seq
-    edges: dict = {}
-    for a, b in zip(seq, seq[1:]):
-        edges.setdefault(a, []).append(b)
-    for v in edges.values():
-        rng.shuffle(v)
-    out = [seq[0]]
-    cur = seq[0]
-    for _ in range(len(seq) - 1):
-        nxt = edges.get(cur)
-        if not nxt:
-            # Walk stranded: fall back to a remaining base so the length
-            # is preserved rather than silently returning a short string.
-            left = [k for k, v in edges.items() if v]
-            if not left:
-                break
-            cur = rng.choice(left)
-            out.append(cur)
-            continue
-        cur = nxt.pop()
-        out.append(cur)
-    return "".join(out)
-
-
 def _count(pattern, seq: str) -> tuple:
     hits = [(m.start(), m.group(1)) for m in pattern.finditer(seq)]
     # Overlapping lookahead matches would count one quadruplex several
@@ -279,7 +248,7 @@ def scan_features(sequence: str, *, shuffles: int = SHUFFLES,
     rng = random.Random(seed)
     # Each run shuffled on its own, so the null has the same run structure
     # as the observation and the two are comparable.
-    shuffled = [[(0, _dinucleotide_shuffle(r, rng)) for _, r in runs]
+    shuffled = [[(0, dinucleotide_shuffle(r, rng)) for _, r in runs]
                 for _ in range(shuffles)]
 
     feats: dict = {}
