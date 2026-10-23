@@ -4202,7 +4202,10 @@ def write_outputs(result: dict, outdir: str | Path, *, top_n: int = 25) -> list[
     # opposite of what a written argument wants; see screenlist.py.
     from . import screenlist as _sl
 
-    _plan = _sl.build(result)
+    # The same FDA filter the report applies. Without it the plate list
+    # carries compounds the run was told to leave out - and this is the
+    # file someone orders from, so it is the worst place to disagree.
+    _plan = _sl.build(fda_mod.apply(result))
     if _plan.get("rows"):
         p = outdir / "screen_list.tsv"
         p.write_text(_sl.to_tsv(_plan), encoding="utf-8")

@@ -1307,3 +1307,30 @@ def test_the_occupancy_partition_reaches_a_real_run():
     import json
     assert json.loads(json.dumps(res, default=str))["results"][0][
         "scan_quality"]["occupancy"]["n_factors"] == occ["n_factors"]
+
+
+def test_a_proportion_is_never_more_than_all_of_it():
+    """A scan loose enough to be mostly noise used to report that 210% of
+    its measured sites were consistent with chance."""
+    from generoutes import motifs
+
+    factors = ([{"symbol": f"H{n}", "chip_peaks": 1} for n in range(3)]
+               + [{"symbol": f"B{n}", "chip_peaks": 0} for n in range(2)])
+    out = motifs.occupancy_partition(factors, {"expected_by_chance": 20.0})
+    assert out["fdp_supported"] <= 1.0
+    assert out["fdp_unsupported"] <= 1.0
+    # And it says the split cannot help rather than printing a number.
+    assert out["saturated"] is True
+    assert "too loose for the split to help" in out["note"]
+    assert "stricter p-value" in out["note"]
+
+
+def test_a_scan_with_room_to_spare_still_gets_the_split():
+    from generoutes import motifs
+
+    factors = ([{"symbol": f"H{n}", "chip_peaks": 1} for n in range(8)]
+               + [{"symbol": f"B{n}", "chip_peaks": 0} for n in range(2)])
+    out = motifs.occupancy_partition(factors, {"expected_by_chance": 2.0})
+    assert out["saturated"] is False
+    assert out["fdp_unsupported"] == 1.0 and out["fdp_supported"] == 0.0
+    assert "measured peak over this window" in out["note"]

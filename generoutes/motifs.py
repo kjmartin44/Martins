@@ -411,9 +411,16 @@ def occupancy_partition(factors, quality: dict) -> dict:
     # over-trusting an unmeasured site is a wasted experiment.
     out["fdp_unsupported"] = (round(min(1.0, expected / len(bare)), 3)
                               if bare else 0.0)
+    # Capped, because this is a proportion. The surplus spilling past
+    # the unmeasured sites is real, but once it fills the measured ones
+    # too the scan has no clean subset left and the number stops
+    # carrying information; `saturated` below is what to read instead.
     out["fdp_supported"] = round(
-        max(0.0, (expected - min(expected, len(bare))) / len(supported)), 3
+        min(1.0, max(0.0, (expected - min(expected, len(bare)))
+                     / len(supported))), 3
     ) if supported else None
+    # True when chance alone accounts for every site, measured or not.
+    out["saturated"] = bool(expected >= n)
     out["drugged_unsupported"] = sorted(
         f.get("symbol") or "?" for f in bare if f.get("drugs"))
     out["drugged_supported"] = sorted(
@@ -433,6 +440,14 @@ def _occupancy_note(o: dict) -> str:
                 f"peak over this window, so every one rests on the scan "
                 f"alone and the window-wide false-discovery proportion "
                 f"applies to all of them unchanged.")
+    if o.get("saturated"):
+        return (
+            f"This scan is too loose for the split to help. Chance alone "
+            f"accounts for {o['expected_by_chance']} sites against {n} "
+            f"found, so there is no subset of it - measured or not - that "
+            f"chance does not already explain, and {s} measured peaks "
+            f"cannot rescue it. A stricter p-value is the fix; nothing "
+            f"that can be done to this hit list is.")
     parts = [
         f"{s} of {n} factors have a measured peak over this window and {b} "
         f"do not. A shuffled copy of the window cannot produce a peak, so "

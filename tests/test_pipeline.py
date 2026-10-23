@@ -1635,6 +1635,12 @@ def test_all_output_files_written_for_every_section(tmp_path):
         encoding="utf-8").splitlines()
     assert plate[0].startswith("compound	step")
     assert "score" not in plate[0]
+    # The same rows the report shows. This is the file someone orders
+    # compounds from, so a filter the report applied and this did not
+    # would put excluded compounds on a plate.
+    from generoutes import report as _rp
+    section = chr(10).join(_rp._screen_list_section(res))
+    assert f"**{len(plate) - 1} distinct compounds" in section
     assert len(plate) == len({l.split("	")[0] for l in plate[1:]}) + 1
 
     bed = (tmp_path / "sites.bed").read_text().splitlines()
