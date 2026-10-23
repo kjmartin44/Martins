@@ -104,7 +104,3 @@ See the [documentation](docs/index.md) for installation details, input formats,
 methods, limitations, the Python API, and development instructions —
 in particular [specificity and evidence](docs/specificity.md) and
 [comparing several genes](docs/panel.md).
-
-## License
-
-This repository is licensed under [Creative Commons Attribution 4.0 International](LICENSE) (CC BY 4.0). The public data sources it reads have their own terms; see [Setting up the data](docs/data-setup.md).
