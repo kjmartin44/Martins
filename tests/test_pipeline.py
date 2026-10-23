@@ -16704,3 +16704,86 @@ def test_the_state_reaches_the_saved_row():
     r = _tf("A", 0)
     r.chip_state = pl.chip_state(r, True, {"A"})
     assert r.to_dict()["chip_state"] == "not bound"
+
+
+# ===================================================================== #
+# Every run gets its own temporary root, because several sessions run    #
+# this suite in one checkout at the same time.                           #
+# ===================================================================== #
+def test_each_run_gets_a_basetemp_of_its_own(tmp_path, monkeypatch):
+    """Keyed on the process id: two live processes never share one, so
+    two runs can never be handed the same directory."""
+    import pathlib
+    import os
+    import sys
+
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+    import conftest as ct
+
+    monkeypatch.setattr(ct.tempfile, "gettempdir", lambda: str(tmp_path))
+
+    class _Opt:
+        basetemp = None
+
+    class _Config:
+        option = _Opt()
+
+    cfg = _Config()
+    ct.pytest_configure(cfg)
+    assert cfg.option.basetemp.endswith(f"run-{os.getpid()}")
+    # The parent has to exist already: pytest makes the basetemp itself
+    # and not the directories above it.
+    assert pathlib.Path(cfg.option.basetemp).parent.is_dir()
+
+
+def test_an_explicit_basetemp_is_left_alone(tmp_path):
+    """Somebody who asked for a directory gets that directory."""
+    import pathlib
+    import sys
+
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+    import conftest as ct
+
+    class _Opt:
+        basetemp = str(tmp_path / "mine")
+
+    class _Config:
+        option = _Opt()
+
+    cfg = _Config()
+    ct.pytest_configure(cfg)
+    assert cfg.option.basetemp == str(tmp_path / "mine")
+
+
+def test_abandoned_run_directories_are_cleared_and_live_ones_are_not(tmp_path):
+    import pathlib
+    import os
+    import time
+
+    import sys
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+    import conftest as ct
+
+    root = tmp_path / "generoutes-pytest"
+    root.mkdir()
+    old = root / "run-1"
+    old.mkdir()
+    (old / "leftover.txt").write_text("x", encoding="utf-8")
+    stale = time.time() - ct._RUN_DIR_MAX_AGE - 60
+    os.utime(old, (stale, stale))
+    recent = root / "run-2"
+    recent.mkdir()
+
+    ct._clear_abandoned_runs(root)
+    assert not old.exists()
+    assert recent.exists()
+
+
+def test_clearing_never_raises_on_a_root_that_is_not_there(tmp_path):
+    """It runs before every suite, so it must not be able to stop one."""
+    import pathlib
+    import sys
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+    import conftest as ct
+
+    ct._clear_abandoned_runs(tmp_path / "nope")

@@ -26,6 +26,10 @@ include = ["generoutes*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# There is deliberately no basetemp here. pytest wipes that directory at
+# startup, so a fixed one would have concurrent runs deleting each
+# other's fixtures every time. tests/conftest.py gives each run its own
+# instead, keyed on the process id.
 
 [build-system]
 requires = ["setuptools>=64"]
