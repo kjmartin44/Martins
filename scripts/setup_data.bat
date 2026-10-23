@@ -3,6 +3,17 @@ REM Fetch every reference file the analysis reads from data\ and that git
 REM does not carry: motifs, ChIP peaks, annotation, expression, LINCS,
 REM DepMap, PRISM, GWAS, gnomAD and the rest. See scripts\setup_data.py.
 REM
+REM Some tables are BUILT rather than downloaded - the named transcript
+REM regulators are assembled from TargetScan and ENCODE eCLIP by
+REM scripts\build_transcript_sites.py, which this script calls for you.
+REM
+REM Two are neither fetched nor built, and the run says so rather than
+REM reporting the question as answered:
+REM   data\drug_protein_abundance.tsv   decryptE or ProTargetMiner, placed
+REM                                     by hand - see docs\methods.md
+REM   data\transcript_expression.tsv    optional; without it GTEx is
+REM                                     queried live instead
+REM
 REM Usage:  setup_data.bat              (shows what is missing, asks, fetches)
 REM         setup_data.bat --yes        (no question)
 REM         setup_data.bat --list       (inventory only)

@@ -152,6 +152,15 @@ of range (for example `--null-shuffles -1` or `--upstream-factors 0`).
 `scripts\run_everything.bat` asks for the gene, the direction, the tissue state and the
 dosage scenario, then runs the long command above with a window of -1000/+200, a p-value
 of 1e-5, `--all-tss`, `--tf-weight 0.7` when ChIP data is present, and `--regulator-steps 2`.
+
+Three of its questions change what the run produces rather than how it is tuned. For any
+scenario where a copy is impaired it asks what the broken copy makes, and whether the
+transcript carries a premature stop; either answer turns `--design-screen` from a promoter
+reporter into a screen of the approved library against the gene's protein in patient cells.
+It then asks whether DNA-damaging compounds should be demoted, which passes
+`--avoid-genotoxic`. That one defaults to yes, because much of what the literature records
+as raising a gene is a carcinogen, a tumour promoter or an irritant, and for a patient with
+a cancer predisposition those are not candidates at any score.
 It adds docking before the analysis, a funnel against a control gene after it, and a dose
 check. It uses a local file for each option only if that file exists in `data/`. It also
 asks how many factors to search for upstream drugs. Blank keeps the default of 8, and a

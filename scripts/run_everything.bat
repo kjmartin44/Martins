@@ -40,7 +40,7 @@ REM The files below are git-ignored, so a fresh checkout has none of them.
 REM The offers further down fetch a few; scripts\setup_data.bat fetches all
 REM of them, and leaves any that are already here alone.
 set "NEEDSETUP="
-for %%P in (data\jaspar2024.txt data\remap2022.bed.gz data\chip_regulon.tsv data\collectri.tsv data\gencode.basic.gtf.gz data\rna_tissue_consensus.tsv data\lincs_chem_pert_up.gmt data\lincs_chem_pert_down.gmt data\lincs_geneinfo.txt data\approved_library.tsv) do if not exist %%P set "NEEDSETUP=1"
+for %%P in (data\jaspar2024.txt data\remap2022.bed.gz data\chip_regulon.tsv data\collectri.tsv data\gencode.basic.gtf.gz data\rna_tissue_consensus.tsv data\lincs_chem_pert_up.gmt data\lincs_chem_pert_down.gmt data\lincs_geneinfo.txt data\approved_library.tsv data\transcript_sites.tsv) do if not exist %%P set "NEEDSETUP=1"
 if defined NEEDSETUP (
     echo.
     echo Some reference files are not in data\. Without them routes are skipped
@@ -444,10 +444,15 @@ REM What the broken copy makes. This matters because transcription is
 REM not allele-specific: raising the gene raises BOTH copies, so a
 REM truncated product gets amplified alongside the working one, and the
 REM requirement above stops being the whole specification.
+REM Asked for the recessive scenarios too. A truncated product is what
+REM turns the designed screen from a promoter reporter into a protein
+REM screen, and that is as true of two impaired copies as of one.
 set "BROKEN="
 set "ASKBROKEN="
 if "!SCEN!"=="haploinsufficiency" set "ASKBROKEN=1"
 if "!SCEN!"=="silenced_allele" set "ASKBROKEN=1"
+if "!SCEN!"=="hypomorph" set "ASKBROKEN=1"
+if "!SCEN!"=="biallelic_hypomorph" set "ASKBROKEN=1"
 if defined ASKBROKEN (
     echo.
     echo What does the broken copy make?
@@ -460,6 +465,21 @@ if defined ASKBROKEN (
     if "!BNUM!"=="1" set "BMAKES=null"
     if "!BNUM!"=="2" set "BMAKES=truncated"
     set "BROKEN=--broken-allele-makes !BMAKES!"
+)
+
+REM A premature stop is worth its own question rather than being inferred
+REM from "truncated". It decides two things: the designed screen reads
+REM protein instead of a reporter, and readthrough agents become a
+REM modality worth listing. Answer no if you do not know.
+set "PTC="
+if defined ASKBROKEN (
+    echo.
+    echo Does the transcript carry a premature stop codon ^(nonsense or
+    echo frameshift^)? This makes the designed screen measure protein
+    echo rather than a promoter reporter.
+    set "HASPTC="
+    set /p HASPTC="y/N: "
+    if /i "!HASPTC!"=="y" set "PTC=--has-ptc"
 )
 
 REM For a lowering plan, how much you want left. Half is the usual ask
@@ -496,8 +516,21 @@ if "!SCEN!"=="modifier" (
     )
 )
 
+REM Whether a DNA-damaging route is acceptable. Asked rather than assumed:
+REM many of the chemicals the literature records as RAISING a gene are
+REM carcinogens, tumour promoters or irritants, and for a patient already
+REM at raised cancer risk those are not candidates at any score.
+echo.
+echo Should DNA-damaging compounds be demoted? Say yes for a patient with
+echo a cancer predisposition, an existing tumour, or who is a child.
+set "GENOTOX="
+set "AVOIDG="
+set /p AVOIDG="Y/n: "
+if /i not "!AVOIDG!"=="n" set "GENOTOX=--avoid-genotoxic"
+
 set "DOSAGE="
-if not "!SCEN!"=="" set "DOSAGE=--scenario !SCEN! !BROKEN! !FRACTION! !CONDITION!"
+if not "!SCEN!"=="" set "DOSAGE=--scenario !SCEN! !BROKEN! !PTC! !FRACTION! !CONDITION!"
+if "!SCEN!"=="" if defined PTC set "DOSAGE=!PTC!"
 
 set "OUT=results\!GENE!_!DIR!"
 
@@ -761,7 +794,7 @@ echo.
     --regulator-route --regulator-steps 2 ^
     !LINCS! --genetics --screen --design-screen --design-modality ^
     --promoter-dna --screen-product --find-analogs ^
-    !ACTIVITY! !SENS! !DOCKING! !DOSAGE! ^
+    !ACTIVITY! !SENS! !DOCKING! !DOSAGE! !GENOTOX! ^
     --out "!OUT!" -v
 
 if errorlevel 1 (

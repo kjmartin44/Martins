@@ -413,7 +413,9 @@ SUBS = {
     "!SENS!": "--sensitivity-scan", "!DOCKING!": "--docking-results d.json",
     "!UPFACT!": "--upstream-factors 17",
     "!DOSAGE!": "--scenario haploinsufficiency --broken-allele-makes "
-                "truncated", "!LIBRARY!": "",
+                "truncated --has-ptc", "!LIBRARY!": "",
+    # The launcher now asks whether DNA-damaging routes are acceptable.
+    "!GENOTOX!": "--avoid-genotoxic",
 }
 
 
