@@ -10,6 +10,20 @@ dependencies = ["numpy>=1.24"]
 [project.optional-dependencies]
 chemistry = ["rdkit>=2023.9", "scikit-learn>=1.3"]
 dev = ["pytest>=7", "build>=1"]
+# Imported by the docking path. Meeko writes the ligand PDBQT and is the
+# first choice for the receptor, so without it every compound in a Vina
+# screen returns nothing. The docking BINARY is not a package and cannot
+# be declared here; see docs/dependencies.md.
+docking = ["meeko>=0.5"]
+# Imported by the scripts that build tables under data/. decoupler is the
+# preferred CollecTRI source and falls back to OmniPath; openpyxl reads
+# the TargetScan workbook.
+data = ["decoupler>=1.5", "openpyxl>=3.1"]
+# Open Babel is the fallback receptor converter, used only when meeko is
+# absent. It is in an extra of its own because it often has no wheel for
+# the running platform and builds from source: inside `docking` a failure
+# here would take meeko down with it, and meeko is the one that matters.
+openbabel = ["openbabel-wheel>=3.1"]
 
 [project.urls]
 Repository = "https://github.com/kjmartin44/Martins"

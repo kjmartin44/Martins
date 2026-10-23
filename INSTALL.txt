@@ -13,6 +13,13 @@ Windows PowerShell, from the folder containing pyproject.toml:
 The demo uses synthetic data and makes no network requests.
 Open results/demo/report.md after it completes.
 
+The curated tables are part of the package. Check them with:
+
+    .\.venv\Scripts\python.exe -m generoutes.audit
+
+docs/curated-tables.md says what each holds. The tables built from your own
+runs or from openFDA are in docs/data-setup.md, group D.
+
 Optional chemistry tools:
     .\.venv\Scripts\python.exe -m pip install -e ".[chemistry]"
 

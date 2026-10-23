@@ -123,3 +123,14 @@ Thumbs.db
 # transcript_sites_src/ so a rebuild does not fetch a gigabyte again.
 /data/transcript_sites.tsv
 /data/transcript_sites_src/
+
+# Other filenames the loaders accept (generoutes/datasets.py lists them all).
+# A test checks that every one is ignored, so a download cannot be committed
+# by accident.
+/data/drug_protein_abundance.tsv
+/data/transcript_expression.tsv
+/data/chembl_*_sqlite/
+/data/common_essentials.csv
+/data/hgnc.tsv
+/data/hg38.fa
+/data/genome.fa

@@ -9891,6 +9891,96 @@ def test_the_version_floor_is_still_what_the_test_above_assumes():
     assert m.group(1) == ">=3.10"
 
 
+# PyPI name for the module name, where they differ.
+_DISTRIBUTION = {"sklearn": "scikit-learn", "openbabel": "openbabel-wheel"}
+
+
+def test_every_third_party_import_is_declared_in_pyproject():
+    """Four packages were imported and declared nowhere.
+
+    meeko, openbabel, decoupler and openpyxl were reachable only by
+    reading the source: `pip install -e ".[dev,chemistry]"`, which is
+    what AGENTS.md tells you to run, installed none of them. meeko is
+    the one that mattered - without it every compound in a Vina screen
+    returns nothing, and the screen reports no hits rather than no
+    meeko.
+
+    NumPy stays the only RUNTIME requirement; the rest live in extras,
+    which is what this checks. Sibling scripts import each other by bare
+    name, so only names that are neither stdlib nor part of this
+    repository count.
+    """
+    import ast
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    text = (root / "pyproject.toml").read_text(encoding="utf-8")
+
+    local = {p.stem for p in (root / "generoutes").glob("*.py")}
+    local |= {p.stem for p in (root / "scripts").glob("*.py")}
+    local |= {"generoutes"}
+
+    missing = {}
+    for folder in ("generoutes", "scripts"):
+        for f in sorted((root / folder).glob("*.py")):
+            tree = ast.parse(f.read_text(encoding="utf-8", errors="replace"))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    names = [a.name.split(".")[0] for a in node.names]
+                elif isinstance(node, ast.ImportFrom) and node.level == 0:
+                    names = [(node.module or "").split(".")[0]]
+                else:
+                    continue
+                for n in names:
+                    if not n or n in sys.stdlib_module_names or n in local:
+                        continue
+                    if _DISTRIBUTION.get(n, n) not in text:
+                        missing.setdefault(n, f.name)
+
+    assert not missing, (
+        "imported but declared in neither dependencies nor an extra: "
+        + ", ".join(f"{n} ({where})" for n, where in sorted(missing.items()))
+        + ". Add it to pyproject.toml and to docs/dependencies.md.")
+
+
+def test_numpy_is_still_the_only_required_runtime_dependency():
+    """The point of the extras. A package whose point is that it runs
+    wherever Python does cannot grow a compiled requirement by
+    accident."""
+    import tomllib
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    with open(root / "pyproject.toml", "rb") as fh:
+        data = tomllib.load(fh)
+    required = data["project"]["dependencies"]
+    assert [r.split(">")[0].split("=")[0].strip() for r in required] == [
+        "numpy"]
+
+
+def test_the_dependency_page_names_every_declared_package():
+    """One page lists them, and a package declared but unlisted is one
+    nobody can find out about."""
+    import tomllib
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    with open(root / "pyproject.toml", "rb") as fh:
+        data = tomllib.load(fh)
+    page = (root / "docs" / "dependencies.md").read_text(encoding="utf-8")
+
+    declared = list(data["project"]["dependencies"])
+    for extra in data["project"]["optional-dependencies"].values():
+        declared += list(extra)
+    absent = sorted({r.split(">")[0].split("=")[0].strip() for r in declared}
+                    - {w.strip("`,.|") for w in page.replace("|", " ").split()})
+    # openbabel-wheel is listed under its module name, which is what you
+    # type to import it and what the error message says.
+    absent = [a for a in absent if a != "openbabel-wheel"]
+    assert not absent, f"declared in pyproject but not in the page: {absent}"
+
+
 # ===================================================================== #
 # Two independent methods, intersected. Each ran and neither was ever   #
 # compared against the other.                                           #

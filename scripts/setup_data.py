@@ -32,6 +32,7 @@ import json
 import os
 import re
 import shutil
+import ssl
 import subprocess
 import sys
 import time
@@ -81,6 +82,28 @@ def _open(url: str, timeout: int = 60):
     return urllib.request.urlopen(req, timeout=timeout)
 
 
+def _is_tls_error(exc: OSError) -> bool:
+    return isinstance(exc, ssl.SSLError) or isinstance(
+        getattr(exc, "reason", None), ssl.SSLError)
+
+
+def _curl(url: str, part: Path) -> None:
+    """Fetch with curl, for a server the Python TLS stack cannot talk to.
+
+    miRTarBase answers curl but fails the handshake from Python on some
+    machines, and a retry through the same stack fails the same way.
+    """
+    exe = shutil.which("curl.exe") or shutil.which("curl")
+    if not exe:
+        raise OSError("curl is not on PATH")
+    done = subprocess.run([exe, "-fsSL", "--retry", "2", "-A", AGENT,
+                           "-o", str(part), url],
+                          capture_output=True, timeout=3600)
+    if done.returncode:
+        raise OSError(f"curl exit {done.returncode}: "
+                      f"{(done.stderr or b'').decode('utf-8', 'replace').strip()[-200:]}")
+
+
 def get_text(url: str) -> str:
     with _open(url) as r:
         return r.read().decode("utf-8", "replace")
@@ -124,6 +147,14 @@ def download(url: str, dest, *, check=None, retries: int = 3) -> Path:
             last = exc
             if part.exists():
                 part.unlink()
+            if _is_tls_error(exc):
+                try:
+                    _curl(url, part)
+                    last = None
+                except (OSError, subprocess.SubprocessError) as curl_exc:
+                    last = OSError(f"{exc}; curl also failed: {curl_exc}")
+                    part.unlink(missing_ok=True)
+                break
             if attempt < retries:
                 time.sleep(2 * attempt)
     if last is not None:

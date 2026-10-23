@@ -68,19 +68,30 @@ python -m generoutes --demo --gene DEMOGENE --out results/demo
 ```
 
 The demo runs offline on synthetic data. Open `results/demo/report.md`.
+The curated tables are part of the package, and `python -m generoutes.audit`
+checks them ([what each holds](docs/curated-tables.md)).
 A completed run also writes `results.json`, `tf_summary.tsv`, `sites.bed`,
 and `promoter.fa`.
 
 To analyze a real gene with live services, first fetch the reference files. Git
-does not carry them, and the full set is about 3 GB (`--small` skips the largest;
+does not carry them, and the full set is about 4.5 GB (`--small` skips the largest;
 `--list` shows what is missing):
 
 ```sh
 python scripts/setup_data.py
-python -m generoutes --gene CCR5 --direction down --pfm-file data/jaspar2024.txt --out results/CCR5_down
+python -m generoutes --gene CCR5 --direction down \
+  --pfm-file data/jaspar2024.txt --chip-bed data/remap2022.bed.gz \
+  --regulon-file data/chip_regulon.tsv --expression-file data/rna_tissue_consensus.tsv \
+  --out results/CCR5_down
 ```
 
-On Windows, `scripts\run_everything.bat` does both and runs every stage.
+The table flags matter. With `--pfm-file` alone the run still works, but the
+report loses the ChIP evidence and uses coarse regulon tiers. Read the
+**Evidence available in this run** table at the top of `report.md` to see which
+sources arrived. A report can still be marked degraded when the scan shows no
+signal above chance, as it does for CCR5, and that is a property of the gene's
+promoter window and not of the install. On Windows, `scripts\run_everything.bat` does both steps and
+runs every stage.
 
 To compare several candidate genes and narrow to the one with the least
 collateral effect:

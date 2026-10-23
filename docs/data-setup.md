@@ -44,15 +44,17 @@ the install is good and any later problem is in the data.
 python -m generoutes --demo --gene DEMOGENE --out results/demo
 ```
 
-## The three groups
+## The four groups
 
 | Group | Contents | Disk | What you get |
 | --- | --- | --- | --- |
 | A. Core | motifs, ChIP peaks, gene models, regulons, expression, drug library | about 1.7 GB | the promoter motif route, and the tables most routes read |
 | B. Evidence | LINCS, dosage, genes and GO, Orange Book, CollecTRI | about 0.3 GB | measured drug effects, dosage limits, route of administration, signed regulons |
 | C. Large optional | BindingDB, DepMap, PRISM, GWAS Catalog, ChEMBL database, transcript site catalogues | 13 GB or more | measured potency, dependency, drug sensitivity, human genetics, the microRNAs and RBPs named on a transcript |
+| D. Built and curated | tables built from your own runs or from openFDA, and the curated tables inside the package | under 1 MB | the fame check, human peak plasma levels, protein abundance, and the checked curated tables |
 
 Take A and B for a complete run. Add C items only for the sections they unlock.
+Group D needs no large download; read it after your first runs.
 The run records which sources ran, so skipping one is visible and never silent.
 
 ## Group A: core files
@@ -356,6 +358,66 @@ is what keeps the table near 115 MB instead of 880 MB. `--mirtarbase-weak`
 puts it back, with every row labelled weak. `Non-Functional MTI` is always
 left out, because it records that the pair does not act.
 
+## Group D: built tables and the curated tables
+
+Two kinds of table are not downloads.
+
+A **curated table** is typed into the Python source, so it comes with the
+install and needs no setup. They include the drug classes, the nuclear
+receptors and the docking residue codes. [Curated tables](curated-tables.md)
+lists each one, says what a complete version would be, and gives the steps to
+rebuild or check it. After installing, check them:
+
+```sh
+python -m generoutes.audit
+```
+
+That needs no network. Add `--online` to also check every drug name against
+ChEMBL, every gene symbol against HGNC, the nuclear receptor list against the
+HGNC receptor group, and the docking residue codes against the PDB. Run it from
+the repository root, because two of its checks read `data/`.
+
+A **built table** is made from files you already have, from a web service, or
+from your own earlier runs. Git ignores them, so each checkout builds its own.
+Every one is optional, and a run names the section it loses without one.
+
+| File | Built from | Command | Without it |
+| --- | --- | --- | --- |
+| `data/chip_regulon.tsv` | ReMap peaks and GENCODE | step 5 above | factors outside TRRUST have no target count |
+| `data/repurposing_hub.tsv` | the Hub's two downloads | step 7 above | the library comes from `approved_library.tsv`, or ChEMBL one request at a time |
+| `data/approved_library.tsv` | the ChEMBL web API | `python scripts/setup_data.py --only library` | the docking screen and the upstream drug index query ChEMBL one compound at a time |
+| `data/bindingdb_distilled.tsv` | the BindingDB release | step 13 above | the potency axis has nothing to read |
+| `data/transcript_sites.tsv` | TargetScan, miRTarBase and ENCODE eCLIP | step 17 above | UTR scans show motifs with no named factor |
+| `data/ctd_fame.tsv` | your saved runs in `results/` | `python scripts/build_fame_table.py` | no candidate is checked for being recorded for most genes |
+| `data/fda_label_cmax.tsv` and `data/fda_label_cmax_review.tsv` | openFDA drug labels | `python scripts/build_fda_cmax.py` | the dose check uses ChEMBL's human peak levels, which exist for few drugs |
+| `data/drug_protein_abundance.tsv` | a decryptE or ProTargetMiner export | `python scripts/build_protein_abundance.py EXPORT.csv` | the protein abundance route does not run |
+
+Notes on the table:
+
+- `approved_library.tsv` holds the approved small molecules in ChEMBL that have
+  a structure, about 3,300 of them, with a withdrawn flag and an oral flag.
+  `repurposing_hub.tsv` holds about 6,800 and is read first when both exist,
+  because the loaders try `repurposing_drugs.txt`, then `repurposing_hub.tsv`,
+  then `approved_library.tsv`. Move the Hub files out of `data/` to screen the
+  ChEMBL library instead.
+- `ctd_fame.tsv` counts, for each chemical, how many distinct genes in your
+  saved runs have CTD recording it. It needs runs for at least five genes, and
+  its resolution is however many genes you have run. It makes no network
+  request. Rebuild it after new runs.
+- `fda_label_cmax.tsv` reads the peak concentration sentences in the
+  pharmacokinetics section of each label. It looks up the drugs in
+  `results/*/results.json`, or the ones you name with `--drugs`, and keeps rows
+  from earlier runs. Most labels give no usable number, and those drugs go to
+  the review file with the reason, which is a result and not a failure. openFDA
+  allows 1,000 requests a day without a key. Put a key in `OPENFDA_API_KEY` for
+  more.
+- `drug_protein_abundance.tsv` has no public download in the shape the package
+  reads. Download the decryptE or ProTargetMiner export by hand, then convert it.
+  The script renames columns and does not average replicates.
+- A table another table needs is built after it: `chip_regulon.tsv` and
+  `transcript_sites.tsv` need `gencode.basic.gtf.gz` first. `setup_data.py`
+  orders them for you.
+
 ## Sources read over the network at run time
 
 These are not stored in `data/`. Each is requested during a run and cached for
@@ -421,11 +483,15 @@ results/check/promoter.fa` after the first run has written that file.
 
 ## A tested reference result
 
-This guide was run on an empty folder. For BUB1B (goal up, window 1,000 bases
-before to 200 after the start site, p-value 1e-5) a correct setup gives 879
-motifs, 68,655,741 ReMap peaks, 37 motif hits, 34 candidate factors, and a
-verdict of `interpretable`. If your counts differ, a file is wrong or from another
-release.
+This guide was run on an empty folder on 2026-10-23. For BUB1B (goal up, window
+1,000 bases before to 200 after the start site, p-value 1e-5) a correct setup
+gives 879 motifs loaded, 68,655,741 ReMap peaks (step 5 prints the count when it
+builds the regulon), 17 motif hits, 17 candidate factors, and a verdict of
+`interpretable`. GENCODE release 47 and release 50 gave the same result, so
+`setup_data.py`, which takes the newest release, and the step 3 command agree.
+If your counts differ, a file is wrong or from another release. Earlier versions
+of this page gave 37 hits and 34 factors, which the current code no longer
+reproduces.
 
 On Windows, one command fetches every reference file that git does not carry:
 
@@ -517,6 +583,18 @@ data/
   repository root. Change to the folder that contains `pyproject.toml`.
 - **A source list says `FAILED`.** The service was down or blocked. Everything
   fetched is cached, so rerun and the work resumes.
+- **`HTTP Error 502` or 503 from one host.** The server is down, and nothing on
+  your side will fix it. `setup_data.py` carries on with the other items and
+  lists the failures at the end. ReMap answered 502 for over an hour on
+  2026-10-23. Rerun later with `--only remap,chip_regulon`, or put a copy of
+  the file in `data/` yourself.
+- **`SSL: SSLV3_ALERT_HANDSHAKE_FAILURE`.** Some servers, miRTarBase among them,
+  refuse the TLS handshake from Python and answer `curl`. `setup_data.py`
+  retries that download with `curl` when it is on `PATH`, and says so if that
+  fails too.
+- **`403` after a few requests to one host.** miRTarBase answers 403 for a while
+  after several requests in a short time. Wait ten minutes and rerun. The
+  download starts again from the beginning of the file.
 - **A link has moved.** Releases change. Use the source page in
   [Getting the analysis tables](datasets.md), and keep the file name the loaders
   expect.
@@ -529,6 +607,23 @@ conditions on reuse and attribution, and others require attribution. Read the te
 before you share a `data/` folder or a results archive. A derived table such as
 `chip_regulon.tsv` or `bindingdb_distilled.tsv` carries the terms of its inputs,
 and `results.json` embeds values taken from these tables.
+
+This repository is licensed CC BY 4.0, and it tracks only one file under
+`data/`, the small tissue lookup `hpa.tsv`. Six sources state their terms on a
+page that was read on 2026-10-23. The others were not read for this page.
+
+| Source | What its page says | Page |
+| --- | --- | --- |
+| JASPAR | licensed under CC BY 4.0 | jaspar.elixir.no/about |
+| openFDA | public domain with a CC0 1.0 dedication, and a warning that some third party works may not be | open.fda.gov/terms |
+| ClinGen | curated content free of restriction under CC0 1.0; attribution and the access date are requested | clinicalgenome.org/docs/terms-of-use |
+| ChEMBL | CC BY-SA 3.0, so a derived table must carry the same terms | ebi.ac.uk/chembl |
+| Human Protein Atlas | CC BY 4.0 for the copyrightable parts; data from other sources may carry its own terms | proteinatlas.org/about/licence |
+| TRRUST | freely available for non-commercial research; the site is CC BY-SA 4.0 | grnpedia.org/trrust |
+
+Cite the source when you share anything built from these tables. The run
+records the hash of every file passed by flag, which lets a reader find the
+release it used.
 
 Record the release, download date and hash of each file you use. The run itself
 records the size, modification time and SHA-256 of every file you pass by flag.

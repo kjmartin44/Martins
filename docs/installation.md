@@ -38,8 +38,31 @@ python -m pip install -e ".[dev,chemistry]"
 `chemistry` installs RDKit and scikit-learn for structure features, direction
 classification, and virtual screening. `dev` adds pytest and the build frontend.
 The full test suite currently exercises chemistry features and needs both.
-Docking helpers additionally require separately installed tools such as Vina
-and receptor preparation software; there is no docking command in the main CLI.
+`docking` adds meeko, which writes the ligand files the Vina path needs, and
+`data` adds decoupler and openpyxl for the scripts that build tables under
+`data/`.
+
+Docking also needs a program that is not a Python package and does not arrive
+with pip: AutoDock Vina on Windows, or gnina or smina through WSL. The command
+itself is there either way — `python -m generoutes.docking`, installed by the
+wheel as `generoutes-dock` — and `--check` reports what is present and what is
+missing. [What this package needs](dependencies.md) lists every package and
+program in one table.
+
+## Curated tables
+
+The curated tables are typed into the package source, so installing the
+package installs them. Nothing to download. Check them from the repository
+root:
+
+```sh
+python -m generoutes.audit
+```
+
+[Curated tables](curated-tables.md) says what each one holds and how to
+rebuild or check it. The tables built from your own runs or from openFDA, such
+as `ctd_fame.tsv` and `fda_label_cmax.tsv`, are in
+[group D of the data setup](data-setup.md#group-d-built-tables-and-the-curated-tables).
 
 ## Windows launchers
 

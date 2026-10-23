@@ -130,6 +130,42 @@ def test_a_dropped_connection_is_retried_then_reported(tmp_path, monkeypatch):
     assert len(calls) == 3 and not (tmp_path / "f").exists()
 
 
+def test_a_tls_failure_falls_back_to_curl(tmp_path, monkeypatch):
+    """miRTarBase fails the handshake from Python and answers curl."""
+    import ssl
+    import subprocess
+    import urllib.error
+
+    def refuse(url, timeout=60):
+        raise urllib.error.URLError(ssl.SSLError(1, "handshake failure"))
+    asked = []
+
+    def fake_curl(cmd, **kw):
+        asked.append(cmd)
+        Path(cmd[cmd.index("-o") + 1]).write_bytes(b"hsa_MTI,x")
+        return subprocess.CompletedProcess(cmd, 0)
+    monkeypatch.setattr(sd, "_open", refuse)
+    monkeypatch.setattr(sd.shutil, "which", lambda name: "curl")
+    monkeypatch.setattr(sd.subprocess, "run", fake_curl)
+    got = sd.download("https://x/f", tmp_path / "f", check=sd.contains("hsa"))
+    assert got.read_bytes() == b"hsa_MTI,x" and asked[0][0] == "curl"
+    assert not (tmp_path / "f.part").exists()
+
+
+def test_a_tls_failure_with_no_curl_is_reported_with_both_reasons(
+        tmp_path, monkeypatch):
+    import ssl
+    import urllib.error
+
+    def refuse(url, timeout=60):
+        raise urllib.error.URLError(ssl.SSLError(1, "handshake failure"))
+    monkeypatch.setattr(sd, "_open", refuse)
+    monkeypatch.setattr(sd.shutil, "which", lambda name: None)
+    with pytest.raises(sd.SetupError, match="curl"):
+        sd.download("https://x/f", tmp_path / "f")
+    assert not (tmp_path / "f").exists()
+
+
 def test_a_short_read_is_not_kept(tmp_path, monkeypatch):
     class Short(_Resp):
         def __init__(self):
@@ -535,3 +571,30 @@ def test_the_launcher_passes_every_analysis_switch_the_cli_offers():
     assert not missing, (
         f"the launcher never passes {missing}; add it, or list it as left "
         f"out on purpose")
+
+
+def test_every_filename_the_loaders_accept_is_ignored_by_git():
+    """A download or a built table must not be committed by accident.
+
+    The only tracked file under data/ is the small tissue lookup, so any other
+    name a loader accepts has to match a rule in .gitignore.
+    """
+    import subprocess
+
+    from generoutes import datasets
+
+    if not (ROOT / ".git").exists():
+        pytest.skip("not a git checkout")
+    tracked = set(subprocess.run(
+        ["git", "ls-files", "data"], cwd=ROOT, capture_output=True,
+        text=True).stdout.split())
+    loose = []
+    for d in datasets.registry():
+        for p in d.paths:
+            p = str(p).replace("\\", "/")
+            if not p.startswith("data/") or p in tracked:
+                continue
+            if subprocess.run(["git", "check-ignore", "-q", p], cwd=ROOT,
+                              capture_output=True).returncode != 0:
+                loose.append(p)
+    assert not loose, f"not in .gitignore: {loose}"

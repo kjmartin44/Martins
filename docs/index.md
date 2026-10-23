@@ -17,6 +17,8 @@ inspect the evidence behind each route.
 - [A full workup](workflow.md): the five steps, end to end, with the
   commands and what would make you stop at each one.
 - [Installation](installation.md): environments, extras, and Windows launchers.
+- [What this package needs](dependencies.md): every Python package and
+  external program, what each one buys, and what stops without it.
 - [Running it from the command line](cli-guide.md): what is required, what has a
   default, and what each switch costs.
 - [Usage](usage.md): analysis, directions, offline runs, and saved-result tools.
