@@ -1066,7 +1066,244 @@ def test_a_protein_absent_from_the_table_is_not_a_measured_zero(tmp_path):
                  "A\tTP53\t0.9\nA\tTP53\t0.8\n", encoding="utf-8")
     missing = proteomics.describe("BUB1B", path=str(t))
     assert missing["n_compounds"] == 0
-    assert "does not appear in the protein table at all" in         proteomics.coverage_note(missing, "BUB1B")
+    assert ("does not appear in the protein table at all"
+            in proteomics.coverage_note(missing, "BUB1B"))
     present = proteomics.describe("TP53", path=str(t))
     assert present["n_compounds"] == 1 and present["n_up"] == 1
-    assert "quantified for 1 compound" in         proteomics.coverage_note(present, "TP53")
+    assert ("quantified for 1 compound"
+            in proteomics.coverage_note(present, "TP53"))
+
+# ===================================================================== #
+# C20. A source that was never asked has to say what it needs, not      #
+#      send the reader to another file.                                 #
+# ===================================================================== #
+def test_an_unasked_source_names_the_file_it_needs():
+    from generoutes import pipeline as pl
+
+    res = pl.run("DEMOGENE", demo=True, offline=True)
+    res["evidence_sources"] = {"sources": {"protein_abundance": {
+        "state": "not requested", "requested": False,
+        "enable_with": "needs data/drug_protein_abundance.tsv (decryptE "
+                       "or ProTargetMiner, not LINCS P100)"}}}
+    md = pl.summary_report(res)
+    assert "data/drug_protein_abundance.tsv" in md
+    assert "decryptE" in md
+    # And the reason it matters: an unasked source is not a negative.
+    assert "would have found nothing" in md
+    # One source is "this source", not "these sources".
+    assert "that this source would have found nothing" in md
+
+
+def test_a_long_list_of_unasked_sources_stays_one_line():
+    """Naming what each needs is right for a handful and buries the rest
+    of the summary for a bare run where a dozen are missing at once."""
+    from generoutes import pipeline as pl
+
+    res = pl.run("DEMOGENE", demo=True, offline=True)
+    res["evidence_sources"] = {"sources": {
+        f"source_{n}": {"state": "not requested", "requested": False,
+                        "enable_with": "a flag"} for n in range(6)}}
+    md = pl.summary_report(res)
+    assert "**Not available here:**" in md
+    assert "    - `source_0`" not in md
+
+
+# ===================================================================== #
+# C21. A screen that only reads the gene cannot tell a hit that works    #
+#      through the claimed factor from one that works some other way.    #
+# ===================================================================== #
+def test_the_route_test_covers_all_four_outcomes():
+    """The one that is easiest to leave out is the double negative, and
+    it is the one that causes a good branch to be discarded."""
+    from generoutes import screens
+
+    m = screens.protein_abundance_plan("GENE", factors=["FOO"])["mechanism"]
+    results = [a for a, _ in m["outcomes"]]
+    assert results == ["GENE up, factor engaged",
+                       "GENE up, factor NOT engaged",
+                       "GENE flat, factor engaged",
+                       "GENE flat, factor NOT engaged"]
+    nothing_tested = dict(m["outcomes"])["GENE flat, factor NOT engaged"]
+    assert "says nothing about the route" in nothing_tested
+
+
+def test_the_route_test_names_the_factors_the_run_found():
+    from generoutes import screens
+
+    m = screens.protein_abundance_plan(
+        "GENE", factors=["RXRA", "NR1H4"])["mechanism"]
+    assert "RXRA, NR1H4" in m["measure"][0]
+    # And degrades to a phrase rather than an empty bracket.
+    bare = screens.protein_abundance_plan("GENE")["mechanism"]
+    assert "the factor the route runs through" in bare["measure"][0]
+
+
+def test_the_route_test_is_scoped_to_confirmed_hits():
+    """In the primary it doubles the cost of several thousand wells, most
+    of which are about to be discarded as toxic."""
+    from generoutes import screens
+
+    m = screens.protein_abundance_plan("GENE")["mechanism"]
+    assert "not in the primary screen" in m["when"]
+
+
+def test_the_knockdown_is_offered_as_its_own_arm():
+    """The factor's own loss answers the direction question the
+    computational side leaves open."""
+    from generoutes import screens
+
+    m = screens.protein_abundance_plan("GENE")["mechanism"]
+    joined = " ".join(m["decisive_test"])
+    assert "siRNA" in joined and "knockdown alone as its own arm" in joined
+    assert "site-directed promoter mutant" in joined
+
+
+def test_the_screen_section_renders_the_route_test():
+    from generoutes import report, screens
+
+    pp = screens.protein_abundance_plan("GENE", factors=["FOO"])
+    out = "\n".join(report._protein_screen_block(pp))
+    assert "**Testing the route**" in out
+    assert "| Result | What to do |" in out
+    # It comes after the triage that produces its input, and before the
+    # library, which is reference material.
+    assert out.index("Triage, in order") < out.index("Testing the route")
+    assert out.index("Testing the route") < out.index("**Library**")
+
+
+# ===================================================================== #
+# C22. A measured peak is something a shuffle cannot produce, so the    #
+#      scan's chance hits belong to the sites without one.              #
+# ===================================================================== #
+def test_chance_hits_are_charged_to_the_unmeasured_sites():
+    from generoutes import motifs
+
+    factors = ([{"symbol": f"HAS{n}", "chip_peaks": 1} for n in range(8)]
+               + [{"symbol": f"BARE{n}", "chip_peaks": 0} for n in range(2)])
+    out = motifs.occupancy_partition(factors, {"expected_by_chance": 4.0})
+    assert out["n_supported"] == 8 and out["n_unsupported"] == 2
+    # Two unmeasured sites cannot absorb four expected chance hits, so
+    # they take all they can and the remaining two spill over. A peak is
+    # wide and a chance motif match can sit under one, so the spillover
+    # is real rather than an accounting trick.
+    assert out["fdp_unsupported"] == 1.0
+    assert out["fdp_supported"] == 0.25
+    # With chance hits to spare, none reaches the measured sites.
+    few = motifs.occupancy_partition(factors, {"expected_by_chance": 1.0})
+    assert few["fdp_supported"] == 0.0 and few["fdp_unsupported"] == 0.5
+
+
+def test_the_partition_names_a_drugged_factor_with_no_measured_site():
+    """The reason this matters: a factor can carry the whole ranking and
+    rest on nothing a shuffled window could not have given."""
+    from generoutes import motifs
+
+    factors = [{"symbol": "WITHPEAK", "chip_peaks": 3, "drugs": [{"n": 1}]},
+               {"symbol": "NOPEAK", "chip_peaks": 0, "drugs": [{"n": 1}]},
+               {"symbol": "QUIET", "chip_peaks": 0}]
+    out = motifs.occupancy_partition(factors, {"expected_by_chance": 1.0})
+    assert out["drugged_unsupported"] == ["NOPEAK"]
+    assert out["drugged_supported"] == ["WITHPEAK"]
+    assert "rests on a predicted site" in out["note"]
+    # And the caveat that keeps a peak from being over-read.
+    assert "does not say this factor is what bound" in out["note"]
+
+
+def test_a_window_with_no_measured_peak_keeps_the_whole_proportion():
+    from generoutes import motifs
+
+    out = motifs.occupancy_partition(
+        [{"symbol": "A", "chip_peaks": 0}, {"symbol": "B", "chip_peaks": 0}],
+        {"expected_by_chance": 1.0})
+    assert out["n_supported"] == 0
+    assert "applies to all of them unchanged" in out["note"]
+
+
+# ===================================================================== #
+# C23. The plate list is the opposite of the report: nothing folded,    #
+#      nothing demoted, nothing ranked.                                 #
+# ===================================================================== #
+def _routes():
+    return [
+        {"drug": "Alpha", "acts_on": "RXRA", "source": "network",
+         "category": "TF: ligand", "tier": 4, "score": 10.0},
+        {"drug": "alpha", "acts_on": "RXRA", "source": "regulators",
+         "category": "TF: ligand", "tier": 4, "score": 9.0},
+        {"drug": "Zeta", "acts_on": "BUB1B", "source": "ctd",
+         "category": "literature: reported effect", "tier": 2, "score": 99.0},
+    ]
+
+
+def test_the_plate_list_folds_nothing_and_counts_each_compound_once():
+    from generoutes import screenlist
+
+    plan = screenlist.build({"results": [{"all_routes":
+                                          {"routes": _routes()}}]})
+    names = [r["compound"] for r in plan["rows"]]
+    assert len(names) == 2, names          # Alpha and alpha are one compound
+    assert plan["rows"][0]["n_routes"] == 2
+
+
+def test_a_route_that_only_measured_the_outcome_names_no_step():
+    """CTD says the gene moved. Transcription, stability and degradation
+    are indistinguishable in that record, so naming one would invent the
+    only thing the data does not say."""
+    from generoutes import screenlist
+
+    assert screenlist.step_of({"source": "ctd"}) == screenlist.UNPLACED
+    assert screenlist.step_of({"source": "signatures"}) == screenlist.UNPLACED
+    assert screenlist.step_of({"source": "proteomics"}) == screenlist.UNPLACED
+    assert screenlist.step_of({"source": "network"}) == "transcription"
+    assert (screenlist.step_of({"source": "direct"})
+            == "acts on the gene or its product")
+
+
+def test_the_plate_list_is_alphabetical_not_scored():
+    """A tier-2 route scoring 99 must not float to the top of its group,
+    because the ordering has been measured not to carry anything."""
+    from generoutes import screenlist
+
+    routes = [{"drug": name, "acts_on": "X", "source": "ctd",
+               "category": "c", "tier": 2, "score": score}
+              for name, score in (("Zeta", 99.0), ("Alpha", 1.0))]
+    plan = screenlist.build({"results": [{"all_routes": {"routes": routes}}]})
+    assert [r["compound"] for r in plan["rows"]] == ["Alpha", "Zeta"]
+
+
+def test_the_plate_list_carries_whether_the_site_was_measured():
+    from generoutes import screenlist
+
+    blk = {"all_routes": {"routes": _routes()},
+           "scan_quality": {"occupancy": {"supported": ["RXRA"],
+                                          "unsupported": ["NR1H4"]}}}
+    plan = screenlist.build({"results": [blk]})
+    row = next(r for r in plan["rows"] if r["compound"].lower() == "alpha")
+    assert row["site_evidence"] == "measured"
+
+
+def test_the_tsv_has_one_line_per_compound():
+    from generoutes import screenlist
+
+    plan = screenlist.build({"results": [{"all_routes":
+                                          {"routes": _routes()}}]})
+    lines = screenlist.to_tsv(plan).strip().split("\n")
+    assert len(lines) == 3                 # header plus two compounds
+    assert lines[0].startswith("compound\tstep")
+
+
+def test_the_occupancy_partition_reaches_a_real_run():
+    """A unit test of the function says nothing about the line that calls
+    it: this one was wired in under the wrong module alias and crashed
+    every run while the suite stayed green."""
+    from generoutes import pipeline as pl
+
+    res = pl.run("DEMOGENE", demo=True, offline=True)
+    q = (res["results"][0].get("scan_quality") or {})
+    occ = q.get("occupancy") or {}
+    assert occ, "the partition never reached the result"
+    assert occ["n_supported"] + occ["n_unsupported"] == occ["n_factors"]
+    assert occ.get("note")
+    # And it has to survive the round trip the report reads it back from.
+    import json
+    assert json.loads(json.dumps(res, default=str))["results"][0][
+        "scan_quality"]["occupancy"]["n_factors"] == occ["n_factors"]

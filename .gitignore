@@ -116,3 +116,10 @@ Thumbs.db
 # Partial downloads and archives left in data/ by scripts/setup_data.py
 /data/*.part
 /data/*.zip
+
+# Named regulators of the transcript: built by
+# scripts/build_transcript_sites.py from TargetScan, miRTarBase and ENCODE
+# eCLIP, each of which sets its own terms. The sources are kept under
+# transcript_sites_src/ so a rebuild does not fetch a gigabyte again.
+/data/transcript_sites.tsv
+/data/transcript_sites_src/

@@ -277,6 +277,12 @@ Columns: gene, factor, kind [, region, evidence, source].
 
 TargetScan (predicted miRNA sites), miRTarBase (measured ones), ENCODE eCLIP (RBP footprints) and an m6A atlas all reshape into this one table.
 
+`python scripts/setup_data.py --only transcript_sites` downloads all three and builds the table. To place the files yourself, reshape them with `python scripts/build_transcript_sites.py`, which reads the files you pass and fetches nothing.
+
+An eCLIP peak is placed against the whole gene body, introns included, so those rows say `gene body` rather than claiming the protein sits in a UTR.
+
+miRTarBase's weak class is screen hits rather than direct assays, and 7.3M of its 7.34M human rows, so the builder leaves it out unless asked.
+
 ### Drug fame, from your own saved runs
 
 How many other genes the literature records each candidate as moving.

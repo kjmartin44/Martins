@@ -67,6 +67,7 @@ under their usual names are found without a flag (marked auto).
 | Cell dependency, drug sensitivity | `--depmap-file`, `--prism-file` | Found in `data/` (auto). `--sensitivity-scan` needs both. |
 | Docking results | `--docking-results FILE` | No docking enters the run. |
 | How much of the order is drug fame | `data/ctd_fame.tsv` (auto), built by `python scripts/build_fame_table.py` from your own saved runs | No candidate is checked for being a compound the literature records for every gene. That is the control the retrospective found mattered most. |
+| Which miRNA or RBP acts on the transcript | `data/transcript_sites.tsv` (auto), built by `python scripts/setup_data.py --only transcript_sites` from TargetScan, miRTarBase and ENCODE eCLIP | The UTR scans report motifs with no factor attached, so there is nothing to knock down or antagonise. |
 | Drugs measured on the PROTEIN | `data/drug_protein_abundance.tsv` (auto) | Every abundance claim in the run is about mRNA, so a stabiliser or a degradation blocker is invisible. decryptE and ProTargetMiner fit; LINCS P100 and CPTAC do not. |
 | What is wrong with the gene | `--scenario`, with `--broken-allele-makes`, `--target-fraction`, `--condition` | The ranking states no requirement. `haploinsufficiency` assumes the surviving copy is wild type; for a recessive condition where it is not, use `biallelic_hypomorph`. |
 

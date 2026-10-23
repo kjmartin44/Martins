@@ -372,6 +372,95 @@ def _quantile(values: list, q: float) -> float:
     return vs[lo] + (vs[hi] - vs[lo]) * (pos - lo)
 
 
+def occupancy_partition(factors, quality: dict) -> dict:
+    """Divide the scan's expected chance hits over the unmeasured sites.
+
+    `factors` are the per-factor records the run built, each with a
+    `chip_peaks` count. A factor with a measured peak at this window is
+    one a shuffle of the window could not have produced, so the chance
+    hits the null predicts are attributed to the factors without one.
+
+    What this does and does not license
+    -----------------------------------
+    A peak lowers the risk that the SITE is an artefact of scanning. It
+    does not show that THIS factor is what bound there - peaks are wide,
+    and a window usually carries several motifs - and the experiment was
+    run in whatever cell type the atlas used, not yours. So `supported`
+    is "something was measured binding here", and nothing stronger.
+    """
+    rows = list(factors or [])
+    if not rows or not quality:
+        return {}
+    supported = [f for f in rows if (f.get("chip_peaks") or 0) > 0]
+    bare = [f for f in rows if not (f.get("chip_peaks") or 0)]
+    n = len(rows)
+    expected = quality.get("expected_by_chance")
+    if expected is None or not n:
+        return {}
+    out = {
+        "n_factors": n,
+        "n_supported": len(supported),
+        "n_unsupported": len(bare),
+        "supported": sorted(f.get("symbol") or "?" for f in supported),
+        "unsupported": sorted(f.get("symbol") or "?" for f in bare),
+        "expected_by_chance": expected,
+    }
+    # Every chance hit is assumed to land among the unsupported sites.
+    # That is the pessimistic reading for them and the generous one for
+    # the measured sites, and it is the right way round: the cost of
+    # over-trusting an unmeasured site is a wasted experiment.
+    out["fdp_unsupported"] = (round(min(1.0, expected / len(bare)), 3)
+                              if bare else 0.0)
+    out["fdp_supported"] = round(
+        max(0.0, (expected - min(expected, len(bare))) / len(supported)), 3
+    ) if supported else None
+    out["drugged_unsupported"] = sorted(
+        f.get("symbol") or "?" for f in bare if f.get("drugs"))
+    out["drugged_supported"] = sorted(
+        f.get("symbol") or "?" for f in supported if f.get("drugs"))
+    out["note"] = _occupancy_note(out)
+    return out
+
+
+def _occupancy_note(o: dict) -> str:
+    n, s, b = o["n_factors"], o["n_supported"], o["n_unsupported"]
+    if not b:
+        return (f"All {n} factors with a site here also have a measured "
+                f"peak over this window, so none of them rests on the scan "
+                f"alone.")
+    if not s:
+        return (f"None of the {n} factors with a site here has a measured "
+                f"peak over this window, so every one rests on the scan "
+                f"alone and the window-wide false-discovery proportion "
+                f"applies to all of them unchanged.")
+    parts = [
+        f"{s} of {n} factors have a measured peak over this window and {b} "
+        f"do not. A shuffled copy of the window cannot produce a peak, so "
+        f"the {o['expected_by_chance']} sites the null expects by chance "
+        f"are attributed to those {b}: about "
+        f"{o['fdp_unsupported']:.0%} of them are consistent with chance, "
+        f"against roughly {o['fdp_supported']:.0%} of the measured ones."]
+    if o["drugged_unsupported"]:
+        parts.append(
+            f"This matters for the ranking because "
+            f"{', '.join(o['drugged_unsupported'])} "
+            f"{'have' if len(o['drugged_unsupported']) > 1 else 'has'} a "
+            f"ligand and no measured occupancy: every drug reaching the "
+            f"gene through "
+            f"{'them' if len(o['drugged_unsupported']) > 1 else 'it'} rests "
+            f"on a predicted site.")
+    if o["drugged_supported"]:
+        parts.append(
+            f"{', '.join(o['drugged_supported'])} "
+            f"{'have' if len(o['drugged_supported']) > 1 else 'has'} both a "
+            f"ligand and a measured peak, which is the stronger footing.")
+    parts.append(
+        "A peak says something bound here in the cell type the atlas used. "
+        "It does not say this factor is what bound, and it is not a "
+        "measurement in your cells.")
+    return " ".join(parts)
+
+
 def scan_quality(n_hits: int, n_motifs: int, seq_length: int,
                  pvalue: float, null: dict | None = None,
                  observed_scores: list | None = None) -> dict:

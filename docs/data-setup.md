@@ -50,7 +50,7 @@ python -m generoutes --demo --gene DEMOGENE --out results/demo
 | --- | --- | --- | --- |
 | A. Core | motifs, ChIP peaks, gene models, regulons, expression, drug library | about 1.7 GB | the promoter motif route, and the tables most routes read |
 | B. Evidence | LINCS, dosage, genes and GO, Orange Book, CollecTRI | about 0.3 GB | measured drug effects, dosage limits, route of administration, signed regulons |
-| C. Large optional | BindingDB, DepMap, PRISM, GWAS Catalog, ChEMBL database | 12 GB or more | measured potency, dependency, drug sensitivity, human genetics |
+| C. Large optional | BindingDB, DepMap, PRISM, GWAS Catalog, ChEMBL database, transcript site catalogues | 13 GB or more | measured potency, dependency, drug sensitivity, human genetics, the microRNAs and RBPs named on a transcript |
 
 Take A and B for a complete run. Add C items only for the sections they unlock.
 The run records which sources ran, so skipping one is visible and never silent.
@@ -297,6 +297,65 @@ The SQLite release is at <https://ftp.ebi.ac.uk/pub/databases/chembl/ChEMBLdb/la
 (`chembl_37_sqlite.tar.gz` at the time of writing). Unpack it and save the
 database as `data/chembl.db`.
 
+### 17. Named regulators of the transcript (about 1 GB downloaded)
+
+The UTR scans can say an AU-rich element or a DRACH site is in excess, but not
+which microRNA or RNA-binding protein uses it, and the name is what you can act
+on. This table supplies the names. It is built from three downloads, each under
+its own terms, and `data/transcript_sites.tsv` keeps the measured rows and the
+predicted ones apart.
+
+```sh
+curl -fL -o Predicted_Targets_Info.default_predictions.txt.zip \
+  "https://www.targetscan.org/vert_80/vert_80_data_download/Predicted_Targets_Info.default_predictions.txt.zip"
+unzip Predicted_Targets_Info.default_predictions.txt.zip
+curl -fL -o hsa_MTI.csv \
+  "https://awi.cuhk.edu.cn/miRTarBase/downloads/files/11.0/hsa_MTI.csv"
+```
+
+The ENCODE eCLIP peaks are 252 files, one per RNA-binding protein and cell
+line. Ask the portal which they are, then save each under a name that starts
+with its protein, because ENCODE leaves the BED name column as `.`:
+
+```sh
+curl -fL -H "Accept: application/json" -o eclip.json \
+  "https://www.encodeproject.org/search/?type=File&assay_title=eCLIP&file_type=bed+narrowPeak&assembly=GRCh38&status=released&limit=all&format=json&field=href&field=accession&field=preferred_default&field=target.label&field=biosample_ontology.term_name"
+python - <<'PY'
+import json, re, urllib.request
+for f in json.load(open("eclip.json"))["@graph"]:
+    if not f.get("preferred_default"):
+        continue
+    name = "_".join(re.sub(r"[^A-Za-z0-9]", "", s) for s in
+                    (f["target"]["label"],
+                     f["biosample_ontology"]["term_name"], f["accession"]))
+    urllib.request.urlretrieve(
+        "https://www.encodeproject.org" + f["href"], f"eclip/{name}.bed.gz")
+PY
+```
+
+Then build the table. The builder fetches nothing; it reads the files you pass.
+
+```sh
+python scripts/build_transcript_sites.py \
+  --targetscan Predicted_Targets_Info.default_predictions.txt \
+  --mirtarbase hsa_MTI.csv \
+  --eclip eclip/ \
+  --annotation data/gencode.basic.gtf.gz \
+  --out data/transcript_sites.tsv
+```
+
+`--genes a-file-of-symbols.txt` keeps the table to the genes you actually run,
+which matters because TargetScan alone is millions of rows. `--m6a` takes a
+methylation atlas in the same BED shape, which is what replaces the DRACH
+motif scan with measured sites. `setup_data.py --only transcript_sites` does
+all of this for you.
+
+miRTarBase's `Functional MTI (Weak)` class — screen hits rather than direct
+assays, and 7.3 million of its 7.34 million human rows — is left out, which
+is what keeps the table near 115 MB instead of 880 MB. `--mirtarbase-weak`
+puts it back, with every row labelled weak. `Non-Functional MTI` is always
+left out, because it records that the pair does not act.
+
 ## Sources read over the network at run time
 
 These are not stored in `data/`. Each is requested during a run and cached for
@@ -381,7 +440,7 @@ It lists what is missing, asks once, and fetches the rest. Files already in
 | --- | --- |
 | `--yes` | Fetch without asking. |
 | `--list` | Show what is present and missing, and stop. |
-| `--small` | Skip the files over about 500 MB (ReMap, BindingDB, DepMap expression). |
+| `--small` | Skip the files over about 500 MB (ReMap, BindingDB, DepMap expression, the transcript site catalogues). |
 | `--only remap,collectri` | Fetch only the named items. |
 | `--skip bindingdb` | Leave an item out. |
 | `--with-optional` | Also fetch the CREEDS and DrugMatrix signatures. |
@@ -389,8 +448,10 @@ It lists what is missing, asks once, and fetches the rest. Files already in
 The items are JASPAR, TRRUST, CollecTRI, ClinGen, gnomAD, the Orange Book, GENCODE,
 HPA tissue RNA, HGNC, GO annotations, LINCS, the knockout libraries, the approved
 drug library from ChEMBL, DepMap, PRISM, the GWAS Catalog, ReMap, the regulon built
-from ReMap, and BindingDB (about 9 GB while it is unpacked, 270 MB after it is
-distilled). The whole set is roughly 3 GB. Each download goes to a `.part` file and
+from ReMap, BindingDB (about 9 GB while it is unpacked, 270 MB after it is
+distilled), and the named transcript regulators built from TargetScan,
+miRTarBase and the ENCODE eCLIP peaks (about 1.4 GB downloaded). The whole set
+is roughly 4.5 GB. Each download goes to a `.part` file and
 is kept only if it passes a check on its content or its published checksum.
 
 Three files are not fetched. The ChEMBL SQLite release and the hg38 genome are
@@ -449,7 +510,8 @@ data/
 ## Terms of use
 
 Several sources set their own terms. CTD, ReMap, TRRUST and CLUE restrict
-commercial use, and others require attribution. Read the terms at each source
+commercial use, TargetScan, miRTarBase and ENCODE each publish their own
+conditions on reuse and attribution, and others require attribution. Read the terms at each source
 before you share a `data/` folder or a results archive. A derived table such as
 `chip_regulon.tsv` or `bindingdb_distilled.tsv` carries the terms of its inputs,
 and `results.json` embeds values taken from these tables.

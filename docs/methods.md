@@ -227,9 +227,29 @@ evidence, source]`.
 | Source | What it adds | Where |
 |---|---|---|
 | TargetScan | predicted microRNA sites, conserved families | targetscan.org, `Predicted_Targets_Info.txt` |
-| miRTarBase | microRNA targets with experimental support | mirtarbase.cuhk.edu.cn, `hsa_MTI.xlsx` |
+| miRTarBase | microRNA targets with experimental support | mirtarbase.cuhk.edu.cn, `hsa_MTI.csv` |
 | ENCODE eCLIP | measured footprints for ~150 RNA-binding proteins | encodeproject.org, eCLIP IDR peaks (BED) |
 | m6A atlases (REPIC, m6A-Atlas) | measured methylation sites rather than DRACH motifs | the atlas's own download |
+
+`scripts/build_transcript_sites.py` does the reshaping, and
+`scripts/setup_data.py --only transcript_sites` fetches the three
+downloads and runs it. A miRTarBase row carries that entry's own
+experiment list, so a reporter assay is not reported as the same thing as
+a CLIP hit. Two miRTarBase classes are left out. `Non-Functional MTI`
+records that the pair does *not* act, so listing it as a regulator would
+say the opposite of the measurement. `Functional MTI (Weak)` is a hit
+from a high-throughput screen rather than a direct assay, and in release
+11 it is 7,309,069 of the 7,339,072 human rows — keeping it makes the
+table 880 MB, which every run then reads to answer about one gene.
+`--mirtarbase-weak` puts that class back with every row labelled weak.
+
+An eCLIP peak is an interval, mapped to a gene by overlap on
+the same strand with the gene body, introns included, so those rows say
+`gene body` rather than claiming the protein sits in a UTR. That is a
+broad criterion. A well expressed gene carries peaks for most of the
+assayed proteins — BUB1B matches 148 of the 168 — so the list says which
+proteins have been seen on the transcript, and does not rank them or
+argue that any one of them sets its level.
 
 Rows marked `predicted` are reported separately from rows with
 experimental evidence, because a TargetScan prediction and an eCLIP peak

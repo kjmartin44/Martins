@@ -272,7 +272,8 @@ APPROVED_LIBRARIES = (
 )
 
 
-def protein_abundance_plan(gene: str, *, why: str = "") -> dict:
+def protein_abundance_plan(gene: str, *, why: str = "",
+                           factors: list | None = None) -> dict:
     """A screen for compounds that raise `gene`'s PROTEIN in patient cells.
 
     Written against the failure mode this package spent its effort
@@ -282,6 +283,7 @@ def protein_abundance_plan(gene: str, *, why: str = "") -> dict:
     without them the screen's top hits will be antiproliferatives.
     """
     g = (gene or "the gene").strip().upper()
+    names = [f for f in (factors or []) if f][:4]
     return {
         "endpoint": f"{g} protein per cell, in the patient's own cells",
         "why": why or (f"the declared problem is the {g} protein rather "
@@ -366,14 +368,91 @@ def protein_abundance_plan(gene: str, *, why: str = "") -> dict:
             "with transcript flat points at stability or translation; both "
             "up points at transcription, and that route is testable "
             "against the rest of this report.",
-            "5. Only then is it a candidate, and it is a candidate for a "
+            "5. Read the factor the route runs through, in the same wells, "
+            "and then test whether the effect survives losing it. See "
+            "'Testing the route' below: this is the step that separates a "
+            "compound that works for the reason this report gives from one "
+            "that works for another reason, and it is also what makes a "
+            "negative interpretable.",
+            "6. Only then is it a candidate, and it is a candidate for a "
             "cell assay of function, not for a patient.",
         ],
+        "mechanism": _route_test(g, names),
         "caveat": "A screen in fibroblasts or LCLs is not the affected "
                   "tissue. A compound that raises the protein there may "
                   "not reach or work in the tissue that matters, and the "
                   "exposure check in `exposure.py` is the next question "
                   "for anything that survives.",
+    }
+
+
+def _route_test(gene: str, factors: list) -> dict:
+    """How to tell a hit that works through the factor from one that does not.
+
+    Deliberately placed at confirmation rather than in the primary. A
+    second channel across a few thousand compounds roughly doubles the
+    cost and complicates normalisation, and most primary hits are
+    cytotoxic or mitotic artefacts that are about to be discarded. On the
+    dozens that survive it is cheap, and every outcome changes what to do
+    next.
+    """
+    who = (", ".join(factors) if factors
+           else "the factor the route runs through")
+    return {
+        "when": "on confirmed hits only, not in the primary screen",
+        "measure": [
+            f"The factor's own level, in the same wells as the "
+            f"{gene} readout ({who}). A drug can engage a factor without "
+            f"changing how much of it there is, so for a ligand read "
+            f"activity rather than abundance: a target-gene panel the "
+            f"factor is already known to control, or its occupancy at the "
+            f"predicted site by ChIP-qPCR.",
+            f"{gene} protein and {gene} transcript, which step 4 has "
+            f"already produced for this compound.",
+        ],
+        "outcomes": [
+            (f"{gene} up, factor engaged",
+             "the route is supported, and the next compound to try is the "
+             "one with the best potency at that factor"),
+            (f"{gene} up, factor NOT engaged",
+             "a real hit by another mechanism. Do not optimise on the "
+             "factor, which would be tuning the wrong variable; follow the "
+             "transcript reading instead, because protein up with "
+             "transcript flat points at stabilisation and almost nothing "
+             "in this report covers that axis"),
+            (f"{gene} flat, factor engaged",
+             "the factor-to-gene link is false in this cell type. This is "
+             "the most economical result in the whole screen: it retires "
+             "every compound that reaches the gene through that factor at "
+             "once, not just the one tested"),
+            (f"{gene} flat, factor NOT engaged",
+             "nothing was tested. The compound did not reach its target at "
+             "this dose or time, so this says nothing about the route, and "
+             "discarding the branch on it would be an error"),
+        ],
+        "decisive_test": [
+            f"Knock the factor down (siRNA or a degron line), then add the "
+            f"compound. If {gene} still rises without the factor, the "
+            f"effect does not run through it and the route is wrong "
+            f"whatever the correlations say.",
+            "This is the practical form of the site-directed promoter "
+            "mutant named elsewhere in this report. The mutant is the "
+            "stronger evidence, because it shows the effect runs through "
+            "one element rather than through the factor by any route; the "
+            "knockdown is faster, cheaper and answers for the whole family "
+            "of compounds at once.",
+            "Include the knockdown alone as its own arm. A factor whose "
+            "loss moves the gene by itself tells you the direction to push "
+            "it, which is the question the computational part of this "
+            "report could not settle.",
+        ],
+        "caveat": "A factor that partners promiscuously - a nuclear "
+                  "receptor that heterodimerises with many others, for "
+                  "one - makes its abundance a poor readout, because the "
+                  "compound may reach the gene through a partner instead. "
+                  "For those, occupancy at the predicted element or the "
+                  "promoter mutant is the readout that discriminates, and "
+                  "a level alone is not.",
     }
 
 
@@ -465,7 +544,8 @@ def design(promoter, tf_symbols: list[str], graded_drugs: list[dict],
             compounds=compound_plan(graded_drugs, direct_hits),
             expectations=protein_expectations(),
             endpoint=f"{promoter.gene_symbol} protein in patient cells",
-            protein=protein_abundance_plan(promoter.gene_symbol, why=why),
+            protein=protein_abundance_plan(promoter.gene_symbol, why=why,
+                                           factors=tf_symbols),
         )
     return ScreenPlan(
         gene=promoter.gene_symbol,

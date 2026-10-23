@@ -93,6 +93,31 @@ def _protein_screen_block(pp: dict) -> list:
         for item in pp.get(key) or []:
             L.append(f"- {item}")
         L.append("")
+    mech = pp.get("mechanism") or {}
+    if mech:
+        L += ["**Testing the route**", "",
+              f"Everything above establishes that a hit is real. This "
+              f"establishes whether it works for the reason this report "
+              f"gives, which is a different question and the one the "
+              f"ranking rests on. Run it {mech.get('when', '')}.", ""]
+        L.append("*What to measure*")
+        L.append("")
+        for item in mech.get("measure") or []:
+            L.append(f"- {item}")
+        L.append("")
+        if mech.get("outcomes"):
+            L += ["*What each result means*", "",
+                  "| Result | What to do |", "|---|---|"]
+            for what, means in mech["outcomes"]:
+                L.append(f"| {what} | {means} |")
+            L.append("")
+        L.append("*The decisive test*")
+        L.append("")
+        for item in mech.get("decisive_test") or []:
+            L.append(f"- {item}")
+        L.append("")
+        if mech.get("caveat"):
+            L += [f"*{mech['caveat']}*", ""]
     lib = pp.get("library") or {}
     L.append("**Library**")
     L.append("")
@@ -780,6 +805,55 @@ def _standard_of_care_section(result: dict) -> list:
     return L
 
 
+def _screen_list_section(result: dict) -> list:
+    """What to put on a plate, as against what to conclude."""
+    from . import screenlist as _sl
+
+    plan = _sl.build(result)
+    if not plan.get("rows"):
+        return []
+    gene = result["query"]["gene"]
+    L = [f"## The plate: every compound, in no order", "",
+         _sl.summarise(plan, gene), ""]
+    by_step: dict = {}
+    for r in plan["rows"]:
+        by_step.setdefault(r["step"], []).append(r)
+    for step in _sl.STEP_ORDER:
+        rows = by_step.get(step)
+        if not rows:
+            continue
+        L += [f"### {step} ({len(rows)})", "",
+              "| Compound | Acts on | Site evidence | Routes | Found by |",
+              "|---|---|---|---|---|"]
+        for r in rows:
+            L.append(f"| {r['compound']} | "
+                     f"{', '.join(r['targets']) or '—'} | "
+                     f"{r['site_evidence'] or '—'} | {r['n_routes']} | "
+                     f"{', '.join(r['sources'])} |")
+        L.append("")
+    missing = [s for s in _sl.STEP_ORDER
+               if s not in by_step and s != _sl.UNPLACED]
+    if missing:
+        L += [f"**No compound is placed at {', '.join(missing)}.** Those "
+              f"steps were searched and returned annotations rather than "
+              f"compounds, so they contribute nothing to a plate however "
+              f"the groups above are weighted. Giving them equal weight "
+              f"here would mean weighting empty sets.", ""]
+    exc = plan.get("excluded") or []
+    if exc:
+        L += [f"### Found and left off ({len(exc)})", "",
+              "The reason in each case is clinical. On a plate several of "
+              "these are reasonable mechanistic controls, and adding one "
+              "back is a decision this table exists to inform.", "",
+              "| Compound | Why it is not on the list |", "|---|---|"]
+        for e in exc[:30]:
+            L.append(f"| {e.get('drug')} | {e.get('why')} |")
+        L.append("")
+    L += ["`screen_list.tsv` holds the same rows for a pipetting robot or "
+          "a plate map.", ""]
+    return L
+
+
 def _utr_section(result: dict) -> list:
     """Translation and mRNA stability: two of the six steps, from sequence.
 
@@ -803,7 +877,18 @@ def _utr_section(result: dict) -> list:
          "feature counts only when there is more of it than that base "
          "composition gives by chance.", ""]
     L += [_utr.summarise(scan, gene), ""]
-    L += [_utr.summarise_sites(_utr.annotated_sites(gene), gene), ""]
+    _sites = _utr.annotated_sites(gene)
+    L += [_utr.summarise_sites(_sites, gene), ""]
+    if (_sites.get("by_kind") or {}).get("RBP"):
+        L += [f"Read that count the right way round. An eCLIP peak is "
+              f"matched across the whole gene body, introns included, so a "
+              f"well expressed gene matches most of the proteins the atlas "
+              f"assays at all - {gene} is not unusual in matching this "
+              f"many. Every row is a real measured footprint, and the list "
+              f"ranks nothing: it is the set of proteins seen on this "
+              f"transcript, not the ones that set its level. Narrowing it "
+              f"needs the peak positions against the UTRs, which this "
+              f"table does not carry.", ""]
     L += ["**No compound was searched against any of this.** A uORF, a "
           "quadruplex or a decay element is a place an intervention could "
           "act, not an intervention; and a motif in the annotated UTR is not "
@@ -1329,6 +1414,7 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
     L.extend(_proliferation_section(result))
     L.extend(_fame_section(result))
     L.extend(_crosscheck_section(result))
+    L.extend(_screen_list_section(result))
     L.extend(_utr_section(result))
     L.extend(_brake_exon_section(result))
 
@@ -1395,6 +1481,10 @@ def markdown_report(result: dict, top_n: int = 25) -> str:
                 f"chance match at a higher rate than stated. A looser "
                 f"`--pvalue` scans them, with more chance hits.")
         L.append(f"- Non-redundant sites: {res['n_sites']} across {res['n_tfs']} TFs")
+        _occ = qs.get("occupancy") or {}
+        if _occ.get("note"):
+            L.append(f"- **Measured occupancy splits the scan.** "
+                     f"{_occ['note']}")
         L.append("")
         q2 = res.get("scan_quality") or {}
         if q2:
@@ -3855,7 +3945,7 @@ def summary_report(result: dict, top_n: int = SUMMARY_TOP) -> str:
                 if xc_mod.cautions_for(_m, _xc):
                     _ctd_opposite.append(_m.get("drug"))
             if xc_mod.cautions_for(r, _xc):
-                _broad += " ⚠CTD opposite"
+                _broad += " ⚠databases disagree"
             _targets = ", ".join(sorted(r["targets"])) or EMDASH
             _line[id(r)] = (
                 f"| **{r.get('drug')}**{_broad}{_more} | "
@@ -3907,7 +3997,7 @@ def summary_report(result: dict, top_n: int = SUMMARY_TOP) -> str:
                              f"{cl_mod.names(c, limit=8)}")
             L.append("")
         if _ctd_opposite:
-            L.append(f"⚠CTD opposite: CTD records "
+            L.append(f"⚠databases disagree: CTD records "
                      f"{', '.join(dict.fromkeys(_ctd_opposite))} moving "
                      f"{q['gene']} the other way. A route with no recorded "
                      f"direction at its factor is lowered to tier 4; the "
@@ -3982,10 +4072,27 @@ def summary_report(result: dict, top_n: int = SUMMARY_TOP) -> str:
                          f"nothing below should be read as evidence that "
                          f"it would have found nothing.")
             if absent:
-                L.append(f"- **Not available here:** {', '.join(absent)}. "
-                         f"No input for these on this machine, so they "
-                         f"were never asked. `report.md` names the file or "
-                         f"flag each one needs.")
+                # Each with what it needs, while the list is short enough
+                # to read. The generic sentence below is a fallback for a
+                # bare run where a dozen are missing at once and naming
+                # each would bury the rest of the summary.
+                _needs = [(k, (sources.get(k) or {}).get("enable_with"))
+                          for k in absent]
+                if len(absent) <= 4 and any(n for _, n in _needs):
+                    _them = ("these sources" if len(absent) > 1
+                             else "this source")
+                    L.append(f"- **Not asked, and what each would need** "
+                             f"(nothing below is evidence that {_them} "
+                             f"would have found nothing):")
+                    for _k, _n in _needs:
+                        L.append(f"    - `{_k}` - {_n}" if _n else
+                                 f"    - `{_k}` - see `report.md`")
+                else:
+                    L.append(f"- **Not available here:** "
+                             f"{', '.join(absent)}. No input for these on "
+                             f"this machine, so they were never asked. "
+                             f"`report.md` names the file or flag each one "
+                             f"needs.")
             L.append("")
         elif not q.get("demo"):
             L.append("## What the answer rests on")
@@ -4021,6 +4128,23 @@ def summary_report(result: dict, top_n: int = SUMMARY_TOP) -> str:
                 "No factor with a site in this promoter has a detectably "
                 "perturbed regulon in the tissue checked, so these routes "
                 "rest on sequence alone.")
+        _tfs = res.get("tfs") or []
+        _unassayed = [t for t in _tfs
+                      if t.get("chip_state") == "not assayed"
+                      and not t.get("chip_peaks")]
+        _drugged_unassayed = [t for t in _unassayed if t.get("drugs")]
+        if _drugged_unassayed and any(
+                t.get("chip_state") == "bound" for t in _tfs):
+            cautions.append(
+                f"{len(_unassayed)} factor(s) here have no measured "
+                f"occupancy because the ChIP table never covers them, not "
+                f"because they were looked for and not found"
+                + (f" - including {', '.join(t['symbol'] for t in _drugged_unassayed[:3])}, "
+                   f"which {'have' if len(_drugged_unassayed) > 1 else 'has'} "
+                   f"a drug. They are scored on sequence alone and sit below "
+                   f"factors with a peak for that reason, which is a fact "
+                   f"about what has been assayed rather than about this "
+                   f"promoter." if _drugged_unassayed else "."))
         ov = result.get("tss_window_overlap") or []
         if ov:
             cautions.append(
@@ -4073,10 +4197,22 @@ def write_outputs(result: dict, outdir: str | Path, *, top_n: int = 25) -> list[
     p.write_text(json.dumps(result, indent=2, default=str), encoding="utf-8")
     written.append(p)
 
+    # The plate list: every distinct compound, nothing folded, nothing
+    # ranked. Separate from the report because a screen wants the
+    # opposite of what a written argument wants; see screenlist.py.
+    from . import screenlist as _sl
+
+    _plan = _sl.build(result)
+    if _plan.get("rows"):
+        p = outdir / "screen_list.tsv"
+        p.write_text(_sl.to_tsv(_plan), encoding="utf-8")
+        written.append(p)
+
     p = outdir / "tf_summary.tsv"
     cols = ["symbol", "name", "role", "nuclear_receptor", "n_sites", "best_rel_score",
             "best_score_bits", "best_site_tss_offset", "best_site_sequence",
-            "matrix_id", "chip_peaks", "score", "n_drugs", "drugs"]
+            "matrix_id", "chip_peaks", "chip_state", "score", "n_drugs",
+            "drugs"]
     # csv.writer rather than "\t".join: names come from external tables
     # and APIs, and one carrying a tab or a newline used to split the row
     # and shift every column after it, silently. QUOTE_MINIMAL quotes

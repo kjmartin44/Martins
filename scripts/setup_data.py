@@ -423,6 +423,66 @@ def _fetch_remap(data: Path):
              check=gzip_opens)
 
 
+ENCODE_ECLIP = (
+    "https://www.encodeproject.org/search/?type=File&assay_title=eCLIP"
+    "&file_type=bed+narrowPeak&assembly=GRCh38&status=released&limit=all"
+    "&format=json&field=href&field=accession&field=preferred_default"
+    "&field=target.label&field=biosample_ontology.term_name")
+TARGETSCAN_ZIP = ("https://www.targetscan.org/vert_80/vert_80_data_download/"
+                  "Predicted_Targets_Info.default_predictions.txt.zip")
+MIRTARBASE_CSV = ("https://awi.cuhk.edu.cn/miRTarBase/downloads/files/11.0/"
+                  "hsa_MTI.csv")
+
+
+def _fetch_transcript_sites(data: Path):
+    """The three site catalogues, then build the one table from them.
+
+    The downloads stay under `data/transcript_sites_src/` so a rebuild with
+    different options does not fetch a gigabyte again. ENCODE leaves the BED
+    name column as ".", so each peak file is saved under the name of the RBP
+    it measured.
+    """
+    src = data / "transcript_sites_src"
+    src.mkdir(parents=True, exist_ok=True)
+
+    ts_zip = src / "targetscan.zip"
+    ts_txt = src / "Predicted_Targets_Info.default_predictions.txt"
+    if not ts_txt.exists():
+        download(TARGETSCAN_ZIP, ts_zip, check=zip_holds(".txt"))
+        with zipfile.ZipFile(ts_zip) as z:
+            member = next(n for n in z.namelist() if n.endswith(".txt"))
+            ts_txt.write_bytes(z.read(member))
+        ts_zip.unlink(missing_ok=True)
+
+    mtb = src / "hsa_MTI.csv"
+    if not mtb.exists():
+        download(MIRTARBASE_CSV, mtb, check=first_line_has("miRNA",
+                                                           "Target Gene"))
+
+    peaks = src / "eclip"
+    peaks.mkdir(exist_ok=True)
+    files = [f for f in get_json(ENCODE_ECLIP)["@graph"]
+             if f.get("preferred_default")]
+    if not files:
+        raise SetupError("ENCODE listed no eCLIP peak files")
+    print(f"    {len(files)} eCLIP peak files")
+    for f in files:
+        name = "_".join(re.sub(r"[^A-Za-z0-9]", "", s) for s in
+                        (f["target"]["label"],
+                         f["biosample_ontology"]["term_name"],
+                         f["accession"]))
+        dest = peaks / f"{name}.bed.gz"
+        if not dest.exists():
+            download("https://www.encodeproject.org" + f["href"], dest,
+                     check=gzip_opens)
+
+    _run([sys.executable, ROOT / "scripts" / "build_transcript_sites.py",
+          "--targetscan", ts_txt, "--mirtarbase", mtb,
+          "--eclip", peaks,
+          "--annotation", data / "gencode.basic.gtf.gz",
+          "--out", data / "transcript_sites.tsv"])
+
+
 def _run(cmd: list):
     print("    " + " ".join(str(c) for c in cmd))
     done = subprocess.run([str(c) for c in cmd], cwd=ROOT)
@@ -604,6 +664,12 @@ def items() -> list:
         Item("ccle", "DepMap expression (CCLE)", "about 500 MB", "big",
              (_reg("ccle_expression"),), _fetch_ccle,
              "the expression half of the sensitivity scan is skipped"),
+        Item("transcript_sites", "Named transcript regulators (built)",
+             "about 1.4 GB downloaded", "big",
+             (_reg("transcript_sites"),), _fetch_transcript_sites,
+             "the UTR scans report motifs with no factor attached, so there "
+             "is nothing to knock down or antagonise",
+             needs=("gencode",)),
         Item("corpora", "CREEDS and DrugMatrix signatures", "about 60 MB",
              "optional",
              (("data/creeds_drug_up.gmt",), ("data/creeds_drug_down.gmt",),

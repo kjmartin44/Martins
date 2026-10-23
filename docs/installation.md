@@ -49,7 +49,12 @@ environment activated. `run_demo.bat` uses synthetic fixtures.
 `run_analysis.bat` and `run_everything.bat` use live services. The latter may
 install missing chemistry dependencies and download reference files.
 `setup_data.bat` fetches all of the git-ignored reference files in one step and
-skips any that are already in `data/`; see [data setup](data-setup.md).
+skips any that are already in `data/`; see [data setup](data-setup.md). Two of
+those tables are built rather than downloaded: the ChIP-derived regulon from
+the ReMap peaks, and the named transcript regulators from TargetScan,
+miRTarBase and the ENCODE eCLIP peaks. Both need the GENCODE annotation first,
+and the setup script orders them for you. `--small` skips the large downloads,
+the 1.4 GB behind the transcript regulator table among them.
 
 `run_everything.bat` checks for the key reference files first and offers to run
 `setup_data.bat` when any is missing. It runs every stage at full effort, and a run

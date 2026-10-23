@@ -268,6 +268,7 @@ Generated from each module's own first docstring line.
 | `report.py` | Turning a finished run into something a person reads. |
 | `retrospective.py` | Does the pipeline recover drugs already known to move a gene? |
 | `screening.py` | Screen the whole approved-drug library against a receptor. |
+| `screenlist.py` | Every compound worth putting on a plate, with nothing ranked. |
 | `screens.py` | Design the experiment that settles what this whole package only predicts. |
 | `sensitivity.py` | Which approved drugs behave as though they act on your factor. |
 | `services.py` | Do the web services still return the shape the parsers expect? |

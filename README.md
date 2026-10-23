@@ -40,7 +40,7 @@ by auditing all six and marking each **searched**, **listed only** or
 |---|---|
 | Transcription | The promoter scan, the factor ligands, the recorded regulators, the upstream network, the literature record and the expression signatures. |
 | Splicing and isoform choice | Exons used only by transcripts the cell destroys, each weighed by how much of the gene's message its isoforms carry in GTEx. |
-| mRNA stability | AU-rich elements, Pumilio sites and the m6A consensus in the 3'UTR, each against a shuffle of the same sequence. |
+| mRNA stability | AU-rich elements, Pumilio sites and the m6A consensus in the 3'UTR, each against a shuffle of the same sequence, and the microRNAs and RNA-binding proteins named for this transcript by TargetScan, miRTarBase and ENCODE eCLIP. |
 | Translation | Upstream ORFs in the 5'UTR with the Kozak strength of each, G-quadruplexes, and a 5'TOP motif at the cap. |
 | Folding | A ligand screen against the gene's own protein, which is what a pharmacological chaperone would have to be. |
 | Degradation | The ligase that destroys the protein, the enzyme that reverses it, and compounds measured on the protein itself. |

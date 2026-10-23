@@ -1626,7 +1626,16 @@ def test_all_output_files_written_for_every_section(tmp_path):
     written = pipeline.write_outputs(res, tmp_path)
     names = {p.name for p in written}
     assert names == {"report.md", "summary.md", "results.json",
-                     "tf_summary.tsv", "sites.bed", "promoter.fa"}
+                     "tf_summary.tsv", "sites.bed", "promoter.fa",
+                     "screen_list.tsv"}
+
+    # The plate list: one line per distinct compound, and no score
+    # column, because the ordering has been measured not to carry one.
+    plate = (tmp_path / "screen_list.tsv").read_text(
+        encoding="utf-8").splitlines()
+    assert plate[0].startswith("compound	step")
+    assert "score" not in plate[0]
+    assert len(plate) == len({l.split("	")[0] for l in plate[1:]}) + 1
 
     bed = (tmp_path / "sites.bed").read_text().splitlines()
     assert len(bed) > 1
@@ -16623,3 +16632,75 @@ def test_the_report_marks_an_empty_source_rather_than_hiding_it():
     from generoutes import report as rep
     src = inspect.getsource(rep.markdown_report)
     assert '"empty": "ok, nothing found"' in src
+
+
+# ===================================================================== #
+# A ChIP table that never covers a factor must not be read as having    #
+# looked for it and found nothing.                                      #
+# ===================================================================== #
+def _tf(symbol, peaks, rel=0.9):
+    from generoutes.pipeline import TFResult
+
+    class _Hit:
+        rel_score = rel
+        tss_offset = -100
+        score = 10.0
+        matrix_id = "M"
+        matched_sequence = "ACGT"
+
+    r = TFResult(symbol=symbol, annotation={"role": "activator"},
+                 hits=[_Hit()])
+    r.chip_peaks = peaks
+    return r
+
+
+def test_a_factor_the_table_never_covers_keeps_the_unverified_discount():
+    """The failure this prevents: loading ReMap used to DEMOTE a factor
+    nobody had ever ChIPped, relative to not loading it at all."""
+    from generoutes import pipeline as pl
+
+    uncovered = _tf("NR1H4", 0)
+    with_table = pl.score_tf(uncovered, has_chip=True, assayed={"OTHER"})
+    without_table = pl.score_tf(uncovered, has_chip=False)
+    assert with_table == without_table, (
+        "adding a ChIP table changed the score of a factor it says "
+        "nothing about")
+
+
+def test_a_factor_the_table_covers_and_did_not_bind_still_loses_the_axis():
+    """The penalty is not removed, only aimed. Absence is evidence when
+    the factor was actually assayed."""
+    from generoutes import pipeline as pl
+
+    covered = _tf("ZNF768", 0)
+    scored = pl.score_tf(covered, has_chip=True, assayed={"ZNF768"})
+    discounted = pl.score_tf(_tf("NR1H4", 0), has_chip=True,
+                             assayed={"ZNF768"})
+    assert scored < discounted
+    bound = pl.score_tf(_tf("ZNF768", 2), has_chip=True, assayed={"ZNF768"})
+    assert round(bound - scored, 6) == pl.WEIGHTS["chip_evidence"]
+
+
+def test_the_three_chip_states_are_named():
+    from generoutes import pipeline as pl
+
+    assert pl.chip_state(_tf("A", 1), True, {"A"}) == "bound"
+    assert pl.chip_state(_tf("A", 0), True, {"A"}) == "not bound"
+    assert pl.chip_state(_tf("B", 0), True, {"A"}) == "not assayed"
+    # No table at all, and a table whose coverage is unknown, are the same.
+    assert pl.chip_state(_tf("A", 0), False, None) == "not assayed"
+    assert pl.chip_state(_tf("A", 0), True, None) == "not assayed"
+
+
+def test_coverage_matching_ignores_symbol_case():
+    from generoutes import pipeline as pl
+
+    assert pl.chip_state(_tf("nr1h4", 0), True, {"NR1H4"}) == "not bound"
+
+
+def test_the_state_reaches_the_saved_row():
+    from generoutes import pipeline as pl
+
+    r = _tf("A", 0)
+    r.chip_state = pl.chip_state(r, True, {"A"})
+    assert r.to_dict()["chip_state"] == "not bound"

@@ -142,8 +142,8 @@ def test_the_summary_marks_the_drug_and_names_it_under_the_table(lincs):
         [_route("Aspirin"), _route("Caffeine", 3)], xc))
     rows = [ln for ln in text.splitlines()
             if ln.startswith("| ") and "**" in ln]
-    assert any("Aspirin" in r and "⚠CTD opposite" in r for r in rows)
-    assert not any("Caffeine" in r and "⚠CTD opposite" in r for r in rows)
+    assert any("Aspirin" in r and "⚠databases disagree" in r for r in rows)
+    assert not any("Caffeine" in r and "⚠databases disagree" in r for r in rows)
     assert "CTD records Aspirin moving G1 the other way" in text
     assert "CTD and LINCS disagree on 2 drugs" in text
     assert "Tretinoin" in text.split("CTD and LINCS disagree")[1]
@@ -151,7 +151,7 @@ def test_the_summary_marks_the_drug_and_names_it_under_the_table(lincs):
 
 def test_a_summary_without_a_crosscheck_is_unchanged():
     text = report.summary_report(_summary_result([_route("Aspirin")], None))
-    assert "⚠CTD opposite" not in text and "disagree" not in text
+    assert "⚠databases disagree" not in text and "disagree" not in text
 
 
 def test_the_full_report_section_lists_flagged_drugs_and_conflicts(lincs):

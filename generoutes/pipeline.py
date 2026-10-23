@@ -66,6 +66,10 @@ class TFResult:
     annotation: dict
     hits: list = field(default_factory=list)
     chip_peaks: int = 0
+    # "bound", "not bound" or "not assayed". The last two look identical
+    # in a peak count of zero and mean opposite things, so the state is
+    # kept rather than re-derived from the count.
+    chip_state: str = "not assayed"
     drugs: list = field(default_factory=list)
     score: float = 0.0
     # How many other genes this factor controls. Set after ranking, because
@@ -98,6 +102,7 @@ class TFResult:
             "best_site_sequence": b.matched_sequence if b else None,
             "matrix_id": b.matrix_id if b else None,
             "chip_peaks": self.chip_peaks,
+            "chip_state": self.chip_state,
             "score": round(self.score, 1),
             "n_regulon": self.n_regulon,
             "regulon_provenance": self.regulon_provenance,
@@ -195,7 +200,30 @@ ROLE_CREDIT = {
 }
 
 
-def score_tf(res: TFResult, has_chip: bool, goal: str = "up") -> float:
+# What a missing peak is worth when the factor was never assayed: the
+# same unverified discount a run with no ChIP table at all applies.
+UNVERIFIED_CHIP = 0.35
+
+
+def chip_state(res: TFResult, has_chip: bool, assayed=None) -> str:
+    """`bound`, `not bound` or `not assayed` for one factor.
+
+    `assayed` is the set of symbols the ChIP table covers anywhere in the
+    genome, or None when that is unknown. Only a factor the table
+    demonstrably covers can be said not to be bound; for the rest the
+    table is silent, and silence is not absence.
+    """
+    if not has_chip:
+        return "not assayed"
+    if res.chip_peaks:
+        return "bound"
+    if assayed and res.symbol.upper() in assayed:
+        return "not bound"
+    return "not assayed"
+
+
+def score_tf(res: TFResult, has_chip: bool, goal: str = "up",
+             assayed=None) -> float:
     b = res.best_hit
     if b is None:
         return 0.0
@@ -207,10 +235,13 @@ def score_tf(res: TFResult, has_chip: bool, goal: str = "up") -> float:
     role = res.annotation.get("role", "unknown")
     s += w["activator_role"] * ROLE_CREDIT[goal].get(role, 0.0)
 
-    if has_chip:
-        s += w["chip_evidence"] * (1.0 if res.chip_peaks else 0.0)
+    state = chip_state(res, has_chip, assayed)
+    if state == "bound":
+        s += w["chip_evidence"]
+    elif state == "not bound":
+        pass                      # covered by the table and not bound here
     else:
-        s += w["chip_evidence"] * 0.35 * min(b.rel_score, 1.0)  # unverified discount
+        s += w["chip_evidence"] * UNVERIFIED_CHIP * min(b.rel_score, 1.0)
 
     if res.drugs:
         s += w["druggable"]
@@ -801,8 +832,15 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                                   len(_nr_drugged) == len(_drugged),
         }
 
+        # Which factors the ChIP table covers at all, from the regulon
+        # built out of the same BED genome-wide. Without one, coverage is
+        # unknown and a missing peak goes back to meaning nothing.
+        _assayed = (set(regulons) if regulons and _reg_kind == "chip"
+                    else None)
         for r in by_tf.values():
-            r.score = score_tf(r, has_chip=chip_src.usable, goal=goal)
+            r.chip_state = chip_state(r, chip_src.usable, _assayed)
+            r.score = score_tf(r, has_chip=chip_src.usable, goal=goal,
+                               assayed=_assayed)
 
         ranked = sorted(by_tf.values(), key=lambda r: -r.score)
 
@@ -2104,12 +2142,24 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
             ledger.record("screen", requested=True, ok=_ok,
                           yielded=len(screens), detail=_detail)
 
+        # Which of these factors a shuffle could not have produced. Done
+        # here rather than in scan_quality because the measured peaks are
+        # per factor and that function sees only sequence.
+        if quality:
+            quality["occupancy"] = motifs_mod.occupancy_partition(
+                [r.to_dict() for r in ranked], quality)
+
         return {
             "promoter": prom.to_dict(),
             "sequence": prom.sequence,
             "n_sites": len(hits),
             "scan_quality": quality,
-            "salt_forms_collapsed": collapsed if grade_drugs else {},
+            # `collapsed` is keyed by (drug, factor), which json cannot
+            # write, so the saved field joins the pair into one string.
+            "salt_forms_collapsed": (
+                {f"{drug} @ {tf}": alts
+                 for (drug, tf), alts in collapsed.items()}
+                if grade_drugs else {}),
             "attrition": attrition,
             "beyond_transcription": beyond,
             "analogs": analog_hits,
