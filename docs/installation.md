@@ -79,7 +79,7 @@ those tables are built rather than downloaded: the ChIP-derived regulon from
 the ReMap peaks, and the named transcript regulators from TargetScan,
 miRTarBase and the ENCODE eCLIP peaks. Both need the GENCODE annotation first,
 and the setup script orders them for you. `--small` skips the large downloads,
-the 1.4 GB behind the transcript regulator table among them.
+the 1.6 GB behind the transcript regulator table among them.
 
 `run_everything.bat` checks for the key reference files first and offers to run
 `setup_data.bat` when any is missing. It runs every stage at full effort, and a run

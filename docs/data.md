@@ -27,14 +27,16 @@ treated conservatively as inferred. The current signature loader keeps effects
 in the requested direction with absolute score at least 1.5.
 
 `data/jaspar2024.txt` and `data/trrust.tsv` are reference files that git does not
-carry: everything under `data/` is ignored except `data/hpa.tsv`. Run
+carry: everything under `data/` is ignored except `data/hpa.tsv` and three small
+built tables, `approved_library.tsv` and the two `fda_label_cmax` files, which
+`data/README.md` describes. Run
 `python scripts/setup_data.py` to fetch them. They are not included in the installed
 wheel; pass paths to your own files or use the network defaults. **`data/hpa.tsv` contains `Tissue` and `Organ` columns.
 It is a tissue lookup and cannot be used as an expression matrix.**
 
 Record the source release, download date, assembly, and file hash when obtaining
-new datasets. The repository does not currently provide a complete provenance
-manifest or redistribution-license inventory for these files.
+new datasets. The repository gives the source and terms of the files it ships
+(`data/README.md`) and not of the files you download.
 
 ## Regulon tables for TF activity
 

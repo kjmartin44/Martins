@@ -1631,13 +1631,17 @@ def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
                                       want="up" if goal == "up" else "down"),
                 [])
             protein_abundance = [h.to_dict() for h in (_prot or [])]
+            _pdesc = (_optional("protein abundance coverage",
+                                lambda: prot_mod.describe(prom.gene_symbol),
+                                {})
+                      if prot_mod.available() else None)
             ledger.record(
                 # Not on disk means not asked, not failed.
                 "protein_abundance", requested=prot_mod.available(),
                 ok=prot_mod.available(),
                 yielded=len(protein_abundance),
-                detail=(f"{len(protein_abundance)} compound(s) measured to "
-                        f"move {prom.gene_symbol} protein the needed way"
+                detail=(prot_mod.ledger_detail(
+                    prom.gene_symbol, len(protein_abundance), _pdesc)
                         if prot_mod.available() else prot_mod.SOURCE))
 
         # ---- which drugs change how much of the factor EXISTS?

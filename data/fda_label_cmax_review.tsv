@@ -1,0 +1,151 @@
+name	status	reason	example
+Acetaminophen	none	no peak concentration sentence in the pharmacokinetics section	
+Acitretin	none	no peak concentration sentence in the pharmacokinetics section	
+ALECTINIB	review	every peak statement was set aside: sentence mentions 'ratio'	In patients with ALK-positive NSCLC, the geometric mean (coefficient of variation %) steady-state maximal concentration (C max,ss ) for alectinib was 665 ng/mL (44%) and for M4 was 246 ng/mL (45%) with peak to trough concentration ratio of 1.2.
+Alitretinoin	none	no peak concentration sentence in the pharmacokinetics section	
+Anidulafungin	none	no peak concentration sentence in the pharmacokinetics section	
+ATOGEPANT	none	no peak concentration sentence in the pharmacokinetics section	
+AZILSARTAN KAMEDOXOMIL	none	no peak concentration sentence in the pharmacokinetics section	
+Balsalazide Disodium	none	no peak concentration sentence in the pharmacokinetics section	
+Bazedoxifene	none	no single ingredient label found in openFDA	
+Bazedoxifene Acetate	none	no single ingredient label found in openFDA	
+belinostat	none	no peak concentration sentence in the pharmacokinetics section	
+Bexarotene	none	no peak concentration sentence in the pharmacokinetics section	
+BIVALIRUDIN	none	no peak concentration sentence in the pharmacokinetics section	
+Calcipotriene	none	no peak concentration sentence in the pharmacokinetics section	
+CANAGLIFLOZIN ANHYDROUS	none	no single ingredient label found in openFDA	
+CAPMATINIB	none	no peak concentration sentence in the pharmacokinetics section	
+Caspofungin Acetate	none	no peak concentration sentence in the pharmacokinetics section	
+CHLORHEXIDINE	none	no peak concentration sentence in the pharmacokinetics section	
+Chlorotrianisene	none	no single ingredient label found in openFDA	
+Cholecalciferol	none	no single ingredient label found in openFDA	
+Choline Fenofibrate	none	no single ingredient label found in openFDA	
+Cinacalcet Hydrochloride	none	no peak concentration sentence in the pharmacokinetics section	
+Clobetasol Propionate	none	no peak concentration sentence in the pharmacokinetics section	
+Clofibrate	none	no single ingredient label found in openFDA	
+CONIVAPTAN HYDROCHLORIDE	none	no single ingredient label found in openFDA	
+dabrafenib	none	no peak concentration sentence in the pharmacokinetics section	
+daunorubicin hydrochloride	none	no peak concentration sentence in the pharmacokinetics section	
+Decitabine	none	no peak concentration sentence in the pharmacokinetics section	
+DESLANOSIDE	none	no single ingredient label found in openFDA	
+Desoxycorticosterone Acetate	none	no single ingredient label found in openFDA	
+Desoxycorticosterone Pivalate	none	no single ingredient label found in openFDA	
+Dextrothyroxine Sodium	none	no single ingredient label found in openFDA	
+Dienestrol	none	no single ingredient label found in openFDA	
+Diethylstilbestrol Diphosphate	none	no single ingredient label found in openFDA	
+DIGOXIN	none	no peak concentration sentence in the pharmacokinetics section	
+DOCETAXEL	none	no peak concentration sentence in the pharmacokinetics section	
+Doxercalciferol	none	no peak concentration sentence in the pharmacokinetics section	
+Doxorubicin	review	5 peak statements range from 75.4 to 1.53e+04 nM, more than 30-fold, so none is chosen	Table 8: Pharmacokinetic Parameters of Total Doxorubicin from Doxorubicin Hydrochloride Liposome Injection in Patients With AIDS-Related Kaposi’s Sarcoma Parameter (units) Dose 10 mg/m 2 20 mg/m 2 Peak Plasma Concentration (mcg/mL) 4.12 ± 0.215 8.34 ± 0.49 Plasma Clearance (L/h/m 2 ) 0.056 ± 0.01 0.
+DUTASTERIDE	none	no peak concentration sentence in the pharmacokinetics section	
+Elafibranor	none	no peak concentration sentence in the pharmacokinetics section	
+ELBASVIR	none	no single ingredient label found in openFDA	
+Eltrombopag Olamine	none	no peak concentration sentence in the pharmacokinetics section	
+ENTRECTINIB	none	no single ingredient label found in openFDA	
+Ergocalciferol	none	no peak concentration sentence in the pharmacokinetics section	
+Estetrol	none	no single ingredient label found in openFDA	
+Estradiol Acetate	none	no peak concentration sentence in the pharmacokinetics section	
+Estradiol Cypionate	none	no peak concentration sentence in the pharmacokinetics section	
+estradiol valerate	none	no peak concentration sentence in the pharmacokinetics section	
+Estramustine Phosphate Sodium	none	no single ingredient label found in openFDA	
+Estrogens, Conjugated	none	no peak concentration sentence in the pharmacokinetics section	
+Estrogens, Conjugated Synthetic A	none	no single ingredient label found in openFDA	
+Estrogens, Esterified	none	no single ingredient label found in openFDA	
+Estrone	none	no peak concentration sentence in the pharmacokinetics section	
+Estropipate	none	no single ingredient label found in openFDA	
+Ethinyl Estradiol	none	no single ingredient label found in openFDA	
+Ethynodiol Diacetate	none	no single ingredient label found in openFDA	
+Etretinate	none	no single ingredient label found in openFDA	
+Fenofibrate	none	no peak concentration sentence in the pharmacokinetics section	
+Fenofibric Acid	none	no peak concentration sentence in the pharmacokinetics section	
+FEXOFENADINE HYDROCHLORIDE	none	no peak concentration sentence in the pharmacokinetics section	
+Fludrocortisone Acetate	none	no peak concentration sentence in the pharmacokinetics section	
+FLUOROESTRADIOL F-18	none	no single ingredient label found in openFDA	
+Fulvestrant	none	no peak concentration sentence in the pharmacokinetics section	
+Gemfibrozil	none	no peak concentration sentence in the pharmacokinetics section	
+Givinostat Hydrochloride	none	no single ingredient label found in openFDA	
+HEXAFLUORENIUM	none	no single ingredient label found in openFDA	
+Hydrocortisone Acetate	none	no peak concentration sentence in the pharmacokinetics section	
+Hydroxyprogesterone Caproate	none	no peak concentration sentence in the pharmacokinetics section	
+Ibrexafungerp	none	no single ingredient label found in openFDA	
+Iloprost	none	no peak concentration sentence in the pharmacokinetics section	
+INDINAVIR SULFATE	none	no single ingredient label found in openFDA	
+IRINOTECAN HYDROCHLORIDE	none	no peak concentration sentence in the pharmacokinetics section	
+Isotretinoin	review	every peak statement was set aside: sentence mentions 'fed'; sentence mentions 'with food'	Isotretinoin C max is 862 (22%) ng/mL and AUC 0-inf is 10,004 (22%) ng*h/mL when Isotretinoin Capsules was administered with food in healthy adults.
+Lenalidomide Hydrochloride Monohydrate	none	no single ingredient label found in openFDA	
+Levothyroxine	none	no peak concentration sentence in the pharmacokinetics section	
+Lidocaine	none	no peak concentration sentence in the pharmacokinetics section	
+LIFITEGRAST	none	no peak concentration sentence in the pharmacokinetics section	
+Liothyronine Sodium	none	no peak concentration sentence in the pharmacokinetics section	
+LOMITAPIDE	review	4 peak statements range from 8.27 to 523 nM, more than 30-fold, so none is chosen	Table 11: Predicted AUC 0-tau and C max at Steady-State Age Group Maximum Recommended Dosage Median AUC 0-tau (ng/mL∙h) 5 th , 95 th Percentile AUC 0-tau (ng/mL∙h) Median C max (ng/mL) 5 th , 95 th Percentile C max (ng/mL) AUC 0-tau =Area under the curve over the dosing interval of 24 hours (tau=24
+LOPINAVIR	none	no single ingredient label found in openFDA	
+LUMACAFTOR	none	no single ingredient label found in openFDA	
+Maraviroc	none	no peak concentration sentence in the pharmacokinetics section	
+medrysone	none	no single ingredient label found in openFDA	
+Mestranol	none	no single ingredient label found in openFDA	
+Methimazole	none	no peak concentration sentence in the pharmacokinetics section	
+Micafungin Sodium	none	no peak concentration sentence in the pharmacokinetics section	
+mitoxantrone	none	no peak concentration sentence in the pharmacokinetics section	
+MONTELUKAST SODIUM	review	every peak statement was set aside: under the heading 'Pediatric'	Based on population analyses, the mean AUC (4296 ng•hr/mL [range 1200 to 7153]) was 60% higher and the mean C max (667 ng/mL [range 201 to 1058]) was 89% higher than those observed in adults (mean AUC 2689 ng•hr/mL [range 1521 to 4595]) and mean C max (353 ng/mL [range 180 to 548]).
+NALDEMEDINE TOSYLATE	none	no peak concentration sentence in the pharmacokinetics section	
+Nandrolone Phenpropionate	none	no single ingredient label found in openFDA	
+niclosamide	none	no single ingredient label found in openFDA	
+Obeticholic Acid	none	no single ingredient label found in openFDA	
+OLMESARTAN MEDOXOMIL	none	no peak concentration sentence in the pharmacokinetics section	
+Olsalazine Sodium	none	no peak concentration sentence in the pharmacokinetics section	
+Oxandrolone	none	no single ingredient label found in openFDA	
+Oxymetholone	none	no single ingredient label found in openFDA	
+Paclitaxel	none	no peak concentration sentence in the pharmacokinetics section	
+palbociclib	none	no peak concentration sentence in the pharmacokinetics section	
+Palovarotene	none	no single ingredient label found in openFDA	
+Panobinostat	none	no single ingredient label found in openFDA	
+Paramethasone Acetate	none	no single ingredient label found in openFDA	
+Paricalcitol	review	20 peak statements range from 0.144 to 117 nM, more than 30-fold, so none is chosen	Mean ± SD Paricalcitol Pharmacokinetic Parameters in CKD Patients on Dialysis Following Single 0.24 mcg/kg Intravenous Bolus Dose CKD-HD (n=14) CKD-PD (n=8) C max (ng/mL) 1.680 ± 0.511 1.832 ± 0.315 AUC 0-∞ (ng·h/mL) 14.51 ± 4.12 16.01 ± 5.98 β (1/h) 0.050 ± 0.023 0.045 ± 0.026 t 1/2 (h)* 13.9 ± 7.3
+PARITAPREVIR	none	no single ingredient label found in openFDA	
+PAROMOMYCIN	none	no peak concentration sentence in the pharmacokinetics section	
+Pentamidine	review	4 peak statements range from 6.76 to 1.8e+03 nM, more than 30-fold, so none is chosen	In the patients who received aerosolized pentamidine, the peak plasma levels of pentamidine were at or below the lower limit of detection of the assay (2.3 ng/mL).
+Phenobarbital	none	no peak concentration sentence in the pharmacokinetics section	
+PIMOZIDE	none	no peak concentration sentence in the pharmacokinetics section	
+Pioglitazone Hydrochloride	none	no peak concentration sentence in the pharmacokinetics section	
+PITAVASTATIN	none	no peak concentration sentence in the pharmacokinetics section	
+Plerixafor	none	no peak concentration sentence in the pharmacokinetics section	
+PLICAMYCIN	none	no single ingredient label found in openFDA	
+Ponesimod	none	no peak concentration sentence in the pharmacokinetics section	
+Prednisolone Acetate	none	no peak concentration sentence in the pharmacokinetics section	
+Progesterone	review	22 peak statements range from 4.77 to 1.39e+03 nM, more than 30-fold, so none is chosen	Co-administration of conjugated estrogens and progesterone capsules to 29 postmenopausal women over a 12-day period resulted in an increase in total estrone concentrations (C max 3.68 ng/mL to 4.93 ng/mL) and total equilin concentrations (C max 2.27 ng/mL to 3.22 ng/mL) and a decrease in circulating
+Quinestrol	none	no single ingredient label found in openFDA	
+Raloxifene Hydrochloride	none	no peak concentration sentence in the pharmacokinetics section	
+Ramelteon	review	every peak statement was set aside: under the heading 'Special Populations'	Age In a group of 24 elderly subjects aged 63 to 79 years administered a single ramelteon 16 mg dose, the mean C max and AUC 0-inf values were 11.6 ng/mL (SD, 13.8) and 18.7 ng∙hr/mL (SD, 19.4), respectively.
+Resmetirom	none	no peak concentration sentence in the pharmacokinetics section	
+RIMEGEPANT SULFATE	none	no peak concentration sentence in the pharmacokinetics section	
+Rosiglitazone	none	no single ingredient label found in openFDA	
+SAQUINAVIR	none	no single ingredient label found in openFDA	
+Selexipag	none	no peak concentration sentence in the pharmacokinetics section	
+Simvastatin	review	every peak statement was set aside: under the heading 'Drug Interaction'; under the heading 'Interactions'	Coadministration of simvastatin (40 mg QD for 10 days) resulted in an increase in the maximum mean levels of cardioactive digoxin (given as a single 0.4 mg dose on day 10) by approximately 0.3 ng/mL [see DRUG INTERACTIONS ( 7.2 )] .
+sirolimus	review	6 peak statements range from 2.3 to 252 nM, more than 30-fold, so none is chosen	TABLE 4: MEAN ± SD STEADY STATE SIROLIMUS PHARMACOKINETIC PARAMETERS IN LOW- TO MODERATE-IMMUNOLOGIC RISK ADULT RENAL TRANSPLANT PATIENTS FOLLOWING SIROLIMUS 2 MG DAILY a,b Multiple Dose (daily dose) Solution Tablets C max (ng/mL) 14.4 ± 5.3 15.0 ± 4.9 t max (hr) 2.1 ± 0.8 3.5 ± 2.4 AUC (ng•h/mL) 19
+sorafenib	none	no peak concentration sentence in the pharmacokinetics section	
+Sulindac	none	no peak concentration sentence in the pharmacokinetics section	
+sunitinib	none	no peak concentration sentence in the pharmacokinetics section	
+Tasimelteon	review	every peak statement was set aside: under the heading 'Pediatric'	The average dose normalized Cmax and AUC inf at the recommended dose was 231 ng/mL and 310 ng.h/mL.
+Tazarotene	review	13 peak statements range from 0.0199 to 53.8 nM, more than 30-fold, so none is chosen	After 7 days of topical dosing with measured doses of tazarotene 0.1% gel on 20% of the total body surface without occlusion in 24 healthy subjects, the C max for tazarotenic acid was 0.72 ± 0.58 ng/mL (mean ± SD) occurring 9 hours after the last dose, and the AUC 0-24hr for tazarotenic acid was 10.
+TELMISARTAN	none	no peak concentration sentence in the pharmacokinetics section	
+Testosterone Enanthate	none	no peak concentration sentence in the pharmacokinetics section	
+Testosterone Propionate	none	no single ingredient label found in openFDA	
+thioridazine hydrochloride	none	no peak concentration sentence in the pharmacokinetics section	
+TIPIRACIL	none	no single ingredient label found in openFDA	
+TIPRANAVIR	none	no single ingredient label found in openFDA	
+Titanium Dioxide	none	no peak concentration sentence in the pharmacokinetics section	
+Toremifene Citrate	none	no peak concentration sentence in the pharmacokinetics section	
+trimeprazine tartrate	none	no single ingredient label found in openFDA	
+Troglitazone	none	no single ingredient label found in openFDA	
+TUCATINIB	none	no single ingredient label found in openFDA	
+UBROGEPANT	none	no single ingredient label found in openFDA	
+UMBRALISIB TOSYLATE	none	no single ingredient label found in openFDA	
+Ursodiol	none	no peak concentration sentence in the pharmacokinetics section	
+Valproic acid	none	no peak concentration sentence in the pharmacokinetics section	
+VANZACAFTOR	none	no single ingredient label found in openFDA	
+VENETOCLAX	review	every peak statement was set aside: sentence mentions 'meal'	12.3 Pharmacokinetics Venetoclax mean (± standard deviation) steady state C max was 2.1 ± 1.1 mcg/mL and AUC 0-24h was 32.8 ± 16.9 mcg•h/mL following administration of 400 mg once daily with a low-fat meal.
+Vitamin A	none	no single ingredient label found in openFDA	
+vorinostat	review	every peak statement was set aside: sentence mentions 'fasted state'; sentence mentions 'fed'; sentence mentions 'high-fat'	After oral administration of a single 400-mg dose of vorinostat with a high-fat meal, the mean ± standard deviation area under the curve (AUC) and peak serum concentration (C max ) and the median (range) time to maximum concentration (T max ) were 5.5±1.8 µM∙hr, 1.2±0.62 µM and 4 (2-10) hours, respe
+ZAFIRLUKAST	review	every peak statement was set aside: under the heading 'Special Populations'	Children: Following administration of a single 20 mg dose of zafirlukast to 20 boys and girls between 7 and 11 years of age, and in a second study, to 29 boys and girls between 5 and 6 years of age, the following pharmacokinetic parameters were obtained: Parameter Children age 5 to 6 years Mean (% C
+ZAVEGEPANT HYDROCHLORIDE	none	no peak concentration sentence in the pharmacokinetics section	

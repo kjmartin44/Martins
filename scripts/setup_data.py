@@ -437,6 +437,33 @@ def _fetch_gwas(data: Path):
         z.unlink(missing_ok=True)
 
 
+def _fetch_protein_abundance(data: Path):
+    """ProTargetMiner's workbook, turned into data/drug_protein_abundance.tsv.
+
+    The workbook goes to data/protein_abundance_src/ and stays, so a rebuild
+    does not fetch it again. Needs the HGNC file, because the workbook names
+    proteins by UniProt accession and the table is keyed on gene symbol.
+    """
+    import build_protein_abundance as bpa
+
+    book = data / "protein_abundance_src" / "ProTargetMiner_SupplementaryData1.xlsx"
+    if not book.is_file():
+        download(bpa.PROTARGETMINER_URL, book, check=zip_holds("sheet1.xml"))
+    hgnc = next((data / Path(p).name for p in _reg("hgnc")
+                 if (data / Path(p).name).is_file()), None)
+    if hgnc is None:
+        raise SetupError("the HGNC table is needed to turn UniProt accessions "
+                         "into gene symbols; fetch it with --only hgnc")
+    accessions, _ = bpa.load_hgnc_accessions(hgnc)
+    try:
+        rows, _ = bpa.read_protargetminer(book, accessions)
+    except (OSError, ValueError, zipfile.BadZipFile) as exc:
+        raise SetupError(f"the ProTargetMiner workbook could not be read: {exc}")
+    if not rows:
+        raise SetupError("the ProTargetMiner workbook held no readings")
+    bpa.write_table(rows, data / "drug_protein_abundance.tsv")
+
+
 def _fetch_depmap(data: Path):
     """Each of the three files only when no accepted name for it is present,
     so a 420 MB effect table already on disk is not fetched again."""
@@ -475,10 +502,12 @@ TARGETSCAN_ZIP = ("https://www.targetscan.org/vert_80/vert_80_data_download/"
                   "Predicted_Targets_Info.default_predictions.txt.zip")
 MIRTARBASE_CSV = ("https://awi.cuhk.edu.cn/miRTarBase/downloads/files/11.0/"
                   "hsa_MTI.csv")
+REPIC_M6A = ("https://repicmod.uchicago.edu/repic/data/download/"
+             "m6A=sites=species=human=hg38.txt.gz")
 
 
 def _fetch_transcript_sites(data: Path):
-    """The three site catalogues, then build the one table from them.
+    """The four site catalogues, then build the one table from them.
 
     The downloads stay under `data/transcript_sites_src/` so a rebuild with
     different options does not fetch a gigabyte again. ENCODE leaves the BED
@@ -519,9 +548,14 @@ def _fetch_transcript_sites(data: Path):
             download("https://www.encodeproject.org" + f["href"], dest,
                      check=gzip_opens)
 
+    # REPIC's human file is a table, not BED; the builder reads both.
+    m6a = src / "repic_m6a_hg38.txt.gz"
+    if not m6a.exists():
+        download(REPIC_M6A, m6a, check=gzip_opens)
+
     _run_to([sys.executable, ROOT / "scripts" / "build_transcript_sites.py",
              "--targetscan", ts_txt, "--mirtarbase", mtb,
-             "--eclip", peaks,
+             "--eclip", peaks, "--m6a", m6a,
              "--annotation", data / "gencode.basic.gtf.gz"],
             data / "transcript_sites.tsv")
 
@@ -695,6 +729,12 @@ def items() -> list:
              (_reg("library"),), _fetch_library,
              "the docking screen and the upstream drug index need ChEMBL "
              "queries one at a time"),
+        Item("protein_abundance",
+             "Drug to protein abundance (ProTargetMiner)",
+             "17 MB, builds a 58 MB table", "core",
+             (_reg("drug_protein_abundance"),), _fetch_protein_abundance,
+             "every abundance claim in the run is about the transcript",
+             needs=("hgnc",)),
         Item("depmap", "DepMap 24Q2 CRISPR effect, models, essentials",
              "420 MB", "core",
              (_reg("depmap_effect"), _reg("depmap_model"),
@@ -720,7 +760,7 @@ def items() -> list:
              (_reg("ccle_expression"),), _fetch_ccle,
              "the expression half of the sensitivity scan is skipped"),
         Item("transcript_sites", "Named transcript regulators (built)",
-             "about 1.4 GB downloaded", "big",
+             "about 1.6 GB downloaded", "big",
              (_reg("transcript_sites"),), _fetch_transcript_sites,
              "the UTR scans report motifs with no factor attached, so there "
              "is nothing to knock down or antagonise",

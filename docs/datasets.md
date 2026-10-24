@@ -69,7 +69,7 @@ any one of them works.
 checkout can hold several versions and a run says in its own query block
 which it read.
 
-**Built from other files.** Three tables are built from the others, and one more is downloaded
+**Built from other files.** Three tables are built from the others, and two more are downloaded
 and then projected down to the columns this package reads. The command
 is given in each entry.
 
@@ -89,17 +89,20 @@ next best thing.
 
 ## Terms, and what this repository ships
 
-**The repository ships none of the tables below.** Each accepted
+**The repository ships none of the downloads below.** Each accepted
 filename has its own rule in `.gitignore`, so a download you drop into
 `data/` stays out of git, and the installed wheel carries no data at
 all — `MANIFEST.in` does not include `data/` and the package finder
 takes only `generoutes*`.
 
-One file under `data/` *is* tracked, and it is not one of these:
-`data/hpa.tsv`, a small tissue-to-organ lookup. It has `Tissue` and
-`Organ` columns and is **not** an expression matrix — the table that
-answers "how much of this gene is in this tissue" is the HPA consensus
-download listed below.
+Four small files under `data/` *are* tracked, so a fresh clone can
+screen a library and run the dose check before any download:
+`approved_library.tsv` (built from ChEMBL, CC BY-SA 3.0) and the two
+`fda_label_cmax` tables (read from FDA labels through openFDA, CC0), and
+`hpa.tsv`, a small tissue-to-organ lookup. `data/README.md` gives their
+sources and terms. `hpa.tsv` has `Tissue` and `Organ` columns and is
+**not** an expression matrix — the table that answers "how much of this
+gene is in this tissue" is the HPA consensus download listed below.
 
 That matters the moment you do. Each source sets its own terms on the
 page its entry links to, and they are not uniform: some require
@@ -231,17 +234,27 @@ Compounds measured to change the gene's own PROTEIN, where every other abundance
 | --- | --- |
 | Supplied | found by name under data/ — `on by default once the file exists` |
 | Looks for | `data/drug_protein_abundance.tsv` |
-| Size | varies |
-| Source | <https://decryptE.kusterlab.org> |
+| Size | 17 MB downloaded, 58 MB built |
+| Source | <https://doi.org/10.1038/s41467-019-13582-8> |
 | Inventory key | `drug_protein_abundance` |
+
+Prepare it once after downloading:
+
+```sh
+python scripts/setup_data.py --only protein_abundance
+```
 
 **Without it:** every abundance claim in the run is about mRNA, so a stabiliser or a degradation blocker is invisible.
 
 decryptE and ProTargetMiner answer this. LINCS P100 (~90 phosphopeptides) and CPTAC (no drug arm) do not.
 
+The setup script fetches ProTargetMiner's Supplementary Data 1 (55 compounds in A549 cells, 4,557 proteins, a log2 ratio to the control) and builds the table. Many genes are not in it, BUB1B and MYC among them, and the report says so when the gene is absent.
+
+decryptE has no bulk table that a script can fetch. Its web app exports the drugs you pick, and `python scripts/build_protein_abundance.py EXPORT` converts that export.
+
 Columns: drug, protein, log2fc [, cell_line, dose, time, source].
 
-`python scripts/build_protein_abundance.py EXPORT` converts either export into that layout. It keeps every replicate, because a compound with one observation is not reported.
+The converter keeps every replicate, because a compound with one observation is not reported.
 
 ### Isoform-level expression
 
@@ -277,13 +290,15 @@ Which microRNA or RNA-binding protein acts on the transcript, where the UTR scan
 
 Columns: gene, factor, kind [, region, evidence, source].
 
-TargetScan (predicted miRNA sites), miRTarBase (measured ones), ENCODE eCLIP (RBP footprints) and an m6A atlas all reshape into this one table.
+TargetScan (predicted miRNA sites), miRTarBase (measured ones), ENCODE eCLIP (RBP footprints) and the REPIC m6A atlas all reshape into this one table.
 
-`python scripts/setup_data.py --only transcript_sites` downloads all three and builds the table. To place the files yourself, reshape them with `python scripts/build_transcript_sites.py`, which reads the files you pass and fetches nothing.
+`python scripts/setup_data.py --only transcript_sites` downloads all four and builds the table. To place the files yourself, reshape them with `python scripts/build_transcript_sites.py`, which reads the files you pass and fetches nothing.
 
 An eCLIP peak is placed against the whole gene body, introns included, so those rows say `gene body` rather than claiming the protein sits in a UTR.
 
 miRTarBase's weak class is screen hits rather than direct assays, and 7.3M of its 7.34M human rows, so the builder leaves it out unless asked.
+
+An m6A row has no factor, because a methylation site is a position and not a protein. The proteins that write, erase and read the mark - FTO, RBM15, IGF2BP1, IGF2BP2, HNRNPC - come in as eCLIP rows instead.
 
 ### Drug fame, from your own saved runs
 

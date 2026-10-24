@@ -8633,13 +8633,61 @@ def test_one_row_per_drug_with_the_methods_counted():
     assert rows[0]["drug"] == "Calcitriol"
 
 
+def _route_sources_in_catalogue():
+    """Every `source=` literal catalogue.py builds a Route with.
+
+    Read from the source rather than from a fixture or a saved run: a
+    route only appears in a run when its flag and its data are both
+    there, so sampling runs says nothing about the ones nobody has
+    exercised yet.
+    """
+    import ast
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    tree = ast.parse((root / "generoutes" / "catalogue.py").read_text(
+        encoding="utf-8"))
+    out = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        for kw in node.keywords:
+            if kw.arg == "source" and isinstance(kw.value, ast.Constant):
+                if isinstance(kw.value.value, str) and kw.value.value:
+                    out.add(kw.value.value)
+    return out
+
+
 def test_every_route_source_has_a_method_name():
     """A new route source must appear in this table rather than silently
     counting as zero methods, which is what the first version did for
-    every row."""
+    every row.
+
+    The method count is the only thing ordering rows inside a group, so a
+    source missing here sorts its drugs last and shows a blank Methods
+    column. This checked a two-source fixture and four real sources had
+    walked past it: proteomics, sensitivity, product_screen and
+    promoter_dna - the sensitivity scan among them, which is the one
+    route that can surface a compound nobody has linked to the gene.
+    """
+    from generoutes.report import METHOD_OF_SOURCE, METHOD_WEIGHT
+
+    sources = _route_sources_in_catalogue()
+    assert len(sources) > 10, "the AST walk found almost nothing; check it"
+    missing = sorted(sources - set(METHOD_OF_SOURCE))
+    assert not missing, (
+        f"route sources with no method name, so they count as zero "
+        f"methods and sort last: {missing}")
+
+    # And every name it maps to has a weight, or the ordering falls back
+    # to a default that says a docking hit and a direct therapy agree
+    # equally.
+    unweighted = sorted({n for n in METHOD_OF_SOURCE.values()
+                         if n not in METHOD_WEIGHT})
+    assert not unweighted, f"method names with no weight: {unweighted}"
+
     res = _two_method_result()
     assert pipeline.unmapped_sources(res) == set()
-
     res["results"][0]["all_routes"]["routes"].append(
         _route("X", "Y", 4, 1.0, "c", "a_brand_new_source"))
     assert pipeline.unmapped_sources(res) == {"a_brand_new_source"}

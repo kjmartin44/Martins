@@ -1063,11 +1063,14 @@ def _protein_abundance_section(result: dict) -> list:
         if hits is None:
             continue
         gene = (blk.get("promoter") or {}).get("gene_symbol") or "the gene"
+        _desc = pr.describe(gene)
         L = ["### Measured on the protein", "",
-             pr.summarise(hits, gene), ""]
-        _note = pr.coverage_note(pr.describe(gene), gene)
-        if _note:
-            L += [_note, ""]
+             pr.summarise(hits, gene, desc=_desc), ""]
+        # Only where it adds something. `summarise` already says when the
+        # protein is absent from the table; the distribution below is
+        # worth a line only when the protein is actually in it.
+        if _desc.get("n_compounds"):
+            L += [pr.coverage_note(_desc, gene), ""]
         if hits:
             L.append("| Compound | Change | Observations | Cell lines |")
             L.append("|---|---|---|---|")
@@ -3369,6 +3372,10 @@ METHOD_OF_SOURCE = {
     "regulators": "factor recorded as regulating the gene",
     "stabilizers": "protein stability / degradation",
     "catalogue": "chromatin-level agent",
+    "proteomics": "measured change in the gene's own protein",
+    "sensitivity": "viability phenocopies losing the factor (PRISM)",
+    "product_screen": "ligand-based model (the gene's own protein)",
+    "promoter_dna": "sequence feature in the promoter",
 }
 
 # How much a method's agreement is worth, for ordering only. A measured
@@ -3388,6 +3395,21 @@ METHOD_WEIGHT = {
     "protein stability / degradation": 0.4,
     "structure-based docking": 0.3,
     "chromatin-level agent": 0.1,
+    # Measured on the gene's own PRODUCT, which is the endpoint the whole
+    # question is about - below the transcript signature only because the
+    # panel is 55 compounds in one cell line, so agreement from it is
+    # thinner than agreement from a corpus of thousands.
+    "measured change in the gene's own protein": 0.8,
+    # A correlation between a compound's viability profile and a factor's
+    # knockout profile. Measured, and about the factor rather than the
+    # gene, so it sits with the other indirect measurements.
+    "viability phenocopies losing the factor (PRISM)": 0.5,
+    # The same kind of model as the receptor screen, pointed at the gene's
+    # own protein, so it is worth the same.
+    "ligand-based model (the gene's own protein)": 0.4,
+    # A prediction from sequence alone, and the agents it proposes are
+    # nearly all cytotoxic. Lowest, with the chromatin agents.
+    "sequence feature in the promoter": 0.1,
 }
 
 

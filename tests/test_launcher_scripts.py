@@ -772,9 +772,9 @@ def _decrypte_export(tmp_path, name="decryptE.tsv"):
 
 
 def test_build_protein_abundance_writes_the_table_the_route_reads(tmp_path):
-    """The route is on by default and does nothing without this file, and
-    nothing fetches it - decryptE and ProTargetMiner are manual downloads
-    with a column layout of their own."""
+    """The route is on by default and does nothing without this file.
+    ProTargetMiner is fetched by setup_data.py; a decryptE export is a
+    manual download with a column layout of their own."""
     from generoutes import proteomics
     mod = _lf_script("build_protein_abundance")
 
@@ -986,3 +986,241 @@ def test_build_fda_cmax_keeps_the_lookups_it_has_already_paid_for(
     kept = mod.read_rows(out)
     assert len(kept) == 3, (
         "the three lookups that completed are on disk, not discarded")
+
+
+
+def test_the_launcher_menu_offers_every_scenario_the_cli_accepts():
+    """The menu listed six of the seven scenarios. The missing one,
+    biallelic_hypomorph, is the recessive arrangement of one weak copy and
+    one dead copy, so a patient like that could only be declared as
+    haploinsufficiency, which assumes the other copy is normal. Each
+    scenario also needs a direction check when it implies one."""
+    import re
+    from pathlib import Path
+
+    from generoutes import magnitude as mag
+
+    src = (Path(__file__).resolve().parents[1] / "scripts"
+           / "run_everything.bat").read_text(encoding="utf-8")
+    offered = re.findall(r'if "!SNUM!"=="(\d+)" set "SCEN=(\w+)"', src)
+    numbers = [n for n, _ in offered]
+    assert len(set(numbers)) == len(numbers), "two choices share a number"
+    assert sorted(name for _, name in offered) == sorted(mag.SCENARIOS)
+    assert "biallelic hypomorph" in src
+    for scen, (goal, _why) in mag.SCENARIO_GOAL.items():
+        assert f'if "!SCEN!"=="{scen}" set "NEEDDIR={goal}"' in src, scen
+
+
+# --------------------------------------------- the protein-table notice
+def _lf_launcher_text():
+    return (Path(__file__).resolve().parents[1]
+            / "scripts" / "run_everything.bat").read_text(
+                encoding="utf-8", errors="replace")
+
+
+def test_the_launcher_says_what_a_missing_protein_table_costs():
+    """Protein abundance is the only stage with no flag, so a missing
+    table leaves no trace except one line deep in the evidence ledger.
+
+    For a gene whose broken copy makes an unstable protein that is the
+    question that matters most, and the launcher is where a reader is
+    still paying attention.
+    """
+    text = _lf_launcher_text()
+    guard = "if not exist data" + chr(92) + "drug_protein_abundance.tsv ("
+    assert guard in text, "the notice lost its guard"
+    after = text.split(guard, 1)[1].split(chr(10) + ")", 1)[0]
+    # It has to name the question, not just the file.
+    assert "PROTEIN" in after
+    assert "transcript" in after
+    # And say how to get it, so nobody goes looking.
+    assert "decryptE" in after
+    assert "setup_data.py --only protein_abundance" in after
+
+
+def test_the_protein_table_is_not_in_the_setup_prompt():
+    """It must stay out of NEEDSETUP: it is optional, so listing it would
+    prompt on every run for ever and train the reader to answer no to a
+    prompt that also covers the tables a run needs. The notice says how to
+    get it instead."""
+    text = _lf_launcher_text()
+    needsetup = [l for l in text.splitlines()
+                 if "for %%P in (data" in l and "NEEDSETUP" in l]
+    assert needsetup, "the setup check moved"
+    assert "drug_protein_abundance" not in needsetup[0]
+    # The tables that can be fetched are still listed.
+    assert "jaspar2024.txt" in needsetup[0]
+
+
+
+# ---------------------------------------- the ProTargetMiner workbook
+def _workbook(path, rows):
+    """A one-sheet .xlsx. Strings go in as shared strings, numbers as numbers,
+    None leaves the cell out, and an empty list is an empty row. Columns A to Z."""
+    import zipfile
+
+    strings, table = [], []
+
+    def shared(text):
+        if text not in strings:
+            strings.append(text)
+        return strings.index(text)
+
+    for r, row in enumerate(rows, start=1):
+        cells = []
+        for c, value in enumerate(row):
+            if value is None:
+                continue
+            ref = chr(65 + c) + str(r)
+            if isinstance(value, str):
+                cells.append(f'<c r="{ref}" t="s"><v>{shared(value)}</v></c>')
+            else:
+                cells.append(f'<c r="{ref}"><v>{value}</v></c>')
+        table.append(f'<row r="{r}">' + "".join(cells) + "</row>")
+    ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr("[Content_Types].xml", "<Types/>")
+        zf.writestr("xl/sharedStrings.xml", f'<sst xmlns="{ns}">' + "".join(
+            f"<si><t>{s}</t></si>" for s in strings) + "</sst>")
+        zf.writestr("xl/worksheets/sheet1.xml", f'<worksheet xmlns="{ns}">'
+                    "<sheetData>" + "".join(table) + "</sheetData></worksheet>")
+    return Path(path)
+
+
+PTM_ROWS = [
+    ["Supplementary Data 1. "],
+    [],
+    ["Protein ID", "Sequence coverage [%]", "Raltitrexed_Five_1",
+     "Raltitrexed_Five_2", "Raltitrexed_Five_3", "2-methoxyestradiol_Eig",
+     "Nutlin_Four_1"],
+    ["sp_P04818_TYSY_HUMAN", "45.2", 1.1, 0.9, 1.3, 0.05, 0.0],
+    ["sp_Q00987_MDM2_HUMAN", "30.0", 0.1, "NaN", None, 0.0, 2.2],
+    ["sp_P99999_GONE_HUMAN", "12.0", 1.0, 1.0, 1.0, 1.0, 1.0],
+]
+
+
+def _hgnc_file(tmp_path):
+    rows = ["hgnc_id" + TAB + "symbol" + TAB + "status" + TAB + "uniprot_ids",
+            "HGNC:12441" + TAB + "TYMS" + TAB + "Approved" + TAB + "P04818",
+            "HGNC:6973" + TAB + "MDM2" + TAB + "Approved" + TAB + "Q00987",
+            "HGNC:1" + TAB + "GONE" + TAB + "Symbol Withdrawn" + TAB + "P99999"]
+    p = tmp_path / "hgnc_complete_set.txt"
+    p.write_text(NL.join(rows) + NL, encoding="utf-8")
+    return p
+
+
+def test_read_xlsx_gives_strings_numbers_and_gaps(tmp_path):
+    mod = _lf_script("build_protein_abundance")
+    book = _workbook(tmp_path / "a.xlsx", [["a", 1.5, None, "c"], [], ["x"]])
+    assert list(mod.read_xlsx(book)) == [["a", "1.5", "", "c"], [], ["x"]]
+
+
+def test_hgnc_accessions_keep_approved_genes_and_drop_shared_ones(tmp_path):
+    mod = _lf_script("build_protein_abundance")
+    rows = ["symbol" + TAB + "status" + TAB + "uniprot_ids",
+            "AAA" + TAB + "Approved" + TAB + "P1|P2",
+            "BBB" + TAB + "Approved" + TAB + "P2|P3",
+            "CCC" + TAB + "Entry Withdrawn" + TAB + "P4"]
+    p = tmp_path / "hgnc.tsv"
+    p.write_text(NL.join(rows) + NL, encoding="utf-8")
+    found, shared = mod.load_hgnc_accessions(p)
+    assert found == {"P1": "AAA", "P3": "BBB"}, "P2 is two genes, P4 withdrawn"
+    assert shared == 1
+
+
+def test_the_protargetminer_reader_makes_one_row_per_protein_and_column(
+        tmp_path):
+    mod = _lf_script("build_protein_abundance")
+    book = _workbook(tmp_path / "ptm.xlsx", PTM_ROWS)
+    rows, counts = mod.read_protargetminer(
+        book, {"P04818": "TYMS", "Q00987": "MDM2"})
+    got = {(r["drug"], r["protein"]): [] for r in rows}
+    for r in rows:
+        got[(r["drug"], r["protein"])].append(float(r["log2fc"]))
+    assert got[("Raltitrexed", "TYMS")] == [1.1, 0.9, 1.3]
+    assert got[("2-methoxyestradiol", "TYMS")] == [0.05]
+    assert got[("Nutlin", "MDM2")] == [2.2]
+    assert {r["cell_line"] for r in rows} == {"A549"}
+    assert {r["source"] for r in rows} == {mod.PROTARGETMINER_SOURCE}
+    assert len(rows) == 8
+    assert counts["no_number"] == 2, "one NaN and one blank, neither written"
+    assert counts["unmapped_protein"] == 1, "the withdrawn accession"
+    assert counts["unparsed_column"] == 0
+
+
+def test_the_protargetminer_reader_refuses_another_workbook(tmp_path):
+    mod = _lf_script("build_protein_abundance")
+    book = _workbook(tmp_path / "other.xlsx", [["Gene", "Value"], ["A", 1.0]])
+    with pytest.raises(ValueError, match="ProTargetMiner"):
+        mod.read_protargetminer(book, {})
+
+
+def test_a_workbook_is_converted_and_the_route_reads_it(tmp_path):
+    from generoutes import proteomics
+    mod = _lf_script("build_protein_abundance")
+    book = _workbook(tmp_path / "ptm.xlsx", PTM_ROWS)
+    out = tmp_path / "drug_protein_abundance.tsv"
+    assert mod.main([str(book), "--hgnc", str(_hgnc_file(tmp_path)),
+                     "--out", str(out)]) == 0
+    up = proteomics.load("TYMS", want="up", path=str(out))
+    assert [(h.drug, h.median_log2fc, h.n_observations) for h in up] == [
+        ("Raltitrexed", 1.1, 3)]
+    assert up[0].cell_lines == ["A549"]
+    # Nutlin has one reading of MDM2, below the two the route needs, but the
+    # table still says MDM2 was measured, so it is not read as absent.
+    assert proteomics.load("MDM2", want="up", path=str(out)) == []
+    assert proteomics.describe("MDM2", path=str(out))["n_compounds"] == 3
+    assert proteomics.describe("BUB1B", path=str(out))["n_compounds"] == 0
+
+
+def test_a_workbook_needs_hgnc_to_name_its_proteins(tmp_path, monkeypatch,
+                                                    capsys):
+    mod = _lf_script("build_protein_abundance")
+    book = _workbook(tmp_path / "ptm.xlsx", PTM_ROWS)
+    monkeypatch.chdir(tmp_path)
+    assert mod.main([str(book), "--out", str(tmp_path / "t.tsv")]) == 1
+    assert "HGNC" in capsys.readouterr().err
+    assert not (tmp_path / "t.tsv").exists()
+
+
+
+# ------------------------- a gene the protein table never quantified
+def test_a_protein_the_table_lacks_is_absent_not_a_measured_negative(tmp_path):
+    """BUB1B is not one of ProTargetMiner's proteins. The summary called that
+    "a measured negative", and the ledger's `ok, nothing found` says the same
+    thing, which is the one thing an absent measurement must not claim."""
+    from generoutes import proteomics as pr
+    table = tmp_path / "t.tsv"
+    table.write_text(NL.join([
+        "drug" + TAB + "protein" + TAB + "log2fc",
+        "a" + TAB + "TYMS" + TAB + "1.0",
+        "a" + TAB + "TYMS" + TAB + "1.1"]) + NL, encoding="utf-8")
+
+    absent = pr.describe("BUB1B", path=str(table))
+    assert absent["n_compounds"] == 0
+    text = pr.summarise([], "BUB1B", path=str(table), desc=absent)
+    assert "not in the drug-to-protein table" in text
+    assert "measured negative" not in text
+    assert "absent" in pr.ledger_detail("BUB1B", 0, absent)
+
+    # A protein that was measured, and that nothing moved, still is one.
+    present = pr.describe("TYMS", path=str(table))
+    assert present["n_compounds"] == 1
+    assert "measured negative" in pr.summarise(
+        [], "TYMS", path=str(table), desc=present)
+    assert pr.ledger_detail("TYMS", 0, present).startswith("0 compound(s)")
+    # No coverage information, no claim either way.
+    assert "measured negative" in pr.summarise([], "TYMS", path=str(table))
+
+
+def test_describe_reads_the_table_once_for_the_same_file(tmp_path, monkeypatch):
+    from generoutes import proteomics as pr
+    table = tmp_path / "t.tsv"
+    table.write_text("drug" + TAB + "protein" + TAB + "log2fc" + NL
+                     + "a" + TAB + "TYMS" + TAB + "1.0" + NL, encoding="utf-8")
+    pr._DESCRIBED.clear()
+    first = pr.describe("TYMS", path=str(table))
+    def boom(*a, **k):
+        raise AssertionError("the table was read again")
+    monkeypatch.setattr("csv.DictReader", boom)
+    assert pr.describe("TYMS", path=str(table)) == first

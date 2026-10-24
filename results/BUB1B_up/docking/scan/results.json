@@ -1,0 +1,4516 @@
+{
+  "direct_therapies": [],
+  "brake_exons": {
+    "gene": "BUB1B",
+    "n_transcripts": 31,
+    "n_coding": 12,
+    "n_nmd": 12,
+    "n_nmd_without_candidate": 1,
+    "candidates": [
+      {
+        "start": 40166359,
+        "end": 40166482,
+        "length": 124,
+        "kind": "novel exon",
+        "transcripts": [
+          "ENST00000558715"
+        ],
+        "n_transcripts": 1
+      },
+      {
+        "start": 40176383,
+        "end": 40176436,
+        "length": 54,
+        "kind": "novel exon",
+        "transcripts": [
+          "ENST00001082076"
+        ],
+        "n_transcripts": 1
+      },
+      {
+        "start": 40161026,
+        "end": 40161255,
+        "length": 230,
+        "kind": "extended or shifted coding exon",
+        "transcripts": [
+          "ENST00001082079",
+          "ENST00001082081"
+        ],
+        "n_transcripts": 2
+      },
+      {
+        "start": 40200933,
+        "end": 40200980,
+        "length": 48,
+        "kind": "extended or shifted coding exon",
+        "transcripts": [
+          "ENST00001082078",
+          "ENST00001082083"
+        ],
+        "n_transcripts": 2
+      },
+      {
+        "start": 40220564,
+        "end": 40221134,
+        "length": 571,
+        "kind": "extended or shifted coding exon",
+        "transcripts": [
+          "ENST00001082077",
+          "ENST00001082080"
+        ],
+        "n_transcripts": 2
+      },
+      {
+        "start": 40160984,
+        "end": 40161255,
+        "length": 272,
+        "kind": "extended or shifted coding exon",
+        "transcripts": [
+          "ENST00001082076"
+        ],
+        "n_transcripts": 1
+      },
+      {
+        "start": 40161006,
+        "end": 40161255,
+        "length": 250,
+        "kind": "extended or shifted coding exon",
+        "transcripts": [
+          "ENST00001082077"
+        ],
+        "n_transcripts": 1
+      },
+      {
+        "start": 40161027,
+        "end": 40161255,
+        "length": 229,
+        "kind": "extended or shifted coding exon",
+        "transcripts": [
+          "ENST00001082080"
+        ],
+        "n_transcripts": 1
+      },
+      {
+        "start": 40161064,
+        "end": 40161255,
+        "length": 192,
+        "kind": "extended or shifted coding exon",
+        "transcripts": [
+          "ENST00001082082"
+        ],
+        "n_transcripts": 1
+      },
+      {
+        "start": 40161065,
+        "end": 40161255,
+        "length": 191,
+        "kind": "extended or shifted coding exon",
+        "transcripts": [
+          "ENST00001082083"
+        ],
+        "n_transcripts": 1
+      },
+      {
+        "start": 40161067,
+        "end": 40161255,
+        "length": 189,
+        "kind": "extended or shifted coding exon",
+        "transcripts": [
+          "ENST00000558715"
+        ],
+        "n_transcripts": 1
+      },
+      {
+        "start": 40161072,
+        "end": 40161255,
+        "length": 184,
+        "kind": "extended or shifted coding exon",
+        "transcripts": [
+          "ENST00001082085"
+        ],
+        "n_transcripts": 1
+      },
+      {
+        "start": 40170537,
+        "end": 40170599,
+        "length": 63,
+        "kind": "extended or shifted coding exon",
+        "transcripts": [
+          "ENST00000558715"
+        ],
+        "n_transcripts": 1
+      },
+      {
+        "start": 40170537,
+        "end": 40170571,
+        "length": 35,
+        "kind": "extended or shifted coding exon",
+        "transcripts": [
+          "ENST00001082080"
+        ],
+        "n_transcripts": 1
+      },
+      {
+        "start": 40202589,
+        "end": 40202634,
+        "length": 46,
+        "kind": "extended or shifted coding exon",
+        "transcripts": [
+          "ENST00000559733"
+        ],
+        "n_transcripts": 1
+      },
+      {
+        "start": 40202589,
+        "end": 40202692,
+        "length": 104,
+        "kind": "extended or shifted coding exon",
+        "transcripts": [
+          "ENST00001082077"
+        ],
+        "n_transcripts": 1
+      },
+      {
+        "start": 40218460,
+        "end": 40218562,
+        "length": 103,
+        "kind": "extended or shifted coding exon",
+        "transcripts": [
+          "ENST00001082081"
+        ],
+        "n_transcripts": 1
+      },
+      {
+        "start": 40220564,
+        "end": 40221137,
+        "length": 574,
+        "kind": "extended or shifted coding exon",
+        "transcripts": [
+          "ENST00001082078"
+        ],
+        "n_transcripts": 1
+      },
+      {
+        "start": 40220564,
+        "end": 40221133,
+        "length": 570,
+        "kind": "extended or shifted coding exon",
+        "transcripts": [
+          "ENST00001082079"
+        ],
+        "n_transcripts": 1
+      },
+      {
+        "start": 40220564,
+        "end": 40221127,
+        "length": 564,
+        "kind": "extended or shifted coding exon",
+        "transcripts": [
+          "ENST00001082081"
+        ],
+        "n_transcripts": 1
+      }
+    ],
+    "error": null,
+    "note": "12 decay isoform(s) of BUB1B in Ensembl, 11 of them with an exon the coding isoforms do not use: 2 novel exon(s) and 18 extended or shifted coding exon(s).",
+    "isoform_weight": {
+      "tissue": "Cells_Cultured_fibroblasts",
+      "dataset": "gtex_v8",
+      "error": null,
+      "total_tpm": 8.6,
+      "coding_tpm": 7.465,
+      "by_class": {
+        "no defined coding sequence": 0.0,
+        "productive": 7.465,
+        "decay": 0.0,
+        "retained intron": 1.135
+      },
+      "per_transcript": {
+        "ENST00000560120": {
+          "tpm": 0.0,
+          "biotype": "protein_coding_CDS_not_defined",
+          "class": "no defined coding sequence",
+          "share": 0.0
+        },
+        "ENST00000287598": {
+          "tpm": 7.465,
+          "biotype": "protein_coding",
+          "class": "productive",
+          "share": 0.868
+        },
+        "ENST00000559414": {
+          "tpm": 0.0,
+          "biotype": "protein_coding_CDS_not_defined",
+          "class": "no defined coding sequence",
+          "share": 0.0
+        },
+        "ENST00000558715": {
+          "tpm": 0.0,
+          "biotype": "nonsense_mediated_decay",
+          "class": "decay",
+          "share": 0.0
+        },
+        "ENST00000412359": {
+          "tpm": 0.0,
+          "biotype": "protein_coding",
+          "class": "productive",
+          "share": 0.0
+        },
+        "ENST00000559733": {
+          "tpm": 0.0,
+          "biotype": "nonsense_mediated_decay",
+          "class": "decay",
+          "share": 0.0
+        },
+        "ENST00000559461": {
+          "tpm": 0.26,
+          "biotype": "retained_intron",
+          "class": "retained intron",
+          "share": 0.0302
+        },
+        "ENST00000557848": {
+          "tpm": 0.12,
+          "biotype": "retained_intron",
+          "class": "retained intron",
+          "share": 0.014
+        },
+        "ENST00000559772": {
+          "tpm": 0.43,
+          "biotype": "retained_intron",
+          "class": "retained intron",
+          "share": 0.05
+        },
+        "ENST00000558972": {
+          "tpm": 0.0,
+          "biotype": "retained_intron",
+          "class": "retained intron",
+          "share": 0.0
+        },
+        "ENST00000558151": {
+          "tpm": 0.325,
+          "biotype": "retained_intron",
+          "class": "retained intron",
+          "share": 0.0378
+        }
+      },
+      "n_annotated": 31,
+      "n_measured": 11,
+      "unmeasured_by_class": {
+        "productive": 10,
+        "decay": 10
+      },
+      "verdict": "No decay isoform of this gene carries measurable message in Cells_Cultured_fibroblasts. The candidate brake exons below sit on transcripts that are not detectably made in this tissue, so there is nothing for an oligonucleotide to redirect. The non-productive message that does exist is mostly retained intron (13.2%), which a brake-exon oligonucleotide does not address - a different intervention would be needed to recover it. 10 decay isoform(s) Ensembl lists now are newer than the GENCODE build GTEx was quantified on, so they have no measurement at all - which is not a measurement of zero.",
+      "shares": {
+        "no defined coding sequence": 0.0,
+        "productive": 0.868,
+        "decay": 0.0,
+        "retained intron": 0.132
+      },
+      "decay_share": 0.0,
+      "non_productive_share": 0.132
+    }
+  },
+  "mitotic_gene": true,
+  "compound_breadth": {
+    "broad_percentile": 75,
+    "min_signatures": 3,
+    "n_signatures": 33132,
+    "median_genes_all": 119.0,
+    "compounds": {
+      "vorinostat": {
+        "median_genes": 246,
+        "n_signatures": 377,
+        "percentile": 89.1,
+        "thin": false,
+        "broad": true,
+        "very_broad": false
+      },
+      "belinostat": {
+        "median_genes": 185.0,
+        "n_signatures": 46,
+        "percentile": 75.5,
+        "thin": false,
+        "broad": true,
+        "very_broad": false
+      },
+      "azacitidine": {
+        "median_genes": 101.0,
+        "n_signatures": 26,
+        "percentile": 40.9,
+        "thin": false,
+        "broad": false,
+        "very_broad": false
+      },
+      "decitabine": {
+        "median_genes": 67,
+        "n_signatures": 19,
+        "percentile": 20.9,
+        "thin": false,
+        "broad": false,
+        "very_broad": false
+      },
+      "valproicacid": {
+        "median_genes": 152.5,
+        "n_signatures": 2,
+        "percentile": 64.1,
+        "thin": true,
+        "broad": false,
+        "very_broad": false
+      }
+    }
+  },
+  "standard_of_care": null,
+  "tss_window_overlap": [],
+  "evidence_sources": {
+    "sources": {
+      "chip": {
+        "name": "chip",
+        "requested": true,
+        "ok": true,
+        "state": "ok",
+        "detail": "local BED: peaks for 534 factor(s) over the window",
+        "yielded": 534,
+        "enable_with": "--chip-bed (preferred) or --chip-api"
+      },
+      "depmap": {
+        "name": "depmap",
+        "requested": true,
+        "ok": true,
+        "state": "ok",
+        "detail": "17 of 17 factor(s) scored in CRISPRGeneEffect.csv",
+        "yielded": 17,
+        "enable_with": null
+      },
+      "factor_abundance": {
+        "name": "factor_abundance",
+        "requested": true,
+        "ok": true,
+        "state": "empty",
+        "detail": "no compound moved a factor's own transcript the needed way in enough contexts to report (8 factor(s) asked, 0 of them recorded regulators the motif scan did not rank)",
+        "yielded": 0,
+        "enable_with": null
+      },
+      "fame": {
+        "name": "fame",
+        "requested": true,
+        "ok": true,
+        "state": "ok",
+        "detail": "4 candidate(s) found in the fame table over 11 gene(s); 1 are recorded for most of them",
+        "yielded": 1,
+        "enable_with": "on by default; needs data/ctd_fame.tsv, built by scripts/build_fame_table.py from your saved runs"
+      },
+      "knockout": {
+        "name": "knockout",
+        "requested": true,
+        "ok": true,
+        "state": "ok",
+        "detail": "7 of 17 factor(s) were perturbed in the knockout data; the gene moved for 3",
+        "yielded": 3,
+        "enable_with": "--knockout-gmt, or data/knockout_*.gmt from Enrichr"
+      },
+      "proliferation": {
+        "name": "proliferation",
+        "requested": true,
+        "ok": true,
+        "state": "empty",
+        "detail": "5 candidate(s) checked against the mitotic programme; 0 move it along with the gene",
+        "yielded": 0,
+        "enable_with": null
+      },
+      "protein_abundance": {
+        "name": "protein_abundance",
+        "requested": true,
+        "ok": true,
+        "state": "empty",
+        "detail": "BUB1B is not in the table, so no compound was measured against its protein. That is an absent measurement, not a negative one",
+        "yielded": 0,
+        "enable_with": "on by default; needs data/drug_protein_abundance.tsv (decryptE or ProTargetMiner, not LINCS P100)"
+      },
+      "regulon": {
+        "name": "regulon",
+        "requested": true,
+        "ok": true,
+        "state": "ok",
+        "detail": "590 TFs with targets called from ChIP occupancy. A peak near a gene is binding, not regulation",
+        "yielded": 590,
+        "enable_with": "--regulon-file"
+      },
+      "utr": {
+        "name": "utr",
+        "requested": true,
+        "ok": true,
+        "state": "ok",
+        "detail": "5'UTR 152 bp, 3'UTR 364 bp; 1 feature(s) beat a shuffle of the same sequence",
+        "yielded": 1,
+        "enable_with": null
+      }
+    },
+    "n_failed": 0,
+    "failed": [],
+    "empirical_sources_ok": 1,
+    "empirical_available": [
+      "chip"
+    ]
+  },
+  "evidence_verdict": {
+    "level": "interpretable",
+    "headline": "Scan is enriched and measured evidence is available (chip). The ranking rests on more than annotation.",
+    "reasons": [],
+    "n_empirical_sources": 1,
+    "empirical_available": [
+      "chip"
+    ],
+    "scan_verdict": "enriched",
+    "scan_sites": 17,
+    "false_discovery_proportion": 0.455,
+    "false_discovery_range": [
+      0.235,
+      0.647
+    ]
+  },
+  "query": {
+    "gene": "BUB1B",
+    "upstream": 1000,
+    "downstream": 200,
+    "pvalue": 1e-05,
+    "species": "homo_sapiens",
+    "pfm_file": "data\\jaspar2024.txt",
+    "chip_bed": "data\\remap2022.bed.gz",
+    "matrix_ids": null,
+    "all_tss": false,
+    "mask_repeats": true,
+    "goal": "up",
+    "grade_drugs": false,
+    "tissue": null,
+    "tf_weight": 0.5,
+    "predict_direction": false,
+    "regulon_file": "data\\chip_regulon.tsv",
+    "include_direct": false,
+    "estimate_outcome": false,
+    "screen_receptors": false,
+    "find_improvements": false,
+    "chip_api": false,
+    "compare_mechanisms": false,
+    "proliferation": "unknown",
+    "allow_unknown_direction": false,
+    "cell_type_check": false,
+    "include_stabilizers": false,
+    "design_screen": false,
+    "design_modality": false,
+    "use_lincs": false,
+    "signature_file": null,
+    "lincs_file": null,
+    "lincs_geneinfo": null,
+    "tf_activity": false,
+    "depmap_file": null,
+    "prism_file": null,
+    "sensitivity_scan": false,
+    "screen_product": false,
+    "promoter_dna": false,
+    "docking_results": null,
+    "activity_tissue": null,
+    "activity_permutations": 0,
+    "lincs_gmt": null,
+    "knockout_gmt": null,
+    "expression_file": null,
+    "promoter_fasta": null,
+    "has_ptc": false,
+    "gtf": "data\\gencode.basic.gtf.gz",
+    "genome": null,
+    "use_genetics": false,
+    "upstream_network": false,
+    "upstream_depth": 3,
+    "widen_no_signal": true,
+    "ctd_route": true,
+    "null_shuffles": 30,
+    "upstream_factors": 8,
+    "upstream_drugs_per_node": 5,
+    "regulator_route": false,
+    "regulator_measured": false,
+    "regulator_steps": 1,
+    "approved_only": true,
+    "fda_only": true,
+    "include_local_only": false,
+    "use_dgidb": true,
+    "use_opentargets": true,
+    "find_analogs": false,
+    "demo": false,
+    "offline": false,
+    "cache_dir": null,
+    "max_requests": null,
+    "min_ic": 6.0,
+    "scenario": null,
+    "broken_allele_makes": "unknown",
+    "target_fraction": 0.5,
+    "condition": null,
+    "avoid_genotoxic": false,
+    "n_motifs": 879
+  },
+  "fda_filter": {
+    "requested": true,
+    "applied": true,
+    "hide_local_only": true,
+    "note": null
+  },
+  "requirement": null,
+  "dosage": {
+    "symbol": "BUB1B",
+    "assessed": true,
+    "pli": 2.5766e-14,
+    "loeuf": 0.707,
+    "haploinsufficient": null,
+    "triplosensitive": null,
+    "dosage": "unknown",
+    "notes": [],
+    "sources": [
+      {
+        "name": "gnomAD constraint",
+        "path": "data/gnomad.v4.1.constraint_metrics.tsv",
+        "release": "v4.1",
+        "release_from": "filename"
+      },
+      {
+        "name": "ClinGen dosage curation",
+        "path": "data/ClinGen_gene_curation_list_GRCh38.tsv",
+        "release": "07 Oct,2026",
+        "release_from": "file header"
+      }
+    ],
+    "summary": "**BUB1B dosage: unknown.**"
+  },
+  "spend": {
+    "requests": 0,
+    "refused": 0,
+    "budget": null
+  },
+  "provenance": {
+    "schema": 1,
+    "package_version": "0.1.0",
+    "created": "2026-10-24T20:43:16+00:00",
+    "python": "3.12.9",
+    "platform": "Windows-10-10.0.19044-SP0",
+    "inputs": {
+      "pfm_file": {
+        "path": "data\\jaspar2024.txt",
+        "bytes": 283814,
+        "modified": "2026-10-01T01:26:53+00:00",
+        "sha256": "2a6c7c24afb0614ed418c9f02b68845adebf38f80f6cebabbcd5de804eaacb59"
+      },
+      "chip_bed": {
+        "path": "data\\remap2022.bed.gz",
+        "bytes": 1456682065,
+        "modified": "2026-09-30T00:17:38+00:00",
+        "sha256": null,
+        "hash_skipped": "1389 MB is over the 64 MB limit, so size and modification time identify it here"
+      },
+      "regulon_file": {
+        "path": "data\\chip_regulon.tsv",
+        "bytes": 26654627,
+        "modified": "2026-10-06T03:33:14+00:00",
+        "sha256": "1f8518fd65cf3c440ef3b47b5d6b087191f82708e0106f1d4f22a7db93153555"
+      },
+      "gtf": {
+        "path": "data\\gencode.basic.gtf.gz",
+        "bytes": 33706193,
+        "modified": "2026-10-01T01:16:24+00:00",
+        "sha256": "8858ec2557c2904f91e44aeda762759cd998ce663774245710cb52ad4dc334ee"
+      }
+    }
+  },
+  "results": [
+    {
+      "promoter": {
+        "gene_symbol": "BUB1B",
+        "gene_id": "LOCAL:BUB1B",
+        "transcript_id": "ENST00000287598",
+        "transcript_selection": "MANE Select",
+        "chrom": "15",
+        "strand": 1,
+        "tss": 40161069,
+        "start": 40160069,
+        "end": 40161268,
+        "upstream": 1000,
+        "downstream": 200,
+        "assembly": "from GTF",
+        "sequence_length": 1200
+      },
+      "sequence": "GAAGTGCCACCTCTCTGACCATCCCCACAGTCATAAAGGAGAACTCCCCTGTACCTGGGCTTTCTTAAATGACCCTGTTCCTTCCTCAAggtggctaatgcctgtaatcgcagctactgcggaggctgaggtgggaggatcacttgaccccgggagttggaggctggaatgcagtagccccatgatggggctactgcactccagcctgggcaacagagcaagaagaagaccctgtctctaaaacaaaaccaaccaaccaaacaaacaaaaaGACTCTACTCCcctggtcacatctgagctatcacaatttcttcctcagaaaattgaaattgcaacaaacagtttaatgtcagtcaaggctagtcccctgaaggggaaaagaggtaacaccttgggaaccatagcatggctgtgtttactgcttgtggactgagcagaagagaaagcAAGACAGtatcatcactttatagatgaggaaaactgatggtcagaaagattatgtagcttgcctaaggttgcacatttggtatgattttacagaactagaatccagctttttgaattcaagGGTGGGGCAGGAAACAGCTAGGTCAGTGGCCTAAGAACTCCGGACGGGTGAGATTTGGGGCAGACAGCAGGGGTAGTCACCCTACAAGAGTCACGCCAAGTGCAAGCACTCAGAGACATCTCCCAACACTCAAAACAGCAAAGAAGTTCTGGTGCTTTAAGTGTTCCTCGCTCGGCTCAGAGACTCGGCTTCGAGCCGCGACTCAAGACAGCACCTGGGGGTATTTGTTTTGCCTAAGCCTGCTGCACTTCCACGGCCATTGAATCCCAAAAACTACAATTCCCATTATGCACCGCGAGTTCGCGGACTAAACAGGCATAAACTACAAGCCCCAGAATGCCTTGGGCGAGACGCGAGAGCACGGAGGAGCGGAGGGGCGTGGCCACGTCGACCGCGCGGGACCGTTAAATTTGAAACTTGGCGGCTAGGGGTGTGGGCTTGAGGTGGCCGGTTTGTTAGGGAGTCGTGTACGTGCCTTGGTCGCTTCTGTAGCTCCGAGGGCAGGTTGCGGAAGAAAGCCCAGGCGGTCTGTGGCCCAGAGGAAAGGCCTGCAGCAGGACGAGGACCTGAGCCAGGAATGCAGGATGGCGGCGGTGAAGAAGGAAGGGGGTGCTCTGAGGTAGGTACGGGAG",
+      "n_sites": 17,
+      "scan_quality": {
+        "observed": 17,
+        "expected_by_chance": 7.7,
+        "expected_by_formula": 9.2,
+        "scannable_bases": 739,
+        "enrichment": 2.2,
+        "verdict": "enriched",
+        "advice": "17 sites against 8 expected by chance over 739 scannable bases (2.2x).",
+        "false_discovery_proportion": 0.455,
+        "expected_real_sites": 9,
+        "null": {
+          "method": "shuffled copies of this window with the repeat mask and every dinucleotide count kept, scanned and collapsed the same way",
+          "n_shuffles": 30,
+          "mean": 7.7,
+          "sd": 3.2,
+          "p10": 4.0,
+          "p90": 11.0
+        },
+        "false_discovery_range": [
+          0.235,
+          0.647
+        ],
+        "top_site_fdp": [
+          {
+            "top": 5,
+            "fdp": 0.313
+          },
+          {
+            "top": 10,
+            "fdp": 0.393
+          }
+        ],
+        "fdp_note": "about 45% of these 17 sites (range 24% to 65%) would be expected on shuffled sequence of this window, so roughly 9 are above chance; among the best-scoring sites the share is lower: 31% of the top 5, 39% of the top 10. Estimated from 30 shuffled copies that keep the repeat mask and every dinucleotide count. The formula that assumes each motif matches at exactly its stated p-value would expect 9 and is not used. Nothing here says which sites are real; only ChIP evidence separates them.",
+        "motifs_loaded": 879,
+        "motifs_scanned": 625,
+        "motifs_unreachable": 254,
+        "window_widened": null,
+        "occupancy": {
+          "n_factors": 17,
+          "n_supported": 10,
+          "n_unsupported": 7,
+          "supported": [
+            "FLI1",
+            "KLF16",
+            "KLF3",
+            "OSR2",
+            "RXRA",
+            "SP3",
+            "TFAP4",
+            "THAP11",
+            "ZNF143",
+            "ZNF76"
+          ],
+          "unsupported": [
+            "FOXD2",
+            "NR1H4",
+            "NR2F1",
+            "NR2F6",
+            "NR4A2",
+            "PRDM9",
+            "ZNF768"
+          ],
+          "expected_by_chance": 7.7,
+          "expected_factors": 7.7,
+          "fdp_unsupported": 1.0,
+          "fdp_supported": 0.07,
+          "saturated": false,
+          "drugged_unsupported": [
+            "NR1H4"
+          ],
+          "drugged_supported": [
+            "RXRA"
+          ],
+          "note": "10 of 17 factors have a measured peak over this window and 7 do not. A shuffled copy of the window cannot produce a peak, so the share of this scan the null expects by chance - about 8 of its 17 factors - is attributed to those 7: about 100% of them are consistent with chance, against roughly 7% of the measured ones. This matters for the ranking because NR1H4 has a ligand and no measured occupancy: every drug reaching the gene through it rests on a predicted site. RXRA has both a ligand and a measured peak, which is the stronger footing. A peak says something bound here in the cell type the atlas used. It does not say this factor is what bound, and it is not a measurement in your cells."
+        }
+      },
+      "salt_forms_collapsed": {},
+      "attrition": {
+        "n_tfs_with_sites": 17,
+        "n_with_drug": 2,
+        "n_drugged_nuclear_receptor": 2,
+        "all_drugged_are_nr": true,
+        "top25_without_drug": [
+          "OSR2",
+          "THAP11",
+          "KLF3",
+          "SP3",
+          "KLF16",
+          "ZNF76",
+          "ZNF143",
+          "FLI1",
+          "TFAP4",
+          "FOXD2",
+          "NR4A2",
+          "NR2F6",
+          "NR2F1",
+          "PRDM9",
+          "ZNF768"
+        ],
+        "n_top25_without_drug": 15,
+        "receptor_families": {},
+        "family_saturated": false
+      },
+      "beyond_transcription": {
+        "post_transcriptional": {
+          "routes": [
+            {
+              "mechanism": "splice correction",
+              "what_it_does": "redirects splicing so a productive transcript is made \u2014 exon inclusion, exon skipping, or suppression of a cryptic site",
+              "drugs": [
+                "Risdiplam (FDA-approved, SMA \u2014 small molecule, oral)",
+                "Nusinersen (FDA-approved, SMA \u2014 intrathecal ASO)",
+                "Eteplirsen, golodirsen, viltolarsen, casimersen (FDA accelerated approval, DMD exon skipping)",
+                "Branaplam (clinical; SMN2 splice modifier)"
+              ],
+              "status": "approved",
+              "applies_when": "a splice-site or splice-regulatory variant, a poison exon, or a paralog whose splicing can be redirected (SMN2)",
+              "raises": "functional protein",
+              "caveats": [
+                "Exon-skipping restores a partly functional, internally deleted protein, not a wild-type one \u2014 the DMD agents are judged on dystrophin that is shorter than normal.",
+                "Accelerated approvals in this class rest on a surrogate endpoint (protein level), and the confirmatory functional benefit has been contested.",
+                "Small-molecule splice modifiers are not fully gene-specific; risdiplam alters splicing of other transcripts too."
+              ]
+            },
+            {
+              "mechanism": "transcript stabilisation",
+              "what_it_does": "lengthens mRNA half-life, usually through AU-rich elements in the 3'UTR and the proteins that bind them. Doubling half-life doubles steady-state message with no change in transcription",
+              "drugs": [
+                "No approved agent targets a specific transcript's stability.",
+                "HuR/ELAVL1 modulators are preclinical."
+              ],
+              "status": "investigational",
+              "applies_when": "the transcript is short-lived and the promoter is already active \u2014 the case where more transcription achieves nothing",
+              "raises": "transcript",
+              "caveats": [
+                "Entirely invisible to a promoter-level analysis, which is why it is worth checking before concluding the transcriptional route is the only one.",
+                "RNA-binding proteins are highly pleiotropic; HuR alone governs hundreds of transcripts."
+              ]
+            },
+            {
+              "mechanism": "microRNA de-repression",
+              "what_it_does": "blocks a microRNA that represses your transcript, raising both message and protein",
+              "drugs": [
+                "No approved antagomir.",
+                "Miravirsen and RG-101 (anti-miR-122) reached clinical trials."
+              ],
+              "status": "investigational",
+              "applies_when": "a specific miRNA is a documented repressor of your gene in your cell type",
+              "raises": "transcript",
+              "caveats": [
+                "One miRNA has hundreds of targets, so this is a low-specificity intervention despite being sequence-directed.",
+                "Needs the repressing miRNA identified in the right cell type; a TargetScan prediction is not sufficient evidence."
+              ]
+            },
+            {
+              "mechanism": "translational enhancement",
+              "what_it_does": "raises protein output from existing message, usually by relieving a uORF or modulating eIF2-alpha phosphorylation",
+              "drugs": [
+                "No approved agent raises translation of a chosen transcript.",
+                "ISRIB and related integrated-stress-response modulators are preclinical."
+              ],
+              "status": "investigational",
+              "applies_when": "protein is low while transcript is normal \u2014 the signature of a translational, not transcriptional, problem",
+              "raises": "protein",
+              "caveats": [
+                "Global translational modulators move the whole proteome.",
+                "An RT-qPCR cannot see this problem OR this solution; you need protein and, ideally, ribosome profiling."
+              ]
+            },
+            {
+              "mechanism": "nonsense readthrough",
+              "what_it_does": "makes the ribosome read through a premature stop codon, so a full-length protein is produced from an allele that otherwise yields a truncated one",
+              "drugs": [
+                "Gentamicin (FDA-approved as an antibiotic; readthrough use is off-label)",
+                "Amikacin, tobramycin (same situation)",
+                "Ataluren / Translarna (EMA conditional approval for nonsense DMD; the FDA did NOT approve it, and the EMA moved against renewal \u2014 do not record this as an approved option)",
+                "ELX-02 (clinical, designed to separate readthrough from aminoglycoside toxicity)"
+              ],
+              "status": "approved elsewhere",
+              "applies_when": "the gene carries a premature termination codon (PTC)",
+              "raises": "functional protein",
+              "caveats": [
+                "Only helps a nonsense allele. A missense, frameshift or deletion allele gets nothing from readthrough.",
+                "Aminoglycoside readthrough is weak and the doses implied are nephrotoxic and ototoxic; this is why the class has not become a therapy despite thirty years of interest.",
+                "Readthrough inserts a near-cognate amino acid at the stop, so the product is full-length but not necessarily wild-type.",
+                "Efficiency depends strongly on the stop codon identity and its sequence context \u2014 UGA with a C at +4 reads through best."
+              ]
+            },
+            {
+              "mechanism": "nonsense-mediated decay (NMD) inhibition",
+              "what_it_does": "stops the surveillance pathway destroying a PTC-bearing transcript, so more message survives to be translated",
+              "drugs": [
+                "No approved NMD inhibitor exists.",
+                "SMG1 and UPF1 inhibitors are preclinical."
+              ],
+              "status": "investigational",
+              "applies_when": "the gene carries a PTC and the transcript is being degraded before translation",
+              "raises": "transcript",
+              "caveats": [
+                "NMD is a general surveillance pathway: blocking it stabilises every PTC-bearing transcript in the cell, not only yours, and roughly a third of normal transcripts are NMD substrates.",
+                "Raising a PTC transcript without readthrough gives you more truncated protein, which may be inert or actively harmful. The two mechanisms are usually only interesting together."
+              ]
+            }
+          ],
+          "summary": "A promoter-level analysis stops at transcription. These act after it, and for some genes that is where the whole problem is: if the transcript is destroyed or mistranslated, doubling transcription doubles the amount that is destroyed. 1 of 6 mechanism(s) here have an FDA-approved agent. The rest are listed so that an empty transcriptional result is not mistaken for 'nothing can be done' \u2014 they are mechanisms, not treatments."
+        },
+        "compensation": {
+          "gene": "BUB1B",
+          "known_redundancy": null,
+          "paralogs": [],
+          "notes": [
+            "BUB1B is not in the curated redundancy table, which is short and certainly incomplete. Absence here is not evidence that no paralog substitutes \u2014 it means nobody has written one down in this file."
+          ],
+          "recommended": null,
+          "summary": "Whether a paralog could substitute for this gene is unanswered. It is worth asking explicitly, because the question 'restore this function' has more answers than 'raise this transcript'."
+        },
+        "reactivation": {
+          "gene": "BUB1B",
+          "routes": [
+            {
+              "mechanism": "fetal-gene reactivation (developmental switch reversal)",
+              "silencing_type": "developmental silencing",
+              "what_it_does": "re-expresses a paralog that was switched off after birth, by interfering with the repressor that closed it",
+              "drugs": [
+                "Hydroxyurea (FDA-approved, sickle cell) \u2014 raises HbF",
+                "Voxelotor, L-glutamine (approved for sickle cell by other mechanisms; not HbF inducers)",
+                "Exagamglogene autotemcel / exa-cel (FDA-approved gene editing that disrupts the BCL11A erythroid enhancer \u2014 the switch itself)",
+                "Decitabine, azacitidine (approved hypomethylating agents; raise HbF but are cytotoxic)"
+              ],
+              "status": "approved",
+              "worked_example": "sickle cell disease: HBB is mutated and undruggable, so the intervention raises HBG1/HBG2 instead. The clearest proof that reactivating a silenced paralog beats fixing the broken gene",
+              "specificity": "comes from the tissue and the repressor, not the drug: BCL11A's erythroid enhancer is lineage-restricted, which is what makes exa-cel targeted rather than global",
+              "caveats": [
+                "Hydroxyurea's HbF mechanism is still incompletely defined after decades of clinical use, and response varies widely between patients.",
+                "Hypomethylating agents reactivate the whole methylome, not your locus; they are chemotherapeutics."
+              ]
+            },
+            {
+              "mechanism": "imprinted-allele unsilencing",
+              "silencing_type": "genomic imprinting",
+              "what_it_does": "re-expresses the silent parental copy of an imprinted gene, leaving the already-expressed copy alone",
+              "drugs": [
+                "Topotecan and other topoisomerase-I inhibitors (FDA-approved in oncology; this use is preclinical repurposing, not an approved indication)",
+                "Antisense oligonucleotides against the silencing transcript (clinical for Angelman: rugonersen, ION582, GTX-102)"
+              ],
+              "status": "clinical",
+              "worked_example": "Angelman syndrome: maternal UBE3A is mutated and the paternal copy is imprinted silent. Topoisomerase inhibitors unsilence the paternal allele in mouse models by interfering with the long antisense transcript that represses it",
+              "specificity": "the ASO route is genuinely sequence-specific. The small-molecule route is not \u2014 a topoisomerase inhibitor is a cytotoxic drug and the doses are not plausibly tolerable for a neurological indication",
+              "caveats": [
+                "Only applies to imprinted loci \u2014 roughly 150 genes in humans. Check whether yours is one before reading further.",
+                "The silent allele must be intact. If both copies carry the mutation, unsilencing achieves nothing.",
+                "Most of the mouse data is developmental; the window in which reactivation helps may close."
+              ]
+            },
+            {
+              "mechanism": "X-reactivation",
+              "silencing_type": "X-chromosome inactivation",
+              "what_it_does": "re-expresses the gene from the inactive X in a heterozygous female, where roughly half of cells silence the healthy copy",
+              "drugs": [
+                "No approved agent.",
+                "XIST-directed ASOs and combined DNMT/EZH2 inhibition are preclinical."
+              ],
+              "status": "preclinical",
+              "worked_example": "Rett syndrome: MECP2 is X-linked, and in heterozygous females the wild-type copy sits on the inactive X in half of neurons. Reactivating it would be curative in those cells",
+              "specificity": "essentially none at present. X-reactivation is genome-scale by definition, and reactivating the whole inactive X risks overexpressing hundreds of genes",
+              "caveats": [
+                "Only relevant for X-linked genes in heterozygous females.",
+                "MECP2 in particular is dose-sensitive in both directions \u2014 duplication causes its own syndrome, so overshooting is harmful rather than merely wasteful."
+              ]
+            },
+            {
+              "mechanism": "promoter de-methylation",
+              "silencing_type": "DNA methylation",
+              "what_it_does": "removes the methylation holding a CpG-island promoter shut, so the existing machinery can transcribe it again",
+              "drugs": [
+                "Azacitidine, decitabine (FDA-approved, MDS/AML)",
+                "Cedazuridine/decitabine (approved oral combination)"
+              ],
+              "status": "approved",
+              "worked_example": "tumour-suppressor reactivation in myelodysplastic syndrome, where the therapeutic effect is attributed partly to re-expressing methylation-silenced genes",
+              "specificity": "none at the locus level. These reactivate every methylation-silenced promoter in the genome, which is why they are useful in malignancy and hard to justify otherwise",
+              "caveats": [
+                "Myelosuppressive, and the global reactivation includes retroelements and genes you did not want.",
+                "Only works if your promoter is actually methylated \u2014 worth measuring before assuming, and this package does not look at methylation at all.",
+                "Already represented in the chromatin-level category, where its specificity is scored at ~0.05. Listed here because the *reason* to use it is different: a specific silenced allele, not a general nudge."
+              ]
+            }
+          ],
+          "notes": [
+            "BUB1B is not in the curated imprinted or developmental-switch lists, which are short. That is not evidence the gene is unsilenced \u2014 **nothing in this package measures methylation, imprinting or allele-specific expression.** If your gene is silenced rather than merely low, every transcriptional route above is aimed at the wrong problem, and the way to find out is allele-specific RT-qPCR or bisulphite sequencing."
+          ],
+          "applicable": false,
+          "summary": "Whether this gene is silenced rather than merely low is unmeasured here, and it changes which routes make sense. Allele-specific expression is the experiment that settles it."
+        },
+        "product_stability": {
+          "gene": "BUB1B",
+          "degradation": {
+            "gene": "BUB1B",
+            "ligase": "APC/C with Cdc20",
+            "components": [
+              "CDC20",
+              "ANAPC2",
+              "ANAPC11",
+              "FZR1"
+            ],
+            "degron": "a KEN box and a D-box",
+            "when": "at mitotic exit, once the checkpoint is satisfied",
+            "protected_by": "acetylation of the protein is reported to block its recognition by Cdc20, so the balance - not the ligase alone - sets the level. Verify in the primary literature before building on it; this is a pointer, not a result of this run.",
+            "note": "BUBR1 is a checkpoint protein that the checkpoint's own target complex destroys, so its level is tied to the cycle it controls. Blocking that destruction also blocks mitotic exit, which is why this route is harder than it looks for a gene of this kind.",
+            "drugs": [],
+            "checked": true
+          },
+          "rescue": {
+            "gene": "BUB1B",
+            "established": false,
+            "dubs": [],
+            "note": "",
+            "drugs": [],
+            "checked": true
+          },
+          "routes": [
+            {
+              "mechanism": "proteasome inhibition",
+              "what_it_does": "blocks the 26S proteasome, so ubiquitinated proteins are not destroyed and levels rise",
+              "drugs": [
+                "Bortezomib (FDA-approved, myeloma)",
+                "Carfilzomib (FDA-approved)",
+                "Ixazomib (FDA-approved, oral)"
+              ],
+              "status": "approved",
+              "raises": "abundance",
+              "specificity": 0.03,
+              "specificity_note": "essentially none: the proteasome degrades most of the proteome, so this raises thousands of proteins at once",
+              "caveats": [
+                "These are cytotoxic oncology drugs with neuropathy and cardiotoxicity. Using one to raise a single protein is not a plausible therapy outside malignancy.",
+                "Useful mainly as an EXPERIMENT: if your protein rises under proteasome inhibition, degradation is the limiting step and transcriptional routes are aimed at the wrong place."
+              ]
+            },
+            {
+              "mechanism": "lysosomal / autophagy blockade",
+              "what_it_does": "prevents lysosomal degradation, raising proteins cleared by autophagy rather than the proteasome",
+              "drugs": [
+                "Hydroxychloroquine (FDA-approved)",
+                "Chloroquine (FDA-approved)"
+              ],
+              "status": "approved",
+              "raises": "abundance",
+              "specificity": 0.05,
+              "specificity_note": "non-specific, and the two degradation routes are distinct - which one clears your protein decides which drug could matter",
+              "caveats": [
+                "Retinal toxicity limits chronic dosing.",
+                "Equally a diagnostic: it tells you which degradation pathway your protein uses."
+              ]
+            },
+            {
+              "mechanism": "pharmacological chaperone",
+              "what_it_does": "binds a misfolding-prone protein and stabilises a foldable conformation, so it escapes quality control and traffics normally",
+              "drugs": [
+                "Migalastat (FDA-approved, Fabry disease - stabilises mutant alpha-galactosidase A)",
+                "Tafamidis (FDA-approved, ATTR - stabilises the transthyretin tetramer)",
+                "Acoramidis (FDA-approved, ATTR)",
+                "Lumacaftor, tezacaftor, elexacaftor (FDA-approved, CF - correctors that stabilise mutant CFTR folding)"
+              ],
+              "status": "approved",
+              "raises": "abundance",
+              "specificity": 0.85,
+              "specificity_note": "genuinely high: a chaperone binds one protein, and this is the only route in this section with real selectivity",
+              "caveats": [
+                "Needs a specific misfolding mutation with residual function. Migalastat works only for amenable GLA variants - roughly a third of patients - and does nothing for a null allele.",
+                "No chaperone exists unless someone has developed one for your protein specifically; this is a discovery programme, not a route you can take today."
+              ]
+            },
+            {
+              "mechanism": "E3 ligase inhibition",
+              "what_it_does": "blocks the specific ligase that ubiquitinates your protein, so only your protein accumulates",
+              "drugs": [
+                "No approved inhibitor of a named E3 for this purpose.",
+                "MDM2 inhibitors (idasanutlin, navtemadlin) are the closest clinical example, raising p53."
+              ],
+              "status": "clinical",
+              "raises": "abundance",
+              "specificity": 0.7,
+              "specificity_note": "potentially high - an E3 has a limited substrate set - but it requires knowing which ligase degrades your protein",
+              "caveats": [
+                "The limiting knowledge is the ligase-substrate pair. For most proteins nobody has identified it.",
+                "This is the mirror image of a PROTAC: the same biology used to raise rather than destroy."
+              ]
+            }
+          ],
+          "notes": [
+            "These leave transcription alone. If your protein is made normally and degraded too fast, every transcriptional route in this report is aimed at the wrong step - and nothing in this package can tell the two apart.",
+            "The experiment that distinguishes them: compare transcript and protein. Normal mRNA with low protein points here; low mRNA points at everything above.",
+            "Specificity is the problem for three of these four. A proteasome inhibitor raises most of the proteome, which makes it an excellent diagnostic and a poor therapy. The pharmacological chaperone is the exception, and it needs a chaperone to exist for your protein."
+          ]
+        }
+      },
+      "analogs": {},
+      "evidence_verdict": {
+        "level": "interpretable",
+        "headline": "Scan is enriched and measured evidence is available (chip). The ranking rests on more than annotation.",
+        "reasons": [],
+        "n_empirical_sources": 1,
+        "empirical_available": [
+          "chip"
+        ],
+        "scan_verdict": "enriched",
+        "scan_sites": 17,
+        "false_discovery_proportion": 0.455,
+        "false_discovery_range": [
+          0.235,
+          0.647
+        ]
+      },
+      "neighbours": {
+        "checked": true,
+        "window": "chr15:40160069-40161268",
+        "padding": 10000,
+        "genes": [],
+        "n_inside": 0,
+        "n_antisense": 0,
+        "clean": true,
+        "source": "data\\gencode.basic.gtf.gz",
+        "summary": "No other annotated gene within the window or its surroundings \u2014 the scanned sequence is this gene's alone, as far as annotation goes."
+      },
+      "n_tfs": 17,
+      "tfs": [
+        {
+          "symbol": "RXRA",
+          "name": "retinoid X receptor alpha",
+          "role": "unknown",
+          "nuclear_receptor": true,
+          "n_sites": 2,
+          "best_rel_score": 0.907,
+          "best_score_bits": 14.18,
+          "best_site_tss_offset": -413,
+          "best_site_sequence": "AGGCCACTGACCT",
+          "matrix_id": "MA1147.2",
+          "chip_peaks": 1,
+          "chip_state": "bound",
+          "score": 69.2,
+          "n_regulon": 1200,
+          "regulon_provenance": "bundled tier: broad",
+          "regulon_understudied": false,
+          "dependency": "essential in a handful of lines",
+          "dependency_burden": 0.068,
+          "drugs": [
+            {
+              "name": "Acitretin",
+              "chembl_id": "CHEMBL1131",
+              "target_symbol": "RXRA",
+              "action_type": "AGONIST",
+              "mechanism": "Retinoid receptor agonist",
+              "approved": true,
+              "max_phase": 4.0,
+              "first_approval": 1996,
+              "withdrawn": false,
+              "oral": true,
+              "direction": "up",
+              "source": "ChEMBL",
+              "target_chembl_id": "CHEMBL2363071",
+              "properties": {
+                "alogp": "5.17",
+                "aromatic_rings": 1,
+                "full_molformula": "C21H26O3",
+                "full_mwt": "326.44",
+                "hba": 2,
+                "hbd": 1,
+                "heavy_atoms": 24,
+                "mw_freebase": "326.44",
+                "np_likeness_score": "1.38",
+                "num_ro5_violations": 1,
+                "psa": "46.53",
+                "qed_weighted": "0.58",
+                "ro3_pass": "N",
+                "rtb": 6
+              },
+              "interaction_score": 0.06189389892776514,
+              "sources": "ChEMBL; Drug Repurposing Hub",
+              "target_type": "PROTEIN FAMILY"
+            },
+            {
+              "name": "Alitretinoin",
+              "chembl_id": "CHEMBL705",
+              "target_symbol": "RXRA",
+              "action_type": "AGONIST",
+              "mechanism": "Retinoid receptor agonist",
+              "approved": true,
+              "max_phase": 4.0,
+              "first_approval": 1999,
+              "withdrawn": false,
+              "oral": false,
+              "direction": "up",
+              "source": "ChEMBL",
+              "target_chembl_id": "CHEMBL2363071",
+              "properties": {
+                "alogp": "5.60",
+                "aromatic_rings": 0,
+                "full_molformula": "C20H28O2",
+                "full_mwt": "300.44",
+                "hba": 1,
+                "hbd": 1,
+                "heavy_atoms": 22,
+                "mw_freebase": "300.44",
+                "np_likeness_score": "2.31",
+                "num_ro5_violations": 1,
+                "psa": "37.30",
+                "qed_weighted": "0.53",
+                "ro3_pass": "N",
+                "rtb": 5
+              },
+              "interaction_score": 0.2475755957110605,
+              "sources": "ChEMBL; DTC; GuideToPharmacology; TEND; TTD",
+              "target_type": "PROTEIN FAMILY"
+            },
+            {
+              "name": "Bexarotene",
+              "chembl_id": "CHEMBL1023",
+              "target_symbol": "RXRA",
+              "action_type": "AGONIST",
+              "mechanism": "Retinoid X receptor agonist",
+              "approved": true,
+              "max_phase": 4.0,
+              "first_approval": 1999,
+              "withdrawn": false,
+              "oral": true,
+              "direction": "up",
+              "source": "ChEMBL",
+              "target_chembl_id": "CHEMBL2363070",
+              "properties": {
+                "alogp": "6.10",
+                "aromatic_rings": 2,
+                "full_molformula": "C24H28O2",
+                "full_mwt": "348.49",
+                "hba": 1,
+                "hbd": 1,
+                "heavy_atoms": 26,
+                "mw_freebase": "348.49",
+                "np_likeness_score": "0.55",
+                "num_ro5_violations": 1,
+                "psa": "37.30",
+                "qed_weighted": "0.73",
+                "ro3_pass": "N",
+                "rtb": 3
+              },
+              "interaction_score": 0.438415117405003,
+              "sources": "ChEMBL; DTC; Drug Repurposing Hub; GuideToPharmacology; TALC; TEND; TTD; TdgClinicalTrial",
+              "target_type": "PROTEIN FAMILY"
+            },
+            {
+              "name": "Sulindac",
+              "chembl_id": "rxcui:10237",
+              "target_symbol": "RXRA",
+              "action_type": "INHIBITOR",
+              "mechanism": null,
+              "approved": true,
+              "max_phase": 4.0,
+              "first_approval": null,
+              "withdrawn": false,
+              "oral": null,
+              "direction": "down",
+              "source": "DGIdb",
+              "target_chembl_id": null,
+              "properties": null,
+              "interaction_score": 0.08768302348100061,
+              "sources": "DTC; GuideToPharmacology",
+              "target_type": null
+            },
+            {
+              "name": "Danthron",
+              "chembl_id": "CHEMBL53418",
+              "target_symbol": "RXRA",
+              "action_type": "ANTAGONIST",
+              "mechanism": "Retinoid X receptor alpha antagonist",
+              "approved": true,
+              "max_phase": 4.0,
+              "first_approval": null,
+              "withdrawn": true,
+              "oral": false,
+              "direction": "down",
+              "source": "ChEMBL",
+              "target_chembl_id": "CHEMBL2061",
+              "properties": {
+                "alogp": "1.87",
+                "aromatic_rings": 2,
+                "full_molformula": "C14H8O4",
+                "full_mwt": "240.21",
+                "hba": 4,
+                "hbd": 2,
+                "heavy_atoms": 18,
+                "mw_freebase": "240.21",
+                "np_likeness_score": "0.82",
+                "num_ro5_violations": 0,
+                "psa": "74.60",
+                "qed_weighted": "0.63",
+                "ro3_pass": "N",
+                "rtb": 0
+              },
+              "interaction_score": 0.1315245352215009,
+              "sources": "ChEMBL",
+              "target_type": null
+            },
+            {
+              "name": "Etretinate",
+              "chembl_id": "CHEMBL464",
+              "target_symbol": "RXRA",
+              "action_type": "AGONIST",
+              "mechanism": "Retinoid receptor agonist",
+              "approved": true,
+              "max_phase": 4.0,
+              "first_approval": 1986,
+              "withdrawn": true,
+              "oral": true,
+              "direction": "up",
+              "source": "ChEMBL",
+              "target_chembl_id": "CHEMBL2363071",
+              "properties": {
+                "alogp": "5.65",
+                "aromatic_rings": 1,
+                "full_molformula": "C23H30O3",
+                "full_mwt": "354.49",
+                "hba": 3,
+                "hbd": 0,
+                "heavy_atoms": 26,
+                "mw_freebase": "354.49",
+                "np_likeness_score": "1.10",
+                "num_ro5_violations": 1,
+                "psa": "35.53",
+                "qed_weighted": "0.36",
+                "ro3_pass": "N",
+                "rtb": 7
+              },
+              "interaction_score": 0.07515687726942909,
+              "sources": "ChEMBL",
+              "target_type": "PROTEIN FAMILY"
+            }
+          ]
+        },
+        {
+          "symbol": "OSR2",
+          "name": "odd-skipped related transciption factor 2",
+          "role": "unknown",
+          "nuclear_receptor": false,
+          "n_sites": 1,
+          "best_rel_score": 1.0,
+          "best_score_bits": 13.53,
+          "best_site_tss_offset": 51,
+          "best_site_sequence": "ACAGAAGC",
+          "matrix_id": "MA1646.2",
+          "chip_peaks": 1,
+          "chip_state": "bound",
+          "score": 66.5,
+          "n_regulon": null,
+          "regulon_provenance": "unknown",
+          "regulon_understudied": false,
+          "dependency": "essential in a handful of lines",
+          "dependency_burden": 0.016,
+          "drugs": []
+        },
+        {
+          "symbol": "THAP11",
+          "name": "THAP domain containing 11",
+          "role": "unknown",
+          "nuclear_receptor": false,
+          "n_sites": 2,
+          "best_rel_score": 0.98,
+          "best_score_bits": 22.69,
+          "best_site_tss_offset": -160,
+          "best_site_sequence": "ACTACAATTCCCAT",
+          "matrix_id": "MA1573.2",
+          "chip_peaks": 1,
+          "chip_state": "bound",
+          "score": 66.1,
+          "n_regulon": 1588,
+          "regulon_provenance": "regulon file",
+          "regulon_understudied": false,
+          "dependency": "essential in a substantial minority",
+          "dependency_burden": 0.427,
+          "drugs": []
+        },
+        {
+          "symbol": "KLF3",
+          "name": "KLF transcription factor 3",
+          "role": "unknown",
+          "nuclear_receptor": false,
+          "n_sites": 1,
+          "best_rel_score": 0.989,
+          "best_score_bits": 15.6,
+          "best_site_tss_offset": -58,
+          "best_site_sequence": "GGCCACGCCC",
+          "matrix_id": "MA1516.2",
+          "chip_peaks": 1,
+          "chip_state": "bound",
+          "score": 66.0,
+          "n_regulon": null,
+          "regulon_provenance": "unknown",
+          "regulon_understudied": false,
+          "dependency": "essential in a handful of lines",
+          "dependency_burden": 0.045,
+          "drugs": []
+        },
+        {
+          "symbol": "SP3",
+          "name": "Sp3 transcription factor",
+          "role": "unknown",
+          "nuclear_receptor": false,
+          "n_sites": 1,
+          "best_rel_score": 0.979,
+          "best_score_bits": 16.11,
+          "best_site_tss_offset": -60,
+          "best_site_sequence": "GCCACGCCCCT",
+          "matrix_id": "MA0746.3",
+          "chip_peaks": 1,
+          "chip_state": "bound",
+          "score": 65.6,
+          "n_regulon": 5000,
+          "regulon_provenance": "bundled tier: global",
+          "regulon_understudied": false,
+          "dependency": "essential in a handful of lines",
+          "dependency_burden": 0.132,
+          "drugs": []
+        },
+        {
+          "symbol": "KLF16",
+          "name": "KLF transcription factor 16",
+          "role": "unknown",
+          "nuclear_receptor": false,
+          "n_sites": 1,
+          "best_rel_score": 0.973,
+          "best_score_bits": 15.11,
+          "best_site_tss_offset": -60,
+          "best_site_sequence": "GCCACGCCCCT",
+          "matrix_id": "MA0741.1",
+          "chip_peaks": 1,
+          "chip_state": "bound",
+          "score": 65.4,
+          "n_regulon": null,
+          "regulon_provenance": "unknown",
+          "regulon_understudied": false,
+          "dependency": "essential in a substantial minority",
+          "dependency_burden": 0.364,
+          "drugs": []
+        },
+        {
+          "symbol": "ZNF76",
+          "name": "zinc finger protein 76",
+          "role": "unknown",
+          "nuclear_receptor": false,
+          "n_sites": 2,
+          "best_rel_score": 0.927,
+          "best_score_bits": 19.14,
+          "best_site_tss_offset": -152,
+          "best_site_sequence": "TCCCATTATGCACCGCG",
+          "matrix_id": "MA1716.2",
+          "chip_peaks": 1,
+          "chip_state": "bound",
+          "score": 64.7,
+          "n_regulon": null,
+          "regulon_provenance": "unknown",
+          "regulon_understudied": false,
+          "dependency": "essential in a handful of lines",
+          "dependency_burden": 0.067,
+          "drugs": []
+        },
+        {
+          "symbol": "ZNF143",
+          "name": "zinc finger protein 143",
+          "role": "unknown",
+          "nuclear_receptor": false,
+          "n_sites": 1,
+          "best_rel_score": 0.923,
+          "best_score_bits": 18.76,
+          "best_site_tss_offset": -153,
+          "best_site_sequence": "TTCCCATTATGCACCG",
+          "matrix_id": "MA0088.2",
+          "chip_peaks": 1,
+          "chip_state": "bound",
+          "score": 61.2,
+          "n_regulon": null,
+          "regulon_provenance": "unknown",
+          "regulon_understudied": false,
+          "dependency": "essential in most lines",
+          "dependency_burden": 0.523,
+          "drugs": []
+        },
+        {
+          "symbol": "FLI1",
+          "name": "Fli-1 proto-oncogene, ETS transcription factor",
+          "role": "unknown",
+          "nuclear_receptor": false,
+          "n_sites": 1,
+          "best_rel_score": 0.866,
+          "best_score_bits": 13.24,
+          "best_site_tss_offset": -426,
+          "best_site_sequence": "GCAGGAAACAGCTA",
+          "matrix_id": "MA1967.2",
+          "chip_peaks": 1,
+          "chip_state": "bound",
+          "score": 54.5,
+          "n_regulon": null,
+          "regulon_provenance": "unknown",
+          "regulon_understudied": false,
+          "dependency": "essential in a handful of lines",
+          "dependency_burden": 0.0,
+          "drugs": []
+        },
+        {
+          "symbol": "TFAP4",
+          "name": "transcription factor AP-4",
+          "role": "unknown",
+          "nuclear_receptor": false,
+          "n_sites": 1,
+          "best_rel_score": 0.866,
+          "best_score_bits": 13.24,
+          "best_site_tss_offset": -426,
+          "best_site_sequence": "GCAGGAAACAGCTA",
+          "matrix_id": "MA1967.2",
+          "chip_peaks": 1,
+          "chip_state": "bound",
+          "score": 54.5,
+          "n_regulon": null,
+          "regulon_provenance": "unknown",
+          "regulon_understudied": false,
+          "dependency": "essential in a minority of lines",
+          "dependency_burden": 0.346,
+          "drugs": []
+        },
+        {
+          "symbol": "NR1H4",
+          "name": "nuclear receptor subfamily 1 group H member 4",
+          "role": "unknown",
+          "nuclear_receptor": true,
+          "n_sites": 1,
+          "best_rel_score": 0.882,
+          "best_score_bits": 13.51,
+          "best_site_tss_offset": -413,
+          "best_site_sequence": "AGGTCAGTGGCCT",
+          "matrix_id": "MA1146.2",
+          "chip_peaks": 0,
+          "chip_state": "not assayed",
+          "score": 51.3,
+          "n_regulon": 300,
+          "regulon_provenance": "bundled tier: moderate",
+          "regulon_understudied": false,
+          "dependency": "essential in a handful of lines",
+          "dependency_burden": 0.113,
+          "drugs": [
+            {
+              "name": "Beta Sitosterol",
+              "chembl_id": "rxcui:47070",
+              "target_symbol": "NR1H4",
+              "action_type": "AGONIST",
+              "mechanism": null,
+              "approved": true,
+              "max_phase": 4.0,
+              "first_approval": null,
+              "withdrawn": false,
+              "oral": null,
+              "direction": "up",
+              "source": "DGIdb",
+              "target_chembl_id": null,
+              "properties": null,
+              "interaction_score": 0.2787067532074662,
+              "sources": "GuideToPharmacology",
+              "target_type": null
+            },
+            {
+              "name": "Chenodeoxycholic Acid",
+              "chembl_id": "rxcui:2323",
+              "target_symbol": "NR1H4",
+              "action_type": "AGONIST",
+              "mechanism": null,
+              "approved": true,
+              "max_phase": 4.0,
+              "first_approval": null,
+              "withdrawn": false,
+              "oral": null,
+              "direction": "up",
+              "source": "DGIdb",
+              "target_chembl_id": null,
+              "properties": null,
+              "interaction_score": 0.9057969479242652,
+              "sources": "ChEMBL; DTC; GuideToPharmacology; TTD",
+              "target_type": null
+            },
+            {
+              "name": "Chenodiol",
+              "chembl_id": "CHEMBL240597",
+              "target_symbol": "NR1H4",
+              "action_type": "AGONIST",
+              "mechanism": "Bile acid receptor FXR agonist",
+              "approved": true,
+              "max_phase": 4.0,
+              "first_approval": 1983,
+              "withdrawn": false,
+              "oral": true,
+              "direction": "up",
+              "source": "ChEMBL",
+              "target_chembl_id": "CHEMBL2047",
+              "properties": {
+                "alogp": "4.48",
+                "aromatic_rings": 0,
+                "full_molformula": "C24H40O4",
+                "full_mwt": "392.58",
+                "hba": 3,
+                "hbd": 3,
+                "heavy_atoms": 28,
+                "mw_freebase": "392.58",
+                "np_likeness_score": "2.43",
+                "num_ro5_violations": 0,
+                "psa": "77.76",
+                "qed_weighted": "0.66",
+                "ro3_pass": "N",
+                "rtb": 4
+              },
+              "interaction_score": null,
+              "sources": null,
+              "target_type": null
+            },
+            {
+              "name": "Guggulsterone",
+              "chembl_id": "iuphar.ligand:2745",
+              "target_symbol": "NR1H4",
+              "action_type": "INHIBITOR",
+              "mechanism": null,
+              "approved": true,
+              "max_phase": 4.0,
+              "first_approval": null,
+              "withdrawn": false,
+              "oral": null,
+              "direction": "down",
+              "source": "DGIdb",
+              "target_chembl_id": null,
+              "properties": null,
+              "interaction_score": 0.2388915027492567,
+              "sources": "Drug Repurposing Hub; GuideToPharmacology; TTD",
+              "target_type": null
+            },
+            {
+              "name": "Ursodiol",
+              "chembl_id": "CHEMBL1551",
+              "target_symbol": "NR1H4",
+              "action_type": "AGONIST",
+              "mechanism": "Bile acid receptor FXR agonist",
+              "approved": true,
+              "max_phase": 4.0,
+              "first_approval": 1987,
+              "withdrawn": false,
+              "oral": true,
+              "direction": "up",
+              "source": "ChEMBL",
+              "target_chembl_id": "CHEMBL2047",
+              "properties": {
+                "alogp": "4.48",
+                "aromatic_rings": 0,
+                "full_molformula": "C24H40O4",
+                "full_mwt": "392.58",
+                "hba": 3,
+                "hbd": 3,
+                "heavy_atoms": 28,
+                "mw_freebase": "392.58",
+                "np_likeness_score": "2.43",
+                "num_ro5_violations": 0,
+                "psa": "77.76",
+                "qed_weighted": "0.66",
+                "ro3_pass": "N",
+                "rtb": 4
+              },
+              "interaction_score": 0.06193483404610361,
+              "sources": "ChEMBL; Drug Repurposing Hub",
+              "target_type": null
+            },
+            {
+              "name": "Obeticholic Acid",
+              "chembl_id": "CHEMBL566315",
+              "target_symbol": "NR1H4",
+              "action_type": "AGONIST",
+              "mechanism": "Bile acid receptor FXR agonist",
+              "approved": true,
+              "max_phase": 4.0,
+              "first_approval": 2016,
+              "withdrawn": true,
+              "oral": true,
+              "direction": "up",
+              "source": "ChEMBL",
+              "target_chembl_id": "CHEMBL2047",
+              "properties": {
+                "alogp": "5.11",
+                "aromatic_rings": 0,
+                "full_molformula": "C26H44O4",
+                "full_mwt": "420.63",
+                "hba": 3,
+                "hbd": 3,
+                "heavy_atoms": 30,
+                "mw_freebase": "420.63",
+                "np_likeness_score": "2.32",
+                "num_ro5_violations": 1,
+                "psa": "77.76",
+                "qed_weighted": "0.58",
+                "ro3_pass": "N",
+                "rtb": 5
+              },
+              "interaction_score": 5.016721557734392,
+              "sources": "ChEMBL; DTC; Drug Repurposing Hub; GuideToPharmacology; TTD; TdgClinicalTrial",
+              "target_type": null
+            }
+          ]
+        },
+        {
+          "symbol": "FOXD2",
+          "name": "forkhead box D2",
+          "role": "unknown",
+          "nuclear_receptor": false,
+          "n_sites": 1,
+          "best_rel_score": 0.931,
+          "best_score_bits": 14.03,
+          "best_site_tss_offset": -211,
+          "best_site_sequence": "CAAAACAAATA",
+          "matrix_id": "MA0847.4",
+          "chip_peaks": 0,
+          "chip_state": "not assayed",
+          "score": 46.6,
+          "n_regulon": null,
+          "regulon_provenance": "unknown",
+          "regulon_understudied": false,
+          "dependency": "dispensable across the panel",
+          "dependency_burden": 0.022,
+          "drugs": []
+        },
+        {
+          "symbol": "NR4A2",
+          "name": "nuclear receptor subfamily 4 group A member 2",
+          "role": "unknown",
+          "nuclear_receptor": true,
+          "n_sites": 1,
+          "best_rel_score": 0.907,
+          "best_score_bits": 14.18,
+          "best_site_tss_offset": -413,
+          "best_site_sequence": "AGGCCACTGACCT",
+          "matrix_id": "MA1147.2",
+          "chip_peaks": 0,
+          "chip_state": "not assayed",
+          "score": 42.2,
+          "n_regulon": null,
+          "regulon_provenance": "unknown",
+          "regulon_understudied": false,
+          "dependency": "essential in a handful of lines",
+          "dependency_burden": 0.072,
+          "drugs": []
+        },
+        {
+          "symbol": "NR2F6",
+          "name": "nuclear receptor subfamily 2 group F member 6",
+          "role": "unknown",
+          "nuclear_receptor": true,
+          "n_sites": 1,
+          "best_rel_score": 0.876,
+          "best_score_bits": 12.71,
+          "best_site_tss_offset": -414,
+          "best_site_sequence": "TAGGTCAGTGGCCTA",
+          "matrix_id": "MA1539.1",
+          "chip_peaks": 0,
+          "chip_state": "not assayed",
+          "score": 41.1,
+          "n_regulon": null,
+          "regulon_provenance": "unknown",
+          "regulon_understudied": false,
+          "dependency": "essential in a handful of lines",
+          "dependency_burden": 0.074,
+          "drugs": []
+        },
+        {
+          "symbol": "NR2F1",
+          "name": "nuclear receptor subfamily 2 group F member 1",
+          "role": "unknown",
+          "nuclear_receptor": true,
+          "n_sites": 1,
+          "best_rel_score": 0.872,
+          "best_score_bits": 13.61,
+          "best_site_tss_offset": -414,
+          "best_site_sequence": "TAGGCCACTGACCTA",
+          "matrix_id": "MA1538.1",
+          "chip_peaks": 0,
+          "chip_state": "not assayed",
+          "score": 40.9,
+          "n_regulon": null,
+          "regulon_provenance": "unknown",
+          "regulon_understudied": false,
+          "dependency": "essential in a handful of lines",
+          "dependency_burden": 0.04,
+          "drugs": []
+        },
+        {
+          "symbol": "PRDM9",
+          "name": "PR/SET domain 9",
+          "role": "unknown",
+          "nuclear_receptor": false,
+          "n_sites": 1,
+          "best_rel_score": 0.889,
+          "best_score_bits": 12.69,
+          "best_site_tss_offset": -997,
+          "best_site_sequence": "GATGGTCAGAGAGGTGGCAC",
+          "matrix_id": "MA1723.2",
+          "chip_peaks": 0,
+          "chip_state": "not assayed",
+          "score": 37.5,
+          "n_regulon": null,
+          "regulon_provenance": "unknown",
+          "regulon_understudied": false,
+          "dependency": "essential in a handful of lines",
+          "dependency_burden": 0.0,
+          "drugs": []
+        },
+        {
+          "symbol": "ZNF768",
+          "name": "zinc finger protein 768",
+          "role": "unknown",
+          "nuclear_receptor": false,
+          "n_sites": 1,
+          "best_rel_score": 0.979,
+          "best_score_bits": 14.92,
+          "best_site_tss_offset": -992,
+          "best_site_sequence": "ACCTCTCTG",
+          "matrix_id": "MA1731.2",
+          "chip_peaks": 0,
+          "chip_state": "not bound",
+          "score": 34.0,
+          "n_regulon": 826,
+          "regulon_provenance": "regulon file",
+          "regulon_understudied": false,
+          "dependency": "essential in a handful of lines",
+          "dependency_burden": 0.062,
+          "drugs": []
+        }
+      ],
+      "direction_unknown": {
+        "NR1H4": [
+          {
+            "name": "Imipramine Hydrochloride",
+            "chembl_id": "chembl:CHEMBL1692",
+            "target_symbol": "NR1H4",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.09290225106915541,
+            "sources": "DTC",
+            "target_type": null
+          },
+          {
+            "name": "Saquinavir Mesylate",
+            "chembl_id": "chembl:CHEMBL282042",
+            "target_symbol": "NR1H4",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.06967668830186656,
+            "sources": "DTC",
+            "target_type": null
+          },
+          {
+            "name": "Methylene Blue",
+            "chembl_id": "chembl:CHEMBL550495",
+            "target_symbol": "NR1H4",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.06193483404610361,
+            "sources": "DTC",
+            "target_type": null
+          },
+          {
+            "name": "Phenolphthalein",
+            "chembl_id": "rxcui:155122",
+            "target_symbol": "NR1H4",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.06193483404610361,
+            "sources": "DTC",
+            "target_type": null
+          },
+          {
+            "name": "Nimodipine",
+            "chembl_id": "rxcui:7426",
+            "target_symbol": "NR1H4",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.05867510593841394,
+            "sources": "DTC",
+            "target_type": null
+          },
+          {
+            "name": "Hydroxyprogesterone Caproate (Usp)",
+            "chembl_id": "rxcui:12488",
+            "target_symbol": "NR1H4",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.05574135064149324,
+            "sources": "Drug Repurposing Hub",
+            "target_type": null
+          },
+          {
+            "name": "Phenazopyridine Hydrochloride",
+            "chembl_id": "chembl:CHEMBL1201022",
+            "target_symbol": "NR1H4",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.03483834415093328,
+            "sources": "DTC",
+            "target_type": null
+          },
+          {
+            "name": "Clioquinol",
+            "chembl_id": "rxcui:5942",
+            "target_symbol": "NR1H4",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.0309674170230518,
+            "sources": "DTC",
+            "target_type": null
+          },
+          {
+            "name": "Levoketoconazole",
+            "chembl_id": "rxcui:2588846",
+            "target_symbol": "NR1H4",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.02933755296920697,
+            "sources": "DTC",
+            "target_type": null
+          },
+          {
+            "name": "Raloxifene Hydrochloride",
+            "chembl_id": "chembl:CHEMBL1116",
+            "target_symbol": "NR1H4",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.02533697756431511,
+            "sources": "DTC",
+            "target_type": null
+          },
+          {
+            "name": "Melphalan",
+            "chembl_id": "rxcui:6718",
+            "target_symbol": "NR1H4",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.01922115539361836,
+            "sources": "DTC",
+            "target_type": null
+          },
+          {
+            "name": "Diethylstilbestrol",
+            "chembl_id": "rxcui:3390",
+            "target_symbol": "NR1H4",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.01858045021383108,
+            "sources": "DTC",
+            "target_type": null
+          },
+          {
+            "name": "Apigenin",
+            "chembl_id": "rxcui:1368130",
+            "target_symbol": "NR1H4",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.01429265401063929,
+            "sources": "DTC",
+            "target_type": null
+          },
+          {
+            "name": "Genistein",
+            "chembl_id": "rxcui:25696",
+            "target_symbol": "NR1H4",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.008847833435157658,
+            "sources": "DTC",
+            "target_type": null
+          },
+          {
+            "name": "Doxorubicin Hydrochloride",
+            "chembl_id": "rxcui:142433",
+            "target_symbol": "NR1H4",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.003278902978911367,
+            "sources": "DTC",
+            "target_type": null
+          }
+        ],
+        "NR4A2": [
+          {
+            "name": "Gemcitabine",
+            "chembl_id": "rxcui:12574",
+            "target_symbol": "NR4A2",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.2152769404085256,
+            "sources": "CIViC",
+            "target_type": null
+          }
+        ],
+        "RXRA": [
+          {
+            "name": "Adapalene",
+            "chembl_id": "rxcui:60223",
+            "target_symbol": "RXRA",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.1578294422658011,
+            "sources": "Drug Repurposing Hub; TEND; TdgClinicalTrial",
+            "target_type": null
+          },
+          {
+            "name": "Clorophene",
+            "chembl_id": "chembl:CHEMBL1328919",
+            "target_symbol": "RXRA",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.1052196281772007,
+            "sources": "DTC",
+            "target_type": null
+          },
+          {
+            "name": "Doconexent",
+            "chembl_id": "rxcui:1006469",
+            "target_symbol": "RXRA",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.09565420743381885,
+            "sources": "DTC",
+            "target_type": null
+          },
+          {
+            "name": "Etodolac",
+            "chembl_id": "rxcui:24605",
+            "target_symbol": "RXRA",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.08768302348100061,
+            "sources": "TdgClinicalTrial",
+            "target_type": null
+          },
+          {
+            "name": "Imipramine Hydrochloride",
+            "chembl_id": "chembl:CHEMBL1692",
+            "target_symbol": "RXRA",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.08768302348100061,
+            "sources": "DTC",
+            "target_type": null
+          },
+          {
+            "name": "Triclosan",
+            "chembl_id": "rxcui:10795",
+            "target_symbol": "RXRA",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.07515687726942909,
+            "sources": "DTC",
+            "target_type": null
+          },
+          {
+            "name": "Saquinavir Mesylate",
+            "chembl_id": "chembl:CHEMBL282042",
+            "target_symbol": "RXRA",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.06576226761075046,
+            "sources": "DTC",
+            "target_type": null
+          },
+          {
+            "name": "Rosuvastatin",
+            "chembl_id": "rxcui:301542",
+            "target_symbol": "RXRA",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.04046908776046182,
+            "sources": "ClinPGx",
+            "target_type": null
+          },
+          {
+            "name": "Raloxifene Hydrochloride",
+            "chembl_id": "chembl:CHEMBL1116",
+            "target_symbol": "RXRA",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.02391355185845471,
+            "sources": "DTC",
+            "target_type": null
+          },
+          {
+            "name": "Bithionol",
+            "chembl_id": "ncit:C77030",
+            "target_symbol": "RXRA",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.02192075587025015,
+            "sources": "DTC",
+            "target_type": null
+          },
+          {
+            "name": "Vitamin A",
+            "chembl_id": "rxcui:11246",
+            "target_symbol": "RXRA",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.01878921931735727,
+            "sources": "Drug Repurposing Hub",
+            "target_type": null
+          },
+          {
+            "name": "Niclosamide",
+            "chembl_id": "rxcui:7402",
+            "target_symbol": "RXRA",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.01814131520296564,
+            "sources": "DTC",
+            "target_type": null
+          },
+          {
+            "name": "Pimozide",
+            "chembl_id": "rxcui:8331",
+            "target_symbol": "RXRA",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.01644056690268761,
+            "sources": "DTC",
+            "target_type": null
+          },
+          {
+            "name": "Daunorubicin Hydrochloride",
+            "chembl_id": "chembl:CHEMBL1563",
+            "target_symbol": "RXRA",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.01594236790563647,
+            "sources": "DTC",
+            "target_type": null
+          },
+          {
+            "name": "Dactinomycin",
+            "chembl_id": "rxcui:3100",
+            "target_symbol": "RXRA",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.01461383724683343,
+            "sources": "DTC",
+            "target_type": null
+          },
+          {
+            "name": "Testosterone",
+            "chembl_id": "rxcui:10379",
+            "target_symbol": "RXRA",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.01348969592015394,
+            "sources": "DTC",
+            "target_type": null
+          },
+          {
+            "name": "Docetaxel Anhydrous",
+            "chembl_id": "rxcui:1299922",
+            "target_symbol": "RXRA",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.01011727194011545,
+            "sources": "ClinPGx",
+            "target_type": null
+          },
+          {
+            "name": "Genistein",
+            "chembl_id": "rxcui:25696",
+            "target_symbol": "RXRA",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.008350764141047677,
+            "sources": "DTC",
+            "target_type": null
+          },
+          {
+            "name": "Progesterone",
+            "chembl_id": "rxcui:8727",
+            "target_symbol": "RXRA",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.008350764141047677,
+            "sources": "DTC",
+            "target_type": null
+          },
+          {
+            "name": "Tretinoin",
+            "chembl_id": "rxcui:10753",
+            "target_symbol": "RXRA",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.005781298251494545,
+            "sources": "DTC",
+            "target_type": null
+          },
+          {
+            "name": "Doxorubicin Hydrochloride",
+            "chembl_id": "rxcui:142433",
+            "target_symbol": "RXRA",
+            "action_type": "UNKNOWN",
+            "mechanism": null,
+            "approved": true,
+            "max_phase": 4.0,
+            "first_approval": null,
+            "withdrawn": false,
+            "oral": null,
+            "direction": "unclear",
+            "source": "DGIdb",
+            "target_chembl_id": null,
+            "properties": null,
+            "interaction_score": 0.003094694946388257,
+            "sources": "DTC",
+            "target_type": null
+          }
+        ]
+      },
+      "cell_cycle": {
+        "RXRA": {
+          "symbol": "RXRA",
+          "phase": "constitutive",
+          "duty": 1.0,
+          "proliferation": "unknown",
+          "compatible": true,
+          "multiplier": 1.0,
+          "notes": []
+        },
+        "OSR2": {
+          "symbol": "OSR2",
+          "phase": "unknown",
+          "duty": 1.0,
+          "proliferation": "unknown",
+          "compatible": true,
+          "multiplier": 1.0,
+          "notes": [
+            "no cell-cycle annotation; assumed cycle-independent"
+          ]
+        },
+        "THAP11": {
+          "symbol": "THAP11",
+          "phase": "unknown",
+          "duty": 1.0,
+          "proliferation": "unknown",
+          "compatible": true,
+          "multiplier": 1.0,
+          "notes": [
+            "no cell-cycle annotation; assumed cycle-independent"
+          ]
+        },
+        "KLF3": {
+          "symbol": "KLF3",
+          "phase": "unknown",
+          "duty": 1.0,
+          "proliferation": "unknown",
+          "compatible": true,
+          "multiplier": 1.0,
+          "notes": [
+            "no cell-cycle annotation; assumed cycle-independent"
+          ]
+        },
+        "SP3": {
+          "symbol": "SP3",
+          "phase": "unknown",
+          "duty": 1.0,
+          "proliferation": "unknown",
+          "compatible": true,
+          "multiplier": 1.0,
+          "notes": [
+            "no cell-cycle annotation; assumed cycle-independent"
+          ]
+        },
+        "KLF16": {
+          "symbol": "KLF16",
+          "phase": "unknown",
+          "duty": 1.0,
+          "proliferation": "unknown",
+          "compatible": true,
+          "multiplier": 1.0,
+          "notes": [
+            "no cell-cycle annotation; assumed cycle-independent"
+          ]
+        },
+        "ZNF76": {
+          "symbol": "ZNF76",
+          "phase": "unknown",
+          "duty": 1.0,
+          "proliferation": "unknown",
+          "compatible": true,
+          "multiplier": 1.0,
+          "notes": [
+            "no cell-cycle annotation; assumed cycle-independent"
+          ]
+        },
+        "ZNF143": {
+          "symbol": "ZNF143",
+          "phase": "unknown",
+          "duty": 1.0,
+          "proliferation": "unknown",
+          "compatible": true,
+          "multiplier": 1.0,
+          "notes": [
+            "no cell-cycle annotation; assumed cycle-independent"
+          ]
+        },
+        "FLI1": {
+          "symbol": "FLI1",
+          "phase": "unknown",
+          "duty": 1.0,
+          "proliferation": "unknown",
+          "compatible": true,
+          "multiplier": 1.0,
+          "notes": [
+            "no cell-cycle annotation; assumed cycle-independent"
+          ]
+        },
+        "TFAP4": {
+          "symbol": "TFAP4",
+          "phase": "unknown",
+          "duty": 1.0,
+          "proliferation": "unknown",
+          "compatible": true,
+          "multiplier": 1.0,
+          "notes": [
+            "no cell-cycle annotation; assumed cycle-independent"
+          ]
+        },
+        "NR1H4": {
+          "symbol": "NR1H4",
+          "phase": "unknown",
+          "duty": 1.0,
+          "proliferation": "unknown",
+          "compatible": true,
+          "multiplier": 1.0,
+          "notes": [
+            "no cell-cycle annotation; assumed cycle-independent"
+          ]
+        },
+        "FOXD2": {
+          "symbol": "FOXD2",
+          "phase": "unknown",
+          "duty": 1.0,
+          "proliferation": "unknown",
+          "compatible": true,
+          "multiplier": 1.0,
+          "notes": [
+            "no cell-cycle annotation; assumed cycle-independent"
+          ]
+        },
+        "NR4A2": {
+          "symbol": "NR4A2",
+          "phase": "unknown",
+          "duty": 1.0,
+          "proliferation": "unknown",
+          "compatible": true,
+          "multiplier": 1.0,
+          "notes": [
+            "no cell-cycle annotation; assumed cycle-independent"
+          ]
+        },
+        "NR2F6": {
+          "symbol": "NR2F6",
+          "phase": "unknown",
+          "duty": 1.0,
+          "proliferation": "unknown",
+          "compatible": true,
+          "multiplier": 1.0,
+          "notes": [
+            "no cell-cycle annotation; assumed cycle-independent"
+          ]
+        },
+        "NR2F1": {
+          "symbol": "NR2F1",
+          "phase": "unknown",
+          "duty": 1.0,
+          "proliferation": "unknown",
+          "compatible": true,
+          "multiplier": 1.0,
+          "notes": [
+            "no cell-cycle annotation; assumed cycle-independent"
+          ]
+        },
+        "PRDM9": {
+          "symbol": "PRDM9",
+          "phase": "unknown",
+          "duty": 1.0,
+          "proliferation": "unknown",
+          "compatible": true,
+          "multiplier": 1.0,
+          "notes": [
+            "no cell-cycle annotation; assumed cycle-independent"
+          ]
+        },
+        "ZNF768": {
+          "symbol": "ZNF768",
+          "phase": "unknown",
+          "duty": 1.0,
+          "proliferation": "unknown",
+          "compatible": true,
+          "multiplier": 1.0,
+          "notes": [
+            "no cell-cycle annotation; assumed cycle-independent"
+          ]
+        }
+      },
+      "cell_cycle_summary": null,
+      "cell_cycle_blocked": [],
+      "drug_grades": [],
+      "outcome_estimates": [],
+      "knockout": {
+        "THAP11": {
+          "n_experiments": 0,
+          "n_responded": 0,
+          "activates": 0,
+          "represses": 0,
+          "sources": [],
+          "species": [],
+          "experiments": [],
+          "class": "not tested"
+        },
+        "NR2F1": {
+          "n_experiments": 0,
+          "n_responded": 0,
+          "activates": 0,
+          "represses": 0,
+          "sources": [],
+          "species": [],
+          "experiments": [],
+          "class": "not tested"
+        },
+        "FLI1": {
+          "n_experiments": 17,
+          "n_responded": 5,
+          "activates": 5,
+          "represses": 0,
+          "sources": [
+            "GEO TF perturbation",
+            "LINCS CRISPR KO"
+          ],
+          "species": [
+            "human",
+            "human cell lines"
+          ],
+          "experiments": [
+            {
+              "experiment": "FLI1 KD HUMAN GSE27524 CREEDSID GENE 1594",
+              "reads": "activates"
+            },
+            {
+              "experiment": "FLI1 KD HUMAN GSE27524 CREEDSID GENE 1596",
+              "reads": "activates"
+            },
+            {
+              "experiment": "FLI1 KD HUMAN GSE27524 CREEDSID GENE 1597",
+              "reads": "activates"
+            },
+            {
+              "experiment": "FLI1 KD HUMAN GSE27524 CREEDSID GENE 1599",
+              "reads": "activates"
+            },
+            {
+              "experiment": "FLI1 KD HUMAN GSE27524 CREEDSID GENE 1600",
+              "reads": "activates"
+            }
+          ],
+          "class": "measured response"
+        },
+        "FOXD2": {
+          "n_experiments": 0,
+          "n_responded": 0,
+          "activates": 0,
+          "represses": 0,
+          "sources": [],
+          "species": [],
+          "experiments": [],
+          "class": "not tested"
+        },
+        "NR4A2": {
+          "n_experiments": 4,
+          "n_responded": 1,
+          "activates": 0,
+          "represses": 1,
+          "sources": [
+            "GEO TF perturbation",
+            "LINCS CRISPR KO"
+          ],
+          "species": [
+            "human",
+            "human cell lines",
+            "mouse"
+          ],
+          "experiments": [
+            {
+              "experiment": "NR4A2 OE HUMAN GSE58475 CREEDSID GENE 1431",
+              "reads": "represses"
+            }
+          ],
+          "class": "measured response"
+        },
+        "ZNF768": {
+          "n_experiments": 0,
+          "n_responded": 0,
+          "activates": 0,
+          "represses": 0,
+          "sources": [],
+          "species": [],
+          "experiments": [],
+          "class": "not tested"
+        },
+        "NR2F6": {
+          "n_experiments": 1,
+          "n_responded": 0,
+          "activates": 0,
+          "represses": 0,
+          "sources": [
+            "LINCS CRISPR KO"
+          ],
+          "species": [
+            "human cell lines"
+          ],
+          "experiments": [],
+          "class": "tested, no response"
+        },
+        "TFAP4": {
+          "n_experiments": 0,
+          "n_responded": 0,
+          "activates": 0,
+          "represses": 0,
+          "sources": [],
+          "species": [],
+          "experiments": [],
+          "class": "not tested"
+        },
+        "KLF16": {
+          "n_experiments": 0,
+          "n_responded": 0,
+          "activates": 0,
+          "represses": 0,
+          "sources": [],
+          "species": [],
+          "experiments": [],
+          "class": "not tested"
+        },
+        "ZNF76": {
+          "n_experiments": 0,
+          "n_responded": 0,
+          "activates": 0,
+          "represses": 0,
+          "sources": [],
+          "species": [],
+          "experiments": [],
+          "class": "not tested"
+        },
+        "OSR2": {
+          "n_experiments": 0,
+          "n_responded": 0,
+          "activates": 0,
+          "represses": 0,
+          "sources": [],
+          "species": [],
+          "experiments": [],
+          "class": "not tested"
+        },
+        "RXRA": {
+          "n_experiments": 2,
+          "n_responded": 0,
+          "activates": 0,
+          "represses": 0,
+          "sources": [
+            "GEO TF perturbation",
+            "LINCS CRISPR KO"
+          ],
+          "species": [
+            "human",
+            "human cell lines"
+          ],
+          "experiments": [],
+          "class": "tested, no response"
+        },
+        "SP3": {
+          "n_experiments": 3,
+          "n_responded": 1,
+          "activates": 0,
+          "represses": 1,
+          "sources": [
+            "GEO TF perturbation"
+          ],
+          "species": [
+            "human",
+            "mouse"
+          ],
+          "experiments": [
+            {
+              "experiment": "SP3 KD HUMAN GSE7102 CREEDSID GENE 1548",
+              "reads": "represses"
+            }
+          ],
+          "class": "measured response"
+        },
+        "PRDM9": {
+          "n_experiments": 0,
+          "n_responded": 0,
+          "activates": 0,
+          "represses": 0,
+          "sources": [],
+          "species": [],
+          "experiments": [],
+          "class": "not tested"
+        },
+        "KLF3": {
+          "n_experiments": 2,
+          "n_responded": 0,
+          "activates": 0,
+          "represses": 0,
+          "sources": [
+            "GEO TF perturbation"
+          ],
+          "species": [
+            "mouse"
+          ],
+          "experiments": [],
+          "class": "tested, no response"
+        },
+        "NR1H4": {
+          "n_experiments": 0,
+          "n_responded": 0,
+          "activates": 0,
+          "represses": 0,
+          "sources": [],
+          "species": [],
+          "experiments": [],
+          "class": "not tested"
+        },
+        "ZNF143": {
+          "n_experiments": 1,
+          "n_responded": 0,
+          "activates": 0,
+          "represses": 0,
+          "sources": [
+            "GEO TF perturbation"
+          ],
+          "species": [
+            "human"
+          ],
+          "experiments": [],
+          "class": "tested, no response"
+        }
+      },
+      "improvements": {},
+      "crosscheck": null,
+      "all_routes": {
+        "routes": [
+          {
+            "drug": "Vorinostat",
+            "category": "chromatin-level",
+            "mechanism": "HDAC inhibitor",
+            "acts_on": "chromatin (genome-wide)",
+            "tier": 3,
+            "directness": 3,
+            "axes": {
+              "strength": 0.7,
+              "specificity": 0.05,
+              "efficiency": 0.45,
+              "evidence": "curated"
+            },
+            "approved": true,
+            "source": "catalogue",
+            "score": 23.4,
+            "notes": [
+              "acts genome-wide: will move thousands of promoters including yours. Useful as a positive control that your reporter CAN be induced; almost never an acceptable therapeutic route on specificity grounds"
+            ],
+            "approval_verified": true,
+            "breadth_penalty": null,
+            "mitotic_penalty": null,
+            "tier_before_scan_penalty": null,
+            "proliferation_measured": false,
+            "genotoxic": false,
+            "fame_penalty": null,
+            "cancer_risk": null,
+            "tier_label": "curated \u2014 mechanism annotated by a human curator"
+          },
+          {
+            "drug": "Romidepsin",
+            "category": "chromatin-level",
+            "mechanism": "HDAC inhibitor",
+            "acts_on": "chromatin (genome-wide)",
+            "tier": 3,
+            "directness": 3,
+            "axes": {
+              "strength": 0.7,
+              "specificity": 0.05,
+              "efficiency": 0.45,
+              "evidence": "curated"
+            },
+            "approved": true,
+            "source": "catalogue",
+            "score": 23.4,
+            "notes": [
+              "acts genome-wide: will move thousands of promoters including yours. Useful as a positive control that your reporter CAN be induced; almost never an acceptable therapeutic route on specificity grounds"
+            ],
+            "approval_verified": true,
+            "breadth_penalty": null,
+            "mitotic_penalty": null,
+            "tier_before_scan_penalty": null,
+            "proliferation_measured": false,
+            "genotoxic": false,
+            "fame_penalty": null,
+            "cancer_risk": null,
+            "tier_label": "curated \u2014 mechanism annotated by a human curator"
+          },
+          {
+            "drug": "Belinostat",
+            "category": "chromatin-level",
+            "mechanism": "HDAC inhibitor",
+            "acts_on": "chromatin (genome-wide)",
+            "tier": 3,
+            "directness": 3,
+            "axes": {
+              "strength": 0.7,
+              "specificity": 0.05,
+              "efficiency": 0.45,
+              "evidence": "curated"
+            },
+            "approved": true,
+            "source": "catalogue",
+            "score": 23.4,
+            "notes": [
+              "acts genome-wide: will move thousands of promoters including yours. Useful as a positive control that your reporter CAN be induced; almost never an acceptable therapeutic route on specificity grounds"
+            ],
+            "approval_verified": true,
+            "breadth_penalty": null,
+            "mitotic_penalty": null,
+            "tier_before_scan_penalty": null,
+            "proliferation_measured": false,
+            "genotoxic": false,
+            "fame_penalty": null,
+            "cancer_risk": null,
+            "tier_label": "curated \u2014 mechanism annotated by a human curator"
+          },
+          {
+            "drug": "Panobinostat",
+            "category": "chromatin-level",
+            "mechanism": "HDAC inhibitor",
+            "acts_on": "chromatin (genome-wide)",
+            "tier": 3,
+            "directness": 3,
+            "axes": {
+              "strength": 0.7,
+              "specificity": 0.05,
+              "efficiency": 0.45,
+              "evidence": "curated"
+            },
+            "approved": true,
+            "source": "catalogue",
+            "score": 23.4,
+            "notes": [
+              "acts genome-wide: will move thousands of promoters including yours. Useful as a positive control that your reporter CAN be induced; almost never an acceptable therapeutic route on specificity grounds"
+            ],
+            "approval_verified": true,
+            "breadth_penalty": null,
+            "mitotic_penalty": null,
+            "tier_before_scan_penalty": null,
+            "proliferation_measured": false,
+            "genotoxic": false,
+            "fame_penalty": null,
+            "cancer_risk": null,
+            "tier_label": "curated \u2014 mechanism annotated by a human curator"
+          },
+          {
+            "drug": "Azacitidine",
+            "category": "chromatin-level",
+            "mechanism": "DNMT inhibitor",
+            "acts_on": "chromatin (genome-wide)",
+            "tier": 3,
+            "directness": 3,
+            "axes": {
+              "strength": 0.7,
+              "specificity": 0.05,
+              "efficiency": 0.45,
+              "evidence": "curated"
+            },
+            "approved": true,
+            "source": "catalogue",
+            "score": 23.4,
+            "notes": [
+              "acts genome-wide: will move thousands of promoters including yours. Useful as a positive control that your reporter CAN be induced; almost never an acceptable therapeutic route on specificity grounds"
+            ],
+            "approval_verified": true,
+            "breadth_penalty": null,
+            "mitotic_penalty": null,
+            "tier_before_scan_penalty": null,
+            "proliferation_measured": false,
+            "genotoxic": false,
+            "fame_penalty": null,
+            "cancer_risk": null,
+            "tier_label": "curated \u2014 mechanism annotated by a human curator"
+          },
+          {
+            "drug": "Decitabine",
+            "category": "chromatin-level",
+            "mechanism": "DNMT inhibitor",
+            "acts_on": "chromatin (genome-wide)",
+            "tier": 3,
+            "directness": 3,
+            "axes": {
+              "strength": 0.7,
+              "specificity": 0.05,
+              "efficiency": 0.45,
+              "evidence": "curated"
+            },
+            "approved": true,
+            "source": "catalogue",
+            "score": 23.4,
+            "notes": [
+              "acts genome-wide: will move thousands of promoters including yours. Useful as a positive control that your reporter CAN be induced; almost never an acceptable therapeutic route on specificity grounds"
+            ],
+            "approval_verified": true,
+            "breadth_penalty": null,
+            "mitotic_penalty": null,
+            "tier_before_scan_penalty": null,
+            "proliferation_measured": false,
+            "genotoxic": false,
+            "fame_penalty": null,
+            "cancer_risk": null,
+            "tier_label": "curated \u2014 mechanism annotated by a human curator"
+          },
+          {
+            "drug": "Tazemetostat",
+            "category": "chromatin-level",
+            "mechanism": "EZH2 inhibitor",
+            "acts_on": "chromatin (genome-wide)",
+            "tier": 3,
+            "directness": 3,
+            "axes": {
+              "strength": 0.7,
+              "specificity": 0.05,
+              "efficiency": 0.45,
+              "evidence": "curated"
+            },
+            "approved": true,
+            "source": "catalogue",
+            "score": 23.4,
+            "notes": [
+              "acts genome-wide: will move thousands of promoters including yours. Useful as a positive control that your reporter CAN be induced; almost never an acceptable therapeutic route on specificity grounds"
+            ],
+            "approval_verified": true,
+            "breadth_penalty": null,
+            "mitotic_penalty": null,
+            "tier_before_scan_penalty": null,
+            "proliferation_measured": false,
+            "genotoxic": false,
+            "fame_penalty": null,
+            "cancer_risk": null,
+            "tier_label": "curated \u2014 mechanism annotated by a human curator"
+          },
+          {
+            "drug": "Givinostat Hydrochloride",
+            "category": "chromatin-level",
+            "mechanism": "HDAC inhibitor",
+            "acts_on": "chromatin (genome-wide)",
+            "tier": 3,
+            "directness": 3,
+            "axes": {
+              "strength": 0.7,
+              "specificity": 0.05,
+              "efficiency": 0.45,
+              "evidence": "curated"
+            },
+            "approved": true,
+            "source": "catalogue",
+            "score": 23.4,
+            "notes": [
+              "acts genome-wide: will move thousands of promoters including yours. Useful as a positive control that your reporter CAN be induced; almost never an acceptable therapeutic route on specificity grounds",
+              "added from ChEMBL's mechanism table (it inhibits a chromatin enzyme), not from the curated list"
+            ],
+            "approval_verified": true,
+            "breadth_penalty": null,
+            "mitotic_penalty": null,
+            "tier_before_scan_penalty": null,
+            "proliferation_measured": false,
+            "genotoxic": false,
+            "fame_penalty": null,
+            "cancer_risk": null,
+            "tier_label": "curated \u2014 mechanism annotated by a human curator"
+          },
+          {
+            "drug": "Valproic acid",
+            "category": "chromatin-level",
+            "mechanism": "weak HDAC inhibitor",
+            "acts_on": "chromatin (genome-wide)",
+            "tier": 3,
+            "directness": 3,
+            "axes": {
+              "strength": 0.7,
+              "specificity": 0.05,
+              "efficiency": 0.45,
+              "evidence": "curated"
+            },
+            "approved": true,
+            "source": "catalogue",
+            "score": 19.9,
+            "notes": [
+              "acts genome-wide: will move thousands of promoters including yours. Useful as a positive control that your reporter CAN be induced; almost never an acceptable therapeutic route on specificity grounds",
+              "score multiplied by 0.85: recorded as moving 8 of the 11 genes measured here (73%). A compound the literature records for most genes is weak evidence about any one of them: the ranking has been tested against this and orders such drugs no better than chance. It keeps its tier - being well studied is not evidence of being wrong - and loses a little score"
+            ],
+            "approval_verified": true,
+            "breadth_penalty": null,
+            "mitotic_penalty": null,
+            "tier_before_scan_penalty": null,
+            "proliferation_measured": false,
+            "genotoxic": false,
+            "fame_penalty": 0.85,
+            "cancer_risk": null,
+            "tier_label": "curated \u2014 mechanism annotated by a human curator"
+          }
+        ],
+        "n_routes": 9,
+        "by_category": {
+          "chromatin-level": 9
+        },
+        "by_tier": {
+          "curated \u2014 mechanism annotated by a human curator": 9
+        },
+        "best_per_category": {
+          "chromatin-level": {
+            "drug": "Vorinostat",
+            "category": "chromatin-level",
+            "mechanism": "HDAC inhibitor",
+            "acts_on": "chromatin (genome-wide)",
+            "tier": 3,
+            "directness": 3,
+            "axes": {
+              "strength": 0.7,
+              "specificity": 0.05,
+              "efficiency": 0.45,
+              "evidence": "curated"
+            },
+            "approved": true,
+            "source": "catalogue",
+            "score": 23.4,
+            "notes": [
+              "acts genome-wide: will move thousands of promoters including yours. Useful as a positive control that your reporter CAN be induced; almost never an acceptable therapeutic route on specificity grounds"
+            ],
+            "approval_verified": true,
+            "breadth_penalty": null,
+            "mitotic_penalty": null,
+            "tier_before_scan_penalty": null,
+            "proliferation_measured": false,
+            "genotoxic": false,
+            "fame_penalty": null,
+            "cancer_risk": null,
+            "tier_label": "curated \u2014 mechanism annotated by a human curator"
+          }
+        },
+        "categories_absent": [
+          "direct: gene or transcript",
+          "direct: gene product",
+          "direct: predicted product binder",
+          "promoter DNA binder",
+          "TF: orthosteric ligand",
+          "TF: inferred activity change",
+          "TF: abundance change",
+          "protein abundance change",
+          "TF: predicted pocket binder",
+          "TF: allosteric modulator",
+          "TF: stabiliser or glue",
+          "TF: endogenous ligand",
+          "TF: degradation blocker",
+          "TF: known regulator",
+          "upstream signalling",
+          "literature: reported effect",
+          "off-pathway pocket binder",
+          "measured phenocopy",
+          "empirical signature",
+          "virtual screen hypothesis"
+        ]
+      },
+      "mechanisms": {},
+      "upstream": {},
+      "upstream_search": {},
+      "regulators": {},
+      "regulators_without_drugs": [],
+      "stabilisation": {},
+      "ligand_axes": {},
+      "cell_type": {},
+      "tf_activity": {},
+      "activity_drugs": {},
+      "factor_abundance": [],
+      "undirected_factors": [
+        {
+          "symbol": "RXRA",
+          "role": "unknown"
+        },
+        {
+          "symbol": "OSR2",
+          "role": "unknown"
+        },
+        {
+          "symbol": "THAP11",
+          "role": "unknown"
+        },
+        {
+          "symbol": "KLF3",
+          "role": "unknown"
+        },
+        {
+          "symbol": "SP3",
+          "role": "unknown"
+        },
+        {
+          "symbol": "KLF16",
+          "role": "unknown"
+        },
+        {
+          "symbol": "ZNF76",
+          "role": "unknown"
+        },
+        {
+          "symbol": "ZNF143",
+          "role": "unknown"
+        }
+      ],
+      "corpus_scans": {},
+      "corpus_agreement": {},
+      "docking": [],
+      "docking_consensus": {},
+      "dependencies": {
+        "FLI1": {
+          "gene": "FLI1",
+          "mean_effect": 0.002,
+          "median_effect": 0.038,
+          "min_effect": -2.393,
+          "n_lines": 1150,
+          "n_dependent": 39,
+          "fraction_dependent": 0.034,
+          "spread": 0.252,
+          "verdict": "essential in a handful of lines",
+          "selective": true,
+          "top_lineages": [
+            {
+              "lineage": "Bone",
+              "mean_effect": -0.585,
+              "n_lines": 40
+            },
+            {
+              "lineage": "Myeloid",
+              "mean_effect": -0.251,
+              "n_lines": 39
+            },
+            {
+              "lineage": "Lymphoid",
+              "mean_effect": -0.147,
+              "n_lines": 91
+            },
+            {
+              "lineage": "Esophagus/Stomach",
+              "mean_effect": 0.01,
+              "n_lines": 68
+            },
+            {
+              "lineage": "Bowel",
+              "mean_effect": 0.013,
+              "n_lines": 61
+            }
+          ],
+          "burden": 0.0,
+          "depmap_common_essential": null,
+          "caveats": [
+            "the dependency is confined to 39 of 1150 lines, so it has a context. Whether your tissue is in that context is the question, and this panel cannot answer it",
+            "DepMap is cancer cell lines dividing in vitro. A factor whose role is in a post-mitotic or differentiated cell looks dispensable here for reasons that have nothing to do with its importance"
+          ]
+        },
+        "FOXD2": {
+          "gene": "FOXD2",
+          "mean_effect": -0.022,
+          "median_effect": -0.022,
+          "min_effect": -0.471,
+          "n_lines": 1150,
+          "n_dependent": 0,
+          "fraction_dependent": 0.0,
+          "spread": 0.117,
+          "verdict": "dispensable across the panel",
+          "selective": false,
+          "top_lineages": [
+            {
+              "lineage": "Biliary Tract",
+              "mean_effect": -0.063,
+              "n_lines": 35
+            },
+            {
+              "lineage": "Prostate",
+              "mean_effect": -0.056,
+              "n_lines": 10
+            },
+            {
+              "lineage": "Bowel",
+              "mean_effect": -0.055,
+              "n_lines": 61
+            },
+            {
+              "lineage": "Breast",
+              "mean_effect": -0.05,
+              "n_lines": 51
+            },
+            {
+              "lineage": "Liver",
+              "mean_effect": -0.05,
+              "n_lines": 24
+            }
+          ],
+          "burden": 0.022,
+          "depmap_common_essential": null,
+          "caveats": [
+            "no line in the panel needed this factor to grow. That bounds the proliferative cost and says nothing about a differentiated tissue, where the factor's actual job may lie",
+            "DepMap is cancer cell lines dividing in vitro. A factor whose role is in a post-mitotic or differentiated cell looks dispensable here for reasons that have nothing to do with its importance"
+          ]
+        },
+        "KLF16": {
+          "gene": "KLF16",
+          "mean_effect": -0.364,
+          "median_effect": -0.351,
+          "min_effect": -1.168,
+          "n_lines": 1150,
+          "n_dependent": 292,
+          "fraction_dependent": 0.254,
+          "spread": 0.198,
+          "verdict": "essential in a substantial minority",
+          "selective": false,
+          "top_lineages": [
+            {
+              "lineage": "CNS/Brain",
+              "mean_effect": -0.495,
+              "n_lines": 88
+            },
+            {
+              "lineage": "Soft Tissue",
+              "mean_effect": -0.465,
+              "n_lines": 42
+            },
+            {
+              "lineage": "Pleura",
+              "mean_effect": -0.465,
+              "n_lines": 21
+            },
+            {
+              "lineage": "Eye",
+              "mean_effect": -0.461,
+              "n_lines": 15
+            },
+            {
+              "lineage": "Thyroid",
+              "mean_effect": -0.454,
+              "n_lines": 11
+            }
+          ],
+          "burden": 0.364,
+          "depmap_common_essential": null,
+          "caveats": [
+            "DepMap is cancer cell lines dividing in vitro. A factor whose role is in a post-mitotic or differentiated cell looks dispensable here for reasons that have nothing to do with its importance"
+          ]
+        },
+        "KLF3": {
+          "gene": "KLF3",
+          "mean_effect": -0.045,
+          "median_effect": -0.036,
+          "min_effect": -1.112,
+          "n_lines": 1150,
+          "n_dependent": 12,
+          "fraction_dependent": 0.01,
+          "spread": 0.173,
+          "verdict": "essential in a handful of lines",
+          "selective": true,
+          "top_lineages": [
+            {
+              "lineage": "Pancreas",
+              "mean_effect": -0.24,
+              "n_lines": 47
+            },
+            {
+              "lineage": "Thyroid",
+              "mean_effect": -0.132,
+              "n_lines": 11
+            },
+            {
+              "lineage": "Esophagus/Stomach",
+              "mean_effect": -0.104,
+              "n_lines": 68
+            },
+            {
+              "lineage": "Bowel",
+              "mean_effect": -0.1,
+              "n_lines": 61
+            },
+            {
+              "lineage": "Bladder/Urinary Tract",
+              "mean_effect": -0.095,
+              "n_lines": 34
+            }
+          ],
+          "burden": 0.045,
+          "depmap_common_essential": null,
+          "caveats": [
+            "the dependency is confined to 12 of 1150 lines, so it has a context. Whether your tissue is in that context is the question, and this panel cannot answer it",
+            "DepMap is cancer cell lines dividing in vitro. A factor whose role is in a post-mitotic or differentiated cell looks dispensable here for reasons that have nothing to do with its importance"
+          ]
+        },
+        "NR1H4": {
+          "gene": "NR1H4",
+          "mean_effect": -0.113,
+          "median_effect": -0.113,
+          "min_effect": -1.146,
+          "n_lines": 1150,
+          "n_dependent": 7,
+          "fraction_dependent": 0.006,
+          "spread": 0.131,
+          "verdict": "essential in a handful of lines",
+          "selective": true,
+          "top_lineages": [
+            {
+              "lineage": "Bladder/Urinary Tract",
+              "mean_effect": -0.156,
+              "n_lines": 34
+            },
+            {
+              "lineage": "Kidney",
+              "mean_effect": -0.136,
+              "n_lines": 33
+            },
+            {
+              "lineage": "Breast",
+              "mean_effect": -0.134,
+              "n_lines": 51
+            },
+            {
+              "lineage": "Ovary/Fallopian Tube",
+              "mean_effect": -0.131,
+              "n_lines": 60
+            },
+            {
+              "lineage": "Esophagus/Stomach",
+              "mean_effect": -0.127,
+              "n_lines": 68
+            }
+          ],
+          "burden": 0.113,
+          "depmap_common_essential": null,
+          "caveats": [
+            "the dependency is confined to 7 of 1150 lines, so it has a context. Whether your tissue is in that context is the question, and this panel cannot answer it",
+            "DepMap is cancer cell lines dividing in vitro. A factor whose role is in a post-mitotic or differentiated cell looks dispensable here for reasons that have nothing to do with its importance"
+          ]
+        },
+        "NR2F1": {
+          "gene": "NR2F1",
+          "mean_effect": -0.04,
+          "median_effect": -0.036,
+          "min_effect": -0.733,
+          "n_lines": 1150,
+          "n_dependent": 4,
+          "fraction_dependent": 0.003,
+          "spread": 0.113,
+          "verdict": "essential in a handful of lines",
+          "selective": true,
+          "top_lineages": [
+            {
+              "lineage": "CNS/Brain",
+              "mean_effect": -0.086,
+              "n_lines": 88
+            },
+            {
+              "lineage": "Soft Tissue",
+              "mean_effect": -0.067,
+              "n_lines": 42
+            },
+            {
+              "lineage": "Pleura",
+              "mean_effect": -0.064,
+              "n_lines": 21
+            },
+            {
+              "lineage": "Bladder/Urinary Tract",
+              "mean_effect": -0.061,
+              "n_lines": 34
+            },
+            {
+              "lineage": "Uterus",
+              "mean_effect": -0.06,
+              "n_lines": 34
+            }
+          ],
+          "burden": 0.04,
+          "depmap_common_essential": null,
+          "caveats": [
+            "the dependency is confined to 4 of 1150 lines, so it has a context. Whether your tissue is in that context is the question, and this panel cannot answer it",
+            "DepMap is cancer cell lines dividing in vitro. A factor whose role is in a post-mitotic or differentiated cell looks dispensable here for reasons that have nothing to do with its importance"
+          ]
+        },
+        "NR2F6": {
+          "gene": "NR2F6",
+          "mean_effect": -0.074,
+          "median_effect": -0.075,
+          "min_effect": -0.534,
+          "n_lines": 1150,
+          "n_dependent": 2,
+          "fraction_dependent": 0.002,
+          "spread": 0.125,
+          "verdict": "essential in a handful of lines",
+          "selective": true,
+          "top_lineages": [
+            {
+              "lineage": "Prostate",
+              "mean_effect": -0.149,
+              "n_lines": 10
+            },
+            {
+              "lineage": "Peripheral Nervous System",
+              "mean_effect": -0.13,
+              "n_lines": 42
+            },
+            {
+              "lineage": "Esophagus/Stomach",
+              "mean_effect": -0.107,
+              "n_lines": 68
+            },
+            {
+              "lineage": "Cervix",
+              "mean_effect": -0.104,
+              "n_lines": 18
+            },
+            {
+              "lineage": "Skin",
+              "mean_effect": -0.099,
+              "n_lines": 74
+            }
+          ],
+          "burden": 0.074,
+          "depmap_common_essential": null,
+          "caveats": [
+            "the dependency is confined to 2 of 1150 lines, so it has a context. Whether your tissue is in that context is the question, and this panel cannot answer it",
+            "DepMap is cancer cell lines dividing in vitro. A factor whose role is in a post-mitotic or differentiated cell looks dispensable here for reasons that have nothing to do with its importance"
+          ]
+        },
+        "NR4A2": {
+          "gene": "NR4A2",
+          "mean_effect": -0.072,
+          "median_effect": -0.068,
+          "min_effect": -0.778,
+          "n_lines": 1150,
+          "n_dependent": 4,
+          "fraction_dependent": 0.003,
+          "spread": 0.122,
+          "verdict": "essential in a handful of lines",
+          "selective": true,
+          "top_lineages": [
+            {
+              "lineage": "Ovary/Fallopian Tube",
+              "mean_effect": -0.103,
+              "n_lines": 60
+            },
+            {
+              "lineage": "Liver",
+              "mean_effect": -0.098,
+              "n_lines": 24
+            },
+            {
+              "lineage": "Lung",
+              "mean_effect": -0.096,
+              "n_lines": 125
+            },
+            {
+              "lineage": "Prostate",
+              "mean_effect": -0.094,
+              "n_lines": 10
+            },
+            {
+              "lineage": "Thyroid",
+              "mean_effect": -0.091,
+              "n_lines": 11
+            }
+          ],
+          "burden": 0.072,
+          "depmap_common_essential": null,
+          "caveats": [
+            "the dependency is confined to 4 of 1150 lines, so it has a context. Whether your tissue is in that context is the question, and this panel cannot answer it",
+            "DepMap is cancer cell lines dividing in vitro. A factor whose role is in a post-mitotic or differentiated cell looks dispensable here for reasons that have nothing to do with its importance"
+          ]
+        },
+        "OSR2": {
+          "gene": "OSR2",
+          "mean_effect": -0.016,
+          "median_effect": -0.012,
+          "min_effect": -0.56,
+          "n_lines": 1150,
+          "n_dependent": 1,
+          "fraction_dependent": 0.001,
+          "spread": 0.111,
+          "verdict": "essential in a handful of lines",
+          "selective": true,
+          "top_lineages": [
+            {
+              "lineage": "Liver",
+              "mean_effect": -0.058,
+              "n_lines": 24
+            },
+            {
+              "lineage": "Peripheral Nervous System",
+              "mean_effect": -0.056,
+              "n_lines": 42
+            },
+            {
+              "lineage": "Lung",
+              "mean_effect": -0.045,
+              "n_lines": 125
+            },
+            {
+              "lineage": "Pancreas",
+              "mean_effect": -0.043,
+              "n_lines": 47
+            },
+            {
+              "lineage": "Ovary/Fallopian Tube",
+              "mean_effect": -0.038,
+              "n_lines": 60
+            }
+          ],
+          "burden": 0.016,
+          "depmap_common_essential": null,
+          "caveats": [
+            "the dependency is confined to 1 of 1150 lines, so it has a context. Whether your tissue is in that context is the question, and this panel cannot answer it",
+            "DepMap is cancer cell lines dividing in vitro. A factor whose role is in a post-mitotic or differentiated cell looks dispensable here for reasons that have nothing to do with its importance"
+          ]
+        },
+        "PRDM9": {
+          "gene": "PRDM9",
+          "mean_effect": 0.156,
+          "median_effect": 0.152,
+          "min_effect": -1.059,
+          "n_lines": 1150,
+          "n_dependent": 1,
+          "fraction_dependent": 0.001,
+          "spread": 0.094,
+          "verdict": "essential in a handful of lines",
+          "selective": true,
+          "top_lineages": [
+            {
+              "lineage": "Soft Tissue",
+              "mean_effect": 0.121,
+              "n_lines": 42
+            },
+            {
+              "lineage": "Liver",
+              "mean_effect": 0.131,
+              "n_lines": 24
+            },
+            {
+              "lineage": "Bone",
+              "mean_effect": 0.132,
+              "n_lines": 40
+            },
+            {
+              "lineage": "Esophagus/Stomach",
+              "mean_effect": 0.142,
+              "n_lines": 68
+            },
+            {
+              "lineage": "Skin",
+              "mean_effect": 0.143,
+              "n_lines": 74
+            }
+          ],
+          "burden": 0.0,
+          "depmap_common_essential": null,
+          "caveats": [
+            "the dependency is confined to 1 of 1150 lines, so it has a context. Whether your tissue is in that context is the question, and this panel cannot answer it",
+            "DepMap is cancer cell lines dividing in vitro. A factor whose role is in a post-mitotic or differentiated cell looks dispensable here for reasons that have nothing to do with its importance"
+          ]
+        },
+        "RXRA": {
+          "gene": "RXRA",
+          "mean_effect": -0.068,
+          "median_effect": -0.044,
+          "min_effect": -1.345,
+          "n_lines": 1150,
+          "n_dependent": 31,
+          "fraction_dependent": 0.027,
+          "spread": 0.182,
+          "verdict": "essential in a handful of lines",
+          "selective": true,
+          "top_lineages": [
+            {
+              "lineage": "Bladder/Urinary Tract",
+              "mean_effect": -0.267,
+              "n_lines": 34
+            },
+            {
+              "lineage": "Pancreas",
+              "mean_effect": -0.208,
+              "n_lines": 47
+            },
+            {
+              "lineage": "Bowel",
+              "mean_effect": -0.171,
+              "n_lines": 61
+            },
+            {
+              "lineage": "Prostate",
+              "mean_effect": -0.149,
+              "n_lines": 10
+            },
+            {
+              "lineage": "Biliary Tract",
+              "mean_effect": -0.12,
+              "n_lines": 35
+            }
+          ],
+          "burden": 0.068,
+          "depmap_common_essential": null,
+          "caveats": [
+            "the dependency is confined to 31 of 1150 lines, so it has a context. Whether your tissue is in that context is the question, and this panel cannot answer it",
+            "DepMap is cancer cell lines dividing in vitro. A factor whose role is in a post-mitotic or differentiated cell looks dispensable here for reasons that have nothing to do with its importance"
+          ]
+        },
+        "SP3": {
+          "gene": "SP3",
+          "mean_effect": -0.132,
+          "median_effect": -0.127,
+          "min_effect": -0.767,
+          "n_lines": 1150,
+          "n_dependent": 17,
+          "fraction_dependent": 0.015,
+          "spread": 0.155,
+          "verdict": "essential in a handful of lines",
+          "selective": true,
+          "top_lineages": [
+            {
+              "lineage": "Myeloid",
+              "mean_effect": -0.203,
+              "n_lines": 39
+            },
+            {
+              "lineage": "Lung",
+              "mean_effect": -0.17,
+              "n_lines": 125
+            },
+            {
+              "lineage": "Pancreas",
+              "mean_effect": -0.164,
+              "n_lines": 47
+            },
+            {
+              "lineage": "Ovary/Fallopian Tube",
+              "mean_effect": -0.162,
+              "n_lines": 60
+            },
+            {
+              "lineage": "Liver",
+              "mean_effect": -0.149,
+              "n_lines": 24
+            }
+          ],
+          "burden": 0.132,
+          "depmap_common_essential": null,
+          "caveats": [
+            "the dependency is confined to 17 of 1150 lines, so it has a context. Whether your tissue is in that context is the question, and this panel cannot answer it",
+            "DepMap is cancer cell lines dividing in vitro. A factor whose role is in a post-mitotic or differentiated cell looks dispensable here for reasons that have nothing to do with its importance"
+          ]
+        },
+        "TFAP4": {
+          "gene": "TFAP4",
+          "mean_effect": -0.346,
+          "median_effect": -0.32,
+          "min_effect": -1.425,
+          "n_lines": 1150,
+          "n_dependent": 263,
+          "fraction_dependent": 0.229,
+          "spread": 0.242,
+          "verdict": "essential in a minority of lines",
+          "selective": true,
+          "top_lineages": [
+            {
+              "lineage": "Myeloid",
+              "mean_effect": -0.542,
+              "n_lines": 39
+            },
+            {
+              "lineage": "Head and Neck",
+              "mean_effect": -0.46,
+              "n_lines": 74
+            },
+            {
+              "lineage": "Biliary Tract",
+              "mean_effect": -0.454,
+              "n_lines": 35
+            },
+            {
+              "lineage": "Pancreas",
+              "mean_effect": -0.412,
+              "n_lines": 47
+            },
+            {
+              "lineage": "Esophagus/Stomach",
+              "mean_effect": -0.412,
+              "n_lines": 68
+            }
+          ],
+          "burden": 0.346,
+          "depmap_common_essential": null,
+          "caveats": [
+            "the dependency is confined to 263 of 1150 lines, so it has a context. Whether your tissue is in that context is the question, and this panel cannot answer it",
+            "DepMap is cancer cell lines dividing in vitro. A factor whose role is in a post-mitotic or differentiated cell looks dispensable here for reasons that have nothing to do with its importance"
+          ]
+        },
+        "THAP11": {
+          "gene": "THAP11",
+          "mean_effect": -0.427,
+          "median_effect": -0.404,
+          "min_effect": -1.792,
+          "n_lines": 1150,
+          "n_dependent": 428,
+          "fraction_dependent": 0.372,
+          "spread": 0.319,
+          "verdict": "essential in a substantial minority",
+          "selective": false,
+          "top_lineages": [
+            {
+              "lineage": "Lymphoid",
+              "mean_effect": -0.695,
+              "n_lines": 91
+            },
+            {
+              "lineage": "Bone",
+              "mean_effect": -0.56,
+              "n_lines": 40
+            },
+            {
+              "lineage": "Liver",
+              "mean_effect": -0.504,
+              "n_lines": 24
+            },
+            {
+              "lineage": "Myeloid",
+              "mean_effect": -0.494,
+              "n_lines": 39
+            },
+            {
+              "lineage": "Lung",
+              "mean_effect": -0.477,
+              "n_lines": 125
+            }
+          ],
+          "burden": 0.427,
+          "depmap_common_essential": null,
+          "caveats": [
+            "DepMap is cancer cell lines dividing in vitro. A factor whose role is in a post-mitotic or differentiated cell looks dispensable here for reasons that have nothing to do with its importance"
+          ]
+        },
+        "ZNF143": {
+          "gene": "ZNF143",
+          "mean_effect": -0.523,
+          "median_effect": -0.52,
+          "min_effect": -1.421,
+          "n_lines": 1150,
+          "n_dependent": 632,
+          "fraction_dependent": 0.55,
+          "spread": 0.187,
+          "verdict": "essential in most lines",
+          "selective": false,
+          "top_lineages": [
+            {
+              "lineage": "Lymphoid",
+              "mean_effect": -0.635,
+              "n_lines": 91
+            },
+            {
+              "lineage": "Thyroid",
+              "mean_effect": -0.585,
+              "n_lines": 11
+            },
+            {
+              "lineage": "Myeloid",
+              "mean_effect": -0.584,
+              "n_lines": 39
+            },
+            {
+              "lineage": "Prostate",
+              "mean_effect": -0.575,
+              "n_lines": 10
+            },
+            {
+              "lineage": "Bone",
+              "mean_effect": -0.566,
+              "n_lines": 40
+            }
+          ],
+          "burden": 0.523,
+          "depmap_common_essential": null,
+          "caveats": [
+            "DepMap is cancer cell lines dividing in vitro. A factor whose role is in a post-mitotic or differentiated cell looks dispensable here for reasons that have nothing to do with its importance"
+          ]
+        },
+        "ZNF76": {
+          "gene": "ZNF76",
+          "mean_effect": -0.067,
+          "median_effect": -0.064,
+          "min_effect": -0.583,
+          "n_lines": 1150,
+          "n_dependent": 1,
+          "fraction_dependent": 0.001,
+          "spread": 0.102,
+          "verdict": "essential in a handful of lines",
+          "selective": true,
+          "top_lineages": [
+            {
+              "lineage": "Head and Neck",
+              "mean_effect": -0.121,
+              "n_lines": 74
+            },
+            {
+              "lineage": "Peripheral Nervous System",
+              "mean_effect": -0.096,
+              "n_lines": 42
+            },
+            {
+              "lineage": "Esophagus/Stomach",
+              "mean_effect": -0.089,
+              "n_lines": 68
+            },
+            {
+              "lineage": "Bladder/Urinary Tract",
+              "mean_effect": -0.088,
+              "n_lines": 34
+            },
+            {
+              "lineage": "Cervix",
+              "mean_effect": -0.081,
+              "n_lines": 18
+            }
+          ],
+          "burden": 0.067,
+          "depmap_common_essential": null,
+          "caveats": [
+            "the dependency is confined to 1 of 1150 lines, so it has a context. Whether your tissue is in that context is the question, and this panel cannot answer it",
+            "DepMap is cancer cell lines dividing in vitro. A factor whose role is in a post-mitotic or differentiated cell looks dispensable here for reasons that have nothing to do with its importance"
+          ]
+        },
+        "ZNF768": {
+          "gene": "ZNF768",
+          "mean_effect": -0.062,
+          "median_effect": -0.066,
+          "min_effect": -0.55,
+          "n_lines": 1150,
+          "n_dependent": 1,
+          "fraction_dependent": 0.001,
+          "spread": 0.105,
+          "verdict": "essential in a handful of lines",
+          "selective": true,
+          "top_lineages": [
+            {
+              "lineage": "Myeloid",
+              "mean_effect": -0.108,
+              "n_lines": 39
+            },
+            {
+              "lineage": "Cervix",
+              "mean_effect": -0.091,
+              "n_lines": 18
+            },
+            {
+              "lineage": "Bone",
+              "mean_effect": -0.09,
+              "n_lines": 40
+            },
+            {
+              "lineage": "Biliary Tract",
+              "mean_effect": -0.085,
+              "n_lines": 35
+            },
+            {
+              "lineage": "Lung",
+              "mean_effect": -0.079,
+              "n_lines": 125
+            }
+          ],
+          "burden": 0.062,
+          "depmap_common_essential": null,
+          "caveats": [
+            "the dependency is confined to 1 of 1150 lines, so it has a context. Whether your tissue is in that context is the question, and this panel cannot answer it",
+            "DepMap is cancer cell lines dividing in vitro. A factor whose role is in a post-mitotic or differentiated cell looks dispensable here for reasons that have nothing to do with its importance"
+          ]
+        }
+      },
+      "sensitivity": {},
+      "product_screen": {},
+      "promoter_dna": {},
+      "proliferation": {
+        "valproicacid": {
+          "n_signatures": 2,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "decitabine": {
+          "n_signatures": 19,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "belinostat": {
+          "n_signatures": 46,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "azacitidine": {
+          "n_signatures": 26,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "vorinostat": {
+          "n_signatures": 377,
+          "n_with_programme": 37,
+          "share": 0.098,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [
+            "AURKA",
+            "AURKB",
+            "BIRC5",
+            "BUB1",
+            "CCNA2",
+            "CCNB1",
+            "CDC20",
+            "CDK1"
+          ],
+          "tracks_proliferation": false,
+          "direction": "up"
+        }
+      },
+      "protein_abundance": [],
+      "utr": {
+        "five_prime_length": 152,
+        "three_prime_length": 364,
+        "shuffles": 50,
+        "translation": {
+          "n_observed": 0,
+          "expected": 0.24,
+          "p_value": 1.0,
+          "enriched": false,
+          "uorfs": [],
+          "n_overlapping": 1,
+          "gc": 0.625,
+          "g_quadruplex": {
+            "n_observed": 0,
+            "expected": 0.0,
+            "p_value": 1.0,
+            "enriched": false
+          },
+          "top_motif": {
+            "present": false,
+            "why": "the annotated 5' end is not a C, which a TOP motif requires"
+          }
+        },
+        "stability": {
+          "pentamer": {
+            "n_observed": 4,
+            "expected": 1.22,
+            "p_value": 0.0196,
+            "enriched": true
+          },
+          "nonamer": {
+            "n_observed": 0,
+            "expected": 0.0,
+            "p_value": 1.0,
+            "enriched": false
+          },
+          "au_content": 0.676,
+          "m6a_drach": {
+            "n_observed": 8,
+            "expected": 8.26,
+            "p_value": 0.6863,
+            "enriched": false
+          },
+          "pumilio": {
+            "n_observed": 1,
+            "expected": 0.12,
+            "p_value": 0.1373,
+            "enriched": false
+          }
+        }
+      },
+      "fame": {
+        "vorinostat": {
+          "name": "Vorinostat",
+          "n_genes": 3,
+          "of": 11,
+          "share": 0.273,
+          "cut": 4.4,
+          "percentile": 90,
+          "promiscuous": false
+        },
+        "valproicacid": {
+          "name": "Valproic acid",
+          "n_genes": 8,
+          "of": 11,
+          "share": 0.727,
+          "cut": 4.4,
+          "percentile": 90,
+          "promiscuous": true
+        },
+        "azacitidine": {
+          "name": "Azacitidine",
+          "n_genes": 2,
+          "of": 11,
+          "share": 0.182,
+          "cut": 4.4,
+          "percentile": 90,
+          "promiscuous": false
+        },
+        "decitabine": {
+          "name": "Decitabine",
+          "n_genes": 2,
+          "of": 11,
+          "share": 0.182,
+          "cut": 4.4,
+          "percentile": 90,
+          "promiscuous": false
+        }
+      },
+      "modality_design": {},
+      "screen_plan": {},
+      "lincs": {},
+      "genetics": {},
+      "screens": {},
+      "hits": [
+        {
+          "matrix_id": "MA1573.2",
+          "motif_name": "Thap11",
+          "tf_symbols": [
+            "THAP11"
+          ],
+          "start": 840,
+          "end": 854,
+          "strand": "+",
+          "score": 22.687939716010643,
+          "rel_score": 0.9797785926308101,
+          "pvalue_threshold": 1e-05,
+          "tss_offset": -160,
+          "matched_sequence": "ACTACAATTCCCAT",
+          "pvalue": 1.0452332856888222e-08
+        },
+        {
+          "matrix_id": "MA1716.2",
+          "motif_name": "ZNF76",
+          "tf_symbols": [
+            "ZNF76"
+          ],
+          "start": 848,
+          "end": 865,
+          "strand": "+",
+          "score": 19.144776073247936,
+          "rel_score": 0.9268956722092885,
+          "pvalue_threshold": 1e-05,
+          "tss_offset": -152,
+          "matched_sequence": "TCCCATTATGCACCGCG",
+          "pvalue": 2.055936847529434e-07
+        },
+        {
+          "matrix_id": "MA0088.2",
+          "motif_name": "ZNF143",
+          "tf_symbols": [
+            "ZNF143"
+          ],
+          "start": 847,
+          "end": 863,
+          "strand": "+",
+          "score": 18.75785347439121,
+          "rel_score": 0.9225370768073331,
+          "pvalue_threshold": 1e-05,
+          "tss_offset": -153,
+          "matched_sequence": "TTCCCATTATGCACCG",
+          "pvalue": 2.421604584872221e-07
+        },
+        {
+          "matrix_id": "MA1573.2",
+          "motif_name": "Thap11",
+          "tf_symbols": [
+            "THAP11"
+          ],
+          "start": 889,
+          "end": 903,
+          "strand": "+",
+          "score": 18.010698298692237,
+          "rel_score": 0.909818954646255,
+          "pvalue_threshold": 1e-05,
+          "tss_offset": -111,
+          "matched_sequence": "ACTACAAGCCCCAG",
+          "pvalue": 4.17167702328098e-07
+        },
+        {
+          "matrix_id": "MA0746.3",
+          "motif_name": "SP3",
+          "tf_symbols": [
+            "SP3"
+          ],
+          "start": 940,
+          "end": 951,
+          "strand": "-",
+          "score": 16.109616129531883,
+          "rel_score": 0.9788476650547626,
+          "pvalue_threshold": 1e-05,
+          "tss_offset": -60,
+          "matched_sequence": "GCCACGCCCCT",
+          "pvalue": 4.596514665960925e-06
+        },
+        {
+          "matrix_id": "MA1516.2",
+          "motif_name": "KLF3",
+          "tf_symbols": [
+            "KLF3"
+          ],
+          "start": 942,
+          "end": 952,
+          "strand": "-",
+          "score": 15.599185421451496,
+          "rel_score": 0.9888719841720077,
+          "pvalue_threshold": 1e-05,
+          "tss_offset": -58,
+          "matched_sequence": "GGCCACGCCC",
+          "pvalue": 5.2164695048366715e-06
+        },
+        {
+          "matrix_id": "MA1716.2",
+          "motif_name": "ZNF76",
+          "tf_symbols": [
+            "ZNF76"
+          ],
+          "start": 897,
+          "end": 914,
+          "strand": "+",
+          "score": 15.523176714922222,
+          "rel_score": 0.8864288170636536,
+          "pvalue_threshold": 1e-05,
+          "tss_offset": -103,
+          "matched_sequence": "CCCCAGAATGCCTTGGG",
+          "pvalue": 2.2288154756210654e-06
+        },
+        {
+          "matrix_id": "MA0741.1",
+          "motif_name": "KLF16",
+          "tf_symbols": [
+            "KLF16"
+          ],
+          "start": 940,
+          "end": 951,
+          "strand": "-",
+          "score": 15.114789803435412,
+          "rel_score": 0.9727617611176242,
+          "pvalue_threshold": 1e-05,
+          "tss_offset": -60,
+          "matched_sequence": "GCCACGCCCCT",
+          "pvalue": 9.936638803151463e-06
+        },
+        {
+          "matrix_id": "MA1731.2",
+          "motif_name": "ZNF768",
+          "tf_symbols": [
+            "ZNF768"
+          ],
+          "start": 8,
+          "end": 17,
+          "strand": "+",
+          "score": 14.920770531150064,
+          "rel_score": 0.9790846216919732,
+          "pvalue_threshold": 1e-05,
+          "tss_offset": -992,
+          "matched_sequence": "ACCTCTCTG",
+          "pvalue": 4.624431639198717e-06
+        },
+        {
+          "matrix_id": "MA1147.2",
+          "motif_name": "NR4A2::RXRA",
+          "tf_symbols": [
+            "NR4A2",
+            "RXRA"
+          ],
+          "start": 587,
+          "end": 600,
+          "strand": "-",
+          "score": 14.179363803823133,
+          "rel_score": 0.9066988263421676,
+          "pvalue_threshold": 1e-05,
+          "tss_offset": -413,
+          "matched_sequence": "AGGCCACTGACCT",
+          "pvalue": 8.198280683177803e-06
+        },
+        {
+          "matrix_id": "MA0847.4",
+          "motif_name": "FOXD2",
+          "tf_symbols": [
+            "FOXD2"
+          ],
+          "start": 789,
+          "end": 800,
+          "strand": "-",
+          "score": 14.032446808821591,
+          "rel_score": 0.9305542654052459,
+          "pvalue_threshold": 1e-05,
+          "tss_offset": -211,
+          "matched_sequence": "CAAAACAAATA",
+          "pvalue": 4.413681540031727e-06
+        },
+        {
+          "matrix_id": "MA1538.1",
+          "motif_name": "NR2F1",
+          "tf_symbols": [
+            "NR2F1"
+          ],
+          "start": 586,
+          "end": 601,
+          "strand": "-",
+          "score": 13.606599278247414,
+          "rel_score": 0.8717376682456824,
+          "pvalue_threshold": 1e-05,
+          "tss_offset": -414,
+          "matched_sequence": "TAGGCCACTGACCTA",
+          "pvalue": 7.960302348822763e-06
+        },
+        {
+          "matrix_id": "MA1646.2",
+          "motif_name": "OSR2",
+          "tf_symbols": [
+            "OSR2"
+          ],
+          "start": 1050,
+          "end": 1058,
+          "strand": "-",
+          "score": 13.53141534873961,
+          "rel_score": 1.0,
+          "pvalue_threshold": 1e-05,
+          "tss_offset": 51,
+          "matched_sequence": "ACAGAAGC",
+          "pvalue": 8.319319379850379e-06
+        },
+        {
+          "matrix_id": "MA1146.2",
+          "motif_name": "NR1H4::RXRA",
+          "tf_symbols": [
+            "NR1H4",
+            "RXRA"
+          ],
+          "start": 587,
+          "end": 600,
+          "strand": "+",
+          "score": 13.510536402618335,
+          "rel_score": 0.881786944641974,
+          "pvalue_threshold": 1e-05,
+          "tss_offset": -413,
+          "matched_sequence": "AGGTCAGTGGCCT",
+          "pvalue": 9.721435152699727e-06
+        },
+        {
+          "matrix_id": "MA1967.2",
+          "motif_name": "TFAP4::FLI1",
+          "tf_symbols": [
+            "TFAP4",
+            "FLI1"
+          ],
+          "start": 574,
+          "end": 588,
+          "strand": "+",
+          "score": 13.239012567513214,
+          "rel_score": 0.8656051466364798,
+          "pvalue_threshold": 1e-05,
+          "tss_offset": -426,
+          "matched_sequence": "GCAGGAAACAGCTA",
+          "pvalue": 6.963449415482507e-06
+        },
+        {
+          "matrix_id": "MA1539.1",
+          "motif_name": "NR2F6",
+          "tf_symbols": [
+            "NR2F6"
+          ],
+          "start": 586,
+          "end": 601,
+          "strand": "+",
+          "score": 12.705811303021441,
+          "rel_score": 0.8757766267428299,
+          "pvalue_threshold": 1e-05,
+          "tss_offset": -414,
+          "matched_sequence": "TAGGTCAGTGGCCTA",
+          "pvalue": 6.16529678392017e-06
+        },
+        {
+          "matrix_id": "MA1723.2",
+          "motif_name": "PRDM9",
+          "tf_symbols": [
+            "PRDM9"
+          ],
+          "start": 3,
+          "end": 23,
+          "strand": "-",
+          "score": 12.688489967566499,
+          "rel_score": 0.8892461438642104,
+          "pvalue_threshold": 1e-05,
+          "tss_offset": -997,
+          "matched_sequence": "GATGGTCAGAGAGGTGGCAC",
+          "pvalue": 2.1028167408693287e-06
+        }
+      ]
+    }
+  ],
+  "weights": {
+    "motif_quality": 30,
+    "site_count": 10,
+    "proximity": 15,
+    "activator_role": 15,
+    "chip_evidence": 20,
+    "druggable": 10
+  },
+  "drug_weights": {
+    "potency": 0.25,
+    "selectivity": 0.15,
+    "regulon": 0.15,
+    "action": 0.15,
+    "maturity": 0.1,
+    "tissue": 0.1,
+    "evidence_depth": 0.1
+  }
+}

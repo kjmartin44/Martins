@@ -89,8 +89,10 @@ SOURCE = (
     "compounds) answer this question; LINCS P100 (~90 phosphopeptides) "
     "and CPTAC (tumour proteogenomics, no drug arm) do not. Put a table "
     "at data/drug_protein_abundance.tsv with columns "
-    "drug, protein, log2fc [, cell_line, dose, time, source]; "
-    "`python scripts/build_protein_abundance.py EXPORT` converts either "
+    "drug, protein, log2fc [, cell_line, dose, time, source]. "
+    "`python scripts/setup_data.py --only protein_abundance` fetches and "
+    "builds ProTargetMiner's A549 table, and "
+    "`python scripts/build_protein_abundance.py EXPORT` converts a decryptE "
     "export into that layout.")
 
 
@@ -217,6 +219,9 @@ def _key(name: str) -> str:
     return breadth_key(name)
 
 
+_DESCRIBED: dict = {}
+
+
 def describe(protein: str, *, path=None) -> dict:
     """What the table holds for this protein, before any threshold.
 
@@ -234,6 +239,15 @@ def describe(protein: str, *, path=None) -> dict:
     if found is None:
         return {}
     target = (protein or "").strip().upper()
+    # The run, then its report, each ask. A real table has a million rows and
+    # a pass over it takes seconds, so keep the answer while the file is the
+    # same one.
+    try:
+        stamp = (str(found), found.stat().st_mtime_ns, target)
+    except OSError:
+        stamp = None
+    if stamp in _DESCRIBED:
+        return dict(_DESCRIBED[stamp])
     per_drug: dict = {}
     fh = (io.TextIOWrapper(gzip.open(found, "rb"), encoding="utf-8",
                            errors="replace") if found.suffix == ".gz"
@@ -262,7 +276,7 @@ def describe(protein: str, *, path=None) -> dict:
     meds = {k: statistics.median(v) for k, v in per_drug.items()}
     up = sum(1 for m in meds.values() if m >= MIN_ABS_LOG2FC)
     down = sum(1 for m in meds.values() if m <= -MIN_ABS_LOG2FC)
-    return {
+    out = {
         "protein": target,
         "path": str(found),
         "n_compounds": len(meds),
@@ -273,6 +287,24 @@ def describe(protein: str, *, path=None) -> dict:
         "largest_increase": round(max(meds.values()), 3) if meds else None,
         "largest_decrease": round(min(meds.values()), 3) if meds else None,
     }
+    if stamp is not None:
+        _DESCRIBED[stamp] = dict(out)
+    return out
+
+
+def ledger_detail(protein: str, n_hits: int, desc: dict | None) -> str:
+    """What the evidence ledger says this source returned.
+
+    A protein the table never quantified is an absent measurement, not a
+    negative one, and the ledger's `ok, nothing found` reads as the second.
+    So the detail says which it was.
+    """
+    if desc and desc.get("n_compounds") == 0:
+        return (f"{protein} is not in the table, so no compound was measured "
+                f"against its protein. That is an absent measurement, not a "
+                f"negative one")
+    return (f"{n_hits} compound(s) measured to move {protein} protein the "
+            f"needed way")
 
 
 def coverage_note(desc: dict, protein: str) -> str:
@@ -295,7 +327,8 @@ def coverage_note(desc: dict, protein: str) -> str:
         f"says nothing about the rest of the approved library.")
 
 
-def summarise(hits: list, protein: str, *, path=None) -> str:
+def summarise(hits: list, protein: str, *, path=None,
+              desc: dict | None = None) -> str:
     """One paragraph for the report."""
     if _resolve(path) is None:
         # One line. The dataset comparison - which resources answer this
@@ -307,6 +340,12 @@ def summarise(hits: list, protein: str, *, path=None) -> str:
                 f"`data/drug_protein_abundance.tsv` would change that; see "
                 f"[methods](methods.md) for which public datasets actually "
                 f"answer this and which do not.")
+    if not hits and desc and desc.get("n_compounds") == 0:
+        return (f"**{protein} is not in the drug-to-protein table, so no "
+                f"compound was checked against its protein.** That is an "
+                f"absent measurement and not a negative one: the table "
+                f"quantifies a few thousand proteins in one cell line, and "
+                f"this is not one of them.")
     if not hits:
         return (f"**A drug-to-protein table was read and holds no compound "
                 f"that raises {protein}.** That is a measured negative over "

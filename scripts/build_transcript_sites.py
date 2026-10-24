@@ -37,8 +37,13 @@ rows say `gene body` rather than claiming the protein sits in a UTR. ENCODE
 leaves the BED name column as ".", so save each download as
 `<RBP>_<cell line>_<accession>.bed.gz` and the RBP is read from the file
 name. A folder stands for the BED files in it, because naming all 252 peak
-files is longer than a command line may be. `--m6a` takes an atlas of
-methylation sites in the same shape and is mapped the same way.
+files is longer than a command line may be.
+
+`--m6a` takes an atlas of measured methylation sites, which is what replaces
+the DRACH motif scan with a measurement. It reads BED, and also REPIC's own
+table, whose first column writes the interval as `chr1:629848-630037[+]`.
+Those rows carry no factor - a methylation site is a position, not a protein
+- so they are listed under the factor name `m6A`, one row per gene.
 
 Choosing which genes to keep
 ----------------------------
@@ -63,6 +68,7 @@ from __future__ import annotations
 import argparse
 import csv
 import gzip
+import re
 import sys
 from pathlib import Path
 
@@ -220,36 +226,55 @@ def genes_at(index: dict, chrom: str, start: int, end: int, strand: int):
 def bed_rows(path, index, *, kind, evidence, source, default_factor=""):
     """One row per gene a peak lands in, with the factor that bound it.
 
-    The factor is the BED name column where there is one, then
+    The factor is the interval's name where there is one, then
     `default_factor`, then the first field of the file name - which is how
     an ENCODE download, whose name column is ".", carries its RBP.
 
     A peak is placed against the whole gene body, introns included, so the
     region is recorded as that rather than as a UTR site.
     """
+    for chrom, start, end, name, strand in _intervals(path):
+        factor = (name.split("_")[0] if name and name != "." else "") \
+            or default_factor \
+            or Path(str(path)).name.split("_")[0].split(".")[0]
+        for gene in genes_at(index, chrom, start, end, strand):
+            yield {"gene": gene, "factor": factor, "kind": kind,
+                   "region": "gene body", "evidence": evidence,
+                   "source": source}
+
+
+# REPIC publishes its peaks as a table whose first column is the interval
+# written "chr1:629848-630037[+]", not as BED. Its peaks are what
+# exomePeak, MACS2 and MeTPeak wrote, so the bounds are read as BED ones.
+REPIC_POS = re.compile(r"^(\w+):(\d+)-(\d+)\[([+-])\]$")
+
+
+def _intervals(path):
+    """`(chrom, start, end, name, strand)` from a BED or a REPIC table.
+
+    Coordinates come out as BED does them, 0-based with an exclusive end,
+    and the strand as 1 or -1.
+    """
     with _open(path) as fh:
         for line in fh:
-            if line.startswith(("#", "track", "browser")):
+            if line.startswith(("#", "track", "browser", "pos\t")):
                 continue
             f = line.rstrip("\n").split("\t")
             if len(f) < 3:
+                continue
+            hit = REPIC_POS.match(f[0])
+            if hit:
+                chrom, start, end, sign = hit.groups()
+                yield (chrom, int(start), int(end), "",
+                       -1 if sign == "-" else 1)
                 continue
             try:
                 start, end = int(f[1]), int(f[2])
             except ValueError:
                 continue
             name = f[3].strip() if len(f) > 3 else ""
-            # ENCODE leaves the BED name column as "." on its eCLIP peaks,
-            # so the RBP comes from the file name the download was saved
-            # under: "<RBP>_<cell line>_<accession>.bed.gz".
-            factor = (name.split("_")[0] if name and name != "." else "") \
-                or default_factor \
-                or Path(str(path)).name.split("_")[0].split(".")[0]
-            strand = -1 if len(f) > 5 and f[5].strip() == "-" else 1
-            for gene in genes_at(index, f[0], start, end, strand):
-                yield {"gene": gene, "factor": factor, "kind": kind,
-                       "region": "gene body", "evidence": evidence,
-                       "source": source}
+            yield (f[0], start, end, name,
+                   -1 if len(f) > 5 and f[5].strip() == "-" else 1)
 
 
 # -------------------------------------------------------------------- main
@@ -292,7 +317,7 @@ def build(args) -> list:
     for path in bed_paths(args.m6a):
         streams.append(bed_rows(path, index, kind="m6A",
                                 evidence="atlas peak", source="m6A atlas",
-                                default_factor="m6A"))
+                                default_factor="m6A site"))
 
     seen, rows = set(), []
     for stream in streams:

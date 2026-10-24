@@ -48,6 +48,15 @@ ECLIP = (
     "chr1\t9000\t9100\tRBFOX2_K562_rep01\t1000\t+\n"   # no gene there
 )
 M6A = "chr1\t1500\t1510\t.\t0\t+\n"
+# REPIC does not ship BED: its first column holds the whole interval.
+REPIC = (
+    "pos\tpvalue\tfdr\tfold_enrichment\tregion\tdataset\tsample\ttool\t"
+    "species\tassembly\tgeneid\n"
+    "chr1:1500-1510[+]\t1.0e-50\t0\t29.6\texon\tSRP1\tSRX1\texomePeak\t"
+    "human\thg38\tENSG1\n"
+    "chr1:5100-5200[+]\t1.0e-50\t0\t29.6\texon\tSRP1\tSRX1\texomePeak\t"
+    "human\thg38\tENSG2\n"   # wrong strand for OTHER
+)
 
 
 @pytest.fixture(autouse=True)
@@ -84,7 +93,7 @@ def test_builds_a_table_the_reader_can_use(tmp_path):
              for k, rows in sites["by_kind"].items()}
     assert kinds == {"microRNA": ["hsa-miR-17-5p", "hsa-miR-21-5p",
                                   "miR-15-5p"],
-                     "RBP": ["RBFOX2"], "m6A": ["m6A"]}
+                     "RBP": ["RBFOX2"], "m6A": ["m6A site"]}
 
     # The prediction stays a prediction, and the assay keeps its own name.
     evidence = {r["factor"]: r["evidence"]
@@ -109,6 +118,21 @@ def test_drops_other_species_other_strands_and_genes_not_asked_for(tmp_path):
     rows = out.read_text(encoding="utf-8").splitlines()[1:]
     assert len(rows) == 4                      # TP53 and OTHER are gone
     assert all(r.split("\t")[0] == "BUB1B" for r in rows)
+
+
+def test_an_m6a_atlas_reads_in_repics_own_format(tmp_path):
+    """A methylation site is a position, not a protein, so it has no factor."""
+    p = _inputs(tmp_path)
+    atlas = tmp_path / "repic_hg38.txt"
+    atlas.write_text(REPIC, encoding="utf-8")
+    out = tmp_path / "m6a.tsv"
+    assert build.main(["--m6a", str(atlas), "--annotation", p["ann.gtf"],
+                       "--out", str(out)]) == 0
+    sites = utr.annotated_sites("BUB1B", path=str(out))
+    assert [r["factor"] for r in sites["by_kind"]["m6A"]] == ["m6A site"]
+    assert sites["n"] == 1, "many peaks in one gene are one row"
+    assert utr.annotated_sites("OTHER", path=str(out))["n"] == 0, \
+        "the second peak is on the other strand from OTHER"
 
 
 def test_screen_hits_are_left_out_unless_asked_for(tmp_path):

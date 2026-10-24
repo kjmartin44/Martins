@@ -1,0 +1,59 @@
+compound	step	site_evidence	n_routes	targets	sources	approved_for
+Acitretin	transcription	measured	6	RARA;RXRA;RXRB;RXRG	drug_scoring;network;regulators	-
+Balsalazide Disodium	transcription	-	1	PPARG	network	-
+Bazedoxifene Acetate	transcription	-	1	ESR2	regulators	-
+belinostat	transcription	-	5	HDAC1;HDAC3;HDAC9;SOX17;chromatin (genome-wide)	abundance;catalogue;regulators	-
+Bexarotene	transcription	measured	6	RXRA;RXRB;RXRG	drug_scoring;network;regulators;screening	-
+Chenodiol	transcription	predicted only	1	NR1H4	drug_scoring	-
+Chlorotrianisene	transcription	-	1	ESR2	regulators	-
+Cinacalcet Hydrochloride	transcription	-	1	CASR	network	-
+Dextrothyroxine Sodium	transcription	-	1	THRB	network	-
+Estramustine Phosphate Sodium	transcription	-	1	ESR2	regulators	-
+Etrasimod	transcription	-	2	S1PR1	network	-
+Etretinate	transcription	measured	6	RARA;RXRA;RXRB;RXRG	drug_scoring;network;regulators	-
+Fulvestrant	transcription	predicted only	1	NR1H4	screening	-
+Givinostat Hydrochloride	transcription	-	4	HDAC1;HDAC3;HDAC9;chromatin (genome-wide)	catalogue;regulators	-
+Hydrocortisone Acetate	transcription	-	1	NR3C1	network	-
+Isotretinoin	transcription	-	1	RARA	regulators	-
+Lenalidomide Hydrochloride Monohydrate	transcription	-	1	RBX1	network	-
+Levothyroxine	transcription	measured	2	RXRA;THRB	network;screening	-
+Liothyronine Sodium	transcription	-	2	THRB	network	-
+Misoprostol	transcription	-	1	PTGER3	network	-
+Mometasone Furoate	transcription	-	1	NR3C1	network	-
+Nandrolone Phenpropionate	transcription	-	1	AR	network	-
+Obeticholic Acid	transcription	predicted only	2	NR1H4	drug_scoring;screening	-
+Odevixibat	transcription	predicted only	1	NR1H4	screening	-
+Olsalazine Sodium	transcription	-	1	PPARG	network	-
+Ospemifene	transcription	-	1	ESR2	regulators	-
+Oxandrolone	transcription	-	1	AR	network	-
+Oxymetholone	transcription	-	1	AR	network	-
+Ozanimod Hydrochloride	transcription	-	1	S1PR1	network	-
+Panobinostat	transcription	-	4	HDAC1;HDAC3;HDAC9;chromatin (genome-wide)	catalogue;regulators	-
+Paramethasone Acetate	transcription	-	1	NR3C1	network	-
+Pioglitazone Hydrochloride	transcription	-	1	PPARG	network	-
+Ponesimod	transcription	-	1	S1PR1	network	-
+Prednisolone Acetate	transcription	-	1	NR3C1	network	-
+Raloxifene Hydrochloride	transcription	-	1	ESR2	regulators	-
+Resmetirom	transcription	-	1	THRB	network	-
+Romidepsin	transcription	-	4	HDAC1;HDAC3;HDAC9;chromatin (genome-wide)	catalogue;regulators	-
+Rosiglitazone	transcription	-	1	PPARG	network	-
+Simvastatin	transcription	predicted only	1	NR1H4	screening	-
+Siponimod	transcription	-	1	S1PR1	network	-
+Sulindac	transcription	measured	1	RXRA	drug_scoring	-
+Tazemetostat	transcription	-	2	EZH2;chromatin (genome-wide)	catalogue;regulators	-
+Testosterone Enanthate	transcription	-	1	AR	network	-
+Testosterone Propionate	transcription	-	1	AR	network	-
+Toremifene Citrate	transcription	-	1	ESR2	regulators	-
+Tretinoin	transcription	measured	2	RARA;RXRA	regulators;screening	-
+Troglitazone	transcription	-	1	PPARG	network	-
+Ursodiol	transcription	predicted only	1	NR1H4	drug_scoring	-
+Valproic acid	transcription	-	1	chromatin (genome-wide)	catalogue	-
+vorinostat	transcription	-	4	HDAC1;HDAC3;NRL;chromatin (genome-wide)	abundance;catalogue;regulators	-
+BIVALIRUDIN	mechanism not established	measured	1	KLF16	sensitivity	-
+Estradiol	mechanism not established	-	1	not stated	ctd	-
+Lidocaine	mechanism not established	-	1	not stated	ctd	-
+Methimazole	mechanism not established	-	1	not stated	ctd	-
+PAROMOMYCIN	mechanism not established	measured	1	KLF16	sensitivity	-
+Phenobarbital	mechanism not established	-	1	not stated	ctd	-
+PITAVASTATIN	mechanism not established	measured	1	KLF16	sensitivity	-
+TIPIRACIL	mechanism not established	measured	1	THAP11	sensitivity	-

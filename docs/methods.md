@@ -237,10 +237,10 @@ evidence, source]`.
 | TargetScan | predicted microRNA sites, conserved families | targetscan.org, `Predicted_Targets_Info.txt` |
 | miRTarBase | microRNA targets with experimental support | mirtarbase.cuhk.edu.cn, `hsa_MTI.csv` |
 | ENCODE eCLIP | measured footprints for ~150 RNA-binding proteins | encodeproject.org, eCLIP IDR peaks (BED) |
-| m6A atlases (REPIC, m6A-Atlas) | measured methylation sites rather than DRACH motifs | the atlas's own download |
+| REPIC | measured methylation sites rather than DRACH motifs | repicmod.uchicago.edu, human hg38 peak table |
 
 `scripts/build_transcript_sites.py` does the reshaping, and
-`scripts/setup_data.py --only transcript_sites` fetches the three
+`scripts/setup_data.py --only transcript_sites` fetches all four
 downloads and runs it. A miRTarBase row carries that entry's own
 experiment list, so a reporter assay is not reported as the same thing as
 a CLIP hit. Two miRTarBase classes are left out. `Non-Functional MTI`
@@ -258,6 +258,18 @@ broad criterion. A well expressed gene carries peaks for most of the
 assayed proteins — BUB1B matches 148 of the 168 — so the list says which
 proteins have been seen on the transcript, and does not rank them or
 argue that any one of them sets its level.
+
+REPIC's human table is read the same way, so an m6A row says the
+transcript carries measured methylation where the DRACH scan could only
+say the consensus is present. Read it for what it is. A methylation site
+is a position, not a protein, so these rows have no factor to act on:
+they are listed under the name `m6A`, one row per gene. The only drugs
+are writer and eraser inhibitors such as STM2457 and the FTO
+inhibitors, and those move methylation across the whole transcriptome,
+not on the gene you asked about. Where the question is which protein
+reads the mark, the eCLIP rows answer it better — FTO, RBM15, IGF2BP1,
+IGF2BP2 and HNRNPC are all in the assayed set, and each is a named
+protein a knockdown can reach.
 
 Rows marked `predicted` are reported separately from rows with
 experimental evidence, because a TargetScan prediction and an eCLIP peak
@@ -295,6 +307,18 @@ two that are routinely named do not:
 | DepMap proteomics | baseline protein levels, no drug arm | no |
 | Thermal proteome profiling (Meltome) | melting shift, target engagement | no |
 | Kinobeads chemoproteomics | binding of ~240 kinase inhibitors | no |
+
+`setup_data.py --only protein_abundance` fetches and builds the ProTargetMiner
+part: Supplementary Data 1 of Saei et al. 2019, which holds the log2 ratio of
+each treated replicate to its experiment's controls for 4,557 proteins in A549
+cells under 55 compounds. It was checked against known biology before use:
+thymidylate synthase rises under carmofur, floxuridine and methotrexate, p21
+rises under the topoisomerase poisons, and topoisomerase II falls under them.
+The deep proteome sheets in the same paper are not read, because their values
+are all positive and do not behave as ratios to a control. decryptE has no bulk
+table that a script can fetch, so it is an export made by hand. BUB1B and MYC are
+not in that table, and for such a gene the report says the
+protein was not measured and does not call it a negative result.
 
 Coverage is the honest limit. decryptE and ProTargetMiner together reach
 a low hundreds of compounds against an approved library of several

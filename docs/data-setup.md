@@ -7,7 +7,9 @@ run. It lists every public source the pipeline reads, what each one is used
 for, the exact download command, any step that turns a download into the file
 the code expects, and a check that the file arrived intact.
 
-The repository ships none of these tables. You download them once into `data/`.
+The repository ships none of these downloads. You download them once into `data/`.
+Three small built tables are the exception, and `data/README.md` says where they
+come from.
 Every table is optional, and a missing one costs a section of the report that
 the report names. [Getting the analysis tables](datasets.md) is the complete
 reference for accepted filenames. This page is the walkthrough.
@@ -51,7 +53,7 @@ python -m generoutes --demo --gene DEMOGENE --out results/demo
 | A. Core | motifs, ChIP peaks, gene models, regulons, expression, drug library | about 1.7 GB | the promoter motif route, and the tables most routes read |
 | B. Evidence | LINCS, dosage, genes and GO, Orange Book, CollecTRI | about 0.3 GB | measured drug effects, dosage limits, route of administration, signed regulons |
 | C. Large optional | BindingDB, DepMap, PRISM, GWAS Catalog, ChEMBL database, transcript site catalogues | 13 GB or more | measured potency, dependency, drug sensitivity, human genetics, the microRNAs and RBPs named on a transcript |
-| D. Built and curated | tables built from your own runs or from openFDA, and the curated tables inside the package | under 1 MB | the fame check, human peak plasma levels, protein abundance, and the checked curated tables |
+| D. Built and curated | tables built from your own runs, from openFDA or from ProTargetMiner, and the curated tables inside the package | under 1 MB | the fame check, human peak plasma levels, protein abundance, and the checked curated tables |
 
 Take A and B for a complete run. Add C items only for the sections they unlock.
 Group D needs no large download; read it after your first runs.
@@ -299,11 +301,11 @@ The SQLite release is at <https://ftp.ebi.ac.uk/pub/databases/chembl/ChEMBLdb/la
 (`chembl_37_sqlite.tar.gz` at the time of writing). Unpack it and save the
 database as `data/chembl.db`.
 
-### 17. Named regulators of the transcript (about 1 GB downloaded)
+### 17. Named regulators of the transcript (about 1.2 GB downloaded)
 
 The UTR scans can say an AU-rich element or a DRACH site is in excess, but not
 which microRNA or RNA-binding protein uses it, and the name is what you can act
-on. This table supplies the names. It is built from three downloads, each under
+on. This table supplies the names. It is built from four downloads, each under
 its own terms, and `data/transcript_sites.tsv` keeps the measured rows and the
 predicted ones apart.
 
@@ -341,6 +343,16 @@ for f in json.load(open("eclip.json"))["@graph"]:
 PY
 ```
 
+The m6A atlas is REPIC's human peak table, 173 MB, which replaces the DRACH
+motif scan with measured methylation. It is a table rather than a BED: its
+first column writes the interval as `chr1:629848-630037[+]`, and the builder
+reads that form as well as BED.
+
+```sh
+curl -fL -o repic_m6a_hg38.txt.gz \
+  "https://repicmod.uchicago.edu/repic/data/download/m6A=sites=species=human=hg38.txt.gz"
+```
+
 Then build the table. The builder fetches nothing; it reads the files you pass.
 
 ```sh
@@ -348,15 +360,21 @@ python scripts/build_transcript_sites.py \
   --targetscan Predicted_Targets_Info.default_predictions.txt \
   --mirtarbase hsa_MTI.csv \
   --eclip eclip/ \
+  --m6a repic_m6a_hg38.txt.gz \
   --annotation data/gencode.basic.gtf.gz \
   --out data/transcript_sites.tsv
 ```
 
 `--genes a-file-of-symbols.txt` keeps the table to the genes you actually run,
-which matters because TargetScan alone is millions of rows. `--m6a` takes a
-methylation atlas in the same BED shape, which is what replaces the DRACH
-motif scan with measured sites. `setup_data.py --only transcript_sites` does
-all of this for you.
+which matters because TargetScan alone is millions of rows.
+`setup_data.py --only transcript_sites` does all of this for you.
+
+An m6A row carries no factor, because a methylation site is a position and not
+a protein. Those rows are listed under the name `m6A`, one per gene, and the
+drugs that act on them — METTL3 inhibitors such as STM2457, and the FTO
+inhibitors — move methylation across the whole transcriptome rather than on
+one gene. Where you want the protein that reads the mark, the eCLIP rows carry
+it: FTO, RBM15, IGF2BP1, IGF2BP2 and HNRNPC are all in the assayed set.
 
 miRTarBase's `Functional MTI (Weak)` class — screen hits rather than direct
 assays, and 7.3 million of its 7.34 million human rows — is left out, which
@@ -396,7 +414,12 @@ Every one is optional, and a run names the section it loses without one.
 | `data/transcript_sites.tsv` | TargetScan, miRTarBase and ENCODE eCLIP | step 17 above | UTR scans show motifs with no named factor |
 | `data/ctd_fame.tsv` | your saved runs in `results/` | `python scripts/build_fame_table.py` | no candidate is checked for being recorded for most genes |
 | `data/fda_label_cmax.tsv` and `data/fda_label_cmax_review.tsv` | openFDA drug labels | `python scripts/build_fda_cmax.py` | the dose check uses ChEMBL's human peak levels, which exist for few drugs |
-| `data/drug_protein_abundance.tsv` | a decryptE or ProTargetMiner export | `python scripts/build_protein_abundance.py EXPORT.csv` | the protein abundance route does not run |
+| `data/drug_protein_abundance.tsv` | ProTargetMiner's Supplementary Data 1, or a decryptE export | `python scripts/setup_data.py --only protein_abundance` | the protein abundance route does not run |
+
+Three of these ship with the repository, so a fresh clone already has them:
+`approved_library.tsv` and the two `fda_label_cmax` files. Run the command to
+refresh them. `ctd_fame.tsv` does not ship, because CTD allows research and
+educational use only.
 
 Notes on the table:
 
@@ -417,9 +440,16 @@ Notes on the table:
   the review file with the reason, which is a result and not a failure. openFDA
   allows 1,000 requests a day without a key. Put a key in `OPENFDA_API_KEY` for
   more.
-- `drug_protein_abundance.tsv` has no public download in the shape the package
-  reads. Download the decryptE or ProTargetMiner export by hand, then convert it.
-  The script renames columns and does not average replicates.
+- `drug_protein_abundance.tsv` holds compounds measured to change a gene's own
+  protein. `setup_data.py --only protein_abundance` downloads ProTargetMiner's
+  Supplementary Data 1 (17 MB, CC BY 4.0, doi:10.1038/s41467-019-13582-8) and
+  builds the table, which needs the HGNC file first because the workbook names
+  proteins by UniProt accession. The table covers 55 compounds in A549 cells and
+  4,132 proteins, as a log2 ratio to the control, with every replicate kept.
+  It does not cover every gene: BUB1B and MYC are not in it, and the report says
+  so when a gene is absent. decryptE has no bulk table that a script can fetch,
+  so use its web app to export the drugs you want and convert the export with
+  `python scripts/build_protein_abundance.py EXPORT.csv`.
 - A table another table needs is built after it: `chip_regulon.tsv` and
   `transcript_sites.tsv` need `gencode.basic.gtf.gz` first. `setup_data.py`
   orders them for you.
@@ -519,10 +549,11 @@ It lists what is missing, asks once, and fetches the rest. Files already in
 
 The items are JASPAR, TRRUST, CollecTRI, ClinGen, gnomAD, the Orange Book, GENCODE,
 HPA tissue RNA, HGNC, GO annotations, LINCS, the knockout libraries, the approved
-drug library from ChEMBL, DepMap, PRISM, the GWAS Catalog, ReMap, the regulon built
+drug library from ChEMBL, the ProTargetMiner protein table, DepMap, PRISM, the GWAS Catalog, ReMap, the regulon built
 from ReMap, BindingDB (about 9 GB while it is unpacked, 270 MB after it is
 distilled), and the named transcript regulators built from TargetScan,
-miRTarBase and the ENCODE eCLIP peaks (about 1.4 GB downloaded). The whole set
+miRTarBase, the ENCODE eCLIP peaks and the REPIC m6A atlas (about 1.6 GB
+downloaded). The whole set
 is roughly 4.5 GB. Each download goes to a `.part` file and
 is kept only if it passes a check on its content or its published checksum.
 The same holds for the tables that are expanded from a zip or built by a
@@ -535,13 +566,13 @@ small reference files the same way, reading curl's exit code as well as
 checking the content — a truncated JASPAR file still contains its first
 matrix header, so the content check alone cannot see a dropped connection.
 
-Four files are not fetched. The ChEMBL SQLite release and the hg38 genome are
+Three files are not fetched. The ChEMBL SQLite release and the hg38 genome are
 optional and very large. `fda_label_cmax.tsv` is built from a finished run by
-`scripts/build_fda_cmax.py`, which `run_everything.bat` does at the end. And
-`drug_protein_abundance.tsv` has no public download in the shape this package
-reads: decryptE and ProTargetMiner are manual downloads, and
-`scripts/build_protein_abundance.py` converts either one. Without it the
-protein abundance route does not run, and the report says so rather than
+`scripts/build_fda_cmax.py`, which `run_everything.bat` does at the end.
+`ctd_fame.tsv` is counted from your own runs. The protein abundance table is
+fetched, but only the ProTargetMiner part: decryptE is an export you make by
+hand and convert with `scripts/build_protein_abundance.py`. Without the table
+the protein abundance route does not run, and the report says so rather than
 reporting that nothing moves the protein.
 
 CollecTRI comes from `decoupler` when it is installed, and otherwise from OmniPath's
@@ -614,8 +645,9 @@ before you share a `data/` folder or a results archive. A derived table such as
 `chip_regulon.tsv` or `bindingdb_distilled.tsv` carries the terms of its inputs,
 and `results.json` embeds values taken from these tables.
 
-This repository is licensed CC BY 4.0, and it tracks only one file under
-`data/`, the small tissue lookup `hpa.tsv`. Six sources state their terms on a
+This repository is licensed CC BY 4.0, and it tracks four small files under
+`data/`, which `data/README.md` lists with their sources and terms. One of them,
+`approved_library.tsv`, is built from ChEMBL and so stays CC BY-SA 3.0. Six sources state their terms on a
 page that was read on 2026-10-23. The others were not read for this page.
 
 | Source | What its page says | Page |

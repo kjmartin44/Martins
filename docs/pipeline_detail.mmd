@@ -1,4 +1,4 @@
-%% The same run in more detail, naming all fourteen routes.
+%% The same run in more detail, naming all eighteen routes.
 %% The short version is pipeline.mmd. Source of truth: docs/how-it-works.md.
 flowchart TD
     START["Choose a gene, a direction,<br/>and what is wrong with the alleles"]
@@ -27,6 +27,13 @@ flowchart TD
         CHECK --> R11["11 docking, once the<br/>pocket passes a control"]
         CHECK --> R7["7 compounds that change<br/>a factor's own transcript"]
         CHECK --> R8["8 compounds that move<br/>a factor's inferred activity"]
+        CHECK --> R16["16 the factor's own<br/>endogenous ligand"]
+        CHECK --> R18["18 stabilisers, glues and<br/>degradation blockers:<br/>the routes for a factor<br/>with no ligand pocket"]
+    end
+
+    subgraph NO_FACTOR["Past the factor entirely"]
+        R15["15 chromatin-level agents<br/>HDAC, DNMT and EZH2:<br/>genome-wide, not this gene"]
+        R17["17 DNA-binding agents for a<br/>sequence feature of this promoter,<br/>only where it beats a shuffle"]
     end
 
     subgraph AROUND["Around the factor"]
@@ -37,7 +44,7 @@ flowchart TD
     subgraph AFTER["Annotated, with no drug matched to them"]
         A1["splicing and isoform choice:<br/>decay exons an oligo could skip,<br/>each weighed by the message<br/>its isoforms carry in GTEx"]
         A2["translation:<br/>upstream ORFs in the 5'UTR,<br/>G-quadruplexes, a 5'TOP motif"]
-        A3["mRNA stability:<br/>AU-rich elements in the 3'UTR,<br/>Pumilio sites, the m6A consensus"]
+        A3["mRNA stability:<br/>AU-rich elements in the 3'UTR,<br/>Pumilio sites, the m6A consensus,<br/>and measured methylation from REPIC"]
         A4["degradation:<br/>the ligase that destroys the protein,<br/>and the enzyme that reverses it"]
         A6["named regulators:<br/>which miRNA or RBP acts on it,<br/>from TargetScan, miRTarBase and<br/>ENCODE eCLIP, with measured sites<br/>counted apart from predicted"]
     end
@@ -46,12 +53,14 @@ flowchart TD
     START --> MEASURED
     START --> PROM
     START --> AROUND
+    START --> NO_FACTOR
     START --> AFTER
 
     ON_GENE --> NARROW["Weigh the collateral<br/>how many genes the factor runs<br/>how body-wide the factor is<br/>how many systems the drug moves<br/>whether a selective ligand can exist"]
     MEASURED --> NARROW
     VIA_TF --> NARROW
     AROUND --> NARROW
+    NO_FACTOR --> NARROW
 
     NARROW --> GATES["Demote what the evidence cannot carry<br/>a scan that is mostly noise<br/>a compound that just moves the cell cycle<br/>one the literature records for every gene<br/>one that damages DNA, or raises an oncogene,<br/>when the patient cannot afford either"]
     GATES --> RANK["Rank every route by<br/>how strong its evidence is"]

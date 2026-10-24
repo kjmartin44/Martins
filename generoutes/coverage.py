@@ -167,11 +167,34 @@ def audit(result: dict) -> list[dict]:
     if degron:
         rows[-1]["what_ran"] += f" ({degron.get('ligase')})"
     if not protein:
-        rows[-1]["gap"] = ("no drug-to-protein-abundance table on disk, so "
-                           "no compound was checked against the protein "
-                           "itself - only against transcripts")
-        rows[-1]["enable"] = ("decryptE or ProTargetMiner at "
-                              "data/drug_protein_abundance.tsv")
+        # An absent table and a table that does not quantify this protein
+        # both give no hits and need opposite things done about them.
+        from . import proteomics as _pr
+
+        gene = ((result.get("query") or {}).get("gene") or "this gene")
+        if not _pr.available():
+            rows[-1]["gap"] = ("no drug-to-protein-abundance table on disk, "
+                               "so no compound was checked against the "
+                               "protein itself - only against transcripts")
+            rows[-1]["enable"] = ("decryptE or ProTargetMiner at "
+                                  "data/drug_protein_abundance.tsv")
+        elif not (_pr.describe(gene) or {}).get("n_compounds"):
+            rows[-1]["gap"] = (f"a drug-to-protein-abundance table is on "
+                               f"disk and does not quantify {gene} at all, "
+                               f"so nothing in it bears on this protein. "
+                               f"That is an absent measurement, not a "
+                               f"negative one.")
+            rows[-1]["enable"] = ("proteomics that covers this protein - "
+                                  "a targeted assay, or a dataset whose "
+                                  "depth reaches it")
+        else:
+            rows[-1]["gap"] = ("the table quantifies this protein and no "
+                               "compound in it moved the protein the "
+                               "wanted way. That is a measured negative "
+                               "over the compounds it covers, and says "
+                               "nothing about the rest of the library.")
+            rows[-1]["enable"] = ("proteomics over more compounds than the "
+                                  "current table holds")
     return rows
 
 

@@ -1104,7 +1104,8 @@ def main(argv=None) -> int:
     p.add_argument("--exhaustiveness", type=int, default=16)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--jobs", type=int, default=1)
-    p.add_argument("--cpu", type=int, default=1)
+    p.add_argument("--cpu", type=int, default=None,
+                   help="cores per docking job; defaults to the machine's")
     p.add_argument("--strip-counter-ions", action="store_true")
     p.add_argument("--reference", action="store_true",
                    help="also dock the same compounds into the template's own "

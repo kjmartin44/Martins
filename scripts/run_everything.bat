@@ -54,6 +54,27 @@ if defined NEEDSETUP (
     )
 )
 
+REM --- the one table with no flag ---------------------------------------
+REM Not in the list above on purpose: it is optional, so prompting for it
+REM every run would teach the user to say no. A notice instead, because
+REM this stage cannot be switched on from the command line and leaves no
+REM other visible trace when it is missing.
+if not exist data\drug_protein_abundance.tsv (
+    echo.
+    echo Note: data\drug_protein_abundance.tsv is not here, so this run will
+    echo not answer "has any compound been measured to change this gene's
+    echo PROTEIN". Every abundance number in the report will be about the
+    echo transcript. That matters most when the broken copy makes an
+    echo unstable or truncated protein, because a stabiliser raises protein
+    echo with the transcript flat and no other route here can see one.
+    echo python scripts\setup_data.py --only protein_abundance fetches the
+    echo ProTargetMiner table ^(55 compounds in A549 cells; many genes are
+    echo not in it^). decryptE is an export made by hand. Columns are drug,
+    echo protein, log2fc and optionally cell_line, dose, time, source. See
+    echo docs\methods.md.
+    echo.
+)
+
 REM --- motif file (required) -------------------------------------------
 if not exist data\jaspar2024.txt (
     echo === Downloading JASPAR motifs ^(~284 KB^) ===
@@ -439,6 +460,7 @@ echo    3  toxic gain          - lower a harmful product
 echo    4  null                - no working product at all
 echo    5  silenced allele     - an intact copy switched off
 echo    6  modifier            - no mutation; moving a normal gene helps
+echo    7  biallelic hypomorph - one copy weak, one dead; raise the weak one
 echo    0  skip                - rank routes, state no requirement
 set "SNUM="
 set /p SNUM="Choose [0]: "
@@ -450,6 +472,7 @@ if "!SNUM!"=="3" set "SCEN=toxic_gain"
 if "!SNUM!"=="4" set "SCEN=null"
 if "!SNUM!"=="5" set "SCEN=silenced_allele"
 if "!SNUM!"=="6" set "SCEN=modifier"
+if "!SNUM!"=="7" set "SCEN=biallelic_hypomorph"
 if not "!SNUM!"=="" if not "!SNUM!"=="0" if "!SCEN!"=="" (
     echo "!SNUM!" is not one of the choices.
     pause
@@ -477,6 +500,7 @@ REM refuses the same pair, but only once it is started.
 set "NEEDDIR="
 if "!SCEN!"=="haploinsufficiency" set "NEEDDIR=up"
 if "!SCEN!"=="hypomorph" set "NEEDDIR=up"
+if "!SCEN!"=="biallelic_hypomorph" set "NEEDDIR=up"
 if "!SCEN!"=="silenced_allele" set "NEEDDIR=up"
 if "!SCEN!"=="toxic_gain" set "NEEDDIR=down"
 if defined NEEDDIR if /i not "!DIR!"=="!NEEDDIR!" (

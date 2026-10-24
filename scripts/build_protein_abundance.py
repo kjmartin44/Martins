@@ -3,6 +3,15 @@
     python scripts/build_protein_abundance.py decryptE.csv
     python scripts/build_protein_abundance.py decryptE.csv ptm.csv
         --out data/drug_protein_abundance.tsv
+    python scripts/build_protein_abundance.py ProTargetMiner_SuppData1.xlsx
+
+`setup_data.py --only protein_abundance` downloads the ProTargetMiner workbook
+and runs the last line for you.
+
+A tidy table (one row per compound, protein and reading) is converted as it
+stands. The ProTargetMiner workbook is not tidy: it has a row per protein,
+named by UniProt entry, and a column per replicate, so it is read by its own
+reader and the accession is turned into a gene symbol through HGNC.
 
 Why this exists
 ---------------
@@ -37,8 +46,11 @@ import csv
 import gzip
 import io
 import math
+import re
 import sys
+import zipfile
 from pathlib import Path
+from xml.etree import ElementTree
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -197,6 +209,170 @@ def read_export(path: Path, source: str | None = None) -> tuple:
     return rows, counts
 
 
+# ProTargetMiner (Saei et al. 2019). Supplementary Data 1 holds the log2 ratio
+# of each treated replicate to the mean of its experiment's controls, for 4,557
+# proteins in A549 cells under 55 compounds. Checked against known biology
+# before it was used: thymidylate synthase rises under the antimetabolites
+# (carmofur, floxuridine, methotrexate), p21 rises and topoisomerase II falls
+# under the topoisomerase poisons. The deep proteome sheets (Supplementary
+# Data 4 to 7) are not read: their values are all positive and do not behave
+# as ratios to a control.
+PROTARGETMINER_URL = ("https://static-content.springer.com/esm/art%3A10.1038"
+                      "%2Fs41467-019-13582-8/MediaObjects/"
+                      "41467_2019_13582_MOESM4_ESM.xlsx")
+# Short, because it is written on every one of about a million rows.
+# doi:10.1038/s41467-019-13582-8, Supplementary Data 1.
+PROTARGETMINER_SOURCE = "ProTargetMiner 2019 SD1"
+PROTARGETMINER_CELLS = "A549"
+
+_XL = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+# "Raltitrexed_Five_2" is the compound, the experiment it was run in, and the
+# replicate; a few columns carry no replicate number.
+_PTM_COLUMN = re.compile(r"^(?P<drug>.+?)_(?P<experiment>[A-Za-z]+)"
+                         r"(?:_(?P<replicate>\d+))?$")
+# "sp_P04818_TYSY_HUMAN": the accession is the second field, and the entry
+# name is not always the gene symbol (TYSY is TYMS), so only the accession
+# is trusted.
+_PTM_PROTEIN = re.compile(r"^(?:sp|tr)_(?P<accession>[A-Z0-9]+)(?:-\d+)?_")
+
+
+def _column(ref: str) -> int:
+    """The 0-based column of a cell reference such as "AB12"."""
+    n = 0
+    for ch in ref:
+        if not ch.isalpha():
+            break
+        n = n * 26 + ord(ch.upper()) - 64
+    return n - 1
+
+
+def read_xlsx(path: Path):
+    """The rows of the first sheet of an .xlsx, each a list of strings.
+
+    Standard library only: this one workbook is the only reason the script
+    would otherwise need a spreadsheet package. Empty cells come back as "".
+    """
+    with zipfile.ZipFile(path) as zf:
+        names = zf.namelist()
+        shared = []
+        if "xl/sharedStrings.xml" in names:
+            with zf.open("xl/sharedStrings.xml") as fh:
+                for _, el in ElementTree.iterparse(fh):
+                    if el.tag == _XL + "si":
+                        shared.append("".join(
+                            t.text or "" for t in el.iter(_XL + "t")))
+                        el.clear()
+        sheets = sorted(
+            (n for n in names if re.fullmatch(r"xl/worksheets/sheet\d+\.xml", n)),
+            key=lambda n: int(re.findall(r"\d+", n)[0]))
+        if not sheets:
+            raise ValueError(f"{Path(path).name} has no worksheet")
+        with zf.open(sheets[0]) as fh:
+            for _, el in ElementTree.iterparse(fh):
+                if el.tag != _XL + "row":
+                    continue
+                cells = {}
+                for c in el.iter(_XL + "c"):
+                    kind, v = c.get("t"), c.find(_XL + "v")
+                    if kind == "inlineStr":
+                        text = "".join(t.text or "" for t in c.iter(_XL + "t"))
+                    elif v is None or v.text is None:
+                        continue
+                    elif kind == "s":
+                        text = shared[int(v.text)]
+                    else:
+                        text = v.text
+                    cells[_column(c.get("r", ""))] = text
+                el.clear()
+                yield ([cells.get(i, "") for i in range(max(cells) + 1)]
+                       if cells else [])
+
+
+def load_hgnc_accessions(path: Path) -> tuple:
+    """`({UniProt accession: gene symbol}, n_ambiguous)` from HGNC's complete set.
+
+    Approved genes only. An accession that two approved genes share is left out
+    and counted, because a wrong symbol would attach a measurement to a gene
+    that was never measured.
+    """
+    found, shared = {}, set()
+    with open(path, encoding="utf-8", errors="replace", newline="") as fh:
+        for row in csv.DictReader(fh, delimiter="\t"):
+            if (row.get("status") or "Approved").strip() != "Approved":
+                continue
+            symbol = (row.get("symbol") or "").strip()
+            for acc in (row.get("uniprot_ids") or "").split("|"):
+                acc = acc.strip()
+                if acc and symbol and found.setdefault(acc, symbol) != symbol:
+                    shared.add(acc)
+    for acc in shared:
+        found.pop(acc, None)
+    return found, len(shared)
+
+
+def read_protargetminer(path: Path, accessions: dict) -> tuple:
+    """`(rows, counts)` from ProTargetMiner's Supplementary Data 1.
+
+    One row per protein and column, with the gene symbol taken from the
+    accession through `accessions`. Readings that are blank or not a number
+    were not quantified in that channel and are counted, not written.
+    """
+    rows = []
+    counts = {"read": 0, "no_number": 0, "unmapped_protein": 0,
+              "unparsed_column": 0}
+    header, columns = None, []
+    for cells in read_xlsx(path):
+        if header is None:
+            if cells and cells[0].strip().lower() == "protein id":
+                header = cells
+                for i, label in enumerate(cells):
+                    if i < 2 or not label.strip():
+                        continue
+                    m = _PTM_COLUMN.match(label.strip())
+                    if m:
+                        columns.append((i, m.group("drug")))
+                    else:
+                        counts["unparsed_column"] += 1
+            continue
+        if not cells or not cells[0].strip():
+            continue
+        m = _PTM_PROTEIN.match(cells[0].strip())
+        symbol = accessions.get(m.group("accession")) if m else None
+        if not symbol:
+            counts["unmapped_protein"] += 1
+            continue
+        for i, drug in columns:
+            text = cells[i].strip() if i < len(cells) else ""
+            if not text:
+                counts["no_number"] += 1
+                continue
+            counts["read"] += 1
+            try:
+                value = float(text)
+            except ValueError:
+                counts["no_number"] += 1
+                continue
+            if not math.isfinite(value):
+                counts["no_number"] += 1
+                continue
+            rows.append({"drug": drug, "protein": symbol.upper(),
+                         "log2fc": str(round(value, 4)),
+                         "cell_line": PROTARGETMINER_CELLS, "dose": "",
+                         "time": "", "source": PROTARGETMINER_SOURCE})
+    if header is None:
+        raise ValueError("no header row starting with 'Protein ID', so this "
+                         "is not the ProTargetMiner workbook")
+    return rows, counts
+
+
+def find_hgnc(explicit=None) -> Path | None:
+    """The HGNC complete set, from `--hgnc` or the names the loaders accept."""
+    names = ([explicit] if explicit else
+             ["data/hgnc_complete_set.txt", "data/hgnc_complete_set.tsv",
+              "data/hgnc.tsv"])
+    return next((Path(n) for n in names if n and Path(n).is_file()), None)
+
+
 def write_table(rows: list, out: Path) -> Path:
     """Write the table, through a .part file so a crash leaves nothing.
 
@@ -227,7 +403,12 @@ def main(argv=None) -> int:
         epilog="Replicates are kept: the route needs at least two "
                "observations of a compound before it reports it.")
     p.add_argument("exports", nargs="+",
-                   help="one or more exports (.csv, .tsv, .txt, .gz)")
+                   help="one or more exports (.csv, .tsv, .txt, .gz), or the "
+                        "ProTargetMiner workbook (.xlsx)")
+    p.add_argument("--hgnc",
+                   help="HGNC complete set, to turn UniProt accessions into "
+                        "gene symbols for the workbook (default: the file "
+                        "under data/)")
     p.add_argument("--out", default="data/drug_protein_abundance.tsv")
     p.add_argument("--source",
                    help="what to record as the source when the export has "
@@ -242,7 +423,19 @@ def main(argv=None) -> int:
             failed += 1
             continue
         try:
-            got, counts = read_export(path, source=args.source)
+            if path.suffix.lower() == ".xlsx":
+                hgnc = find_hgnc(args.hgnc)
+                if hgnc is None:
+                    raise ValueError(
+                        "a workbook names proteins by UniProt accession, and "
+                        "HGNC is what turns that into a gene symbol. Fetch it "
+                        "with `python scripts/setup_data.py --only hgnc` or "
+                        "pass --hgnc")
+                accessions, shared = load_hgnc_accessions(hgnc)
+                got, counts = read_protargetminer(path, accessions)
+                counts["ambiguous_accession_in_hgnc"] = shared
+            else:
+                got, counts = read_export(path, source=args.source)
         except ValueError as exc:
             print(f"  {path}: {exc}", file=sys.stderr)
             failed += 1

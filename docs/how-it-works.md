@@ -94,9 +94,9 @@ then multiplied down for a withdrawn drug or a boxed warning. The drug score and
 the factor score are combined with `--tf-weight` (0.5, or 0.7 when ChIP data is
 present).
 
-**8. Look for routes that skip the factor.** Thirteen further searches run next
-to the factor route, among them the upstream network, the known regulators and the
-CTD literature record. Most produce routes that go into the same ranked list;
+**8. Look for routes that skip the factor.** Seventeen further searches run
+next to the factor route, among them the upstream network, the known regulators
+and the CTD literature record. Most produce routes that go into the same ranked list;
 three (genetics, CTD and the dosage constraint) produce evidence that is
 attached to the list instead, and the designed modalities produce a separate
 section. [The next section](#the-routes-in-detail) takes each in turn.
@@ -186,6 +186,10 @@ of this table, in this order.
 | PRISM phenocopy | measured phenocopy | 4 | partial correlation | 1 |
 | Product ligand screen, new hypothesis | direct: predicted product binder | 5 | the model's probability | 0 |
 | Measured protein abundance | protein abundance change | 2 | how many observations agree | 0 |
+| Chromatin-level agent | chromatin-level | 3 | the class it belongs to, not this gene | 3 |
+| The factor's endogenous ligand | TF: endogenous ligand | 3 if approved, else 5 | whether the ligand is available as a drug | 2 |
+| Promoter DNA feature (`--promoter-dna`) | promoter DNA binder | 5 | a sequence feature that beats a shuffle | 0 |
+| Stabiliser, glue or degradation blocker | TF: stabiliser or glue, TF: degradation blocker | 3 if approved, else 5 | the mechanism recorded for the compound | 1 |
 
 Genetics, CTD, DepMap's knockout effects and the dosage constraint add no
 route. They are described last.

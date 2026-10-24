@@ -1381,3 +1381,58 @@ def test_a_scan_with_room_to_spare_still_gets_the_split():
     assert out["saturated"] is False
     assert out["fdp_unsupported"] == 1.0 and out["fdp_supported"] == 0.0
     assert "measured peak over this window" in out["note"]
+
+
+def test_the_audit_tells_an_absent_table_from_an_absent_protein(tmp_path,
+                                                                monkeypatch):
+    """Three different failures used to print the same sentence.
+
+    "No table on disk" sends someone to download a file. "The table does
+    not cover this protein" sends them to a different assay. "Nothing in
+    it moved the protein" is a result. Telling a reader to fetch a file
+    they already have is the one that wastes a day.
+    """
+    from generoutes import coverage, proteomics
+
+    result = {"query": {"gene": "BUB1B"},
+              "results": [{"all_routes": {"routes": []},
+                           "protein_abundance": []}]}
+
+    def _row(step):
+        return [r for r in coverage.audit(result) if r["step"] == step][0]
+
+    # 1. no table at all
+    monkeypatch.setattr(proteomics, "available", lambda *a, **k: False)
+    assert "no drug-to-protein-abundance table on disk" in _row(
+        "degradation")["gap"]
+
+    # 2. a table that never mentions this protein
+    monkeypatch.setattr(proteomics, "available", lambda *a, **k: True)
+    monkeypatch.setattr(proteomics, "describe", lambda *a, **k: {
+        "n_compounds": 0})
+    gap = _row("degradation")["gap"]
+    assert "does not quantify BUB1B at all" in gap
+    assert "absent measurement, not a negative one" in gap
+
+    # 3. a table that covers it and holds nothing that helps
+    monkeypatch.setattr(proteomics, "describe", lambda *a, **k: {
+        "n_compounds": 40})
+    gap = _row("degradation")["gap"]
+    assert "measured negative" in gap
+    assert "rest of the library" in gap
+
+
+def test_the_protein_section_does_not_say_it_twice(monkeypatch):
+    """`summarise` reports an absent protein itself, so the coverage line
+    under it must not repeat the same sentence."""
+    from generoutes import proteomics, report
+
+    result = {"query": {"gene": "BUB1B"},
+              "results": [{"promoter": {"gene_symbol": "BUB1B"},
+                           "protein_abundance": []}]}
+    monkeypatch.setattr(proteomics, "describe", lambda *a, **k: {
+        "n_compounds": 0})
+    monkeypatch.setattr(proteomics, "_resolve", lambda *a, **k: "x.tsv")
+    text = chr(10).join(report._protein_abundance_section(result))
+    assert text.count("does not appear in the protein table") == 0
+    assert "is not in the drug-to-protein table" in text

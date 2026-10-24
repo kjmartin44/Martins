@@ -1,0 +1,12 @@
+[
+  {
+    "target": "BUB1B",
+    "uniprot": "O60566",
+    "usable": false,
+    "n_docked": 0,
+    "n_failed": 0,
+    "hits": [],
+    "error": "1 measured ligand(s) for BUB1B, below the 5 needed to check whether docking into this pocket works at all. An unvalidated dock produces confident nonsense, so nothing is reported",
+    "refused_before_screening": true
+  }
+]

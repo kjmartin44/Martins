@@ -1,0 +1,18 @@
+symbol	name	role	nuclear_receptor	n_sites	best_rel_score	best_score_bits	best_site_tss_offset	best_site_sequence	matrix_id	chip_peaks	chip_state	score	n_drugs	drugs
+RXRA	retinoid X receptor alpha	unknown	True	2	0.907	14.18	-413	AGGCCACTGACCT	MA1147.2	1	bound	69.2	4	Acitretin; Bexarotene; Sulindac; Etretinate
+OSR2	odd-skipped related transciption factor 2	unknown	False	1	1.0	13.53	51	ACAGAAGC	MA1646.2	1	bound	66.5	0	
+THAP11	THAP domain containing 11	unknown	False	2	0.98	22.69	-160	ACTACAATTCCCAT	MA1573.2	1	bound	66.1	0	
+KLF3	KLF transcription factor 3	unknown	False	1	0.989	15.6	-58	GGCCACGCCC	MA1516.2	1	bound	66.0	0	
+SP3	Sp3 transcription factor	unknown	False	1	0.979	16.11	-60	GCCACGCCCCT	MA0746.3	1	bound	65.6	0	
+KLF16	KLF transcription factor 16	unknown	False	1	0.973	15.11	-60	GCCACGCCCCT	MA0741.1	1	bound	65.4	0	
+ZNF76	zinc finger protein 76	unknown	False	2	0.927	19.14	-152	TCCCATTATGCACCGCG	MA1716.2	1	bound	64.7	0	
+ZNF143	zinc finger protein 143	unknown	False	1	0.923	18.76	-153	TTCCCATTATGCACCG	MA0088.2	1	bound	61.2	0	
+FLI1	Fli-1 proto-oncogene, ETS transcription factor	unknown	False	1	0.866	13.24	-426	GCAGGAAACAGCTA	MA1967.2	1	bound	54.5	0	
+TFAP4	transcription factor AP-4	unknown	False	1	0.866	13.24	-426	GCAGGAAACAGCTA	MA1967.2	1	bound	54.5	0	
+NR1H4	nuclear receptor subfamily 1 group H member 4	unknown	True	1	0.882	13.51	-413	AGGTCAGTGGCCT	MA1146.2	0	not assayed	51.3	3	Chenodiol; Ursodiol; Obeticholic Acid
+FOXD2	forkhead box D2	unknown	False	1	0.931	14.03	-211	CAAAACAAATA	MA0847.4	0	not assayed	46.6	0	
+NR4A2	nuclear receptor subfamily 4 group A member 2	unknown	True	1	0.907	14.18	-413	AGGCCACTGACCT	MA1147.2	0	not assayed	42.2	0	
+NR2F6	nuclear receptor subfamily 2 group F member 6	unknown	True	1	0.876	12.71	-414	TAGGTCAGTGGCCTA	MA1539.1	0	not assayed	41.1	0	
+NR2F1	nuclear receptor subfamily 2 group F member 1	unknown	True	1	0.872	13.61	-414	TAGGCCACTGACCTA	MA1538.1	0	not assayed	40.9	0	
+PRDM9	PR/SET domain 9	unknown	False	1	0.889	12.69	-997	GATGGTCAGAGAGGTGGCAC	MA1723.2	0	not assayed	37.5	0	
+ZNF768	zinc finger protein 768	unknown	False	1	0.979	14.92	-992	ACCTCTCTG	MA1731.2	0	not bound	34.0	0	

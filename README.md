@@ -14,18 +14,24 @@ clinical story of one child. Nothing here has been shown to help with MVA.
 
 ## The pipeline
 
-One run, from a gene and a direction to ranked drug hypotheses. The [detailed flowchart](docs/pipeline_detail.mmd) shows the branches, and [how it works](docs/how-it-works.md) covers the data each step reads.
+One run, from a gene and a direction to ranked drug hypotheses, in the order the eleven stages happen. Stage 8 is where most of the searching is: the [detailed flowchart](docs/pipeline_detail.mmd) opens it out into all eighteen routes, and [how it works](docs/how-it-works.md) covers the data each one reads.
 
 ```mermaid
-flowchart LR
-    A["<b>1 Ask</b><br/>a gene, a direction,<br/>and what is wrong<br/>with the alleles"]
-    B["<b>2 Gather</b><br/>fourteen routes,<br/>in parallel, from the<br/>promoter to the protein"]
-    C["<b>3 Weigh</b><br/>demote what the evidence<br/>cannot carry, drop what<br/>the patient cannot afford"]
-    D["<b>4 Report</b><br/>group by what was measured,<br/>and say which of the six<br/>steps were never asked"]
-    E["<b>5 Test</b><br/>the experiment<br/>that settles it"]
-    A --> B --> C --> D --> E
+flowchart TD
+    S1["<b>1 Resolve the gene</b><br/>pick the transcript, take the promoter"]
+    S2["<b>2 Scan for motifs</b><br/>and ask how many sites chance alone gives"]
+    S3["<b>3 Say what each factor does</b><br/>activator, repressor, or unknown"]
+    S4["<b>4 Was it really bound?</b><br/>measured ChIP over this window"]
+    S5["<b>5 Rank the factors</b><br/>motif, proximity, role, measured binding"]
+    S6["<b>6 Find drugs at each factor</b><br/>and which way each one pushes it"]
+    S7["<b>7 Grade every factor and drug pair</b><br/>potency, selectivity, what else it moves"]
+    S8["<b>8 Skip the factor</b><br/>seventeen further searches, from the<br/>literature record to the gene's own protein"]
+    S9["<b>9 Put every route on one scale</b><br/>a tier for the kind of claim, three axes,<br/>and a distance from the gene"]
+    S10["<b>10 Record what actually ran</b><br/>found something, found nothing, or failed:<br/>never the same thing"]
+    S11["<b>11 Write the outputs</b><br/>the report, the one-page summary,<br/>and the compounds worth a plate"]
+    S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> S7 --> S8 --> S9 --> S10 --> S11
     classDef step fill:#f6f8fa,stroke:#57606a,color:#1f2328
-    class A,B,C,D,E step
+    class S1,S2,S3,S4,S5,S6,S7,S8,S9,S10,S11 step
 ```
 
 ## The six steps between a gene and a protein
@@ -40,7 +46,7 @@ by auditing all six and marking each **searched**, **listed only** or
 |---|---|
 | Transcription | The promoter scan, the factor ligands, the recorded regulators, the upstream network, the literature record and the expression signatures. |
 | Splicing and isoform choice | Exons used only by transcripts the cell destroys, each weighed by how much of the gene's message its isoforms carry in GTEx. |
-| mRNA stability | AU-rich elements, Pumilio sites and the m6A consensus in the 3'UTR, each against a shuffle of the same sequence, and the microRNAs and RNA-binding proteins named for this transcript by TargetScan, miRTarBase and ENCODE eCLIP. |
+| mRNA stability | AU-rich elements, Pumilio sites and the m6A consensus in the 3'UTR, each against a shuffle of the same sequence; the microRNAs and RNA-binding proteins named for this transcript by TargetScan, miRTarBase and ENCODE eCLIP; and measured methylation from REPIC. |
 | Translation | Upstream ORFs in the 5'UTR with the Kozak strength of each, G-quadruplexes, and a 5'TOP motif at the cap. |
 | Folding | A ligand screen against the gene's own protein, which is what a pharmacological chaperone would have to be. |
 | Degradation | The ligase that destroys the protein, the enzyme that reverses it, and compounds measured on the protein itself. |

@@ -57,6 +57,7 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 import re
 import shutil
 import subprocess
@@ -72,13 +73,65 @@ log = logging.getLogger(__name__)
 # The WSL search runs on every engine lookup; it is reported once.
 _WSL_PROBE_REPORTED = False
 
+# Search threads stop paying for themselves well before a large machine
+# runs out of cores, and one docking job should not take the whole
+# machine. An explicit --cpu is never capped: ask for 32 and you get 32.
+MAX_AUTO_CPU = 16
+_CORES: dict = {}
+
+
+def machine_cores() -> int:
+    """Cores on the side the docking binary runs, not on this side.
+
+    A binary in WSL sees the cores WSL was given, which need not be what
+    Windows reports. Asked once and kept, because it costs a subprocess.
+    """
+    binary = _docking_binary()
+    key = "wsl" if (binary or "").startswith("/") else "host"
+    if key not in _CORES:
+        n = os.cpu_count() or 1
+        if key == "wsl":
+            try:
+                from . import wsldock as _wsl
+                n = int(_wsl.run_script("nproc", timeout=30).stdout.strip())
+            except Exception as exc:                        # noqa: BLE001
+                log.debug("could not read the core count inside WSL (%s); "
+                          "using what Windows reports instead",
+                          str(exc)[:80])
+        _CORES[key] = max(1, n)
+    return _CORES[key]
+
+
+def default_cpu(jobs: int = 1) -> int:
+    """Threads for ONE docking job when the caller did not choose.
+
+    Cost is driven by how flexible the ligand is, and threads are the
+    only lever on it: measured here, a sixteen-rotatable-bond ligand
+    takes 166 s on one core and 26 s on eight, for the same scores.
+
+    Divided by `jobs`, which run at the same time: oversubscribing the
+    machine makes every one of them slower.
+    """
+    return max(1, min(MAX_AUTO_CPU, machine_cores() // max(1, jobs)))
+
+
+def _cpu(cpu, jobs: int = 1) -> int:
+    """What the caller asked for, or the machine's answer."""
+    return default_cpu(jobs) if cpu in (None, 0) else int(cpu)
+
+
+def reset_core_count() -> None:
+    """Ask the machine again. For tests."""
+    _CORES.clear()
+
 # How many docking runs may time out through WSL before the rest of the
 # run stops trying. Each timeout costs the full timeout in wall clock and
-# yields nothing, so the second one in a row is already strong evidence
-# that the binary is not coming back rather than that this ligand is
-# hard. Two rather than one: a single genuinely slow ligand should not
-# disable a working setup.
-MAX_WSL_TIMEOUTS = 2
+# yields nothing, so there has to be a limit - but one timeout is not
+# evidence of a broken setup. Docking cost rises steeply with a ligand's
+# rotatable bonds and a library is not sorted by flexibility, so several
+# awkward molecules in succession is ordinary. Set where only a binary
+# that has genuinely stopped returning reaches it.
+MAX_WSL_TIMEOUTS = 5
 _WSL_TIMEOUTS = 0
 _WSL_GIVEN_UP = False
 
@@ -298,7 +351,7 @@ def _docking_binary() -> str | None:
 def dock_one(receptor_pdb: Path, ligand_sdf: Path, *,
              autobox_ligand: Path | None = None,
              exhaustiveness: int = 16, seed: int = 0,
-             cpu: int = 1) -> float | None:
+             cpu: int | None = None) -> float | None:
     """Run one docking job; return the best score in kcal/mol.
 
     Goes through `_run_dock` rather than calling the binary directly,
@@ -320,7 +373,7 @@ def dock_one(receptor_pdb: Path, ligand_sdf: Path, *,
         out = Path(tmp) / "docked.sdf"
         args = ["-r", conv(receptor_pdb), "-l", conv(ligand_sdf),
                 "-o", conv(out), "--exhaustiveness", str(exhaustiveness),
-                "--seed", str(seed), "--cpu", str(cpu)]
+                "--seed", str(seed), "--cpu", str(_cpu(cpu))]
         # Box: reuse the crystallographic ligand when we have one, which
         # is the only reliable way to place the box on the orthosteric
         # pocket.
@@ -430,11 +483,15 @@ def _run_dock(binary: str, args: list, out_sdf: Path, *,
                 log.warning(
                     "docking through WSL timed out %d times in a row at "
                     "%.0f s each, so the rest of this run will not try it. "
-                    "That is a binary that is not returning rather than a "
-                    "hard ligand: check `python -m generoutes.wsldock` for "
-                    "a visible GPU and the CUDA libraries gnina needs. "
-                    "Every compound from here on is reported as not "
-                    "scored, which is not a statement about the compound.",
+                    "Two causes look alike from here. The binary may have "
+                    "stopped returning, which `python -m "
+                    "generoutes.wsldock` shows as no visible GPU or "
+                    "missing CUDA libraries. Or these ligands are simply "
+                    "flexible, which costs far more time than a large box "
+                    "does - raise --cpu, which now follows the machine "
+                    "unless you set it. Every compound from here on is "
+                    "reported as not scored, which is not a statement "
+                    "about the compound.",
                     _WSL_TIMEOUTS, timeout)
             else:
                 log.warning(
@@ -477,7 +534,7 @@ def _dock_args(binary: str, receptor: Path, ligand: Path, out: Path,
             "--size_x", f"{sx:.3f}", "--size_y", f"{sy:.3f}",
             "--size_z", f"{sz:.3f}",
             "--exhaustiveness", str(exhaustiveness),
-            "--seed", str(seed), "--cpu", str(cpu),
+            "--seed", str(seed), "--cpu", str(_cpu(cpu)),
             "--num_modes", str(num_modes)]
     if "gnina" in binary:
         # Rescore every pose, not only the top one, so the CNN can
@@ -487,7 +544,8 @@ def _dock_args(binary: str, receptor: Path, ligand: Path, out: Path,
 
 
 def dock_one_scored(receptor_pdb: Path, ligand_sdf: Path, box: tuple, *,
-                    exhaustiveness: int = 8, seed: int = 0, cpu: int = 1,
+                    exhaustiveness: int = 8, seed: int = 0,
+                    cpu: int | None = None,
                     binary: str | None = None) -> PoseScore | None:
     """Dock one ligand and return every score the program produced."""
     binary = binary or _docking_binary()
@@ -1042,7 +1100,7 @@ _REC_LOCK = threading.Lock()
 
 def _dock_smiles(smiles_list: list, receptor: Path, autobox: Path | None,
                  *, exhaustiveness: int, seed: int, score_fn=None,
-                 box: tuple | None = None, cpu: int = 1,
+                 box: tuple | None = None, cpu: int | None = None,
                  jobs: int = 1, detailed: bool = False,
                  tally: dict | None = None,
                  strip_counter_ions: bool = False) -> list:
@@ -1175,7 +1233,8 @@ def _dock_smiles(smiles_list: list, receptor: Path, autobox: Path | None,
 def validate_pocket(receptor: Path, actives: list, decoys: list, *,
                     autobox: Path | None = None, exhaustiveness: int = 8,
                     seed: int = 0, score_fn=None,
-                    box: tuple | None = None, cpu: int = 1,
+                    box: tuple | None = None,
+                    cpu: int | None = None,
                     jobs: int = 1, strip_counter_ions: bool = False) -> dict:
     """Does docking into THIS pocket recover ligands known to bind it?
 
@@ -1357,7 +1416,7 @@ def screen_by_docking(receptor: Path, library: list, *, target: str = "?",
                       autobox: Path | None = None, top_n: int = 25,
                       exhaustiveness: int = 8, seed: int = 0,
                       score_fn=None, box: tuple | None = None,
-                      cpu: int = 1, jobs: int = 1,
+                      cpu: int | None = None, jobs: int = 1,
                       strip_counter_ions: bool = False) -> DockingScreen:
     """Dock an approved library into one pocket, if the pocket validates.
 
@@ -1750,7 +1809,7 @@ def engine_name(binary: str | None = None) -> str:
 
 def dock_one_boxed(receptor_pdb: Path, ligand_sdf: Path, box: tuple, *,
                    exhaustiveness: int = 8, seed: int = 0,
-                   cpu: int = 1) -> float | None:
+                   cpu: int | None = None) -> float | None:
     """Dock into an explicit box, so the command works on any of the three.
 
     smina and gnina accept a PDB receptor and an SDF ligand and do the
@@ -1951,7 +2010,8 @@ def vina_prep_available() -> tuple:
 
 
 def dock_one_vina(receptor_pdb: Path, smiles: str, box: tuple, *,
-                  exhaustiveness: int = 8, seed: int = 0, cpu: int = 1,
+                  exhaustiveness: int = 8, seed: int = 0,
+                  cpu: int | None = None,
                   receptor_pdbqt_cache: dict | None = None) -> float | None:
     """One Vina dock from a PDB receptor and a SMILES, on any platform.
 
@@ -2011,7 +2071,7 @@ def dock_one_vina(receptor_pdb: Path, smiles: str, box: tuple, *,
                 "--size_x", f"{sx:.3f}", "--size_y", f"{sy:.3f}",
                 "--size_z", f"{sz:.3f}",
                 "--exhaustiveness", str(exhaustiveness),
-                "--seed", str(seed), "--cpu", str(cpu)]
+                "--seed", str(seed), "--cpu", str(_cpu(cpu))]
         stdout, _unused = _run_dock(binary, args, op)
         if stdout is None:
             return None
@@ -2327,7 +2387,7 @@ def dock_screen_for_target(client, symbol: str, uniprot: str, library: list,
                            exhaustiveness: int = 8, seed: int = 0,
                            want_state: str | None = None,
                            state_note: str | None = None,
-                           score_fn=None, cpu: int = 1,
+                           score_fn=None, cpu: int | None = None,
                            jobs: int = 1,
                            strip_counter_ions: bool = False) -> dict:
     """Gene symbol to a validated, ranked shortlist of approved drugs.
@@ -2643,7 +2703,8 @@ def load_bundle(bundle_dir) -> dict:
 
 def dock_from_bundle(bundle_dir, *, top_n: int = 25,
                      exhaustiveness: int = 8, seed: int = 0,
-                     score_fn=None, cpu: int = 1, jobs: int = 1,
+                     score_fn=None, cpu: int | None = None,
+                     jobs: int = 1,
                      strip_counter_ions: bool = False) -> dict:
     """Run the validated screen from a bundle, with no network at all."""
     import random
@@ -2968,10 +3029,13 @@ def main(argv=None) -> int:
                         "diminishing returns, so --jobs 8 --cpu 4 beats "
                         "--cpu 32 by about 2.5x. Scores do not change "
                         "(default 1)")
-    p.add_argument("--cpu", type=int, default=1,
-                   help="cores per docking job. A screen is thousands of "
-                        "independent jobs, so raising this is the single "
-                        "biggest speed-up available (default 1)")
+    p.add_argument("--cpu", type=int, default=None,
+                   help="cores per docking job. Cost is driven by how "
+                        "flexible the ligand is, and threads are the only "
+                        "lever on it, so this is the single biggest "
+                        "speed-up available; the scores do not change. "
+                        "Defaults to the machine's cores divided by "
+                        "--jobs, capped at 16")
     p.add_argument("--strip-counter-ions", action="store_true",
                    help="dock each drug without its salt (chloride, "
                         "calcium, maleate and so on) and with one copy "

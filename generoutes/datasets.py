@@ -325,20 +325,28 @@ def registry() -> tuple:
                  "where every other abundance route reads the transcript",
             supply=AUTO,
             paths=_paths("proteomics", "DEFAULT_PATHS"),
-            url="https://decryptE.kusterlab.org",
-            size="varies",
+            url="https://doi.org/10.1038/s41467-019-13582-8",
+            size="17 MB downloaded, 58 MB built",
+            build="python scripts/setup_data.py --only protein_abundance",
             flag="on by default once the file exists",
             without="every abundance claim in the run is about mRNA, so a "
                     "stabiliser or a degradation blocker is invisible",
             counter=_count_csv_rows, unit="row",
             notes=("decryptE and ProTargetMiner answer this. LINCS P100 "
                    "(~90 phosphopeptides) and CPTAC (no drug arm) do not.",
+                   "The setup script fetches ProTargetMiner's Supplementary "
+                   "Data 1 (55 compounds in A549 cells, 4,557 proteins, a "
+                   "log2 ratio to the control) and builds the table. Many "
+                   "genes are not in it, BUB1B and MYC among them, and the "
+                   "report says so when the gene is absent.",
+                   "decryptE has no bulk table that a script can fetch. Its "
+                   "web app exports the drugs you pick, and "
+                   "`python scripts/build_protein_abundance.py EXPORT` "
+                   "converts that export.",
                    "Columns: drug, protein, log2fc [, cell_line, dose, "
                    "time, source].",
-                   "`python scripts/build_protein_abundance.py EXPORT` "
-                   "converts either export into that layout. It keeps "
-                   "every replicate, because a compound with one "
-                   "observation is not reported.",),
+                   "The converter keeps every replicate, because a compound "
+                   "with one observation is not reported.",),
         ),
         Dataset(
             key="transcript_expression",
@@ -377,9 +385,9 @@ def registry() -> tuple:
                    "source].",
                    "TargetScan (predicted miRNA sites), miRTarBase "
                    "(measured ones), ENCODE eCLIP (RBP footprints) and "
-                   "an m6A atlas all reshape into this one table.",
+                   "the REPIC m6A atlas all reshape into this one table.",
                    "`python scripts/setup_data.py --only "
-                   "transcript_sites` downloads all three and builds the "
+                   "transcript_sites` downloads all four and builds the "
                    "table. To place the files yourself, reshape them with "
                    "`python scripts/build_transcript_sites.py`, which "
                    "reads the files you pass and fetches nothing.",
@@ -388,7 +396,11 @@ def registry() -> tuple:
                    "than claiming the protein sits in a UTR.",
                    "miRTarBase's weak class is screen hits rather than "
                    "direct assays, and 7.3M of its 7.34M human rows, so "
-                   "the builder leaves it out unless asked.",),
+                   "the builder leaves it out unless asked.",
+                   "An m6A row has no factor, because a methylation site "
+                   "is a position and not a protein. The proteins that "
+                   "write, erase and read the mark - FTO, RBM15, IGF2BP1, "
+                   "IGF2BP2, HNRNPC - come in as eCLIP rows instead.",),
         ),
         Dataset(
             key="ctd_fame",

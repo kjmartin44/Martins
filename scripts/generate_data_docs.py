@@ -115,17 +115,20 @@ next best thing.
 
 ## Terms, and what this repository ships
 
-**The repository ships none of the tables below.** Each accepted
+**The repository ships none of the downloads below.** Each accepted
 filename has its own rule in `.gitignore`, so a download you drop into
 `data/` stays out of git, and the installed wheel carries no data at
 all — `MANIFEST.in` does not include `data/` and the package finder
 takes only `generoutes*`.
 
-One file under `data/` *is* tracked, and it is not one of these:
-`data/hpa.tsv`, a small tissue-to-organ lookup. It has `Tissue` and
-`Organ` columns and is **not** an expression matrix — the table that
-answers "how much of this gene is in this tissue" is the HPA consensus
-download listed below.
+Four small files under `data/` *are* tracked, so a fresh clone can
+screen a library and run the dose check before any download:
+`approved_library.tsv` (built from ChEMBL, CC BY-SA 3.0) and the two
+`fda_label_cmax` tables (read from FDA labels through openFDA, CC0), and
+`hpa.tsv`, a small tissue-to-organ lookup. `data/README.md` gives their
+sources and terms. `hpa.tsv` has `Tissue` and `Organ` columns and is
+**not** an expression matrix — the table that answers "how much of this
+gene is in this tissue" is the HPA consensus download listed below.
 
 That matters the moment you do. Each source sets its own terms on the
 page its entry links to, and they are not uniform: some require

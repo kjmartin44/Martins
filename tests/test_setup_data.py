@@ -459,13 +459,10 @@ def test_every_table_the_registry_names_is_fetched_or_explained():
     # ctd_fame: counted from your own saved runs by build_fame_table.py,
     # so there is nothing to fetch - it does not exist until you have run
     # some genes.
-    # drug_protein_abundance: no public file to fetch - decryptE and
-    # ProTargetMiner are downloads a person makes and places by hand.
     # transcript_expression: fetched live from the GTEx API when no file
     # is there, so there is nothing for the setup script to place.
     assert uncovered == {"chembl", "genome", "fda_label_cmax",
-                         "ctd_fame", "drug_protein_abundance",
-                         "transcript_expression"}, uncovered
+                         "ctd_fame", "transcript_expression"}, uncovered
 
 
 def test_the_batch_wrapper_and_the_launcher_point_at_the_script():
@@ -537,7 +534,14 @@ def test_the_launcher_analysis_and_funnel_commands_parse_with_the_real_parsers()
 
 def test_the_launcher_passes_every_analysis_switch_the_cli_offers():
     """Which CLI switches the launcher leaves out is a choice made here, so a
-    new analysis flag cannot be left off unnoticed."""
+    new analysis flag cannot be left off unnoticed.
+
+    Taking an entry OFF this list turns it into an assertion that the
+    launcher passes it. `--has-ptc` and `--avoid-genotoxic` were on it,
+    with a note saying the launcher could not know a declaration about
+    the patient - and then the launcher learned to ask. They are off the
+    list now, so if it ever stops asking, this fails.
+    """
     from generoutes import cli
     text = (ROOT / "scripts" / "run_everything.bat").read_text(
         encoding="utf-8")
@@ -545,23 +549,22 @@ def test_the_launcher_passes_every_analysis_switch_the_cli_offers():
         # a different input source, or found by name under data/
         "--species", "--min-ic", "--matrix-id", "--genome", "--promoter-fasta",
         "--knockout-gmt", "--lincs-file", "--signature-file", "--prism-file",
+        "--depmap-file",
         # limits whose defaults are what the launcher wants
         "--upstream-drugs-per-node", "--null-shuffles",
+        # how the run is cached and bounded, which the launcher settles
+        # its own way rather than passing through
+        "--cache-dir", "--max-requests",
         # off on purpose: leads with no direction
         "--regulator-measured",
-        # the opposite of a default the launcher wants
-        "--no-widen",
-        "--no-ctd-route",
-        "--depmap-file", "--cache-dir", "--max-requests",
-        # opposite of a default, or narrows the output
-        "--no-mask-repeats", "--include-unknown-direction",
-        "--include-local-only", "--include-investigational",
-        "--include-non-fda", "--no-dgidb", "--no-opentargets", "--quiet",
-        # about the run's mode, or about a particular gene or patient
-        "--demo", "--offline", "--has-ptc", "--help",
-        # a declaration about the patient, like --has-ptc: the launcher
-        # cannot know it, and defaulting it either way would be a claim
-        "--avoid-genotoxic",
+        # the opposite of a default the launcher wants, or narrows the
+        # output it is trying to produce in full
+        "--no-widen", "--no-ctd-route", "--no-mask-repeats",
+        "--no-dgidb", "--no-opentargets", "--quiet",
+        "--include-unknown-direction", "--include-local-only",
+        "--include-investigational", "--include-non-fda",
+        # about the run's mode rather than about the analysis
+        "--demo", "--offline", "--help",
     }
     missing = []
     for a in cli.build_parser()._actions:
@@ -576,8 +579,9 @@ def test_the_launcher_passes_every_analysis_switch_the_cli_offers():
 def test_every_filename_the_loaders_accept_is_ignored_by_git():
     """A download or a built table must not be committed by accident.
 
-    The only tracked file under data/ is the small tissue lookup, so any other
-    name a loader accepts has to match a rule in .gitignore.
+    Four small files ship on purpose and are listed in data/README.md with their
+    sources and terms. Any other name a loader accepts has to match a rule in
+    .gitignore, and each shipped file has to be described there.
     """
     import subprocess
 
@@ -585,6 +589,14 @@ def test_every_filename_the_loaders_accept_is_ignored_by_git():
 
     if not (ROOT / ".git").exists():
         pytest.skip("not a git checkout")
+    shipped = {"data/approved_library.tsv", "data/fda_label_cmax.tsv",
+               "data/fda_label_cmax_review.tsv"}
+    readme = (ROOT / "data" / "README.md").read_text(encoding="utf-8")
+    for p in sorted(shipped):
+        ignored = subprocess.run(["git", "check-ignore", "-q", p], cwd=ROOT,
+                                 capture_output=True).returncode == 0
+        assert not ignored, f"{p} ships on purpose but .gitignore hides it"
+        assert Path(p).name in readme, f"{p} is not described in data/README.md"
     tracked = set(subprocess.run(
         ["git", "ls-files", "data"], cwd=ROOT, capture_output=True,
         text=True).stdout.split())
@@ -592,9 +604,50 @@ def test_every_filename_the_loaders_accept_is_ignored_by_git():
     for d in datasets.registry():
         for p in d.paths:
             p = str(p).replace("\\", "/")
-            if not p.startswith("data/") or p in tracked:
+            if not p.startswith("data/") or p in tracked or p in shipped:
                 continue
             if subprocess.run(["git", "check-ignore", "-q", p], cwd=ROOT,
                               capture_output=True).returncode != 0:
                 loose.append(p)
     assert not loose, f"not in .gitignore: {loose}"
+
+
+
+def test_setup_fetches_the_workbook_then_builds_the_table(tmp_path,
+                                                         monkeypatch):
+    from generoutes import proteomics
+    from test_launcher_scripts import PTM_ROWS, _hgnc_file, _workbook
+    import build_protein_abundance as bpa
+
+    data = tmp_path / "data"
+    data.mkdir()
+    _hgnc_file(data)
+    asked = []
+
+    def fake(url, dest, check=None, retries=3):
+        asked.append(url)
+        Path(dest).parent.mkdir(parents=True, exist_ok=True)
+        _workbook(dest, PTM_ROWS)
+    monkeypatch.setattr(sd, "download", fake)
+    by = {i.key: i for i in sd.items()}
+    assert not sd.present(by["protein_abundance"], data)
+    assert sd.fetch_all(data, [by["protein_abundance"]]) == {
+        "protein_abundance": None}
+    assert sd.present(by["protein_abundance"], data)
+    assert asked == [bpa.PROTARGETMINER_URL]
+    assert (data / "protein_abundance_src").is_dir(), "the workbook is kept"
+    assert proteomics.load("TYMS", want="up",
+                           path=str(data / "drug_protein_abundance.tsv"))
+
+
+def test_setup_will_not_build_the_protein_table_without_hgnc(tmp_path,
+                                                            monkeypatch):
+    from test_launcher_scripts import PTM_ROWS, _workbook
+
+    monkeypatch.setattr(sd, "download",
+                        lambda url, dest, check=None, retries=3:
+                        _workbook(dest, PTM_ROWS))
+    by = {i.key: i for i in sd.items()}
+    out = sd.fetch_all(tmp_path, [by["protein_abundance"]])
+    assert "hgnc" in out["protein_abundance"].lower()
+    assert not (tmp_path / "drug_protein_abundance.tsv").exists()

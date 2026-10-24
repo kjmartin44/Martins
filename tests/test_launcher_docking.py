@@ -771,3 +771,99 @@ def test_an_ordinary_ligand_is_minimised_quietly(tmp_path, caplog):
                                     tmp_path / "asa.sdf")
     assert out.exists()
     assert not [r for r in caplog.records if "no force field" in r.message]
+
+
+# ===================================================================== #
+# Docking cost is driven by ligand flexibility, and threads are the only #
+# lever on it. The default has to follow the machine, not be 1.          #
+# ===================================================================== #
+def test_the_cpu_default_follows_the_machine(monkeypatch):
+    """One thread on a forty-core machine was the whole problem: a
+    sixteen-rotatable-bond ligand took 166 s on one core and 26 s on
+    eight, for identical scores."""
+    from generoutes import docking
+
+    monkeypatch.setattr(docking, "_CORES", {"host": 40})
+    monkeypatch.setattr(docking, "_docking_binary", lambda: "smina.exe")
+    assert docking.default_cpu() == docking.MAX_AUTO_CPU
+    assert docking.machine_cores() == 40
+
+
+def test_parallel_jobs_share_the_machine_rather_than_oversubscribe_it():
+    """jobs x cpu threads all run at once; asking for more than the
+    machine has makes every one of them slower."""
+    from generoutes import docking
+
+    docking._CORES.clear()
+    docking._CORES["host"] = 32
+    try:
+        import unittest.mock as m
+        with m.patch.object(docking, "_docking_binary",
+                            lambda: "smina.exe"):
+            assert docking.default_cpu(jobs=1) == 16     # the cap
+            assert docking.default_cpu(jobs=4) == 8
+            assert docking.default_cpu(jobs=64) == 1     # never zero
+    finally:
+        docking.reset_core_count()
+
+
+def test_an_explicit_cpu_is_never_overridden_or_capped():
+    """Somebody who asks for a number has a reason - reproducing an
+    earlier run, or leaving the machine free for something else."""
+    from generoutes import docking
+
+    assert docking._cpu(2) == 2
+    assert docking._cpu(64) == 64
+    # None and 0 both mean "decide for me".
+    assert docking._cpu(None) >= 1
+    assert docking._cpu(0) >= 1
+
+
+def test_the_docking_arguments_carry_the_resolved_cpu(tmp_path,
+                                                      monkeypatch):
+    """The resolution has to happen where the flag is written, or a
+    None passed down from a caller reaches the binary as the string
+    'None'."""
+    from generoutes import docking
+
+    monkeypatch.setattr(docking, "_CORES", {"host": 8})
+    monkeypatch.setattr(docking, "_docking_binary", lambda: "smina.exe")
+    args = docking._dock_args(
+        "smina.exe", tmp_path / "r.pdb", tmp_path / "l.sdf",
+        tmp_path / "o.sdf", (0, 0, 0, 20, 20, 20),
+        exhaustiveness=8, seed=0, cpu=None)
+    assert "--cpu" in args
+    assert args[args.index("--cpu") + 1] == "8"
+
+
+def test_the_breaker_tolerates_a_run_of_slow_ligands():
+    """Two awkward molecules in succession is ordinary in a library that
+    is not sorted by flexibility, and must not disable docking."""
+    from generoutes import docking
+
+    assert docking.MAX_WSL_TIMEOUTS >= 4
+
+
+def test_the_breaker_message_names_both_causes(tmp_path, monkeypatch,
+                                               caplog):
+    """A timeout no longer means only a broken binary, so the line that
+    reports it must not say that it does."""
+    import logging
+    import subprocess
+
+    from generoutes import docking, wsldock
+
+    def boom(*a, **k):
+        raise subprocess.TimeoutExpired(cmd="wsl.exe", timeout=1800)
+
+    monkeypatch.setattr(wsldock, "run_script", boom)
+    docking.reset_wsl_breaker()
+    try:
+        with caplog.at_level(logging.WARNING, logger="generoutes.docking"):
+            for _ in range(docking.MAX_WSL_TIMEOUTS):
+                docking._run_dock("/usr/bin/gnina", [], tmp_path / "o.sdf")
+        said = " ".join(r.message for r in caplog.records)
+        assert "flexible" in said and "--cpu" in said
+        assert "wsldock" in said
+    finally:
+        docking.reset_wsl_breaker()
