@@ -72,6 +72,22 @@ log = logging.getLogger(__name__)
 # The WSL search runs on every engine lookup; it is reported once.
 _WSL_PROBE_REPORTED = False
 
+# How many docking runs may time out through WSL before the rest of the
+# run stops trying. Each timeout costs the full timeout in wall clock and
+# yields nothing, so the second one in a row is already strong evidence
+# that the binary is not coming back rather than that this ligand is
+# hard. Two rather than one: a single genuinely slow ligand should not
+# disable a working setup.
+MAX_WSL_TIMEOUTS = 2
+_WSL_TIMEOUTS = 0
+_WSL_GIVEN_UP = False
+
+
+def reset_wsl_breaker() -> None:
+    """Try WSL again. For tests, and after fixing an installation."""
+    global _WSL_TIMEOUTS, _WSL_GIVEN_UP
+    _WSL_TIMEOUTS, _WSL_GIVEN_UP = 0, False
+
 RCSB_SEARCH = "https://search.rcsb.org/rcsbsearch/v2/query"
 RCSB_FILE = "https://files.rcsb.org/download"
 
@@ -395,14 +411,43 @@ def _run_dock(binary: str, args: list, out_sdf: Path, *,
     """
     from . import wsldock as _wsl
 
+    global _WSL_TIMEOUTS, _WSL_GIVEN_UP
+
     is_wsl = binary.startswith("/")
     if is_wsl:
+        if _WSL_GIVEN_UP:
+            # Silent: the reason was logged once when the breaker tripped,
+            # and repeating it per ligand is how the original six lines
+            # buried everything else in the log.
+            return None, ""
         script = _wsl.dock_script(binary, args)
         try:
             proc = _wsl.run_script(script, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            _WSL_TIMEOUTS += 1
+            if _WSL_TIMEOUTS >= MAX_WSL_TIMEOUTS:
+                _WSL_GIVEN_UP = True
+                log.warning(
+                    "docking through WSL timed out %d times in a row at "
+                    "%.0f s each, so the rest of this run will not try it. "
+                    "That is a binary that is not returning rather than a "
+                    "hard ligand: check `python -m generoutes.wsldock` for "
+                    "a visible GPU and the CUDA libraries gnina needs. "
+                    "Every compound from here on is reported as not "
+                    "scored, which is not a statement about the compound.",
+                    _WSL_TIMEOUTS, timeout)
+            else:
+                log.warning(
+                    "docking through WSL timed out after %.0f s; %d more "
+                    "will stop this run from trying it again",
+                    timeout, MAX_WSL_TIMEOUTS - _WSL_TIMEOUTS)
+            return None, ""
         except Exception as exc:                            # noqa: BLE001
             log.warning("WSL docking failed: %s", str(exc)[:160])
             return None, ""
+        # A run that came back resets the count: the setup is working and
+        # one slow ligand earlier should not count against it.
+        _WSL_TIMEOUTS = 0
     else:
         try:
             proc = subprocess.run([binary] + [str(a) for a in args],
@@ -587,10 +632,46 @@ def split_counter_ions(smiles: str) -> dict:
             "n_fragments": len(frags), "ambiguous": len(keep) > 1}
 
 
-def smiles_to_sdf(smiles: str, path: Path, n_confs: int = 1, seed: int = 0) -> Path:
-    """3D-embed and minimise a ligand ready for docking."""
-    from rdkit import Chem
+def _minimise(mol, smiles: str) -> bool:
+    """Relax a conformer, MMFF first and UFF second, or say it could not be.
+
+    `MMFFOptimizeMolecule` returns -1 when it cannot set the molecule up,
+    which looks like every other return value unless it is read. Both
+    force fields refuse the same unusual elements, so a UFF attempt is
+    worth one line and succeeds for some of what MMFF rejects.
+    """
     from rdkit.Chem import AllChem
+
+    if AllChem.MMFFHasAllMoleculeParams(mol):
+        AllChem.MMFFOptimizeMolecule(mol, maxIters=500)
+        return True
+    if AllChem.UFFHasAllMoleculeParams(mol):
+        AllChem.UFFOptimizeMolecule(mol, maxIters=500)
+        return True
+    log.info("no force field covers %s, so its conformer is the raw "
+             "embedding rather than a minimised one; the pose is still "
+             "docked and the geometry is one step less settled", smiles)
+    return False
+
+
+def smiles_to_sdf(smiles: str, path: Path, n_confs: int = 1, seed: int = 0) -> Path:
+    """3D-embed and minimise a ligand ready for docking.
+
+    Minimisation is best effort. MMFF and UFF both have atom types only
+    for the elements they were parameterised on, and divalent selenium is
+    not among them - so for a ligand like ebselen `MMFFOptimizeMolecule`
+    returns -1 and changes nothing. The embedding is still a reasonable
+    geometry and docking runs on it, but it has not been relaxed, and the
+    run says so rather than leaving it to a stray UFFTYPER line on
+    stderr.
+    """
+    from rdkit import Chem, RDLogger
+    from rdkit.Chem import AllChem
+
+    # ETKDG does its own UFF cleanup and announces every atom it cannot
+    # type, once per conformer, straight to stderr. The message is about
+    # the force field and not about this run.
+    RDLogger.DisableLog("rdApp.*")
 
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
@@ -631,7 +712,7 @@ def smiles_to_sdf(smiles: str, path: Path, n_confs: int = 1, seed: int = 0) -> P
     else:
         if AllChem.EmbedMolecule(mol, params) != 0:
             raise ValueError("3D embedding failed")
-        AllChem.MMFFOptimizeMolecule(mol, maxIters=500)
+        _minimise(mol, smiles)
 
     with Chem.SDWriter(str(path)) as w:
         w.write(mol)

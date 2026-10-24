@@ -96,9 +96,13 @@ def _curl(url: str, part: Path) -> None:
     exe = shutil.which("curl.exe") or shutil.which("curl")
     if not exe:
         raise OSError("curl is not on PATH")
-    done = subprocess.run([exe, "-fsSL", "--retry", "2", "-A", AGENT,
-                           "-o", str(part), url],
-                          capture_output=True, timeout=3600)
+    # -C - resumes from what is already in the part file, so a connection the
+    # server drops partway (miRTarBase does, after about 450 MB of 974 MB)
+    # continues instead of starting again.
+    done = subprocess.run([exe, "-fsSL", "-C", "-", "--retry", "6",
+                           "--retry-delay", "10", "--retry-all-errors",
+                           "-A", AGENT, "-o", str(part), url],
+                          capture_output=True, timeout=4 * 3600)
     if done.returncode:
         raise OSError(f"curl exit {done.returncode}: "
                       f"{(done.stderr or b'').decode('utf-8', 'replace').strip()[-200:]}")

@@ -311,9 +311,15 @@ predicted ones apart.
 curl -fL -o Predicted_Targets_Info.default_predictions.txt.zip \
   "https://www.targetscan.org/vert_80/vert_80_data_download/Predicted_Targets_Info.default_predictions.txt.zip"
 unzip Predicted_Targets_Info.default_predictions.txt.zip
-curl -fL -o hsa_MTI.csv \
+curl -fL -C - --retry 6 --retry-delay 10 --retry-all-errors -o hsa_MTI.csv \
   "https://awi.cuhk.edu.cn/miRTarBase/downloads/files/11.0/hsa_MTI.csv"
 ```
+
+The miRTarBase file is about 974 MB, and the server closed the connection
+partway through (at about 444 MB on 2026-10-23). `-C -` continues from what is
+already on disk, and the retry flags do it again after a drop. At 100 to 250 KB/s
+the file takes one to two hours. The server answers 403 for a while after
+several quick requests, so do not restart the command in a loop.
 
 The ENCODE eCLIP peaks are 252 files, one per RNA-binding protein and cell
 line. Ask the portal which they are, then save each under a name that starts

@@ -643,3 +643,131 @@ def test_a_limit_that_drops_nothing_is_silent_and_a_copy(caplog):
     assert got == rows and none == rows
     assert got is not rows, "a copy, not the caller's list"
     assert not caplog.records
+
+
+# ===================================================================== #
+# A docking binary that stops returning must not be asked again. Each    #
+# timeout costs the whole timeout and yields nothing.                    #
+# ===================================================================== #
+def _always_times_out(monkeypatch):
+    import subprocess
+
+    from generoutes import wsldock
+
+    def boom(*a, **k):
+        raise subprocess.TimeoutExpired(cmd="wsl.exe", timeout=1800)
+
+    monkeypatch.setattr(wsldock, "run_script", boom)
+
+
+def test_wsl_docking_stops_after_repeated_timeouts(tmp_path, monkeypatch):
+    """Six timeouts at half an hour each is three hours that produced no
+    scores. The second one is already enough to know."""
+    from generoutes import docking
+
+    _always_times_out(monkeypatch)
+    docking.reset_wsl_breaker()
+    try:
+        for _ in range(docking.MAX_WSL_TIMEOUTS):
+            assert docking._run_dock("/usr/bin/gnina", [],
+                                     tmp_path / "o.sdf") == (None, "")
+        assert docking._WSL_GIVEN_UP is True
+
+        # And from here it must return without waiting on anything.
+        called = []
+        monkeypatch.setattr(
+            docking, "_wsl_marker", None, raising=False)
+        from generoutes import wsldock
+        monkeypatch.setattr(wsldock, "run_script",
+                            lambda *a, **k: called.append(1))
+        assert docking._run_dock("/usr/bin/gnina", [],
+                                 tmp_path / "o.sdf") == (None, "")
+        assert called == [], "a given-up engine was asked again"
+    finally:
+        docking.reset_wsl_breaker()
+
+
+def test_a_run_that_comes_back_clears_the_timeout_count(tmp_path,
+                                                        monkeypatch):
+    """One slow ligand in the middle of a working screen is not evidence
+    that the binary is gone."""
+    import subprocess
+
+    from generoutes import docking, wsldock
+
+    docking.reset_wsl_breaker()
+    try:
+        calls = {"n": 0}
+
+        def sometimes(*a, **k):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise subprocess.TimeoutExpired(cmd="wsl.exe", timeout=1)
+            return subprocess.CompletedProcess(["x"], 0, "ok", "")
+
+        monkeypatch.setattr(wsldock, "run_script", sometimes)
+        docking._run_dock("/usr/bin/gnina", [], tmp_path / "o.sdf")
+        assert docking._WSL_TIMEOUTS == 1
+        docking._run_dock("/usr/bin/gnina", [], tmp_path / "o.sdf")
+        assert docking._WSL_TIMEOUTS == 0
+        assert docking._WSL_GIVEN_UP is False
+    finally:
+        docking.reset_wsl_breaker()
+
+
+def test_a_windows_binary_is_unaffected_by_the_wsl_breaker(tmp_path,
+                                                           monkeypatch):
+    """The breaker is about one transport, not about docking."""
+    from generoutes import docking
+
+    docking.reset_wsl_breaker()
+    try:
+        docking._WSL_GIVEN_UP = True
+        seen = {}
+
+        def fake_run(cmd, **kw):
+            import subprocess as sp
+            seen["cmd"] = cmd
+            return sp.CompletedProcess(cmd, 0, "", "")
+
+        monkeypatch.setattr(docking.subprocess, "run", fake_run)
+        docking._run_dock("smina.exe", [], tmp_path / "o.sdf")
+        assert seen["cmd"][0] == "smina.exe"
+    finally:
+        docking.reset_wsl_breaker()
+
+
+# ===================================================================== #
+# A ligand no force field covers is embedded but not relaxed, and the    #
+# run has to say so rather than claim it was minimised.                  #
+# ===================================================================== #
+def test_a_selenium_ligand_is_written_without_a_force_field(tmp_path,
+                                                            caplog):
+    """Ebselen. MMFF and UFF both refuse divalent selenium, and
+    MMFFOptimizeMolecule returns -1 rather than raising - which is
+    invisible unless the return value is read."""
+    pytest = __import__("pytest")
+    pytest.importorskip("rdkit")
+    import logging
+
+    from generoutes import docking
+
+    with caplog.at_level(logging.INFO, logger="generoutes.docking"):
+        out = docking.smiles_to_sdf("O=C1N(c2ccccc2)[Se]c2ccccc21",
+                                    tmp_path / "se.sdf")
+    assert out.exists() and out.stat().st_size > 0
+    assert any("no force field covers" in r.message for r in caplog.records)
+
+
+def test_an_ordinary_ligand_is_minimised_quietly(tmp_path, caplog):
+    pytest = __import__("pytest")
+    pytest.importorskip("rdkit")
+    import logging
+
+    from generoutes import docking
+
+    with caplog.at_level(logging.INFO, logger="generoutes.docking"):
+        out = docking.smiles_to_sdf("CC(=O)Oc1ccccc1C(=O)O",
+                                    tmp_path / "asa.sdf")
+    assert out.exists()
+    assert not [r for r in caplog.records if "no force field" in r.message]
