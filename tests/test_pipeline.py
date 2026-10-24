@@ -10004,36 +10004,79 @@ def test_every_third_party_import_is_declared_in_pyproject():
         + ". Add it to pyproject.toml and to docs/dependencies.md.")
 
 
+def _declared_requirements():
+    """`(runtime, {extra: [requirement]})` read out of pyproject.toml.
+
+    By regular expression, not `tomllib`: that exists only from 3.11 and
+    this package supports 3.10. The requires-python test above says so
+    in its own docstring, having been caught by it once - and both of
+    the tests below were then written with `tomllib` anyway, so CI on
+    3.10 failed with ModuleNotFoundError while every other job passed.
+    """
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    text = (root / "pyproject.toml").read_text(encoding="utf-8")
+
+    def names(body):
+        return re.findall(r'"([^"]+)"', body)
+
+    m = re.search(r"^dependencies\s*=\s*\[(.*?)\]", text, re.S | re.M)
+    runtime = names(m.group(1)) if m else []
+
+    extras = {}
+    sec = re.search(r"^\[project\.optional-dependencies\]$(.*?)(?=^\[)",
+                    text, re.S | re.M)
+    if sec:
+        for name, body in re.findall(
+                r"^([A-Za-z0-9_.-]+)\s*=\s*\[(.*?)\]", sec.group(1),
+                re.S | re.M):
+            extras[name] = names(body)
+    return runtime, extras
+
+
+def _requirement_name(spec):
+    """`rdkit` from `rdkit>=2023.9`."""
+    return spec.split(">")[0].split("<")[0].split("=")[0].split("[")[0].strip()
+
+
+def test_the_pyproject_parse_finds_what_is_there():
+    """The two tests below rest on a regex, so the regex gets a test.
+
+    A parse that quietly returned nothing would make both of them pass
+    on an empty set and assert nothing at all.
+    """
+    runtime, extras = _declared_requirements()
+    assert runtime == ["numpy>=1.24"], runtime
+    assert set(extras) >= {"chemistry", "dev", "docking", "data"}, extras
+    assert "rdkit>=2023.9" in extras["chemistry"]
+    assert "meeko>=0.5" in extras["docking"]
+
+
 def test_numpy_is_still_the_only_required_runtime_dependency():
     """The point of the extras. A package whose point is that it runs
     wherever Python does cannot grow a compiled requirement by
     accident."""
-    import tomllib
-    from pathlib import Path
-
-    root = Path(__file__).resolve().parent.parent
-    with open(root / "pyproject.toml", "rb") as fh:
-        data = tomllib.load(fh)
-    required = data["project"]["dependencies"]
-    assert [r.split(">")[0].split("=")[0].strip() for r in required] == [
-        "numpy"]
+    runtime, _ = _declared_requirements()
+    assert [_requirement_name(r) for r in runtime] == ["numpy"]
 
 
 def test_the_dependency_page_names_every_declared_package():
     """One page lists them, and a package declared but unlisted is one
     nobody can find out about."""
-    import tomllib
     from pathlib import Path
 
     root = Path(__file__).resolve().parent.parent
-    with open(root / "pyproject.toml", "rb") as fh:
-        data = tomllib.load(fh)
     page = (root / "docs" / "dependencies.md").read_text(encoding="utf-8")
 
-    declared = list(data["project"]["dependencies"])
-    for extra in data["project"]["optional-dependencies"].values():
-        declared += list(extra)
-    absent = sorted({r.split(">")[0].split("=")[0].strip() for r in declared}
+    runtime, extras = _declared_requirements()
+    declared = list(runtime)
+    for reqs in extras.values():
+        declared += list(reqs)
+    assert len(declared) > 5, "the parse found almost nothing; check it"
+
+    absent = sorted({_requirement_name(r) for r in declared}
                     - {w.strip("`,.|") for w in page.replace("|", " ").split()})
     # openbabel-wheel is listed under its module name, which is what you
     # type to import it and what the error message says.
