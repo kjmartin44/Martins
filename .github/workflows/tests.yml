@@ -26,11 +26,14 @@ jobs:
       - name: Source must parse on this Python
         run: python -m compileall -q generoutes scripts tests
       - run: python -m pip install -e ".[dev,chemistry]"
-      # -rs names every skipped test. About ten skip when an
-      # optional file is absent from data/, which on a clean
-      # checkout is always - so they run only on a maintainer's
-      # machine, and without this nothing says which ones.
-      - run: python -m pytest -q -rs
+      # -rfEs, not -rs: `-r` REPLACES the default `fE`, so `-rs`
+      # alone stops the summary listing failures and a red run
+      # says only how many there were. `s` is there because
+      # about ten tests skip when an optional file is absent
+      # from data/, which on a clean checkout is always - they
+      # run only on a maintainer's machine, and without this
+      # nothing says which ones.
+      - run: python -m pytest -q -rfEs
         env:
           GENEROUTES_CACHE: ${{ runner.temp }}/ptd-cache
       - run: python scripts/generate_cli_docs.py

@@ -72,8 +72,13 @@ Thumbs.db
 /data/*.gtf
 /data/*.gtf.gz
 
+# Both spellings of each: git matches these case-sensitively on
+# Linux and case-insensitively on Windows, so a rule written in one
+# case passes locally and fails in CI. The registry accepts both.
 /data/CRISPR*.csv
+/data/crispr*.csv
 /data/Model.csv
+/data/model.csv
 /data/depmap*.csv
 
 /docking_work/
@@ -111,9 +116,13 @@ Thumbs.db
 /data/repurposing_hub.tsv
 # PRISM and expression matrices for the sensitivity scan.
 /data/Repurposing_Public*
+# The registry also accepts the name with the PRISM_ prefix, which
+# the rule above does not reach.
+/data/PRISM_Repurposing_Public*
 /data/prism_*.csv
 /data/OmicsExpression*
 /data/CCLE_expression*
+/data/ccle_expression*
 
 /data/products.txt
 /data/Products.txt
