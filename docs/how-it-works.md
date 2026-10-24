@@ -43,8 +43,9 @@ recorded. For a minus-strand gene the start is the transcript's end. With
 bases before the start and 200 after.
 
 **2. Scan the promoter for motifs.** Position-weight matrices from JASPAR are
-slid along the sequence and a site is called at a p-value of 1e-4 (the command
-default; the launcher uses 1e-5). Each strand has its own threshold, and a
+slid along the sequence and a site is called at a p-value of 1e-5. A looser
+threshold scans wider and returns mostly chance: the same BUB1B window gives 17
+sites at 45% false discovery here, and 747 at 80% under `--pvalue 1e-4`. Each strand has its own threshold, and a
 matrix whose best possible match is more common than that p-value in the window
 is not scanned, because every hit it gave would be a chance match at a higher
 rate than stated. Overlapping calls are collapsed. The run reports how many

@@ -79,7 +79,7 @@ under their usual names are found without a flag (marked auto).
 | `--direction` | `up` | raise (`up`) or lower (`down`) the gene |
 | `--upstream` | `1000` | bases before the start site that are scanned |
 | `--downstream` | `200` | bases after it |
-| `--pvalue` | `0.0001` | per-position threshold for calling a motif site (the launcher uses 1e-5) |
+| `--pvalue` | `1e-05` | per-position threshold for calling a motif site. Looser values scan wider and return mostly chance: the same BUB1B window gives 17 sites at 45% false discovery here, and 747 at 80% under `1e-4`. |
 | `--min-ic` | `6.0` | drops motifs below this many bits of information |
 | `--tf-weight` | `0.5` | share of a factor's grade that rests on the promoter call (the launcher uses 0.7 with ChIP data) |
 | `--proliferation` | `unknown` | cycling, post-mitotic, mixed or unknown |

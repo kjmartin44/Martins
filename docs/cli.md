@@ -64,8 +64,10 @@ options:
                         bp 3' of the TSS (default: 200)
   --all-tss             scan every distinct TSS, not just the MANE/canonical
                         one (default: False)
-  --pvalue PVALUE       per-position false-positive rate for motif hits
-                        (default: 0.0001)
+  --pvalue PVALUE       per-position false-positive rate for motif hits (1e-4
+                        scans wider and is mostly chance: on BUB1B it gave 747
+                        sites at 80% false discovery against 17 at 45%)
+                        (default: 1e-05)
   --min-ic MIN_IC       drop matrices below this information content (bits)
                         (default: 6.0)
   --pfm-file PFM_FILE   local JASPAR-format PFM file (recommended) (default:
@@ -510,7 +512,9 @@ options:
                         bp 3' of the TSS
   --all-tss             scan every distinct TSS, not just the MANE/canonical
                         one
-  --pvalue PVALUE       per-position false-positive rate for motif hits
+  --pvalue PVALUE       per-position false-positive rate for motif hits (1e-4
+                        scans wider and is mostly chance: on BUB1B it gave 747
+                        sites at 80% false discovery against 17 at 45%)
   --min-ic MIN_IC       drop matrices below this information content (bits)
   --pfm-file PFM_FILE   local JASPAR-format PFM file (recommended)
   --matrix-id MATRIX_IDS

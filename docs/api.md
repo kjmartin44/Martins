@@ -24,7 +24,7 @@ the five `pathlib.Path` objects written there. Existing output files are replace
 | --- | --- | --- |
 | `upstream`, `downstream` | `1000`, `200` | Promoter window in bases. |
 | `species` | `"homo_sapiens"` | Ensembl gene lookup species; later stages remain human-oriented. |
-| `pvalue`, `min_ic` | `1e-4`, `6.0` | Motif threshold and minimum information content. |
+| `pvalue`, `min_ic` | `1e-5`, `6.0` | Motif threshold and minimum information content. `1e-4` scans wider and is mostly chance. |
 | `pfm_file`, `chip_bed`, `regulon_file` | `None` | Local reference files. |
 | `all_tss`, `chip_api` | `False` | Additional TSS clusters and ReMap lookup. |
 | `mask_repeats` | `True` | Skip lowercase repeat sequence outside demo mode. |

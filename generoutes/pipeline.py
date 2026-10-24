@@ -454,7 +454,7 @@ def query_block(args: dict, **derived) -> dict:
 
 
 def run(gene: str, *, upstream: int = 1000, downstream: int = 200,
-        pvalue: float = 1e-4, species: str = "homo_sapiens",
+        pvalue: float = 1e-5, species: str = "homo_sapiens",
         pfm_file: str | None = None, chip_bed: str | None = None,
         matrix_ids: list[str] | None = None, all_tss: bool = False,
         mask_repeats: bool = True, goal: str = "up",

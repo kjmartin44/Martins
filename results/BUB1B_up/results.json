@@ -1432,7 +1432,7 @@
   "provenance": {
     "schema": 1,
     "package_version": "0.1.0",
-    "created": "2026-10-24T20:45:30+00:00",
+    "created": "2026-10-24T21:51:13+00:00",
     "python": "3.12.9",
     "platform": "Windows-10-10.0.19044-SP0",
     "inputs": {
@@ -1458,7 +1458,7 @@
       "docking_results": {
         "path": "results\\BUB1B_up\\docking_all.json",
         "bytes": 377,
-        "modified": "2026-10-24T20:43:28+00:00",
+        "modified": "2026-10-24T21:48:57+00:00",
         "sha256": "75e0625df48d3dbb6f5c907bb22e88f3aa312fc3af104363e08318c32fba000b"
       },
       "expression_file": {
@@ -4514,6 +4514,16 @@
         }
       ],
       "knockout": {
+        "OSR2": {
+          "n_experiments": 0,
+          "n_responded": 0,
+          "activates": 0,
+          "represses": 0,
+          "sources": [],
+          "species": [],
+          "experiments": [],
+          "class": "not tested"
+        },
         "RXRA": {
           "n_experiments": 2,
           "n_responded": 0,
@@ -4529,62 +4539,6 @@
           ],
           "experiments": [],
           "class": "tested, no response"
-        },
-        "ZNF143": {
-          "n_experiments": 1,
-          "n_responded": 0,
-          "activates": 0,
-          "represses": 0,
-          "sources": [
-            "GEO TF perturbation"
-          ],
-          "species": [
-            "human"
-          ],
-          "experiments": [],
-          "class": "tested, no response"
-        },
-        "NR4A2": {
-          "n_experiments": 4,
-          "n_responded": 1,
-          "activates": 0,
-          "represses": 1,
-          "sources": [
-            "GEO TF perturbation",
-            "LINCS CRISPR KO"
-          ],
-          "species": [
-            "human",
-            "human cell lines",
-            "mouse"
-          ],
-          "experiments": [
-            {
-              "experiment": "NR4A2 OE HUMAN GSE58475 CREEDSID GENE 1431",
-              "reads": "represses"
-            }
-          ],
-          "class": "measured response"
-        },
-        "NR2F1": {
-          "n_experiments": 0,
-          "n_responded": 0,
-          "activates": 0,
-          "represses": 0,
-          "sources": [],
-          "species": [],
-          "experiments": [],
-          "class": "not tested"
-        },
-        "PRDM9": {
-          "n_experiments": 0,
-          "n_responded": 0,
-          "activates": 0,
-          "represses": 0,
-          "sources": [],
-          "species": [],
-          "experiments": [],
-          "class": "not tested"
         },
         "FLI1": {
           "n_experiments": 17,
@@ -4623,7 +4577,111 @@
           ],
           "class": "measured response"
         },
+        "ZNF143": {
+          "n_experiments": 1,
+          "n_responded": 0,
+          "activates": 0,
+          "represses": 0,
+          "sources": [
+            "GEO TF perturbation"
+          ],
+          "species": [
+            "human"
+          ],
+          "experiments": [],
+          "class": "tested, no response"
+        },
+        "NR1H4": {
+          "n_experiments": 0,
+          "n_responded": 0,
+          "activates": 0,
+          "represses": 0,
+          "sources": [],
+          "species": [],
+          "experiments": [],
+          "class": "not tested"
+        },
+        "KLF3": {
+          "n_experiments": 2,
+          "n_responded": 0,
+          "activates": 0,
+          "represses": 0,
+          "sources": [
+            "GEO TF perturbation"
+          ],
+          "species": [
+            "mouse"
+          ],
+          "experiments": [],
+          "class": "tested, no response"
+        },
+        "KLF16": {
+          "n_experiments": 0,
+          "n_responded": 0,
+          "activates": 0,
+          "represses": 0,
+          "sources": [],
+          "species": [],
+          "experiments": [],
+          "class": "not tested"
+        },
+        "FOXD2": {
+          "n_experiments": 0,
+          "n_responded": 0,
+          "activates": 0,
+          "represses": 0,
+          "sources": [],
+          "species": [],
+          "experiments": [],
+          "class": "not tested"
+        },
         "TFAP4": {
+          "n_experiments": 0,
+          "n_responded": 0,
+          "activates": 0,
+          "represses": 0,
+          "sources": [],
+          "species": [],
+          "experiments": [],
+          "class": "not tested"
+        },
+        "NR4A2": {
+          "n_experiments": 4,
+          "n_responded": 1,
+          "activates": 0,
+          "represses": 1,
+          "sources": [
+            "GEO TF perturbation",
+            "LINCS CRISPR KO"
+          ],
+          "species": [
+            "human",
+            "human cell lines",
+            "mouse"
+          ],
+          "experiments": [
+            {
+              "experiment": "NR4A2 OE HUMAN GSE58475 CREEDSID GENE 1431",
+              "reads": "represses"
+            }
+          ],
+          "class": "measured response"
+        },
+        "NR2F6": {
+          "n_experiments": 1,
+          "n_responded": 0,
+          "activates": 0,
+          "represses": 0,
+          "sources": [
+            "LINCS CRISPR KO"
+          ],
+          "species": [
+            "human cell lines"
+          ],
+          "experiments": [],
+          "class": "tested, no response"
+        },
+        "PRDM9": {
           "n_experiments": 0,
           "n_responded": 0,
           "activates": 0,
@@ -4653,84 +4711,6 @@
           "experiments": [],
           "class": "not tested"
         },
-        "KLF3": {
-          "n_experiments": 2,
-          "n_responded": 0,
-          "activates": 0,
-          "represses": 0,
-          "sources": [
-            "GEO TF perturbation"
-          ],
-          "species": [
-            "mouse"
-          ],
-          "experiments": [],
-          "class": "tested, no response"
-        },
-        "OSR2": {
-          "n_experiments": 0,
-          "n_responded": 0,
-          "activates": 0,
-          "represses": 0,
-          "sources": [],
-          "species": [],
-          "experiments": [],
-          "class": "not tested"
-        },
-        "THAP11": {
-          "n_experiments": 0,
-          "n_responded": 0,
-          "activates": 0,
-          "represses": 0,
-          "sources": [],
-          "species": [],
-          "experiments": [],
-          "class": "not tested"
-        },
-        "NR1H4": {
-          "n_experiments": 0,
-          "n_responded": 0,
-          "activates": 0,
-          "represses": 0,
-          "sources": [],
-          "species": [],
-          "experiments": [],
-          "class": "not tested"
-        },
-        "FOXD2": {
-          "n_experiments": 0,
-          "n_responded": 0,
-          "activates": 0,
-          "represses": 0,
-          "sources": [],
-          "species": [],
-          "experiments": [],
-          "class": "not tested"
-        },
-        "KLF16": {
-          "n_experiments": 0,
-          "n_responded": 0,
-          "activates": 0,
-          "represses": 0,
-          "sources": [],
-          "species": [],
-          "experiments": [],
-          "class": "not tested"
-        },
-        "NR2F6": {
-          "n_experiments": 1,
-          "n_responded": 0,
-          "activates": 0,
-          "represses": 0,
-          "sources": [
-            "LINCS CRISPR KO"
-          ],
-          "species": [
-            "human cell lines"
-          ],
-          "experiments": [],
-          "class": "tested, no response"
-        },
         "SP3": {
           "n_experiments": 3,
           "n_responded": 1,
@@ -4750,6 +4730,26 @@
             }
           ],
           "class": "measured response"
+        },
+        "NR2F1": {
+          "n_experiments": 0,
+          "n_responded": 0,
+          "activates": 0,
+          "represses": 0,
+          "sources": [],
+          "species": [],
+          "experiments": [],
+          "class": "not tested"
+        },
+        "THAP11": {
+          "n_experiments": 0,
+          "n_responded": 0,
+          "activates": 0,
+          "represses": 0,
+          "sources": [],
+          "species": [],
+          "experiments": [],
+          "class": "not tested"
         }
       },
       "improvements": {
@@ -23354,48 +23354,8 @@
         "summary": "739 bp at 57% GC. Present: AT tract (>=6) x2. None of them is more common than in 200 dinucleotide shuffles of this same sequence, so what is here is explained by base composition. No DNA-directed agent is proposed: a feature a promoter has only by composition is a feature most other promoters have too."
       },
       "proliferation": {
-        "estradiol": {
-          "n_signatures": 13,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "tms": {
-          "n_signatures": 3,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "wortmannin": {
-          "n_signatures": 228,
-          "n_with_programme": 3,
-          "share": 0.013,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [
-            "AURKA",
-            "AURKB",
-            "CCNA2",
-            "CDK1",
-            "PLK1",
-            "UBE2C"
-          ],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "fulvestrant": {
-          "n_signatures": 7,
+        "ag14361": {
+          "n_signatures": 54,
           "n_with_programme": 0,
           "share": 0.0,
           "background_share": 0.0191,
@@ -23416,18 +23376,54 @@
           "tracks_proliferation": false,
           "direction": "up"
         },
-        "manumycina": {
-          "n_signatures": 83,
-          "n_with_programme": 4,
-          "share": 0.048,
+        "oxandrolone": {
+          "n_signatures": 1,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "simvastatin": {
+          "n_signatures": 25,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "genistein": {
+          "n_signatures": 4,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "nvpbez235": {
+          "n_signatures": 112,
+          "n_with_programme": 3,
+          "share": 0.027,
           "background_share": 0.0191,
           "cutoff": 0.108,
           "percentile": 95,
           "markers": [
             "AURKA",
+            "CENPF",
+            "KIF20A",
             "NUSAP1",
-            "PCNA",
-            "UBE2C"
+            "PLK1",
+            "TOP2A",
+            "TTK"
           ],
           "tracks_proliferation": false,
           "direction": "up"
@@ -23443,20 +23439,31 @@
           "tracks_proliferation": false,
           "direction": "up"
         },
-        "brdk26664453": {
-          "n_signatures": 24,
-          "n_with_programme": 2,
-          "share": 0.083,
+        "gsk1059615": {
+          "n_signatures": 242,
+          "n_with_programme": 1,
+          "share": 0.004,
           "background_share": 0.0191,
           "cutoff": 0.108,
           "percentile": 95,
           "markers": [
             "AURKA",
             "CCNA2",
-            "CDC20",
-            "CDK1",
-            "PCNA"
+            "CKS2",
+            "KIF20A",
+            "PLK1"
           ],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "salermide": {
+          "n_signatures": 41,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
           "tracks_proliferation": false,
           "direction": "up"
         },
@@ -23471,160 +23478,8 @@
           "tracks_proliferation": false,
           "direction": "up"
         },
-        "guggulsterone": {
-          "n_signatures": 9,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "gw4064": {
-          "n_signatures": 3,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "pd184352": {
-          "n_signatures": 70,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "roscovitine": {
-          "n_signatures": 28,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "brdk87909389": {
-          "n_signatures": 28,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "mrs1220": {
-          "n_signatures": 3,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "bx795": {
-          "n_signatures": 51,
-          "n_with_programme": 1,
-          "share": 0.02,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [
-            "AURKA",
-            "CCNA2",
-            "NUSAP1",
-            "PCNA"
-          ],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "fluticasonepropionate": {
+        "paclitaxel": {
           "n_signatures": 11,
-          "n_with_programme": 1,
-          "share": 0.091,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [
-            "AURKA",
-            "BUB1",
-            "CCNB2"
-          ],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "liothyronine": {
-          "n_signatures": 3,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "gw7647": {
-          "n_signatures": 7,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "wye125132": {
-          "n_signatures": 129,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "dorsomorphin": {
-          "n_signatures": 60,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "belinostat": {
-          "n_signatures": 46,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "brdk27169919": {
-          "n_signatures": 4,
           "n_with_programme": 0,
           "share": 0.0,
           "background_share": 0.0191,
@@ -23645,213 +23500,6 @@
           "tracks_proliferation": false,
           "direction": "up"
         },
-        "testosteronepropionate": {
-          "n_signatures": 8,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "cgp60474": {
-          "n_signatures": 337,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "phorbol12myristate13acetatepma": {
-          "n_signatures": 45,
-          "n_with_programme": 4,
-          "share": 0.089,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [
-            "AURKA",
-            "BUB1",
-            "CDC20",
-            "PLK1",
-            "UBE2C"
-          ],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "qlx138": {
-          "n_signatures": 72,
-          "n_with_programme": 1,
-          "share": 0.014,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [
-            "AURKA",
-            "PLK1",
-            "UBE2C"
-          ],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "toremifene": {
-          "n_signatures": 8,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "api2": {
-          "n_signatures": 11,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "mocetinostat": {
-          "n_signatures": 45,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "acitretin": {
-          "n_signatures": 1,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "ingenol320dibenzoate": {
-          "n_signatures": 40,
-          "n_with_programme": 5,
-          "share": 0.125,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [
-            "AURKA",
-            "BUB1",
-            "CDC20",
-            "NUSAP1",
-            "UBE2C"
-          ],
-          "tracks_proliferation": true,
-          "direction": "up"
-        },
-        "decitabine": {
-          "n_signatures": 19,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "domperidone": {
-          "n_signatures": 3,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "mitoxantrone": {
-          "n_signatures": 259,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "dasatinib": {
-          "n_signatures": 287,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "linifanib": {
-          "n_signatures": 40,
-          "n_with_programme": 1,
-          "share": 0.025,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [
-            "AURKA",
-            "CCNB2",
-            "PLK1"
-          ],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "azacitidine": {
-          "n_signatures": 26,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "angiogenesisinhibitor": {
-          "n_signatures": 14,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "coumestrol": {
-          "n_signatures": 3,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
         "isotretinoin": {
           "n_signatures": 18,
           "n_with_programme": 0,
@@ -23863,8 +23511,8 @@
           "tracks_proliferation": false,
           "direction": "up"
         },
-        "prednisoloneacetate": {
-          "n_signatures": 5,
+        "thioridazine": {
+          "n_signatures": 33,
           "n_with_programme": 0,
           "share": 0.0,
           "background_share": 0.0191,
@@ -23874,8 +23522,8 @@
           "tracks_proliferation": false,
           "direction": "up"
         },
-        "pioglitazone": {
-          "n_signatures": 7,
+        "ei293": {
+          "n_signatures": 13,
           "n_with_programme": 0,
           "share": 0.0,
           "background_share": 0.0191,
@@ -23885,8 +23533,30 @@
           "tracks_proliferation": false,
           "direction": "up"
         },
-        "torin1": {
-          "n_signatures": 119,
+        "chlorhexidine": {
+          "n_signatures": 3,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "ro082750": {
+          "n_signatures": 4,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "roscovitine": {
+          "n_signatures": 28,
           "n_with_programme": 0,
           "share": 0.0,
           "background_share": 0.0191,
@@ -23916,8 +23586,8 @@
           "tracks_proliferation": false,
           "direction": "up"
         },
-        "ag14361": {
-          "n_signatures": 54,
+        "nvptae226": {
+          "n_signatures": 39,
           "n_with_programme": 0,
           "share": 0.0,
           "background_share": 0.0191,
@@ -23927,8 +23597,8 @@
           "tracks_proliferation": false,
           "direction": "up"
         },
-        "thioridazine": {
-          "n_signatures": 33,
+        "dorsomorphin": {
+          "n_signatures": 60,
           "n_with_programme": 0,
           "share": 0.0,
           "background_share": 0.0191,
@@ -23938,8 +23608,8 @@
           "tracks_proliferation": false,
           "direction": "up"
         },
-        "danthron": {
-          "n_signatures": 2,
+        "fulvestrant": {
+          "n_signatures": 7,
           "n_with_programme": 0,
           "share": 0.0,
           "background_share": 0.0191,
@@ -23949,7 +23619,45 @@
           "tracks_proliferation": false,
           "direction": "up"
         },
-        "oxandrolone": {
+        "tms": {
+          "n_signatures": 3,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "qlxii47": {
+          "n_signatures": 92,
+          "n_with_programme": 2,
+          "share": 0.022,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [
+            "AURKA",
+            "AURKB",
+            "PLK1",
+            "UBE2C"
+          ],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "azacitidine": {
+          "n_signatures": 26,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "acitretin": {
           "n_signatures": 1,
           "n_with_programme": 0,
           "share": 0.0,
@@ -23957,6 +23665,45 @@
           "cutoff": 0.108,
           "percentile": 95,
           "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "w9": {
+          "n_signatures": 4,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "prednisoloneacetate": {
+          "n_signatures": 5,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "brdk26664453": {
+          "n_signatures": 24,
+          "n_with_programme": 2,
+          "share": 0.083,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [
+            "AURKA",
+            "CCNA2",
+            "CDC20",
+            "CDK1",
+            "PCNA"
+          ],
           "tracks_proliferation": false,
           "direction": "up"
         },
@@ -23975,23 +23722,8 @@
           "tracks_proliferation": false,
           "direction": "up"
         },
-        "buparlisib": {
-          "n_signatures": 56,
-          "n_with_programme": 2,
-          "share": 0.036,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [
-            "AURKA",
-            "KIF20A",
-            "PLK1"
-          ],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "ei293": {
-          "n_signatures": 13,
+        "sulindac": {
+          "n_signatures": 1,
           "n_with_programme": 0,
           "share": 0.0,
           "background_share": 0.0191,
@@ -24001,8 +23733,8 @@
           "tracks_proliferation": false,
           "direction": "up"
         },
-        "triptolide": {
-          "n_signatures": 8,
+        "pioglitazone": {
+          "n_signatures": 7,
           "n_with_programme": 0,
           "share": 0.0,
           "background_share": 0.0191,
@@ -24012,8 +23744,8 @@
           "tracks_proliferation": false,
           "direction": "up"
         },
-        "ldn193189": {
-          "n_signatures": 46,
+        "angiogenesisinhibitor": {
+          "n_signatures": 14,
           "n_with_programme": 0,
           "share": 0.0,
           "background_share": 0.0191,
@@ -24023,8 +23755,8 @@
           "tracks_proliferation": false,
           "direction": "up"
         },
-        "azd8055": {
-          "n_signatures": 134,
+        "lidocaine": {
+          "n_signatures": 1,
           "n_with_programme": 0,
           "share": 0.0,
           "background_share": 0.0191,
@@ -24034,28 +23766,8 @@
           "tracks_proliferation": false,
           "direction": "up"
         },
-        "bi2536": {
-          "n_signatures": 197,
-          "n_with_programme": 10,
-          "share": 0.051,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [
-            "AURKA",
-            "AURKB",
-            "BUB1",
-            "CCNB2",
-            "CDC20",
-            "CENPF",
-            "CKS2",
-            "KIF20A"
-          ],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "rosiglitazone": {
-          "n_signatures": 21,
+        "hydrocortisoneacetate": {
+          "n_signatures": 5,
           "n_with_programme": 0,
           "share": 0.0,
           "background_share": 0.0191,
@@ -24065,30 +23777,8 @@
           "tracks_proliferation": false,
           "direction": "up"
         },
-        "simvastatin": {
-          "n_signatures": 25,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "nvptae226": {
-          "n_signatures": 39,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "dcc2036": {
-          "n_signatures": 32,
+        "domperidone": {
+          "n_signatures": 3,
           "n_with_programme": 0,
           "share": 0.0,
           "background_share": 0.0191,
@@ -24118,8 +23808,8 @@
           "tracks_proliferation": false,
           "direction": "up"
         },
-        "cyt387": {
-          "n_signatures": 40,
+        "gw4064": {
+          "n_signatures": 3,
           "n_with_programme": 0,
           "share": 0.0,
           "background_share": 0.0191,
@@ -24129,21 +23819,15 @@
           "tracks_proliferation": false,
           "direction": "up"
         },
-        "clobetasolpropionate": {
-          "n_signatures": 13,
-          "n_with_programme": 2,
-          "share": 0.154,
+        "cgp60474": {
+          "n_signatures": 337,
+          "n_with_programme": 0,
+          "share": 0.0,
           "background_share": 0.0191,
           "cutoff": 0.108,
           "percentile": 95,
-          "markers": [
-            "AURKA",
-            "BIRC5",
-            "BUB1",
-            "CCNB1",
-            "CCNB2"
-          ],
-          "tracks_proliferation": true,
+          "markers": [],
+          "tracks_proliferation": false,
           "direction": "up"
         },
         "brdk49371609": {
@@ -24157,84 +23841,10 @@
           "tracks_proliferation": false,
           "direction": "up"
         },
-        "brdk57080016": {
-          "n_signatures": 33,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "pracinostat": {
-          "n_signatures": 48,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "sulindac": {
-          "n_signatures": 1,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "valproicacid": {
-          "n_signatures": 2,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "pi103": {
-          "n_signatures": 130,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "nvpbez235": {
-          "n_signatures": 112,
+        "wortmannin": {
+          "n_signatures": 228,
           "n_with_programme": 3,
-          "share": 0.027,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [
-            "AURKA",
-            "CENPF",
-            "KIF20A",
-            "NUSAP1",
-            "PLK1",
-            "TOP2A",
-            "TTK"
-          ],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "parthenolide": {
-          "n_signatures": 106,
-          "n_with_programme": 5,
-          "share": 0.047,
+          "share": 0.013,
           "background_share": 0.0191,
           "cutoff": 0.108,
           "percentile": 95,
@@ -24242,31 +23852,37 @@
             "AURKA",
             "AURKB",
             "CCNA2",
-            "CCNB1",
-            "NUSAP1",
-            "UBE2C"
-          ],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "qlxii47": {
-          "n_signatures": 92,
-          "n_with_programme": 2,
-          "share": 0.022,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [
-            "AURKA",
-            "AURKB",
+            "CDK1",
             "PLK1",
             "UBE2C"
           ],
           "tracks_proliferation": false,
           "direction": "up"
         },
-        "lidocaine": {
-          "n_signatures": 1,
+        "guggulsterone": {
+          "n_signatures": 9,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "mitoxantrone": {
+          "n_signatures": 259,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "toremifene": {
+          "n_signatures": 8,
           "n_with_programme": 0,
           "share": 0.0,
           "background_share": 0.0191,
@@ -24287,8 +23903,8 @@
           "tracks_proliferation": false,
           "direction": "up"
         },
-        "lenalidomide": {
-          "n_signatures": 2,
+        "celastrol": {
+          "n_signatures": 70,
           "n_with_programme": 0,
           "share": 0.0,
           "background_share": 0.0191,
@@ -24298,30 +23914,61 @@
           "tracks_proliferation": false,
           "direction": "up"
         },
-        "genistein": {
+        "decitabine": {
+          "n_signatures": 19,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "fluticasonepropionate": {
+          "n_signatures": 11,
+          "n_with_programme": 1,
+          "share": 0.091,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [
+            "AURKA",
+            "BUB1",
+            "CCNB2"
+          ],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "manumycina": {
+          "n_signatures": 83,
+          "n_with_programme": 4,
+          "share": 0.048,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [
+            "AURKA",
+            "NUSAP1",
+            "PCNA",
+            "UBE2C"
+          ],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "gw7647": {
+          "n_signatures": 7,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "brdk27169919": {
           "n_signatures": 4,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "ro082750": {
-          "n_signatures": 4,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "troglitazone": {
-          "n_signatures": 5,
           "n_with_programme": 0,
           "share": 0.0,
           "background_share": 0.0191,
@@ -24351,8 +23998,8 @@
           "tracks_proliferation": false,
           "direction": "up"
         },
-        "salermide": {
-          "n_signatures": 41,
+        "pi103": {
+          "n_signatures": 130,
           "n_with_programme": 0,
           "share": 0.0,
           "background_share": 0.0191,
@@ -24362,8 +24009,47 @@
           "tracks_proliferation": false,
           "direction": "up"
         },
-        "estriol": {
-          "n_signatures": 2,
+        "clobetasolpropionate": {
+          "n_signatures": 13,
+          "n_with_programme": 2,
+          "share": 0.154,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [
+            "AURKA",
+            "BIRC5",
+            "BUB1",
+            "CCNB1",
+            "CCNB2"
+          ],
+          "tracks_proliferation": true,
+          "direction": "up"
+        },
+        "torin1": {
+          "n_signatures": 119,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "ldn193189": {
+          "n_signatures": 46,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "pracinostat": {
+          "n_signatures": 48,
           "n_with_programme": 0,
           "share": 0.0,
           "background_share": 0.0191,
@@ -24384,30 +24070,26 @@
           "tracks_proliferation": false,
           "direction": "up"
         },
-        "hydrocortisoneacetate": {
-          "n_signatures": 5,
-          "n_with_programme": 0,
-          "share": 0.0,
+        "parthenolide": {
+          "n_signatures": 106,
+          "n_with_programme": 5,
+          "share": 0.047,
           "background_share": 0.0191,
           "cutoff": 0.108,
           "percentile": 95,
-          "markers": [],
+          "markers": [
+            "AURKA",
+            "AURKB",
+            "CCNA2",
+            "CCNB1",
+            "NUSAP1",
+            "UBE2C"
+          ],
           "tracks_proliferation": false,
           "direction": "up"
         },
-        "chlorhexidine": {
-          "n_signatures": 3,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "pp110": {
-          "n_signatures": 42,
+        "pd184352": {
+          "n_signatures": 70,
           "n_with_programme": 0,
           "share": 0.0,
           "background_share": 0.0191,
@@ -24418,17 +24100,6 @@
           "direction": "up"
         },
         "methyl25dihydroxycinnamate": {
-          "n_signatures": 11,
-          "n_with_programme": 0,
-          "share": 0.0,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "paclitaxel": {
           "n_signatures": 11,
           "n_with_programme": 0,
           "share": 0.0,
@@ -24459,25 +24130,8 @@
           "tracks_proliferation": false,
           "direction": "up"
         },
-        "gsk1059615": {
-          "n_signatures": 242,
-          "n_with_programme": 1,
-          "share": 0.004,
-          "background_share": 0.0191,
-          "cutoff": 0.108,
-          "percentile": 95,
-          "markers": [
-            "AURKA",
-            "CCNA2",
-            "CKS2",
-            "KIF20A",
-            "PLK1"
-          ],
-          "tracks_proliferation": false,
-          "direction": "up"
-        },
-        "w9": {
-          "n_signatures": 4,
+        "troglitazone": {
+          "n_signatures": 5,
           "n_with_programme": 0,
           "share": 0.0,
           "background_share": 0.0191,
@@ -24487,8 +24141,354 @@
           "tracks_proliferation": false,
           "direction": "up"
         },
-        "celastrol": {
-          "n_signatures": 70,
+        "bx795": {
+          "n_signatures": 51,
+          "n_with_programme": 1,
+          "share": 0.02,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [
+            "AURKA",
+            "CCNA2",
+            "NUSAP1",
+            "PCNA"
+          ],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "liothyronine": {
+          "n_signatures": 3,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "mrs1220": {
+          "n_signatures": 3,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "api2": {
+          "n_signatures": 11,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "estradiol": {
+          "n_signatures": 13,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "testosteronepropionate": {
+          "n_signatures": 8,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "belinostat": {
+          "n_signatures": 46,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "valproicacid": {
+          "n_signatures": 2,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "brdk57080016": {
+          "n_signatures": 33,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "danthron": {
+          "n_signatures": 2,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "azd8055": {
+          "n_signatures": 134,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "linifanib": {
+          "n_signatures": 40,
+          "n_with_programme": 1,
+          "share": 0.025,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [
+            "AURKA",
+            "CCNB2",
+            "PLK1"
+          ],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "brdk87909389": {
+          "n_signatures": 28,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "ingenol320dibenzoate": {
+          "n_signatures": 40,
+          "n_with_programme": 5,
+          "share": 0.125,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [
+            "AURKA",
+            "BUB1",
+            "CDC20",
+            "NUSAP1",
+            "UBE2C"
+          ],
+          "tracks_proliferation": true,
+          "direction": "up"
+        },
+        "dasatinib": {
+          "n_signatures": 287,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "buparlisib": {
+          "n_signatures": 56,
+          "n_with_programme": 2,
+          "share": 0.036,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [
+            "AURKA",
+            "KIF20A",
+            "PLK1"
+          ],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "cyt387": {
+          "n_signatures": 40,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "estriol": {
+          "n_signatures": 2,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "qlx138": {
+          "n_signatures": 72,
+          "n_with_programme": 1,
+          "share": 0.014,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [
+            "AURKA",
+            "PLK1",
+            "UBE2C"
+          ],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "triptolide": {
+          "n_signatures": 8,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "lenalidomide": {
+          "n_signatures": 2,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "rosiglitazone": {
+          "n_signatures": 21,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "phorbol12myristate13acetatepma": {
+          "n_signatures": 45,
+          "n_with_programme": 4,
+          "share": 0.089,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [
+            "AURKA",
+            "BUB1",
+            "CDC20",
+            "PLK1",
+            "UBE2C"
+          ],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "coumestrol": {
+          "n_signatures": 3,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "bi2536": {
+          "n_signatures": 197,
+          "n_with_programme": 10,
+          "share": 0.051,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [
+            "AURKA",
+            "AURKB",
+            "BUB1",
+            "CCNB2",
+            "CDC20",
+            "CENPF",
+            "CKS2",
+            "KIF20A"
+          ],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "dcc2036": {
+          "n_signatures": 32,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "pp110": {
+          "n_signatures": 42,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "mocetinostat": {
+          "n_signatures": 45,
+          "n_with_programme": 0,
+          "share": 0.0,
+          "background_share": 0.0191,
+          "cutoff": 0.108,
+          "percentile": 95,
+          "markers": [],
+          "tracks_proliferation": false,
+          "direction": "up"
+        },
+        "wye125132": {
+          "n_signatures": 129,
           "n_with_programme": 0,
           "share": 0.0,
           "background_share": 0.0191,

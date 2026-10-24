@@ -586,7 +586,7 @@
   "provenance": {
     "schema": 1,
     "package_version": "0.1.0",
-    "created": "2026-10-24T20:43:16+00:00",
+    "created": "2026-10-24T21:48:45+00:00",
     "python": "3.12.9",
     "platform": "Windows-10-10.0.19044-SP0",
     "inputs": {
@@ -2673,15 +2673,27 @@
       "drug_grades": [],
       "outcome_estimates": [],
       "knockout": {
-        "THAP11": {
-          "n_experiments": 0,
-          "n_responded": 0,
+        "NR4A2": {
+          "n_experiments": 4,
+          "n_responded": 1,
           "activates": 0,
-          "represses": 0,
-          "sources": [],
-          "species": [],
-          "experiments": [],
-          "class": "not tested"
+          "represses": 1,
+          "sources": [
+            "GEO TF perturbation",
+            "LINCS CRISPR KO"
+          ],
+          "species": [
+            "human",
+            "human cell lines",
+            "mouse"
+          ],
+          "experiments": [
+            {
+              "experiment": "NR4A2 OE HUMAN GSE58475 CREEDSID GENE 1431",
+              "reads": "represses"
+            }
+          ],
+          "class": "measured response"
         },
         "NR2F1": {
           "n_experiments": 0,
@@ -2692,6 +2704,104 @@
           "species": [],
           "experiments": [],
           "class": "not tested"
+        },
+        "NR2F6": {
+          "n_experiments": 1,
+          "n_responded": 0,
+          "activates": 0,
+          "represses": 0,
+          "sources": [
+            "LINCS CRISPR KO"
+          ],
+          "species": [
+            "human cell lines"
+          ],
+          "experiments": [],
+          "class": "tested, no response"
+        },
+        "KLF16": {
+          "n_experiments": 0,
+          "n_responded": 0,
+          "activates": 0,
+          "represses": 0,
+          "sources": [],
+          "species": [],
+          "experiments": [],
+          "class": "not tested"
+        },
+        "TFAP4": {
+          "n_experiments": 0,
+          "n_responded": 0,
+          "activates": 0,
+          "represses": 0,
+          "sources": [],
+          "species": [],
+          "experiments": [],
+          "class": "not tested"
+        },
+        "RXRA": {
+          "n_experiments": 2,
+          "n_responded": 0,
+          "activates": 0,
+          "represses": 0,
+          "sources": [
+            "GEO TF perturbation",
+            "LINCS CRISPR KO"
+          ],
+          "species": [
+            "human",
+            "human cell lines"
+          ],
+          "experiments": [],
+          "class": "tested, no response"
+        },
+        "FOXD2": {
+          "n_experiments": 0,
+          "n_responded": 0,
+          "activates": 0,
+          "represses": 0,
+          "sources": [],
+          "species": [],
+          "experiments": [],
+          "class": "not tested"
+        },
+        "PRDM9": {
+          "n_experiments": 0,
+          "n_responded": 0,
+          "activates": 0,
+          "represses": 0,
+          "sources": [],
+          "species": [],
+          "experiments": [],
+          "class": "not tested"
+        },
+        "KLF3": {
+          "n_experiments": 2,
+          "n_responded": 0,
+          "activates": 0,
+          "represses": 0,
+          "sources": [
+            "GEO TF perturbation"
+          ],
+          "species": [
+            "mouse"
+          ],
+          "experiments": [],
+          "class": "tested, no response"
+        },
+        "ZNF143": {
+          "n_experiments": 1,
+          "n_responded": 0,
+          "activates": 0,
+          "represses": 0,
+          "sources": [
+            "GEO TF perturbation"
+          ],
+          "species": [
+            "human"
+          ],
+          "experiments": [],
+          "class": "tested, no response"
         },
         "FLI1": {
           "n_experiments": 17,
@@ -2730,7 +2840,7 @@
           ],
           "class": "measured response"
         },
-        "FOXD2": {
+        "NR1H4": {
           "n_experiments": 0,
           "n_responded": 0,
           "activates": 0,
@@ -2739,108 +2849,6 @@
           "species": [],
           "experiments": [],
           "class": "not tested"
-        },
-        "NR4A2": {
-          "n_experiments": 4,
-          "n_responded": 1,
-          "activates": 0,
-          "represses": 1,
-          "sources": [
-            "GEO TF perturbation",
-            "LINCS CRISPR KO"
-          ],
-          "species": [
-            "human",
-            "human cell lines",
-            "mouse"
-          ],
-          "experiments": [
-            {
-              "experiment": "NR4A2 OE HUMAN GSE58475 CREEDSID GENE 1431",
-              "reads": "represses"
-            }
-          ],
-          "class": "measured response"
-        },
-        "ZNF768": {
-          "n_experiments": 0,
-          "n_responded": 0,
-          "activates": 0,
-          "represses": 0,
-          "sources": [],
-          "species": [],
-          "experiments": [],
-          "class": "not tested"
-        },
-        "NR2F6": {
-          "n_experiments": 1,
-          "n_responded": 0,
-          "activates": 0,
-          "represses": 0,
-          "sources": [
-            "LINCS CRISPR KO"
-          ],
-          "species": [
-            "human cell lines"
-          ],
-          "experiments": [],
-          "class": "tested, no response"
-        },
-        "TFAP4": {
-          "n_experiments": 0,
-          "n_responded": 0,
-          "activates": 0,
-          "represses": 0,
-          "sources": [],
-          "species": [],
-          "experiments": [],
-          "class": "not tested"
-        },
-        "KLF16": {
-          "n_experiments": 0,
-          "n_responded": 0,
-          "activates": 0,
-          "represses": 0,
-          "sources": [],
-          "species": [],
-          "experiments": [],
-          "class": "not tested"
-        },
-        "ZNF76": {
-          "n_experiments": 0,
-          "n_responded": 0,
-          "activates": 0,
-          "represses": 0,
-          "sources": [],
-          "species": [],
-          "experiments": [],
-          "class": "not tested"
-        },
-        "OSR2": {
-          "n_experiments": 0,
-          "n_responded": 0,
-          "activates": 0,
-          "represses": 0,
-          "sources": [],
-          "species": [],
-          "experiments": [],
-          "class": "not tested"
-        },
-        "RXRA": {
-          "n_experiments": 2,
-          "n_responded": 0,
-          "activates": 0,
-          "represses": 0,
-          "sources": [
-            "GEO TF perturbation",
-            "LINCS CRISPR KO"
-          ],
-          "species": [
-            "human",
-            "human cell lines"
-          ],
-          "experiments": [],
-          "class": "tested, no response"
         },
         "SP3": {
           "n_experiments": 3,
@@ -2862,7 +2870,7 @@
           ],
           "class": "measured response"
         },
-        "PRDM9": {
+        "OSR2": {
           "n_experiments": 0,
           "n_responded": 0,
           "activates": 0,
@@ -2872,21 +2880,7 @@
           "experiments": [],
           "class": "not tested"
         },
-        "KLF3": {
-          "n_experiments": 2,
-          "n_responded": 0,
-          "activates": 0,
-          "represses": 0,
-          "sources": [
-            "GEO TF perturbation"
-          ],
-          "species": [
-            "mouse"
-          ],
-          "experiments": [],
-          "class": "tested, no response"
-        },
-        "NR1H4": {
+        "ZNF76": {
           "n_experiments": 0,
           "n_responded": 0,
           "activates": 0,
@@ -2896,19 +2890,25 @@
           "experiments": [],
           "class": "not tested"
         },
-        "ZNF143": {
-          "n_experiments": 1,
+        "THAP11": {
+          "n_experiments": 0,
           "n_responded": 0,
           "activates": 0,
           "represses": 0,
-          "sources": [
-            "GEO TF perturbation"
-          ],
-          "species": [
-            "human"
-          ],
+          "sources": [],
+          "species": [],
           "experiments": [],
-          "class": "tested, no response"
+          "class": "not tested"
+        },
+        "ZNF768": {
+          "n_experiments": 0,
+          "n_responded": 0,
+          "activates": 0,
+          "represses": 0,
+          "sources": [],
+          "species": [],
+          "experiments": [],
+          "class": "not tested"
         }
       },
       "improvements": {},
@@ -4057,19 +4057,28 @@
       "product_screen": {},
       "promoter_dna": {},
       "proliferation": {
-        "valproicacid": {
-          "n_signatures": 2,
-          "n_with_programme": 0,
-          "share": 0.0,
+        "vorinostat": {
+          "n_signatures": 377,
+          "n_with_programme": 37,
+          "share": 0.098,
           "background_share": 0.0191,
           "cutoff": 0.108,
           "percentile": 95,
-          "markers": [],
+          "markers": [
+            "AURKA",
+            "AURKB",
+            "BIRC5",
+            "BUB1",
+            "CCNA2",
+            "CCNB1",
+            "CDC20",
+            "CDK1"
+          ],
           "tracks_proliferation": false,
           "direction": "up"
         },
-        "decitabine": {
-          "n_signatures": 19,
+        "azacitidine": {
+          "n_signatures": 26,
           "n_with_programme": 0,
           "share": 0.0,
           "background_share": 0.0191,
@@ -4090,8 +4099,8 @@
           "tracks_proliferation": false,
           "direction": "up"
         },
-        "azacitidine": {
-          "n_signatures": 26,
+        "decitabine": {
+          "n_signatures": 19,
           "n_with_programme": 0,
           "share": 0.0,
           "background_share": 0.0191,
@@ -4101,23 +4110,14 @@
           "tracks_proliferation": false,
           "direction": "up"
         },
-        "vorinostat": {
-          "n_signatures": 377,
-          "n_with_programme": 37,
-          "share": 0.098,
+        "valproicacid": {
+          "n_signatures": 2,
+          "n_with_programme": 0,
+          "share": 0.0,
           "background_share": 0.0191,
           "cutoff": 0.108,
           "percentile": 95,
-          "markers": [
-            "AURKA",
-            "AURKB",
-            "BIRC5",
-            "BUB1",
-            "CCNA2",
-            "CCNB1",
-            "CDC20",
-            "CDK1"
-          ],
+          "markers": [],
           "tracks_proliferation": false,
           "direction": "up"
         }

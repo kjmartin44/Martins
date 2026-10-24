@@ -55,8 +55,11 @@ def add_analysis_args(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
     p.add_argument("--all-tss", action="store_true",
                    help="scan every distinct TSS, not just the MANE/canonical one")
 
-    p.add_argument("--pvalue", type=float, default=1e-4,
-                   help="per-position false-positive rate for motif hits")
+    p.add_argument("--pvalue", type=float, default=1e-5,
+                   help="per-position false-positive rate for motif hits "
+                        "(1e-4 scans wider and is mostly chance: on BUB1B "
+                        "it gave 747 sites at 80%% false discovery against "
+                        "17 at 45%%)")
     p.add_argument("--min-ic", type=float, default=6.0,
                    help="drop matrices below this information content (bits)")
     p.add_argument("--pfm-file", help="local JASPAR-format PFM file (recommended)")

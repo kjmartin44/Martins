@@ -2705,7 +2705,11 @@ from generoutes import explain as ex          # noqa: E402
 
 
 def _demo_result():
-    return pipeline.run("SMN2", demo=True, offline=True)
+    # Pinned to the wide threshold on purpose. These tests need VDR in
+    # the scan, and VDR is exactly the kind of weak nuclear-receptor
+    # match the 1e-5 default now drops. Riding on the default would make
+    # them fail whenever the policy moves, which is not what they test.
+    return pipeline.run("SMN2", demo=True, offline=True, pvalue=1e-4)
 
 
 def test_explain_gathers_evidence_from_every_section():
@@ -7904,7 +7908,10 @@ def test_docking_results_from_another_machine_reach_the_report(tmp_path):
 
     assert dk.load_results(f)["target"] == "VDR"
 
-    res = pipeline.run("DEMOGENE", demo=True, offline=True,
+    # pvalue pinned: the docked target is VDR, which the 1e-5 default
+    # drops from the demo scan. This tests that a dock run elsewhere
+    # reaches the report, not where the motif threshold sits.
+    res = pipeline.run("DEMOGENE", demo=True, offline=True, pvalue=1e-4,
                        docking_results=str(f))
     routes = [r for r in res["results"][0]["all_routes"]["routes"]
               if r["category"] == "TF: predicted pocket binder"]
@@ -8210,7 +8217,12 @@ def test_summary_does_not_state_the_same_number_twice():
     # Everything above the candidate list. The heading moved when the
     # ranked top-ten became the stratified "what to test first".
     head = md[:md.index("## What to test first")]
-    assert head.count(f"{fdp:.0%}") <= 1
+    # Bounded both sides. The bare percentage used to match inside a
+    # longer one - "2%" is in "12%" - so a small proportion could fail
+    # this for a reason that has nothing to do with repeating itself.
+    import re
+    hits = re.findall(rf"(?<![0-9.]){fdp:.0%}", head)
+    assert len(hits) <= 1, hits
 
 
 def test_summary_keeps_the_attrition_caution():
@@ -14269,7 +14281,12 @@ def test_a_checkpoint_says_what_the_stage_found():
     finally:
         progress.disable()
     text = buf.getvalue()
-    assert "motifs loaded" in text and "p <= 0.0001" in text
+    # The threshold the run actually used, not a number frozen into the
+    # assertion: this checks the checkpoint reports the stage, and it
+    # should not have to move every time the default does.
+    from generoutes import cli as _cli
+    _default = _cli.build_parser().get_default("pvalue")
+    assert "motifs loaded" in text and f"p <= {_default:g}" in text
     assert "factors annotated" in text
     assert "rests on sequence alone" in text      # no ChIP in demo
     assert text.rstrip().endswith("done")
@@ -16654,14 +16671,18 @@ def test_the_data_guide_names_every_table():
             assert f"`{path}`" in guide, f"{ds.key}: {path} not listed"
 
 
-def test_no_registry_table_is_committed_to_the_repository():
-    """The data guide tells people the repository ships none of these.
+def test_no_registry_table_is_committed_unless_it_is_documented():
+    """The data guide tells people the repository ships none of these,
+    except for the few small ones it names.
 
     That is a claim about what is in git, and I made it once without
     checking - `data/hpa.tsv` is tracked, so "data/ is ignored" was
-    wrong. This asserts the narrower claim the guide now makes: no
-    accepted filename for any registry table is tracked.
+    wrong. The exception is read from `data/README.md` rather than
+    listed here, so shipping a table means documenting its source and
+    its terms in the same change. Several of these carry a licence that
+    is not this repository's, which is the reason the rule exists.
     """
+    import re
     import subprocess
     from pathlib import Path
     from generoutes import datasets
@@ -16673,11 +16694,22 @@ def test_no_registry_table_is_committed_to_the_repository():
         pytest.skip("not a git checkout")
     tracked = {line.strip() for line in pr.stdout.splitlines() if line.strip()}
     claimed = {p for d in datasets.registry() for p in d.paths}
-    shipped = sorted(tracked & claimed)
-    assert not shipped, (
-        "the data guide says the repository ships none of these tables, "
-        f"but these are tracked: {shipped}. Either untrack them or "
-        "correct docs/datasets.md.")
+
+    readme = (root / "data" / "README.md").read_text(encoding="utf-8")
+    documented = {"data/" + m for m in
+                  re.findall(r"^\| `([^`]+)` \|", readme, re.M)}
+    assert documented, "data/README.md lists no shipped file; check the table"
+
+    undocumented = sorted((tracked & claimed) - documented)
+    assert not undocumented, (
+        "these registry tables are tracked but not described in "
+        f"data/README.md: {undocumented}. Either untrack them, or add a "
+        "row giving the source and the terms it is redistributed under.")
+
+    # And nothing is described as shipped that is not actually there.
+    missing = sorted(f for f in documented if not (root / f).is_file())
+    assert not missing, (
+        f"data/README.md describes files that are not in the tree: {missing}")
 
 
 def test_every_table_can_be_counted():
